@@ -21,7 +21,9 @@ describe("decodeJpeg2000: real OpenJPEG-produced codestreams", () => {
     it(`decodes "${fixture.name}" (${fixture.description})`, () => {
       const warnings: string[] = [];
       const image = decodeJpeg2000(jpeg2000FixtureBytes(fixture.codestream), {
-        onWarning: (message) => warnings.push(message),
+        onWarning: (message) => {
+          warnings.push(message);
+        },
       });
       expect(warnings).toEqual([]);
       expect({
@@ -284,7 +286,9 @@ describe("decodeJpeg2000: scope refusals", () => {
     expect(metadata.truncated).toBe(true);
     const warnings: string[] = [];
     const image = decodeJpeg2000(truncated, {
-      onWarning: (message) => warnings.push(message),
+      onWarning: (message) => {
+        warnings.push(message);
+      },
     });
     expect(warnings.join(" ")).toContain("truncated");
     expect({ width: image.width, height: image.height }).toEqual({

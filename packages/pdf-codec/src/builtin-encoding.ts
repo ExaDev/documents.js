@@ -26,9 +26,9 @@ import { hasBytes, parseSfnt, sfntTableBytes, u8, u16 } from "./sfnt";
 
 export interface BuiltinEncoding {
   // The program's own character code -> Unicode code point. Always undefined for a program that states no code-keyed encoding at all (a CID-keyed CFF, or a TrueType with no symbolic subtable), which is exactly the case a simple font must fall back from.
-  codeToUnicode(code: number): number | undefined;
+  codeToUnicode: (code: number) => number | undefined;
   // Glyph ID -> Unicode code point, for a composite font whose CIDs address the program's own glyphs directly.
-  glyphIdToUnicode(glyphId: number): number | undefined;
+  glyphIdToUnicode: (glyphId: number) => number | undefined;
 }
 
 // The private-use planes, which name no character: reversing a Unicode subtable that maps only these (what a symbol font's own (3, 1) subtable usually is) yields a code point that identifies the glyph within that one font and nothing beyond it, so it is treated as no answer rather than a wrong one.

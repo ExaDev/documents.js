@@ -4,10 +4,10 @@ import { AES_BLOCK_BYTES, aesCbcDecrypt, aesCbcEncrypt } from "./aes";
 
 // FIPS 197 Appendix C's own single-block known-answer vectors (reached here through CBC with an all-zero IV, which for one block is exactly ECB), and NIST SP 800-38A Appendix F.2's multi-block CBC vectors. Between them these pin the S-box construction, the key schedule for both key sizes this codec needs, MixColumns in both directions, and the CBC chaining itself.
 
-function bytes(hex: string): Uint8Array<ArrayBuffer> {
-  const out = new Uint8Array(hex.length / 2);
+function bytes(hexText: string): Uint8Array<ArrayBuffer> {
+  const out = new Uint8Array(hexText.length / 2);
   for (let i = 0; i < out.length; i++) {
-    out[i] = Number.parseInt(hex.slice(i * 2, i * 2 + 2), 16);
+    out[i] = Number.parseInt(hexText.slice(i * 2, i * 2 + 2), 16);
   }
   return out;
 }

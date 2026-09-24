@@ -65,8 +65,8 @@ function writeGlyphRun(
   item: MathGlyphRun,
   ctx: MathContentWriteContext,
 ): void {
-  const cidBytes = encodeGlyphRunToCids(ctx.font, item.text);
-  if (cidBytes.length === 0) {
+  const encodedCids = encodeGlyphRunToCids(ctx.font, item.text);
+  if (encodedCids.length === 0) {
     return;
   }
   const x = toPdfX(positioned, item.xPt);
@@ -75,7 +75,7 @@ function writeGlyphRun(
   writer.writeAscii(`/${ctx.resourceName} ${formatNumber(item.sizePt)} Tf\n`);
   writeRgbOperator(writer, item.color, "rg");
   writer.writeAscii(`1 0 0 1 ${formatNumber(x)} ${formatNumber(y)} Tm\n`);
-  writeObject(writer, pdfHexString(cidBytes));
+  writeObject(writer, pdfHexString(encodedCids));
   writer.writeAscii(" Tj\n");
   writer.writeAscii("ET\n");
 }

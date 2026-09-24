@@ -25,7 +25,7 @@ import { hasBytes, u8, u16, u32 } from "./sfnt";
 export interface CffGlyphBounds {
   readonly numGlyphs: number;
   // `undefined` for a glyph ID outside the font, a glyph that draws nothing, or a charstring this module declines to walk (see the scope list above).
-  bounds(glyphId: number): GlyphInkBounds | undefined;
+  bounds: (glyphId: number) => GlyphInkBounds | undefined;
 }
 
 const CFF_HEADER_MIN_SIZE = 4;

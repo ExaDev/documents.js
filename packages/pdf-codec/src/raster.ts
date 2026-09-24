@@ -132,9 +132,9 @@ export interface RasterPageGeometry {
 
 // The contract a consumer's canvas implements. beginPage, then a document-order sequence of draw calls (the same order the page's content stream paints in, so later draws overlap earlier ones), then finish, which returns the rendered PNG bytes — synchronously or as a promise, whichever the backend's own encoder needs, so an async-encoding backend (a canvas convertToBlob, say) implements the same interface as a synchronous buffer writer. Ops may extend outside the canvas (page content straddling the clip boundary keeps its original geometry in the item layer, and rendering clips rather than truncates, exactly as a viewer does); a backend must bounds-check, never assume.
 export interface PageRasteriser {
-  beginPage(geometry: RasterPageGeometry): void;
-  draw(op: RasterDrawOp): void;
-  finish(): Uint8Array<ArrayBuffer> | Promise<Uint8Array<ArrayBuffer>>;
+  beginPage: (geometry: RasterPageGeometry) => void;
+  draw: (op: RasterDrawOp) => void;
+  finish: () => Uint8Array<ArrayBuffer> | Promise<Uint8Array<ArrayBuffer>>;
 }
 
 // --- The entry point's options. ---
@@ -765,10 +765,10 @@ export function flattenCubic(
 interface TextOutlineFace {
   readonly glyf: GlyfTable;
   readonly unitsPerEm: number;
-  glyphIdOf(
+  glyphIdOf: (
     codes: Uint8Array<ArrayBuffer>,
     byteOffset: number,
-  ): number | undefined;
+  ) => number | undefined;
 }
 
 // What an embedded font program turned out to carry, as resolved from a /FontDescriptor. The "glyf" case's own face carries only what every caller actually reads off it (glyf/unitsPerEm) — composite-ness and the shown-code -> glyph-ID mapping are per-font-dictionary facts a Type0 or TrueType caller derives for itself, never read back off this intermediate value.
@@ -902,10 +902,9 @@ function buildTextOutlineFace(
       encoding?.kind !== "name" ||
       (encoding.name !== "Identity-H" && encoding.name !== "Identity-V")
     ) {
-      unavailable(
+      return unavailable(
         "a Type0 font whose /Encoding is neither Identity-H nor Identity-V (a predefined or embedded CMap this raster walk does not decode)",
       );
-      return;
     }
     const descendants = asArray(dictGet(fontDict, "DescendantFonts"));
     const descendant =
@@ -913,39 +912,37 @@ function buildTextOutlineFace(
         ? resolver.resolveDict(descendants[0])
         : undefined;
     if (descendant === undefined) {
-      unavailable("a Type0 font with no readable /DescendantFonts entry");
-      return;
+      return unavailable(
+        "a Type0 font with no readable /DescendantFonts entry",
+      );
     }
     const descendantSubtype = asName(dictGet(descendant, "Subtype"));
     if (descendantSubtype === "CIDFontType0") {
-      cff();
-      return;
+      return cff();
     }
     if (descendantSubtype !== "CIDFontType2") {
-      unavailable(
+      return unavailable(
         `a descendant font of subtype ${descendantSubtype ?? "(none)"}`,
       );
-      return;
     }
     const cidToGidMap = resolver.resolve(dictGet(descendant, "CIDToGIDMap"));
     const program = openEmbeddedProgram(descendant, resolver);
     if (program.kind === "cff") {
-      cff();
-      return;
+      return cff();
     }
     if (program.kind === "absent") {
-      unavailable("no readable /FontFile2 (or glyf-bearing /FontFile3) stream");
-      return;
+      return unavailable(
+        "no readable /FontFile2 (or glyf-bearing /FontFile3) stream",
+      );
     }
     if (
       cidToGidMap !== undefined &&
       cidToGidMap.kind !== "name" &&
       cidToGidMap.kind !== "stream"
     ) {
-      unavailable(
+      return unavailable(
         "a /CIDToGIDMap that is neither /Identity nor a readable stream",
       );
-      return;
     }
     if (cidToGidMap?.kind === "stream") {
       // An explicit mapping stream: 2-byte big-endian GID per CID (ISO 32000-1 9.7.4.2). CIDs past the stream's end have no entry, and a missing GID is skipped — never drawn as glyph 0, which would paint .notdef ink the file never stated.
@@ -980,19 +977,18 @@ function buildTextOutlineFace(
     // A simple font's own program: code -> Unicode through the PDF's own full encoding precedence (the same decodeToUnicode font-read.ts implements), then Unicode -> GID through the program's own Unicode cmap subtable. Exact for the ordinary embedded TrueType programs simple fonts carry; a (3,0)-only subset whose cmap is keyed by its own codes rather than code points fails the lookup glyph-by-glyph and paints nothing, never a guessed glyph.
     const program = openEmbeddedProgram(fontDict, resolver);
     if (program.kind === "cff") {
-      cff();
-      return;
+      return cff();
     }
     if (program.kind === "absent") {
-      unavailable(
+      return unavailable(
         "no /FontDescriptor or no readable embedded program (a standard-14 or otherwise unembedded face states no outlines at all)",
       );
-      return;
     }
     const cmapLookup = buildCmapLookup(program.sfnt);
     if (cmapLookup === undefined) {
-      unavailable("an embedded program with no usable Unicode cmap subtable");
-      return;
+      return unavailable(
+        "an embedded program with no usable Unicode cmap subtable",
+      );
     }
     return {
       glyf: program.face.glyf,

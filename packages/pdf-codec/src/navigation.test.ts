@@ -134,7 +134,12 @@ function collectDiagnostics(): {
   diagnostics: PdfDiagnostic[];
 } {
   const diagnostics: PdfDiagnostic[] = [];
-  return { sink: (d) => diagnostics.push(d), diagnostics };
+  return {
+    sink: (d) => {
+      diagnostics.push(d);
+    },
+    diagnostics,
+  };
 }
 
 // A resolver over a plain ref-number -> object table — every object in these tests is either direct or a `pdfRef` into this map, matching interpret.test.ts's own makeResolver. Returning the SAME map entry on every resolve is what lets the cycle-detection tests below recognise a repeated node by object identity.

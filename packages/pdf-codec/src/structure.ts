@@ -5,6 +5,9 @@ import type { PdfDict, PdfObject } from "./objects";
 import { asArray, asName, asNumber, dictGet } from "./objects";
 import { decodePdfString } from "./pdf-text";
 
+// A sentinel that is never a key in idByDict, so `idByDict.get(x ?? NEVER_DICT)` reads as undefined for an unresolvable value without an assertion or a cast.
+const NEVER_DICT: PdfDict = { kind: "dict", entries: new Map() };
+
 // Tagged-structure reading (#760, ISO 32000-1 14.7): the /StructTreeRoot element tree and the (page, MCID) association that tells an extracted item which element owns it. Two channels in the file serve two different jobs and neither can do the other's: the /K recursion states the element tree itself (nesting, types, attributes), while /ParentTree states ownership — a number tree keyed by each page's own /StructParents value (a producer-chosen integer, not the page's position) whose entry is that page's array of owning elements indexed by MCID. The tree walk therefore ignores /K's integer and MCR content items entirely (they duplicate what the parent tree states, without the page context they need), and the association lookup never guesses a page from the tree.
 
 export interface StructureContext {
@@ -270,6 +273,3 @@ function parentTreeOwners(
   return (pageIndex: number, mcid: number): string | undefined =>
     owners.get(`${pageIndex}:${mcid}`);
 }
-
-// A sentinel that is never a key in idByDict, so `idByDict.get(x ?? NEVER_DICT)` reads as undefined for an unresolvable value without an assertion or a cast.
-const NEVER_DICT: PdfDict = { kind: "dict", entries: new Map() };

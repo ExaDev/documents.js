@@ -18,11 +18,11 @@ export const GLYPH_CLASS_COMPONENT = 4;
 // A parsed 'GDEF' table. Every method answers for any glyph ID rather than returning `undefined`: a glyph the table does not mention genuinely IS unclassified, in mark-attachment class 0, and outside every filtering set, the same class-0 catch-all ClassDefTable itself resolves with.
 export interface GdefTable {
   // The glyph's GlyphClassDef class: 0 unclassified, 1 base, 2 ligature, 3 mark, 4 component.
-  glyphClass(glyphId: number): number;
+  glyphClass: (glyphId: number) => number;
   // The glyph's MarkAttachClassDef class, 0 for a glyph that table does not list. Mark attachment classes are how a font splits its marks into groups a lookupFlag can selectively ignore: the flag's high byte names the one class whose marks stay visible.
-  markAttachClass(glyphId: number): number;
+  markAttachClass: (glyphId: number) => number;
   // Whether the MarkGlyphSets set at `setIndex` covers `glyphId`. `false` for a set index the font does not declare, matching the class-0 catch-all: a lookup naming a nonexistent filtering set skips every mark, exactly as one naming an empty set would.
-  markFilteringSetCovers(setIndex: number, glyphId: number): boolean;
+  markFilteringSetCovers: (setIndex: number, glyphId: number) => boolean;
 }
 
 const GDEF_HEADER_SIZE_1_0 = 12; // uint16 majorVersion + uint16 minorVersion + four Offset16s (glyphClassDef, attachList, ligCaretList, markAttachClassDef)

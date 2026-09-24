@@ -68,17 +68,17 @@ export interface PdfEncryptionOptions {
 
 export interface PdfEncryptor {
   readonly encryptDict: PdfDict;
-  encryptString(
+  encryptString: (
     bytes: Uint8Array<ArrayBuffer>,
     num: number,
     gen: number,
-  ): Uint8Array<ArrayBuffer>;
-  encryptStream(
+  ) => Uint8Array<ArrayBuffer>;
+  encryptStream: (
     bytes: Uint8Array<ArrayBuffer>,
     dict: PdfDict,
     num: number,
     gen: number,
-  ): Uint8Array<ArrayBuffer>;
+  ) => Uint8Array<ArrayBuffer>;
 }
 
 const RC4_128_KEY_BYTES = 16;

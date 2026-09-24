@@ -77,6 +77,7 @@ import {
 } from "./objects";
 import { NOTES_ANNOTATION_AUTHOR } from "./notes-annotation-author";
 import { serializeObjectToText } from "./serialize";
+import { decodePdfString, parsePdfDate } from "./pdf-text";
 
 // readPdf(bytes, options?) -> LayoutDocument: the top of the read pipeline, assembling every other src/pdf/* read module (document.ts's object store and page tree, interpret.ts's graphics/text extraction, font-read.ts's width/decode, images-read.ts's PNG/JPEG recovery) into the same pivot model src/pdf/write.ts consumes on the way out, so a document round-trips through readPdf -> writePdf structurally even though neither claims byte- or content-fidelity.
 //
@@ -1037,8 +1038,6 @@ function readPageNotes(
 }
 
 // --- PDF string decoding and /Info metadata: the scalar decoders themselves live in pdf-text.ts (shared with the other read-side modules; deep-importable as pdf-codec/pdf-text through the wildcard export). ---
-
-import { decodePdfString, parsePdfDate } from "./pdf-text";
 
 function readMetadata(
   trailer: PdfDict,

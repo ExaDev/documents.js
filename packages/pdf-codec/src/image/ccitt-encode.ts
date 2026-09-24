@@ -47,7 +47,7 @@ const LARGEST_MAKEUP_RUN = 2560;
 const MAKEUP_GRANULARITY = 64;
 
 class BitWriter {
-  private bytes: number[] = [];
+  private readonly bytes: number[] = [];
   private current = 0;
   private used = 0;
 

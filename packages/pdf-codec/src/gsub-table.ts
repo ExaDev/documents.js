@@ -5,6 +5,9 @@ import { parseClassDef, parseCoverage } from "./ot-layout-common";
 import type { SfntFont } from "./sfnt";
 import { hasBytes, i16, sfntTableBytes, u16, u32 } from "./sfnt";
 
+// A ClassDef that assigns class 0 to every glyph: the meaning of a NULL ClassDef offset in a format 2 subtable — nothing is listed, so everything falls to the catch-all class — rather than an absent table.
+const constantZeroClassDef: ClassDefTable = () => 0;
+
 // 'GSUB' (The OpenType spec, "GSUB - Glyph Substitution Table"; ISO/IEC 14496-22 clause 6.2): the substitution-side twin of the 'GPOS' pair-kerning table gpos-table.ts reads. This package applies the features an OpenType shaper turns on for text it has been told nothing else about — 'liga' (standard ligatures), 'rlig' (required ligatures), 'calt' (contextual alternates), and 'clig' (contextual ligatures) — because this package's layout carries no shaping properties beyond family/weight/style, and those four are the default-on set every real shaper (HarfBuzz among them) applies to unattributed horizontal text. The opt-in features stay opt-in rather than half-applied: 'smcp' (small caps) and 'dlig' (discretionary ligatures) reach through the same single- and ligature-substitution machinery the default features use, so a caller may enable them through GsubShaperOptions, but no real shaper turns them on until asked and neither does the default here. The README states this scope.
 //
 // The contextual features are why this module reads 'GDEF' (gdef-table.ts): a lookup's lookupFlag states skip conditions — ignore marks, ignore glyphs outside mark attachment class N, ignore marks outside filtering set S — that quantify over glyph classes only GDEF declares, and a Chaining Contextual rule's backtrack, input, and lookahead sequences are matched against the glyphs that remain visible after those skips. Caladea Italic is the concrete reason the flags cannot stay refused: its one 'liga' lookup carries the ignore-marks flag (0x0008), so before GDEF was read its fi/fl ligatures never applied at all.
@@ -937,9 +940,6 @@ function parseContextualSubtable(
   }
   return undefined;
 }
-
-// A ClassDef that assigns class 0 to every glyph: the meaning of a NULL ClassDef offset in a format 2 subtable — nothing is listed, so everything falls to the catch-all class — rather than an absent table.
-const constantZeroClassDef: ClassDefTable = () => 0;
 
 // The ScriptList walk, identical in shape to gpos-table.ts's own: Latin if the font has it, the script-independent default if not, otherwise the first script.
 function findScriptOffset(

@@ -148,20 +148,20 @@ export interface GlyphAdvance {
 
 // interpret.ts knows nothing about font dictionaries, /ToUnicode CMaps, or embedded-font tables — it only needs "how wide is the next glyph and how many bytes did it consume" to advance the text matrix correctly. font-read.ts implements this against a real PdfDocument; tests here use a fake.
 export interface FontMetricsPort {
-  glyphAdvance(
+  glyphAdvance: (
     fontResourceName: string,
     resources: PdfDict,
     codes: Uint8Array<ArrayBuffer>,
     byteOffset: number,
-  ): GlyphAdvance | undefined;
+  ) => GlyphAdvance | undefined;
   // Whether this font is set vertically, asked independently of any one glyph because a TJ array's own positioning numbers move the text position along whichever axis the writing mode chooses and an array may begin with one before a single glyph has been shown.
-  isVertical(fontResourceName: string, resources: PdfDict): boolean;
+  isVertical: (fontResourceName: string, resources: PdfDict) => boolean;
 }
 
 // The minimal reference-resolution surface interpret.ts needs (looking up /XObject and /Font resources, and recursing into a resolved Form XObject) — a structural subset of PdfDocument, not a dependency on document.ts itself.
 export interface PdfObjectResolver {
-  resolve(obj: PdfObject | undefined): PdfObject | undefined;
-  resolveDict(obj: PdfObject | undefined): PdfDict | undefined;
+  resolve: (obj: PdfObject | undefined) => PdfObject | undefined;
+  resolveDict: (obj: PdfObject | undefined) => PdfDict | undefined;
 }
 
 export interface InterpretContext {
@@ -984,8 +984,8 @@ function runContentStream(
     });
   };
 
-  const showText = (bytes: Uint8Array<ArrayBuffer>): void => {
-    showTextArray([{ kind: "string", bytes, hex: false }]);
+  const showText = (textBytes: Uint8Array<ArrayBuffer>): void => {
+    showTextArray([{ kind: "string", bytes: textBytes, hex: false }]);
   };
 
   const nextLine = (): void => {

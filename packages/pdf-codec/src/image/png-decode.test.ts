@@ -175,7 +175,11 @@ describe("decodePng against hand-built (Node zlib) fixtures", () => {
     const ihdrCrcOffset = PNG_SIGNATURE.length + 4 + 4 + 13; // length + type + IHDR data, then CRC
     corrupted[ihdrCrcOffset] = (corrupted[ihdrCrcOffset]! + 1) & 0xff;
     const warnings: string[] = [];
-    const image = decodePng(corrupted, { onWarning: (m) => warnings.push(m) });
+    const image = decodePng(corrupted, {
+      onWarning: (m) => {
+        warnings.push(m);
+      },
+    });
     expect(warnings.some((w) => w.includes("CRC32"))).toBe(true);
     expect(Array.from(image.data)).toEqual([42]);
   });
@@ -445,7 +449,11 @@ describe("decodePng: container-level failures and warnings", () => {
       { width: 1, height: 1, bitDepth: 8, colorType: 0 },
       Buffer.from([0, 128]),
     );
-    decodePng(png, { onWarning: (m) => warnings.push(m) });
+    decodePng(png, {
+      onWarning: (m) => {
+        warnings.push(m);
+      },
+    });
     expect(warnings).toEqual([]);
   });
 
@@ -469,7 +477,11 @@ describe("decodePng: container-level failures and warnings", () => {
       ]),
     );
     const warnings: string[] = [];
-    const image = decodePng(png, { onWarning: (m) => warnings.push(m) });
+    const image = decodePng(png, {
+      onWarning: (m) => {
+        warnings.push(m);
+      },
+    });
     expect(warnings.join(" ")).toMatch(/tolerant recovery/);
     expect(image.width).toBe(1);
     expect(image.height).toBe(2);

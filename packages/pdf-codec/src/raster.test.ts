@@ -283,12 +283,17 @@ describe("renderPdfPage: geometry and clipPt", () => {
 
   it("rejects scale and dpi together, non-positive scales, and zero-extent or non-intersecting clips", () => {
     const bytes = onePagePdf(content);
-    expect(() =>
-      renderPdfPage(bytes, 0, { scale: 1, dpi: 72 }, new RecordingRasteriser()),
-    ).toThrow(/at most one of scale and dpi/);
-    expect(() =>
-      renderPdfPage(bytes, 0, { scale: 0 }, new RecordingRasteriser()),
-    ).toThrow(/positive scale/);
+    expect(() => {
+      void renderPdfPage(
+        bytes,
+        0,
+        { scale: 1, dpi: 72 },
+        new RecordingRasteriser(),
+      );
+    }).toThrow(/at most one of scale and dpi/);
+    expect(() => {
+      void renderPdfPage(bytes, 0, { scale: 0 }, new RecordingRasteriser());
+    }).toThrow(/positive scale/);
     expect(() =>
       drive(
         bytes,
@@ -344,12 +349,12 @@ describe("renderPdfPage: geometry and clipPt", () => {
   });
 
   it("throws the reader's own typed errors for a non-PDF input and an out-of-range page", () => {
-    expect(() =>
-      renderPdfPage(enc("not a pdf"), 0, {}, new RecordingRasteriser()),
-    ).toThrow(PdfParseError);
-    expect(() =>
-      renderPdfPage(enc("not a pdf"), 0, {}, new RecordingRasteriser()),
-    ).toThrow(/no "%PDF-" header/);
+    expect(() => {
+      void renderPdfPage(enc("not a pdf"), 0, {}, new RecordingRasteriser());
+    }).toThrow(PdfParseError);
+    expect(() => {
+      void renderPdfPage(enc("not a pdf"), 0, {}, new RecordingRasteriser());
+    }).toThrow(/no "%PDF-" header/);
     try {
       drive(enc("not a pdf"), 0, {}, new RecordingRasteriser());
       throw new Error("expected renderPdfPage to throw");
@@ -357,9 +362,9 @@ describe("renderPdfPage: geometry and clipPt", () => {
       expect(error).toBeInstanceOf(PdfParseError);
       expect((error as PdfParseError).code).toBe("pdf/no-header");
     }
-    expect(() =>
-      renderPdfPage(onePagePdf(content), 7, {}, new RecordingRasteriser()),
-    ).toThrow(/page index 7/);
+    expect(() => {
+      void renderPdfPage(onePagePdf(content), 7, {}, new RecordingRasteriser());
+    }).toThrow(/page index 7/);
     try {
       drive(onePagePdf(content), 7, {}, new RecordingRasteriser());
       throw new Error("expected renderPdfPage to throw");
@@ -372,22 +377,22 @@ describe("renderPdfPage: geometry and clipPt", () => {
     // hasPdfHeader searches only a bounded prefix (ISO 32000-1 7.5.2 allows junk before the header, not an unbounded scan) — a header sitting well past that window is exactly as absent as no header at all.
     const junkPrefix = new Uint8Array(1030).fill(0x41); // 1030 > HEADER_SEARCH_WINDOW's own 1024
     const bytes = new Uint8Array([...junkPrefix, ...enc("%PDF-1.7\n")]);
-    expect(() =>
-      renderPdfPage(bytes, 0, {}, new RecordingRasteriser()),
-    ).toThrow(/no "%PDF-" header/);
+    expect(() => {
+      void renderPdfPage(bytes, 0, {}, new RecordingRasteriser());
+    }).toThrow(/no "%PDF-" header/);
   });
 
   it("checks for an already-aborted signal before any parsing begins", () => {
     const controller = new AbortController();
     controller.abort();
-    expect(() =>
-      renderPdfPage(
+    expect(() => {
+      void renderPdfPage(
         onePagePdf(content),
         0,
         { signal: controller.signal },
         new RecordingRasteriser(),
-      ),
-    ).toThrow(/Aborted/);
+      );
+    }).toThrow(/Aborted/);
   });
 
   it("checks an already-aborted signal at entry even for a page with no /Resources, whose walk never reaches the per-item abort check at all", () => {
@@ -425,28 +430,33 @@ describe("renderPdfPage: geometry and clipPt", () => {
   });
 
   it("rejects a page index at exactly the page count (the first invalid index, not just far out of range), naming the count singular for one page", () => {
-    expect(() =>
-      renderPdfPage(onePagePdf(content), 1, {}, new RecordingRasteriser()),
-    ).toThrow(
+    expect(() => {
+      void renderPdfPage(onePagePdf(content), 1, {}, new RecordingRasteriser());
+    }).toThrow(
       /page index 1 is outside this document's page tree \(it declares 1 page\)$/,
     );
   });
 
   it("rejects a negative page index", () => {
-    expect(() =>
-      renderPdfPage(onePagePdf(content), -1, {}, new RecordingRasteriser()),
-    ).toThrow(/page index -1/);
+    expect(() => {
+      void renderPdfPage(
+        onePagePdf(content),
+        -1,
+        {},
+        new RecordingRasteriser(),
+      );
+    }).toThrow(/page index -1/);
   });
 
   it("names the page count plural for a multi-page document", () => {
-    expect(() =>
-      renderPdfPage(
+    expect(() => {
+      void renderPdfPage(
         twoPagesFirstWithoutResourcesPdf(),
         5,
         {},
         new RecordingRasteriser(),
-      ),
-    ).toThrow(/it declares 2 pages\)$/);
+      );
+    }).toThrow(/it declares 2 pages\)$/);
   });
 
   it("falls back to /MediaBox and emits a diagnostic when /CropBox is degenerate", () => {
@@ -455,7 +465,11 @@ describe("renderPdfPage: geometry and clipPt", () => {
     drive(
       onePagePdf(content, { pageEntries: "/CropBox [0 0 0 100] " }),
       0,
-      { sink: (d) => diagnostics.push(d) },
+      {
+        sink: (d) => {
+          diagnostics.push(d);
+        },
+      },
       rasteriser,
     );
     expect(rasteriser.geometry).toMatchObject({ widthPx: 200, heightPx: 100 });
@@ -476,7 +490,11 @@ describe("renderPdfPage: geometry and clipPt", () => {
     drive(
       onePagePdf(content, { pageEntries: "/CropBox [-20 -30 10 10] " }),
       0,
-      { sink: (d) => diagnostics.push(d) },
+      {
+        sink: (d) => {
+          diagnostics.push(d);
+        },
+      },
       rasteriser,
     );
     expect(diagnostics.some((d) => d.code === "pdf/invalid-crop-box")).toBe(
@@ -507,7 +525,11 @@ describe("renderPdfPage: geometry and clipPt", () => {
     drive(
       onePagePdf(content, { pageEntries: "/CropBox [0 100 30 100] " }),
       0,
-      { sink: (d) => diagnostics.push(d) },
+      {
+        sink: (d) => {
+          diagnostics.push(d);
+        },
+      },
       rasteriser,
     );
     expect(diagnostics.some((d) => d.code === "pdf/invalid-crop-box")).toBe(
@@ -566,7 +588,11 @@ describe("renderPdfPage: geometry and clipPt", () => {
     drive(
       twoPagesFirstWithoutResourcesPdf(),
       0,
-      { sink: (d) => diagnostics.push(d) },
+      {
+        sink: (d) => {
+          diagnostics.push(d);
+        },
+      },
       new RecordingRasteriser(),
     );
     expect(diagnostics).toContainEqual(
@@ -638,7 +664,16 @@ describe("renderPdfPage: geometry and clipPt", () => {
     const diagnostics: PdfDiagnostic[] = [];
     const rasteriser = new RecordingRasteriser();
     const bytes = twoPagesFirstWithoutResourcesPdf();
-    drive(bytes, 0, { sink: (d) => diagnostics.push(d) }, rasteriser);
+    drive(
+      bytes,
+      0,
+      {
+        sink: (d) => {
+          diagnostics.push(d);
+        },
+      },
+      rasteriser,
+    );
     expect(rasteriser.geometry).toEqual({
       widthPx: 200,
       heightPx: 100,
@@ -1678,7 +1713,16 @@ describe("renderPdfPage: text refusals are named, never approximated", () => {
     b.stream(5, "<< >>", enc("BT /F1 12 Tf 10 50 Td <0041> Tj ET"));
     const bytes = b.classicXrefAndTrailer(7, "/Root 1 0 R");
     const rasteriser = new RecordingRasteriser();
-    drive(bytes, 0, { sink: (d) => diagnostics.push(d) }, rasteriser);
+    drive(
+      bytes,
+      0,
+      {
+        sink: (d) => {
+          diagnostics.push(d);
+        },
+      },
+      rasteriser,
+    );
     expect(diagnostics.map((d) => d.code)).toContain(
       "raster/text-cff-outlines",
     );
@@ -1691,7 +1735,11 @@ describe("renderPdfPage: text refusals are named, never approximated", () => {
     drive(
       minimalClassicXrefPdf(),
       0,
-      { sink: (d) => diagnostics.push(d) },
+      {
+        sink: (d) => {
+          diagnostics.push(d);
+        },
+      },
       rasteriser,
     );
     expect(diagnostics.map((d) => d.code)).toContain(
@@ -1713,7 +1761,11 @@ describe("renderPdfPage: text refusals are named, never approximated", () => {
     drive(
       onePagePdf("BT /F1 24 Tf 20 60 Td (A) Tj 0 -20 Td (B) Tj ET"),
       0,
-      { sink: (d) => diagnostics.push(d) },
+      {
+        sink: (d) => {
+          diagnostics.push(d);
+        },
+      },
       rasteriser,
     );
     expect(
@@ -1770,7 +1822,16 @@ describe("renderPdfPage: text refusals are named, never approximated", () => {
   } {
     const diagnostics: PdfDiagnostic[] = [];
     const rasteriser = new RecordingRasteriser();
-    drive(bytes, 0, { sink: (d) => diagnostics.push(d) }, rasteriser);
+    drive(
+      bytes,
+      0,
+      {
+        sink: (d) => {
+          diagnostics.push(d);
+        },
+      },
+      rasteriser,
+    );
     return { diagnostics, rasteriser };
   }
 

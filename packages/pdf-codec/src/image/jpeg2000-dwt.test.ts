@@ -318,9 +318,9 @@ describe("synthesiseLine", () => {
         write,
         5,
         5,
+        () => {},
         () => 0,
-        () => 0,
-        () => 0,
+        () => {},
         (v) => v,
       );
     }).not.toThrow();
@@ -330,9 +330,9 @@ describe("synthesiseLine", () => {
         write,
         5,
         3,
+        () => {},
         () => 0,
-        () => 0,
-        () => 0,
+        () => {},
         (v) => v,
       );
     }).not.toThrow();
@@ -347,9 +347,9 @@ describe("synthesiseLine", () => {
       },
       4,
       5,
+      () => {},
       () => 0,
-      () => 0,
-      () => 0,
+      () => {},
       (value) => value * 1000, // would be unmistakable in the output if wrongly applied
     );
     expect(written).toEqual([4, 42]);
@@ -364,9 +364,9 @@ describe("synthesiseLine", () => {
       },
       5,
       6,
+      () => {},
       () => 0,
-      () => 0,
-      () => 0,
+      () => {},
       (value) => value / 2,
     );
     expect(written).toEqual([5, 21]);

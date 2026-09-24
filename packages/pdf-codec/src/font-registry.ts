@@ -41,7 +41,7 @@ export type ResolvedFace =
     };
 
 export interface FontRegistry {
-  resolve(font: LayoutFont): ResolvedFace;
+  resolve: (font: LayoutFont) => ResolvedFace;
 }
 
 function faceCacheKey(family: string, bold: boolean, italic: boolean): string {

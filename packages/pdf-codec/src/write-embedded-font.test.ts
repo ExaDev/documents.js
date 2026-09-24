@@ -286,9 +286,12 @@ describe("writePdf: a FontRegistry resolving Calibri to the vendored Carlito sub
     writePdf(textDoc("a中b", CALIBRI), {
       compress: false,
       fonts: createFontRegistry(),
-      onMissingGlyph: (m, ctx) =>
-        missing.push({ ...m, pageIndex: ctx.pageIndex }),
-      onSubstitution: (s) => substitutions.push(s),
+      onMissingGlyph: (m, ctx) => {
+        missing.push({ ...m, pageIndex: ctx.pageIndex });
+      },
+      onSubstitution: (s) => {
+        substitutions.push(s);
+      },
     });
     expect(missing).toEqual([{ from: "中", pageIndex: 0 }]);
     expect(substitutions).toHaveLength(0);
@@ -698,7 +701,9 @@ describe("the vendored-substitute step's Calibri Light report", () => {
       readonly resolvedFamily: string;
     }[] = [];
     const registry = createFontRegistry({
-      onSubstitution: (report) => reports.push(report),
+      onSubstitution: (report) => {
+        reports.push(report);
+      },
     });
     const resolved = registry.resolve(CALIBRI_LIGHT);
     // No genuine Light face exists to vendor (Carlito ships one weight per style axis), so the honest outcome is the documented approximation — ordinary-weight Carlito — REPORTED rather than silent. This pins that the report fires, so it cannot quietly regress into a silent substitution.

@@ -13,12 +13,12 @@ export interface CmapSubtable {
   readonly format: number;
   readonly lookup: CmapLookup;
   // Visits every code this subtable maps, in no particular order. Used to invert a subtable (glyph ID -> code), which has no direct form in any of these formats.
-  forEachMapping(visit: (code: number, glyphId: number) => void): void;
+  forEachMapping: (visit: (code: number, glyphId: number) => void) => void;
 }
 
 interface ParsedSubtable {
   readonly lookup: CmapLookup;
-  forEachMapping(visit: (code: number, glyphId: number) => void): void;
+  forEachMapping: (visit: (code: number, glyphId: number) => void) => void;
 }
 
 const CMAP_HEADER_SIZE = 4;

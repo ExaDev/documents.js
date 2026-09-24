@@ -327,7 +327,9 @@ describe("format 12 (segmented coverage)", () => {
     );
     const [subtable] = readCmapSubtables(font);
     const visited: [number, number][] = [];
-    subtable?.forEachMapping((code, glyphId) => visited.push([code, glyphId]));
+    subtable?.forEachMapping((code, glyphId) => {
+      visited.push([code, glyphId]);
+    });
     expect(visited).toEqual([[0x10_ffff, 7]]);
   });
 });
@@ -530,7 +532,9 @@ describe("readCmapSubtables", () => {
       parse(buildFontWithCmapSubtable(3, 0, format0)),
     );
     const visited: [number, number][] = [];
-    subtable?.forEachMapping((code, glyphId) => visited.push([code, glyphId]));
+    subtable?.forEachMapping((code, glyphId) => {
+      visited.push([code, glyphId]);
+    });
     expect(visited).toEqual([
       [0x41, 7],
       [0x42, 9],

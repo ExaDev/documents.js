@@ -8,7 +8,12 @@ function collectDiagnostics(): {
   diagnostics: PdfDiagnostic[];
 } {
   const diagnostics: PdfDiagnostic[] = [];
-  return { sink: (d) => diagnostics.push(d), diagnostics };
+  return {
+    sink: (d) => {
+      diagnostics.push(d);
+    },
+    diagnostics,
+  };
 }
 
 describe("readPredictorParams", () => {

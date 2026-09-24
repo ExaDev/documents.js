@@ -1,5 +1,8 @@
 import { Jpeg2000ParseError } from "./jpeg2000-errors";
 
+// Higher than any threshold a real packet header uses (thresholds are layer indices and zero-bit-plane counts, both bounded well below this), so an undetermined node always compares as "at least the threshold".
+const SENTINEL_VALUE = 0x7fffffff;
+
 // The two bit-level primitives a JPEG 2000 packet header is built from: the stuffed-bit reader of ISO/IEC 15444-1 B.10.1 and the tag tree of B.10.2. Both are pure bitstream mechanics with no knowledge of what the values mean, which is why they sit below jpeg2000-t2.ts rather than inside it.
 
 // B.10.1: packet header bits are read most-significant first, and a byte that follows a 0xFF byte carries only seven bits — its most significant bit is a stuffed zero, there so no 0xFF 0x90-or-above marker sequence can ever appear inside a packet header.
@@ -145,6 +148,3 @@ export class TagTree {
     return this.value[y * (this.levelWidths[0] ?? 1) + x] ?? SENTINEL_VALUE;
   }
 }
-
-// Higher than any threshold a real packet header uses (thresholds are layer indices and zero-bit-plane counts, both bounded well below this), so an undetermined node always compares as "at least the threshold".
-const SENTINEL_VALUE = 0x7fffffff;

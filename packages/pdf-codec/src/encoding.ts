@@ -1,5 +1,7 @@
 import { winAnsiCodeToUnicode } from "./winansi";
 
+const MAX_UNICODE_CODE_POINT = 0x10ffff;
+
 // The WinAnsiEncoding table (PDF spec ISO 32000-1 Annex D.2, aka CP1252's printable range): PDF character code (0-255) -> PostScript glyph name. Used to resolve a character to its standard-14 glyph name for measurement (afm-widths.ts) and, on the read path, to decode simple-font text when no /ToUnicode CMap is present. An empty string marks an unassigned/control code. Verified against pdf.js's own WinAnsiEncoding table (src/core/encodings.js), not transcribed from memory.
 export const WINANSI_GLYPH_NAMES: readonly string[] = [
   "",
@@ -1741,5 +1743,3 @@ function algorithmicGlyphNameToUnicode(name: string): number | undefined {
   const codePoint = Number.parseInt(uMatch[1], 16);
   return codePoint <= MAX_UNICODE_CODE_POINT ? codePoint : undefined;
 }
-
-const MAX_UNICODE_CODE_POINT = 0x10ffff;

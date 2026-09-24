@@ -1,3 +1,4 @@
+import { assertNeverToken } from "./parse";
 import { describe, expect, it } from "vitest";
 import { ByteReader } from "./bytes/reader";
 import type { PdfDiagnostic, PdfDiagnosticSink } from "./diagnostics";
@@ -14,7 +15,12 @@ function collectDiagnostics(): {
   diagnostics: PdfDiagnostic[];
 } {
   const diagnostics: PdfDiagnostic[] = [];
-  return { sink: (d) => diagnostics.push(d), diagnostics };
+  return {
+    sink: (d) => {
+      diagnostics.push(d);
+    },
+    diagnostics,
+  };
 }
 
 function parseAllValues(text: string): {
@@ -405,5 +411,13 @@ describe("parseIndirectObject", () => {
     expect(diagnostics.some((d) => d.code === "pdf/object-missing-value")).toBe(
       true,
     );
+  });
+});
+
+describe("assertNeverToken", () => {
+  it("throws naming the unhandled token, proving parseValue's own exhaustiveness guard fires at runtime", () => {
+    expect(() => {
+      assertNeverToken({ kind: "bogus" } as never);
+    }).toThrow('parseValue: unhandled token {"kind":"bogus"}');
   });
 });

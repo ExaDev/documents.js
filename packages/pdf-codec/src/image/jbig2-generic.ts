@@ -120,7 +120,7 @@ function resolveTemplate(template: number): readonly TemplatePosition[] {
 // Resolves a template's own adaptive entries against the AT offsets a segment actually declared, flattening the result into parallel offset arrays. Done once per region rather than once per pixel: the inner loop below runs up to sixteen times for every pixel of a page, so a per-position object property read there is the difference between a page decoding in well under a second and taking several.
 function flattenTemplate(
   positions: readonly TemplatePosition[],
-  at: readonly Jbig2AtPixel[],
+  atPixels: readonly Jbig2AtPixel[],
 ): { readonly dx: Int32Array; readonly dy: Int32Array } {
   const dx = new Int32Array(positions.length);
   const dy = new Int32Array(positions.length);
@@ -128,7 +128,7 @@ function flattenTemplate(
     const offset =
       position.kind === "fixed"
         ? { x: position.dx, y: position.dy }
-        : (at[position.index] ?? { x: 0, y: 0 });
+        : (atPixels[position.index] ?? { x: 0, y: 0 });
     dx[i] = offset.x;
     dy[i] = offset.y;
   });

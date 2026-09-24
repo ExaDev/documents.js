@@ -93,9 +93,9 @@ const COVERAGE_HEADER_SIZE = 4; // uint16 coverageFormat + uint16 (glyphCount | 
 // A parsed Coverage table: the glyph-to-position indirection every glyph-keyed OpenType Layout subtable goes through.
 export interface CoverageTable {
   // This glyph's own index into the subtable's parallel value array, or `undefined` when the table does not cover it at all.
-  coverageIndex(glyphId: number): number | undefined;
+  coverageIndex: (glyphId: number) => number | undefined;
   // Every covered glyph paired with its coverage index, ascending by glyph ID. For a consumer that needs to walk the whole coverage rather than probe it (math-table.ts builds its per-glyph value maps this way), since the range representation above is not itself enumerable.
-  entries(): IterableIterator<readonly [number, number]>;
+  entries: () => IterableIterator<readonly [number, number]>;
 }
 
 export function parseCoverage(

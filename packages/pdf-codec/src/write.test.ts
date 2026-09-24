@@ -445,8 +445,9 @@ describe("writePdf: text and fonts", () => {
       ]),
       {
         compress: false,
-        onSubstitution: (s, ctx) =>
-          substitutions.push({ ...s, pageIndex: ctx.pageIndex }),
+        onSubstitution: (s, ctx) => {
+          substitutions.push({ ...s, pageIndex: ctx.pageIndex });
+        },
       },
     );
     expect(substitutions).toEqual([{ from: "中", to: "?", pageIndex: 0 }]);

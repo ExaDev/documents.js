@@ -14,7 +14,12 @@ function collectDiagnostics(): {
   diagnostics: PdfDiagnostic[];
 } {
   const diagnostics: PdfDiagnostic[] = [];
-  return { sink: (d) => diagnostics.push(d), diagnostics };
+  return {
+    sink: (d) => {
+      diagnostics.push(d);
+    },
+    diagnostics,
+  };
 }
 
 // Replaces the digit run after the last "startxref\n" with a bogus offset, entirely at the byte level — the fixture's compressed streams are binary and a UTF-8 text round-trip (decode/replace/re-encode) would silently mangle every byte >=0x80 in them.
@@ -289,9 +294,9 @@ describe("readXref: classic section malformed shapes", () => {
 describe("readXref: cross-reference stream variants", () => {
   it("applies a default /W of one byte per field when /W is absent", () => {
     const { bytes, objectOne } = xrefStreamVariant({
-      rows: (objectOne) => [
+      rows: (objectOneOffset) => [
         { type: 0, field2: 0, field3: 0 },
-        { type: 1, field2: objectOne, field3: 0 },
+        { type: 1, field2: objectOneOffset, field3: 0 },
       ],
       widths: undefined,
       size: 2,
@@ -309,9 +314,9 @@ describe("readXref: cross-reference stream variants", () => {
   it("reads a type-1 row through a /W whose first field is zero width", () => {
     // /W [0 2 1]: no type byte at all, which the spec's own rule reads as type 1 (an ordinary offset entry).
     const { bytes, objectOne } = xrefStreamVariant({
-      rows: (objectOne) => [
-        { type: 0, field2: objectOne, field3: 0 },
-        { type: 0, field2: objectOne, field3: 7 },
+      rows: (objectOneOffset) => [
+        { type: 0, field2: objectOneOffset, field3: 0 },
+        { type: 0, field2: objectOneOffset, field3: 7 },
       ],
       widths: [0, 2, 1],
       size: 2,
@@ -329,9 +334,9 @@ describe("readXref: cross-reference stream variants", () => {
 
   it("skips a type-0 row silently rather than warning about it", () => {
     const { bytes } = xrefStreamVariant({
-      rows: (objectOne) => [
+      rows: (objectOneOffset) => [
         { type: 0, field2: 0, field3: 0 },
-        { type: 1, field2: objectOne, field3: 0 },
+        { type: 1, field2: objectOneOffset, field3: 0 },
         { type: 0, field2: 5, field3: 5 },
       ],
       widths: [1, 1, 1],
@@ -347,9 +352,9 @@ describe("readXref: cross-reference stream variants", () => {
 
   it("warns on and drops a row of unrecognised type", () => {
     const { bytes } = xrefStreamVariant({
-      rows: (objectOne) => [
+      rows: (objectOneOffset) => [
         { type: 0, field2: 0, field3: 0 },
-        { type: 1, field2: objectOne, field3: 0 },
+        { type: 1, field2: objectOneOffset, field3: 0 },
         { type: 3, field2: 9, field3: 9 },
       ],
       widths: [1, 1, 1],
@@ -369,10 +374,10 @@ describe("readXref: cross-reference stream variants", () => {
 
   it("reads several /Index ranges and ignores a trailing odd element", () => {
     const { bytes } = xrefStreamVariant({
-      rows: (objectOne) => [
+      rows: (objectOneOffset) => [
         { type: 0, field2: 0, field3: 0 },
-        { type: 1, field2: objectOne, field3: 0 },
-        { type: 1, field2: objectOne, field3: 3 },
+        { type: 1, field2: objectOneOffset, field3: 0 },
+        { type: 1, field2: objectOneOffset, field3: 3 },
       ],
       widths: [1, 2, 1],
       size: 6,
@@ -388,11 +393,11 @@ describe("readXref: cross-reference stream variants", () => {
 
   it("warns on running out of row data, naming the first object that no longer fits", () => {
     const { bytes } = xrefStreamVariant({
-      rows: (objectOne) => [
-        { type: 1, field2: objectOne, field3: 0 },
-        { type: 1, field2: objectOne, field3: 1 },
-        { type: 1, field2: objectOne, field3: 2 },
-        { type: 1, field2: objectOne, field3: 3 },
+      rows: (objectOneOffset) => [
+        { type: 1, field2: objectOneOffset, field3: 0 },
+        { type: 1, field2: objectOneOffset, field3: 1 },
+        { type: 1, field2: objectOneOffset, field3: 2 },
+        { type: 1, field2: objectOneOffset, field3: 3 },
       ],
       widths: [1, 2, 1],
       size: 12,
@@ -410,9 +415,9 @@ describe("readXref: cross-reference stream variants", () => {
 
   it("covers 0..Size by default when /Index is absent", () => {
     const { bytes, objectOne } = xrefStreamVariant({
-      rows: (objectOne) => [
+      rows: (objectOneOffset) => [
         { type: 0, field2: 0, field3: 0 },
-        { type: 1, field2: objectOne, field3: 0 },
+        { type: 1, field2: objectOneOffset, field3: 0 },
       ],
       widths: [1, 2, 1],
       size: 2,

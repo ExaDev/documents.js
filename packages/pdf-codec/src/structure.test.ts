@@ -140,7 +140,9 @@ describe("readPdf: marked-content association", () => {
     const bytes = parentTreeMissingEntryPdf();
     const diagnostics: PdfDiagnostic[] = [];
     const doc = readPdf(bytes, {
-      sink: (d) => diagnostics.push(d),
+      sink: (d) => {
+        diagnostics.push(d);
+      },
     });
     expect(
       diagnostics.some((d) => d.code === "pdf/parent-tree-missing-entry"),

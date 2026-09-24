@@ -145,7 +145,7 @@ function optionalCoords(
 export interface DestinationRegistry {
   readonly entries: readonly LayoutDestination[];
   // A named destination (PDF string) resolves to its own name when the table carries it; a direct destination array mints a fresh collision-free `destN` entry. Returns undefined (with a diagnostic) for a dangling name or an unparseable array.
-  intern(obj: PdfObject | undefined): string | undefined;
+  intern: (obj: PdfObject | undefined) => string | undefined;
 }
 
 export function createDestinationRegistry(
