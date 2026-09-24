@@ -157,6 +157,13 @@ export type DocumentJsonResult =
   | { kind: "DocumentTree"; value: DocumentTree }
   | { kind: "ContentDocument"; value: ContentDocument };
 
+// Reached only if DocumentSchemaKind ever gains a variant documentFromJson's own switch does not match: every current member is covered by a case there, so `value` narrows to `never` at the real call site, and adding an uncovered kind makes that narrowing fail and this call stop compiling. That is the real safety net. Exists so the switch's own exhaustiveness (proven by the type checker, not by a catch-all default that would silently swallow a genuinely new kind) still gives consistent-return an explicit statement to see past the switch. Exported so schema-io.test.ts can exercise the throw directly with a forced-invalid cast: it is otherwise unreachable, since every real DocumentSchemaKind is already handled by a case in documentFromJson.
+export function assertNeverDocumentSchemaKind(value: never): never {
+  throw new Error(
+    `documentFromJson: unhandled DocumentSchemaKind ${JSON.stringify(value)}`,
+  );
+}
+
 // The ingest entry point for a value of unknown provenance. $schema selects which schema to run and the version gate decides whether this release may run it; the schema itself still does the real structural validation (a recognized $schema with a structurally invalid body throws the underlying ZodError, not one of this module's errors). Within one major the installed schema validates the dump — patch and minor releases are semver-compatible with the major's schema generation — and across majors it refuses, because a major boundary is exactly where the schema's shape may have changed incompatibly (4.0.0's tree-form envelope being the live example). A caller that already knows the kind and trusts the value's provenance can keep calling DocumentTreeSchema.parse(value) (etc.) directly, unchanged — these schemas are plain (non-strict) z.object()s, so they already tolerate and silently strip an incoming $schema property with zero new code — but such a caller is validating structure only, not version: that is the documented difference between a direct parse and this dispatch.
 export function documentFromJson(value: unknown): DocumentJsonResult {
   if (!isRecord(value) || typeof value.$schema !== "string") {
@@ -194,4 +201,5 @@ export function documentFromJson(value: unknown): DocumentJsonResult {
     case "ContentDocument":
       return { kind, value: ContentDocumentSchema.parse(value) };
   }
+  return assertNeverDocumentSchemaKind(kind);
 }

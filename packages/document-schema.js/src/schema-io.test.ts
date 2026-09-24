@@ -4,6 +4,7 @@ import type { ContentDocument } from "./content";
 import { type DocumentTree, DocumentTreeSchema } from "./package";
 import type { SectionGroupNode } from "./package-node";
 import {
+  assertNeverDocumentSchemaKind,
   contentDocumentWithSchema,
   documentFromJson,
   documentTreeWithSchema,
@@ -395,5 +396,20 @@ describe("documentFromJson dispatches on the $schema URI", () => {
       $schema: uriForVersion(installedMajorPlusOne, "document-tree"),
     } as unknown;
     expect(DocumentTreeSchema.safeParse(foreignTagged).success).toBe(true);
+  });
+});
+
+describe("assertNeverDocumentSchemaKind", () => {
+  it("throws naming the unhandled kind, proving documentFromJson's own exhaustiveness guard actually fires at runtime", () => {
+    let caught: unknown;
+    try {
+      assertNeverDocumentSchemaKind("Bogus" as never);
+    } catch (error) {
+      caught = error;
+    }
+    expect(caught).toBeInstanceOf(Error);
+    expect((caught as Error).message).toBe(
+      'documentFromJson: unhandled DocumentSchemaKind "Bogus"',
+    );
   });
 });

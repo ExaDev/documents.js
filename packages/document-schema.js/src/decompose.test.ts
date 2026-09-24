@@ -14,6 +14,7 @@ import type {
 } from "./content";
 import {
   ConstructMarkerImbalanceError,
+  assertNeverContentDocumentKind,
   decompose,
   decomposeSection,
   decomposeSheet,
@@ -985,5 +986,20 @@ describe("ownership", () => {
     const [firstBlock, secondBlock] = section.blocks;
     expect(firstBlock).toBe(heading);
     expect(secondBlock).toBe(body);
+  });
+});
+
+describe("assertNeverContentDocumentKind", () => {
+  it("throws naming the unhandled kind, proving decompose's and assembleTree's own exhaustiveness guard actually fires at runtime", () => {
+    let caught: unknown;
+    try {
+      assertNeverContentDocumentKind({ kind: "bogus" } as never);
+    } catch (error) {
+      caught = error;
+    }
+    expect(caught).toBeInstanceOf(Error);
+    expect((caught as Error).message).toBe(
+      'decompose: unhandled ContentDocument kind {"kind":"bogus"}',
+    );
   });
 });
