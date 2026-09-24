@@ -381,55 +381,83 @@ describe("renderLinkTitle", () => {
 });
 
 describe("the link title a covering run-level extent supplies", () => {
+  // titledLinkGroup's own four fixture runs are p / a(link) / b(link) / q, so [0, groupEnd) covers the whole group and [innerStart, innerEnd) covers just the two linked runs.
+  const groupEnd = 4;
+  const innerStart = 1;
+  const innerEnd = 3;
+
   it("renders the title of the one extent covering the group, whichever side of the group the extent extends past", () => {
-    expect(titledLinkGroup([linkExtent(0, 4, "t")])).toBe('p[ab](/u "t")q');
+    expect(titledLinkGroup([linkExtent(0, groupEnd, "t")])).toBe(
+      'p[ab](/u "t")q',
+    );
   });
 
   it("ignores an extent that does not cover the whole group", () => {
-    expect(titledLinkGroup([linkExtent(2, 4, "t")])).toBe("p[ab](/u)q");
+    expect(titledLinkGroup([linkExtent(2, groupEnd, "t")])).toBe("p[ab](/u)q");
     expect(titledLinkGroup([linkExtent(0, 2, "t")])).toBe("p[ab](/u)q");
   });
 
   it("takes the innermost covering extent by LARGEST startRun, whichever order the two extents are listed in", () => {
     expect(
-      titledLinkGroup([linkExtent(0, 4, "outer"), linkExtent(1, 3, "inner")]),
+      titledLinkGroup([
+        linkExtent(0, groupEnd, "outer"),
+        linkExtent(innerStart, innerEnd, "inner"),
+      ]),
     ).toBe('p[ab](/u "inner")q');
     expect(
-      titledLinkGroup([linkExtent(1, 3, "inner"), linkExtent(0, 4, "outer")]),
+      titledLinkGroup([
+        linkExtent(innerStart, innerEnd, "inner"),
+        linkExtent(0, groupEnd, "outer"),
+      ]),
     ).toBe('p[ab](/u "inner")q');
   });
 
   it("breaks a startRun tie by SMALLEST endRun, whichever order the two extents are listed in", () => {
     expect(
-      titledLinkGroup([linkExtent(0, 4, "outer"), linkExtent(0, 3, "inner")]),
+      titledLinkGroup([
+        linkExtent(0, groupEnd, "outer"),
+        linkExtent(0, innerEnd, "inner"),
+      ]),
     ).toBe('p[ab](/u "inner")q');
     expect(
-      titledLinkGroup([linkExtent(0, 3, "inner"), linkExtent(0, 4, "outer")]),
+      titledLinkGroup([
+        linkExtent(0, innerEnd, "inner"),
+        linkExtent(0, groupEnd, "outer"),
+      ]),
     ).toBe('p[ab](/u "inner")q');
   });
 
   it("keeps the FIRST of two extents whose ranges are identical, since neither is tighter than the other", () => {
     expect(
-      titledLinkGroup([linkExtent(0, 4, "first"), linkExtent(0, 4, "second")]),
+      titledLinkGroup([
+        linkExtent(0, groupEnd, "first"),
+        linkExtent(0, groupEnd, "second"),
+      ]),
     ).toBe('p[ab](/u "first")q');
   });
 
   it("prefers the larger startRun over the smaller endRun when two covering extents CROSS rather than nest", () => {
     expect(
-      titledLinkGroup([linkExtent(1, 4, "inner"), linkExtent(0, 3, "wider")]),
+      titledLinkGroup([
+        linkExtent(innerStart, groupEnd, "inner"),
+        linkExtent(0, innerEnd, "wider"),
+      ]),
     ).toBe('p[ab](/u "inner")q');
   });
 
   it("skips an untitled link extent entirely rather than letting it win as the tightest and carry no title", () => {
-    expect(titledLinkGroup([linkExtent(0, 4, "outer"), linkExtent(1, 3)])).toBe(
-      'p[ab](/u "outer")q',
-    );
+    expect(
+      titledLinkGroup([
+        linkExtent(0, groupEnd, "outer"),
+        linkExtent(innerStart, innerEnd),
+      ]),
+    ).toBe('p[ab](/u "outer")q');
   });
 
   it("skips an extent of any other descriptor kind, which annotates nothing about this link", () => {
     expect(
       titledLinkGroup([
-        linkExtent(0, 4, "outer"),
+        linkExtent(0, groupEnd, "outer"),
         {
           descriptor: { kind: "division" },
           startRun: 1,

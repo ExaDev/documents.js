@@ -45,7 +45,8 @@ function classify(text: string, start: number, char: "*" | "_" | "~"): string {
 
 describe("scanDelimiterRun", () => {
   it("measures the run length", () => {
-    expect(scanDelimiterRun("***abc", 0, "*")?.count).toBe(3);
+    const runLength = 3; // "***"
+    expect(scanDelimiterRun("***abc", 0, "*")?.count).toBe(runLength);
   });
 
   it("returns undefined when the position does not actually open with the given delimiter character", () => {
@@ -63,39 +64,45 @@ describe("scanDelimiterRun", () => {
   });
 
   // spec 0.31.2's own "right-flanking but not left-flanking" examples.
+  // " abc" and '"abc"' are four and five characters respectively, so the delimiter run in each fixture starts right after its own prefix.
+  const afterFourCharPrefix = 4;
+  const afterFiveCharPrefix = 5;
+
   it.each([
-    [" abc***", 4, "*"],
-    [" abc_", 4, "_"],
-    ['"abc"**', 5, "*"],
-    ['"abc"_', 5, "_"],
+    [" abc***", afterFourCharPrefix, "*"],
+    [" abc_", afterFourCharPrefix, "_"],
+    ['"abc"**', afterFiveCharPrefix, "*"],
+    ['"abc"_', afterFiveCharPrefix, "_"],
   ] as const)("classifies %s at %i as a closer only", (text, start, char) => {
     expect(classify(text, start, char)).toBe("close");
   });
 
   // spec 0.31.2's own "both left and right-flanking" examples — note `_` is deliberately NOT both here: an underscore run between two word characters can neither open nor close, which is the whole intraword-emphasis restriction.
   it("classifies an asterisk run between two word characters as both an opener and a closer", () => {
-    expect(classify(" abc***def", 4, "*")).toBe("both");
+    expect(classify(" abc***def", afterFourCharPrefix, "*")).toBe("both");
   });
 
   it("classifies an underscore run between two word characters as neither", () => {
-    expect(classify("abc_def", 3, "_")).toBe("neither");
+    const afterAbc = 3; // "abc" is three characters
+    expect(classify("abc_def", afterAbc, "_")).toBe("neither");
   });
 
   it("classifies an underscore run between two punctuation characters as both", () => {
-    expect(classify('"abc"_"def"', 5, "_")).toBe("both");
+    expect(classify('"abc"_"def"', afterFiveCharPrefix, "_")).toBe("both");
   });
 
   // spec 0.31.2's own "neither left nor right-flanking" examples.
   it.each([
-    ["abc *** def", 4, "*"],
+    ["abc *** def", afterFourCharPrefix, "*"],
     ["a _ b", 2, "_"],
   ] as const)("classifies %s at %i as neither", (text, start, char) => {
     expect(classify(text, start, char)).toBe("neither");
   });
 
   it("treats the start and end of the block as whitespace", () => {
+    const afterAbc = 3; // "abc" is three characters
     expect(classify("*abc", 0, "*")).toBe("open");
-    expect(classify("abc*", 3, "*")).toBe("close");
+    expect(classify("abc*", afterAbc, "*")).toBe("close");
   });
 
   it("classifies an astral symbol adjacent to a run as punctuation, not as a lone surrogate", () => {
@@ -146,27 +153,33 @@ describe("processEmphasis", () => {
     expect(opener.node.literal).toBe("");
   });
 
-  it("keeps a delimiter search bounded by the openers floor rather than re-walking the whole stack for every same-signature closer", () => {
-    const stack = new DelimiterStack();
-    // A long run of inert, never-removed, never-matching delimiters of a different character sits below a batch of same-signature closers that can never match anything either — without the floor, each of those closers re-walks the entire inert run from scratch, making the whole pass quadratic in its length.
-    const inertCount = 50_000;
-    for (let i = 0; i < inertCount; i++) {
-      const node = new InlineNode("text");
-      node.literal = "_";
-      stack.push("_", { count: 1, canOpen: true, canClose: false }, node);
-    }
-    const closerCount = 500;
-    for (let i = 0; i < closerCount; i++) {
-      const node = new InlineNode("text");
-      node.literal = "*";
-      stack.push("*", { count: 1, canOpen: false, canClose: true }, node);
-    }
+  const stackTestTimeoutMs = 20_000; // generous headroom over the unbounded version's own measured ~14s, so the test only fails on a genuine regression back to quadratic behaviour
+  it(
+    "keeps a delimiter search bounded by the openers floor rather than re-walking the whole stack for every same-signature closer",
+    () => {
+      const stack = new DelimiterStack();
+      // A long run of inert, never-removed, never-matching delimiters of a different character sits below a batch of same-signature closers that can never match anything either — without the floor, each of those closers re-walks the entire inert run from scratch, making the whole pass quadratic in its length.
+      const inertCount = 50_000;
+      for (let i = 0; i < inertCount; i++) {
+        const node = new InlineNode("text");
+        node.literal = "_";
+        stack.push("_", { count: 1, canOpen: true, canClose: false }, node);
+      }
+      const closerCount = 500;
+      for (let i = 0; i < closerCount; i++) {
+        const node = new InlineNode("text");
+        node.literal = "*";
+        stack.push("*", { count: 1, canOpen: false, canClose: true }, node);
+      }
 
-    const start = performance.now();
-    processEmphasis(stack, undefined, (kind) => new InlineNode(kind));
-    const elapsed = performance.now() - start;
+      const start = performance.now();
+      processEmphasis(stack, undefined, (kind) => new InlineNode(kind));
+      const elapsed = performance.now() - start;
 
-    // The bounded-search version finishes in well under a second for this input on any reasonable machine; without the floor it takes upward of ten seconds (measured locally at roughly 14s for these same sizes), so this margin is not close either way.
-    expect(elapsed).toBeLessThan(5000);
-  }, 20_000);
+      // The bounded-search version finishes in well under a second for this input on any reasonable machine; without the floor it takes upward of ten seconds (measured locally at roughly 14s for these same sizes), so this margin is not close either way.
+      const boundedSearchBudgetMs = 5000;
+      expect(elapsed).toBeLessThan(boundedSearchBudgetMs);
+    },
+    stackTestTimeoutMs,
+  );
 });
