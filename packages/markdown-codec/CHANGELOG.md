@@ -1,3 +1,10 @@
+## [11.1.6](https://github.com/ExaDev/documents.js/compare/markdown-codec%4011.1.5...markdown-codec%4011.1.6) (2026-09-24)
+
+
+### Dependencies
+
+- Updated byte-codec to 2.0.1
+
 ## [11.1.5](https://github.com/ExaDev/documents.js/compare/markdown-codec%4011.1.4...markdown-codec%4011.1.5) (2026-09-24)
 
 ### Bug Fixes
