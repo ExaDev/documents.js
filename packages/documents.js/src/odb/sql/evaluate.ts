@@ -146,10 +146,8 @@ function tryResolveName(
         sql,
       );
     }
-    const only = folded[0];
-    if (only !== undefined) {
-      return only;
-    }
+    // folded has at most one element here, since more than one already threw above, so it is exactly what this function itself promises to return: the single match, or undefined for no match at all.
+    return folded[0];
   }
   return undefined;
 }
@@ -277,9 +275,8 @@ function tryResolveColumnIndex(
         sql,
       );
     }
-    if (firstFolded !== undefined) {
-      return firstFolded;
-    }
+    // firstFolded is set on the identical iteration that pushes to foldedNames, so it is defined exactly when foldedNames has its one surviving element (more than one already threw above), and undefined otherwise: exactly what this function itself promises to return.
+    return firstFolded;
   }
   return undefined;
 }
