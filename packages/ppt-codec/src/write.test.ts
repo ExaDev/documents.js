@@ -1066,14 +1066,14 @@ describe("writePptContent / readPptContent round trip", () => {
   });
 
   describe("tables", () => {
-    function tableShape(blocks: ContentBlock[]): ContentShape {
+    function tableShape(blocks: readonly ContentBlock[]): ContentShape {
       return {
         frame: { xPt: 60, yPt: 90, widthPt: 240, heightPt: 120 },
         insetLeftPt: 0.1 * 72,
         insetTopPt: 0.05 * 72,
         insetRightPt: 0.1 * 72,
         insetBottomPt: 0.05 * 72,
-        blocks,
+        blocks: [...blocks],
       };
     }
 

@@ -277,7 +277,12 @@ function imageBlocksFor(
 function embeddedObjectBlocksFor(
   clientData: PptRecord | undefined,
   context: DrawingContext,
-  frame: { xPt: number; yPt: number; widthPt: number; heightPt: number },
+  frame: Readonly<{
+    xPt: number;
+    yPt: number;
+    widthPt: number;
+    heightPt: number;
+  }>,
 ): ContentBlock[] {
   if (clientData === undefined || context.decodeEmbeddedObject === undefined) {
     return [];
@@ -436,7 +441,7 @@ function readMastersById(
 
 function readSlide(
   base: DocumentContext,
-  size: PageSize,
+  size: Readonly<PageSize>,
   notes: string,
   mastersById: ReadonlyMap<number, MasterInfo>,
 ): ContentSlide {
