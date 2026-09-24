@@ -707,7 +707,12 @@ describe("recover-tier diagnostics", () => {
       (diagnostic) =>
         diagnostic.code === MarkdownDiagnosticCodes.DUPLICATE_LINK_REFERENCE,
     );
-    expect(duplicates.map((diagnostic) => diagnostic.line)).toEqual([2, 3]);
+    const secondDefinitionLine = 2;
+    const thirdDefinitionLine = 3;
+    expect(duplicates.map((diagnostic) => diagnostic.line)).toEqual([
+      secondDefinitionLine,
+      thirdDefinitionLine,
+    ]);
   });
 
   it("reports a math block never closed by a matching $$ before end-of-input", () => {
@@ -726,33 +731,36 @@ describe("recover-tier diagnostics", () => {
 
   it("names the opening line of the fenced code block that was never closed", () => {
     const collector = createDiagnosticCollector();
+    const openingLine = 3;
     parseMarkdown("text\n\n```js\ncode", { sink: collector.sink });
     const [diagnostic] = collector.diagnostics;
     expect(diagnostic?.code).toBe(MarkdownDiagnosticCodes.UNCLOSED_FENCE);
-    expect(diagnostic?.line).toBe(3);
-    expect(diagnostic?.message).toContain("line 3");
+    expect(diagnostic?.line).toBe(openingLine);
+    expect(diagnostic?.message).toContain(`line ${String(openingLine)}`);
     expect(diagnostic?.message).toContain("never closed");
   });
 
   it("names the type and the opening line of the HTML block that never met its end condition", () => {
     const collector = createDiagnosticCollector();
+    const openingLine = 3;
     parseMarkdown("text\n\n<!-- comment\nmore text", { sink: collector.sink });
     const [diagnostic] = collector.diagnostics;
     expect(diagnostic?.code).toBe(
       MarkdownDiagnosticCodes.UNTERMINATED_HTML_BLOCK,
     );
-    expect(diagnostic?.line).toBe(3);
+    expect(diagnostic?.line).toBe(openingLine);
     expect(diagnostic?.message).toContain("type 2");
-    expect(diagnostic?.message).toContain("line 3");
+    expect(diagnostic?.message).toContain(`line ${String(openingLine)}`);
   });
 
   it("names the opening line of the math block that was never closed", () => {
     const collector = createDiagnosticCollector();
+    const openingLine = 3;
     parseMarkdown("text\n\n$$\nx^2", { sink: collector.sink });
     const [diagnostic] = collector.diagnostics;
     expect(diagnostic?.code).toBe(MarkdownDiagnosticCodes.UNCLOSED_MATH_BLOCK);
-    expect(diagnostic?.line).toBe(3);
-    expect(diagnostic?.message).toContain("line 3");
+    expect(diagnostic?.line).toBe(openingLine);
+    expect(diagnostic?.message).toContain(`line ${String(openingLine)}`);
     expect(diagnostic?.message).toContain("$$");
   });
 
@@ -781,7 +789,8 @@ describe("recover-tier diagnostics", () => {
         MarkdownDiagnosticCodes.DUPLICATE_FOOTNOTE_DEFINITION,
     );
     expect(duplicates).toHaveLength(1);
-    expect(duplicates[0]?.line).toBe(3);
+    const duplicateDefinitionLine = 3;
+    expect(duplicates[0]?.line).toBe(duplicateDefinitionLine);
     expect(duplicates[0]?.message).toContain('"a"');
     expect(duplicates[0]?.message).toContain("already defined");
   });
