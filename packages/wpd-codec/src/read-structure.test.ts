@@ -1232,22 +1232,18 @@ describe("page geometry margin subgroup isolation", () => {
   });
 
   it("reports the exact landscape-orientation message", () => {
-    const { document, diagnostics } = (() => {
-      const diagnostics: WpdDiagnostic[] = [];
-      const document = readWpdContent(
-        buildWpdFile([
-          ...pageForm({ lengthWpu: 10200, widthWpu: 13200, orientation: 1 }),
-          ...text("wide"),
-        ]),
-        {
-          sink: (d) => {
-            diagnostics.push(d);
-          },
+    const diagnostics: WpdDiagnostic[] = [];
+    readWpdContent(
+      buildWpdFile([
+        ...pageForm({ lengthWpu: 10200, widthWpu: 13200, orientation: 1 }),
+        ...text("wide"),
+      ]),
+      {
+        sink: (d) => {
+          diagnostics.push(d);
         },
-      );
-      return { document, diagnostics };
-    })();
-    void document;
+      },
+    );
     const found = diagnostics.find(
       (d) => d.code === WpdDiagnosticCodes.LandscapeOrientationUnmapped,
     );
