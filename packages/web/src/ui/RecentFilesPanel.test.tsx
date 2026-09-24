@@ -113,6 +113,20 @@ describe("RecentFilesPanel", () => {
     expect(html()).toContain("500 B");
   });
 
+  it("exposes the recent files as a real list, one listitem per record, for assistive technology", () => {
+    useRecentFiles.mockReturnValue([
+      record({ id: 1, name: "first.docx" }),
+      record({ id: 2, name: "second.pdf" }),
+    ]);
+    const { container } = renderPanel();
+    const list = container.querySelector('[role="list"]');
+    expect(list).not.toBeNull();
+    const items = list!.querySelectorAll(':scope > [role="listitem"]');
+    expect(items).toHaveLength(2);
+    expect(items[0]?.textContent).toContain("first.docx");
+    expect(items[1]?.textContent).toContain("second.pdf");
+  });
+
   it("formats a size in KB once at or above 1024 bytes", () => {
     useRecentFiles.mockReturnValue([record({ sizeBytes: 2048 })]);
     const { html } = renderPanel();
