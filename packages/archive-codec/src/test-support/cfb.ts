@@ -122,8 +122,12 @@ export function compoundFile(
   for (const entry of entries) {
     const segments = entry.path.split("/");
     const leaf = segments.pop();
-    // !leaf alone (not leaf === undefined || leaf.length === 0) covers exactly the same two cases: String.prototype.split always returns at least one element, so .pop() on it is genuinely never undefined here — only ever a string, possibly empty — and a falsy check catches both undefined and "" identically to spelling them out, while also narrowing leaf to string below.
-    if (!leaf || segments.some((segment) => segment.length === 0)) {
+    // String.prototype.split always returns at least one element, so .pop() on it is genuinely never undefined here — only ever a string, possibly empty — but the type is still string | undefined, so both cases are spelled out explicitly rather than relying on a falsy check to catch them identically.
+    if (
+      leaf === undefined ||
+      leaf.length === 0 ||
+      segments.some((segment) => segment.length === 0)
+    ) {
       throw new Error(
         `compoundFile entry paths must be slash-separated with no empty segments (got ${JSON.stringify(entry.path)})`,
       );
