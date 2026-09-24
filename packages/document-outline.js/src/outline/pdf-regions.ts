@@ -100,6 +100,14 @@ export function layoutItemBounds(item: LayoutItem): Bounds | undefined {
       return { minX, minY, maxX, maxY };
     }
   }
+  return assertNeverLayoutItem(item);
+}
+
+// Reached only if LayoutItem ever gains a kind layoutItemBounds' own switch does not match: every current kind has a case there, so `item` narrows to `never` at this call, and adding an uncovered kind makes that narrowing fail and the call stop compiling. Exists so the switch's exhaustiveness, proven by the type checker rather than by a catch-all default that would silently report a genuinely new item kind as unbounded, still gives consistent-return an explicit statement to see past the switch. Exported so the test below can exercise the throw directly with a forced-invalid cast, since it is otherwise unreachable through layoutItemBounds.
+export function assertNeverLayoutItem(item: never): never {
+  throw new Error(
+    `layoutItemBounds: unhandled layout item ${JSON.stringify(item)}`,
+  );
 }
 
 export interface BoundedItem {
