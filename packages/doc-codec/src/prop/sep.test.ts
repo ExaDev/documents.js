@@ -21,7 +21,7 @@ describe("applySectionSprms", () => {
   it("resolves pageSize.widthPt and heightPt", () => {
     const props = applySectionSprms(
       [prl(0xb01f, uint16(12240)), prl(0xb020, uint16(15840))],
-      {},
+      { properties: {} },
     );
     expect(props.pageWidthPt).toBe(612);
     expect(props.pageHeightPt).toBe(792);
@@ -30,7 +30,7 @@ describe("applySectionSprms", () => {
   it("resolves margins.leftPt and rightPt", () => {
     const props = applySectionSprms(
       [prl(0xb021, uint16(1800)), prl(0xb022, uint16(1800))],
-      {},
+      { properties: {} },
     );
     expect(props.marginLeftPt).toBe(90);
     expect(props.marginRightPt).toBe(90);
@@ -39,7 +39,7 @@ describe("applySectionSprms", () => {
   it("resolves margins.topPt/bottomPt from a positive (minimum-margin) YAS as its own absolute value", () => {
     const props = applySectionSprms(
       [prl(0x9023, int16(1440)), prl(0x9024, int16(1440))],
-      {},
+      { properties: {} },
     );
     expect(props.marginTopPt).toBe(72);
     expect(props.marginBottomPt).toBe(72);
@@ -48,7 +48,7 @@ describe("applySectionSprms", () => {
   it("resolves margins.topPt/bottomPt from a negative (fixed-margin) YAS as its own absolute value too", () => {
     const props = applySectionSprms(
       [prl(0x9023, int16(-1440)), prl(0x9024, int16(-1440))],
-      {},
+      { properties: {} },
     );
     expect(props.marginTopPt).toBe(72);
     expect(props.marginBottomPt).toBe(72);
@@ -59,12 +59,16 @@ describe("applySectionSprms", () => {
       sprm: { ...decodeSprm(0xb01f), sgc: SGC.character },
       operand: new Uint8Array(uint16(12240)),
     };
-    expect(applySectionSprms([characterSprm], {}).pageWidthPt).toBeUndefined();
+    expect(
+      applySectionSprms([characterSprm], { properties: {} }).pageWidthPt,
+    ).toBeUndefined();
   });
 
   it("ignores a paragraph-family sprm that never reaches the section switch at all", () => {
     const result = applySectionSprms([prl(0x0000, [0])], {
-      pageWidthPt: 400,
+      properties: {
+        pageWidthPt: 400,
+      },
     });
     expect(result.pageWidthPt).toBe(400);
   });
@@ -72,7 +76,9 @@ describe("applySectionSprms", () => {
   it("falls through the switch's own default case for a section-family sprm this reader does not convert", () => {
     // sgc bits 10-12 of 0x1000 decode to SGC.section (4), but the full value matches none of the SPRM_S_* opcodes this reader handles — the one way to actually reach the switch's default case rather than the sgc guard above it.
     const result = applySectionSprms([prl(0x1000, [0])], {
-      pageWidthPt: 400,
+      properties: {
+        pageWidthPt: 400,
+      },
     });
     expect(result.pageWidthPt).toBe(400);
   });
@@ -80,7 +86,7 @@ describe("applySectionSprms", () => {
   it("applies the last Prl's value when the same property is set twice", () => {
     const result = applySectionSprms(
       [prl(0xb01f, uint16(100)), prl(0xb01f, uint16(200))],
-      {},
+      { properties: {} },
     );
     expect(result.pageWidthPt).toBe(10);
   });

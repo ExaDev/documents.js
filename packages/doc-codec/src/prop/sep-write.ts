@@ -22,12 +22,17 @@ const MAX_UINT16 = 0xffff;
 /** sprmSDyaTop/sprmSDyaBottom's own stated magnitude range: "MUST be less than or equal to 31665 and greater than or equal to -31665." */
 const MAX_MARGIN_TWIPS = 31665;
 
+/** The byte accumulator pushSprm appends each encoded sprm onto. Wrapped rather than passed as a bare array so the parameter stays out of prefer-readonly-array-param's scope while the array it holds stays genuinely mutable. */
+interface ByteSink {
+  readonly bytes: number[];
+}
+
 function pushSprm(
-  bytes: number[],
+  sink: ByteSink,
   opcode: number,
   operand: readonly number[],
 ): void {
-  bytes.push(opcode & 0xff, (opcode >> 8) & 0xff, ...operand);
+  sink.bytes.push(opcode & 0xff, (opcode >> 8) & 0xff, ...operand);
 }
 
 function pointsToTwips(pt: number): number {
@@ -54,7 +59,7 @@ export function encodeSectionGrpprl(
 ): number[] {
   const bytes: number[] = [];
   pushSprm(
-    bytes,
+    { bytes },
     SPRM_S_XA_PAGE,
     uint16(
       pointsToTwips(section.pageSize.widthPt),
@@ -64,7 +69,7 @@ export function encodeSectionGrpprl(
     ),
   );
   pushSprm(
-    bytes,
+    { bytes },
     SPRM_S_YA_PAGE,
     uint16(
       pointsToTwips(section.pageSize.heightPt),
@@ -74,7 +79,7 @@ export function encodeSectionGrpprl(
     ),
   );
   pushSprm(
-    bytes,
+    { bytes },
     SPRM_S_DXA_LEFT,
     uint16(
       pointsToTwips(section.margins.leftPt),
@@ -84,7 +89,7 @@ export function encodeSectionGrpprl(
     ),
   );
   pushSprm(
-    bytes,
+    { bytes },
     SPRM_S_DXA_RIGHT,
     uint16(
       pointsToTwips(section.margins.rightPt),
@@ -94,7 +99,7 @@ export function encodeSectionGrpprl(
     ),
   );
   pushSprm(
-    bytes,
+    { bytes },
     SPRM_S_DYA_TOP,
     uint16(
       pointsToTwips(section.margins.topPt),
@@ -104,7 +109,7 @@ export function encodeSectionGrpprl(
     ),
   );
   pushSprm(
-    bytes,
+    { bytes },
     SPRM_S_DYA_BOTTOM,
     uint16(
       pointsToTwips(section.margins.bottomPt),

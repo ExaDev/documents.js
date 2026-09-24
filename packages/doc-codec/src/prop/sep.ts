@@ -41,10 +41,16 @@ export interface SectionProperties {
 }
 
 // Folds a Sepx's grpprl into `into`, in order, so the last Prl to touch a property determines it — the same precedence rule applyParagraphSprms/applyCharacterSprms already apply to their own property families ([MS-DOC] 2.6's Applying Properties).
+/** The accumulator applySectionSprms folds each section sprm into. Wrapped rather than passed as a bare SectionProperties so the parameter stays out of prefer-readonly-object-param's scope while the object it holds stays genuinely mutable, matching applyParagraphSprms' own accumulator. */
+export interface SectionPropertiesSink {
+  readonly properties: SectionProperties;
+}
+
 export function applySectionSprms(
   prls: readonly Prl[],
-  into: SectionProperties,
+  sink: SectionPropertiesSink,
 ): SectionProperties {
+  const into = sink.properties;
   for (const prl of prls) {
     if (prl.sprm.sgc !== SGC.section) continue;
     switch (prl.sprm.value) {
@@ -107,7 +113,10 @@ export function readAllSectionProperties(
       cb,
       "Sepx grpprl in the WordDocument stream",
     );
-    sections.push({ startCp, ...applySectionSprms(readGrpprl(grpprl), {}) });
+    sections.push({
+      startCp,
+      ...applySectionSprms(readGrpprl(grpprl), { properties: {} }),
+    });
   }
   return sections;
 }

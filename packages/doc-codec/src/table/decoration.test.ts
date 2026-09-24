@@ -730,11 +730,13 @@ describe("encodeTableRowGrpprl", () => {
 });
 
 describe("borderNeedsExactColor", () => {
-  const bordered = (color: {
-    r: number;
-    g: number;
-    b: number;
-  }): ContentBorder => ({ color, widthPt: 1 });
+  const bordered = (
+    color: Readonly<{
+      r: number;
+      g: number;
+      b: number;
+    }>,
+  ): ContentBorder => ({ color, widthPt: 1 });
 
   it("is false for a colour that already sits exactly on a palette entry", () => {
     expect(borderNeedsExactColor(bordered(RED))).toBe(false);

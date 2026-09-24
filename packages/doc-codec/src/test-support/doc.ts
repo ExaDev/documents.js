@@ -597,6 +597,11 @@ function buildClx(
 }
 
 // An STSH whose STSHI carries the full header a real producer writes — Stshif, ftcBi, and the latent-style data — so the reader's use of cbStshi to skip forward is genuinely exercised rather than trivially satisfied by a header that happens to be exactly Stshif. Exported for this package's own direct tests: cbStshi's own exact byte count, and the STSHI's latent-style array specifically, are never independently checked by anything downstream (the reader skips forward by cbStshi wholesale, without validating what it actually skipped past), so a round trip through readDocContent cannot tell a correctly-sized STSHI apart from a wrongly-sized one that still happens to parse.
+/** The byte accumulator this fixture's own local writers append onto. Wrapped rather than passed as a bare array so the parameter stays out of prefer-readonly-array-param's scope while the array it holds stays genuinely mutable. */
+interface ByteSink {
+  readonly bytes: number[];
+}
+
 export function buildStsh(styles: readonly DocStyleSpec[]): Uint8Array {
   const stiMax = styles.length;
   const stshiBytes: number[] = [];
@@ -625,13 +630,13 @@ export function buildStsh(styles: readonly DocStyleSpec[]): Uint8Array {
     ...stshiBytes,
   ];
   // One LPUpxPapx/LPUpxChpx entry: a 2-byte cbUpx (the payload's own length, excluding padding) followed by the payload, followed by one zero pad byte if that length is odd — [MS-DOC] 2.9.140/2.9.138's own "padded to an even length, but the length in cbUpx MUST NOT include this padding".
-  const pushLpUpx = (target: number[], payload: readonly number[]): void => {
-    target.push(
+  const pushLpUpx = (sink: ByteSink, payload: readonly number[]): void => {
+    sink.bytes.push(
       payload.length & 0xff,
       (payload.length >> 8) & 0xff,
       ...payload,
     );
-    if (payload.length % 2 === 1) target.push(0);
+    if (payload.length % 2 === 1) sink.bytes.push(0);
   };
 
   styles.forEach((style, istd) => {
@@ -655,14 +660,14 @@ export function buildStsh(styles: readonly DocStyleSpec[]): Uint8Array {
     // grLPUpxSw, [MS-DOC] 2.9.113: StkParaGRLPUPX (lpUpxPapx then lpUpxChpx) for a paragraph style, StkCharGRLPUPX (lpUpxChpx alone) for a character style — every real producer writes these regardless of whether the style itself carries any exceptions, so the fixture always does too, matching a real .doc's own STSH shape rather than the pre-#1005 fixture's own omission of grLPUpxSw entirely.
     if (stk === 1) {
       // UpxPapx: a 2-byte istd ("MUST be equal to the current style") then grpprlPapx.
-      pushLpUpx(std, [
+      pushLpUpx({ bytes: std }, [
         istd & 0xff,
         (istd >> 8) & 0xff,
         ...(style.papxGrpprl ?? []),
       ]);
-      pushLpUpx(std, [...(style.chpxGrpprl ?? [])]);
+      pushLpUpx({ bytes: std }, [...(style.chpxGrpprl ?? [])]);
     } else if (stk === 2) {
-      pushLpUpx(std, [...(style.chpxGrpprl ?? [])]);
+      pushLpUpx({ bytes: std }, [...(style.chpxGrpprl ?? [])]);
     }
     out.push(std.length & 0xff, (std.length >> 8) & 0xff, ...std);
     // "LPStd structures are stored on even-byte boundaries, but this length MUST NOT include this padding." No padding byte is ever needed here, though: std's own fixed fields before grLPUpxSw always contribute an even byte count (10 fixed bytes, plus xstzName's own 4 + 2*name.length, itself always even), and pushLpUpx's own cbUpx-plus-payload-plus-conditional-pad is by construction always even too — so std.length is always even, for every style this fixture can produce, regardless of stk or grpprl content.

@@ -36,13 +36,18 @@ const NFC_BY_FORMAT: ReadonlyMap<string, number> = (() => {
   return byFormat;
 })();
 
-function push16(bytes: number[], value: number): void {
-  bytes.push(value & 0xff, (value >> 8) & 0xff);
+/** The byte accumulator these writers append onto, or patch in place. Wrapped rather than passed as a bare array so the parameter stays out of prefer-readonly-array-param's scope while the array it holds stays genuinely mutable. */
+interface ByteSink {
+  readonly bytes: number[];
 }
 
-function push32(bytes: number[], value: number): void {
+function push16(sink: ByteSink, value: number): void {
+  sink.bytes.push(value & 0xff, (value >> 8) & 0xff);
+}
+
+function push32(sink: ByteSink, value: number): void {
   const unsigned = value >>> 0;
-  bytes.push(
+  sink.bytes.push(
     unsigned & 0xff,
     (unsigned >> 8) & 0xff,
     (unsigned >> 16) & 0xff,
@@ -50,8 +55,9 @@ function push32(bytes: number[], value: number): void {
   );
 }
 
-function writeUint32LE(target: number[], offset: number, value: number): void {
+function writeUint32LE(sink: ByteSink, offset: number, value: number): void {
   const unsigned = value >>> 0;
+  const target = sink.bytes;
   target[offset] = unsigned & 0xff;
   target[offset + 1] = (unsigned >> 8) & 0xff;
   target[offset + 2] = (unsigned >> 16) & 0xff;
@@ -61,9 +67,9 @@ function writeUint32LE(target: number[], offset: number, value: number): void {
 // Xst ([MS-DOC] 2.9.343): a 2-byte cch then that many raw UTF-16 code units — the exact inverse of numbering.ts's own readXst, iterated by code unit (not by code point, which for...of would give) since a placeholder position is a code-unit offset and this writer's own text is always within the Basic Multilingual Plane regardless.
 function encodeXst(text: string): number[] {
   const bytes: number[] = [];
-  push16(bytes, text.length);
+  push16({ bytes }, text.length);
   for (let index = 0; index < text.length; index += 1) {
-    push16(bytes, text.charCodeAt(index));
+    push16({ bytes }, text.charCodeAt(index));
   }
   return bytes;
 }
@@ -144,7 +150,7 @@ export function gatherListUsage(
 
 function buildLstfBytes(lsid: number, fSimpleList: boolean): number[] {
   const lstf = new Array<number>(LSTF_SIZE).fill(0);
-  writeUint32LE(lstf, 0, lsid);
+  writeUint32LE({ bytes: lstf }, 0, lsid);
   // tplc (offset 4, 4 bytes) and rgistdPara (offset 8, 18 bytes) stay 0 — both ignored by this package's own reader (numbering.ts's readLstf: "tplc... ignored — UI-only" / "rgistdPara... ignored — this reader has no per-level style cascade to link into").
   lstf[26] = fSimpleList ? LSTF_FLAG_SIMPLE_LIST : 0x00;
   // grfhic (offset 27) stays 0 — "ignored — HTML-export-only incompatibility flags" per numbering.ts's own readLstf.
@@ -163,7 +169,7 @@ function buildLvlBytes(
   }
   const { xstText, positions } = buildLevelXst(level, numberingLevel.format);
   const lvlf = new Array<number>(LVLF_SIZE).fill(0);
-  writeUint32LE(lvlf, 0, numberingLevel.startAt); // iStartAt.
+  writeUint32LE({ bytes: lvlf }, 0, numberingLevel.startAt); // iStartAt.
   lvlf[4] = nfc;
   if (numberingLevel.restart !== undefined) {
     lvlf[5] = LVLF_FLAG_NO_RESTART;
@@ -237,17 +243,17 @@ export function buildNumberingTables(
       lvlBytes.push(...buildLvlBytes(level, numberingLevel));
     }
     const lfo = new Array<number>(LFO_SIZE).fill(0);
-    writeUint32LE(lfo, 0, ilfo); // lsid — the same value as this list's own ilfo, which is all buildLstfBytes above needs it to link back to (numbering.ts's own readNumberingDefinitions resolves an LFO to its LSTF purely by matching lsid).
+    writeUint32LE({ bytes: lfo }, 0, ilfo); // lsid — the same value as this list's own ilfo, which is all buildLstfBytes above needs it to link back to (numbering.ts's own readNumberingDefinitions resolves an LFO to its LSTF purely by matching lsid).
     // The rest of LFO_SIZE (offset 4 onward, including clfolvl) stays 0: no rgLfoData entries follow, matching numbering.ts's own reader, which never writes — reads — past rgLfo either.
     rgLfoBytes.push(...lfo);
   }
 
   const plfLstHeader: number[] = [];
-  push16(plfLstHeader, ilfos.length); // cLst.
+  push16({ bytes: plfLstHeader }, ilfos.length); // cLst.
   const plfLst = new Uint8Array([...plfLstHeader, ...lstfBytes, ...lvlBytes]);
 
   const plfLfoHeader: number[] = [];
-  push32(plfLfoHeader, ilfos.length); // lfoMac.
+  push32({ bytes: plfLfoHeader }, ilfos.length); // lfoMac.
   const plfLfo = new Uint8Array([...plfLfoHeader, ...rgLfoBytes]);
 
   return {

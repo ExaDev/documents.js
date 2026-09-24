@@ -6,7 +6,9 @@ import { readGrpprl } from "./sprm";
 
 function roundTrip(paragraph: Parameters<typeof encodeParagraphGrpprl>[0]) {
   const bytes = encodeParagraphGrpprl(paragraph, () => 1);
-  return applyParagraphSprms(readGrpprl(new Uint8Array(bytes)), {});
+  return applyParagraphSprms(readGrpprl(new Uint8Array(bytes)), {
+    properties: {},
+  });
 }
 
 describe("encodeParagraphGrpprl", () => {
@@ -159,7 +161,7 @@ describe("encodeParagraphGrpprl", () => {
           ),
         ),
       ),
-      {},
+      { properties: {} },
     );
     expect(result.listId).toBe(7);
     expect(result.listLevel).toBe(2);
@@ -185,7 +187,7 @@ describe("encodeParagraphGrpprl", () => {
           encodeParagraphGrpprl({ list: { numId: "1", level: 8 } }, () => 1),
         ),
       ),
-      {},
+      { properties: {} },
     );
     expect(result.listLevel).toBe(8);
   });

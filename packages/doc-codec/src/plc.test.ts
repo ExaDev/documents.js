@@ -3,7 +3,10 @@ import { DocFormatError } from "./errors";
 import { findLargestAtMost, parsePlc } from "./plc";
 
 // Bytes assembled by hand from [MS-DOC] 2.2.2's own PLC definition rather than dumped from a real file: "The PLC structure is an array of character positions followed by an array of data elements ... The number of CPs MUST be one more than the number of data elements", with n = (cbPlc - 4) / (4 + cbData).
-function plcBytes(cps: number[], data: number[][]): Uint8Array {
+function plcBytes(
+  cps: readonly number[],
+  data: readonly number[][],
+): Uint8Array {
   const elementSize = data[0]?.length ?? 0;
   const bytes = new Uint8Array(cps.length * 4 + data.length * elementSize);
   const view = new DataView(bytes.buffer);

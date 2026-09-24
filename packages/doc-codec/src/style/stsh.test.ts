@@ -11,23 +11,28 @@ import {
   type StyleSheet,
 } from "./stsh";
 
+/** The byte accumulator this fixture's own local writers append onto. Wrapped rather than passed as a bare array so the parameter stays out of prefer-readonly-array-param's scope while the array it holds stays genuinely mutable. */
+interface ByteSink {
+  readonly bytes: number[];
+}
+
 // A minimal, otherwise-empty Stshif (18 bytes): cstd, cbSTDBaseInFile, fStdStylenamesWritten, stiMaxWhenSaved, istdMaxFixedWhenSaved, nVerBuiltInNamesWhenSaved, ftcAsci, ftcFE, ftcOther, ftcBi, cbLSD.
 function stshiBytes(cstd: number, cbStdBaseInFile: number): number[] {
-  const push16 = (target: number[], value: number): void => {
-    target.push(value & 0xff, (value >> 8) & 0xff);
+  const push16 = (sink: ByteSink, value: number): void => {
+    sink.bytes.push(value & 0xff, (value >> 8) & 0xff);
   };
   const bytes: number[] = [];
-  push16(bytes, cstd);
-  push16(bytes, cbStdBaseInFile);
-  push16(bytes, 0x0001);
-  push16(bytes, 0);
-  push16(bytes, 0x000f);
-  push16(bytes, 0);
-  push16(bytes, 0);
-  push16(bytes, 0);
-  push16(bytes, 0);
-  push16(bytes, 0);
-  push16(bytes, 4);
+  push16({ bytes }, cstd);
+  push16({ bytes }, cbStdBaseInFile);
+  push16({ bytes }, 0x0001);
+  push16({ bytes }, 0);
+  push16({ bytes }, 0x000f);
+  push16({ bytes }, 0);
+  push16({ bytes }, 0);
+  push16({ bytes }, 0);
+  push16({ bytes }, 0);
+  push16({ bytes }, 0);
+  push16({ bytes }, 4);
   return bytes;
 }
 

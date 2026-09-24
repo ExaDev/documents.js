@@ -75,7 +75,7 @@ const CONCRETE_ICO_ENTRIES: readonly NearestIcoMatch[] = ICO_PALETTE.flatMap(
 );
 
 // Shared by nearestIco (the Ico byte a caller writes) and nearestIcoColor (the exact colour that byte states, which borderNeedsExactColor compares against) so the two can never disagree about which palette entry is nearest: both read off the identical search, rather than one re-deriving it from the other's own output. reduce() with no initial accumulator is what makes this return a definite NearestIcoMatch rather than one typed `| undefined` for an emptiness CONCRETE_ICO_ENTRIES can never actually have: the single-argument overload folds over the array's own first element, which needs no separate fallback the way a manually-seeded loop would.
-function nearestIcoMatch(color: Color): NearestIcoMatch {
+function nearestIcoMatch(color: Readonly<Color>): NearestIcoMatch {
   return CONCRETE_ICO_ENTRIES.reduce((best, candidate) => {
     const dr = color.r - candidate.color.r;
     const dg = color.g - candidate.color.g;
@@ -94,12 +94,12 @@ function nearestIcoMatch(color: Color): NearestIcoMatch {
  *
  * This is a genuinely lossy quantisation and is only ever used where [MS-DOC] itself offers no better field: Brc80.ico, the border colour a TC80 can carry at all. Wherever the format has an exact spelling beside it — Brc.cv, reached through sprmTSetBrc — this package writes that too, so nothing downstream has to read the approximation back (see table/decoration.ts and the README's own Tables section).
  */
-export function nearestIco(color: Color): number {
+export function nearestIco(color: Readonly<Color>): number {
   return nearestIcoMatch(color).index;
 }
 
 /** The exact colour nearestIco's own chosen palette entry states — always a real Color, never cvAuto's "no colour" case, since nearestIcoMatch only ever considers the sixteen entries that name one. Exists so a caller comparing against the palette's own approximation (table/decoration.ts's borderNeedsExactColor) never has to re-resolve nearestIco's own index back through icoColor, which types as `Color | undefined` for the sake of a cvAuto case this search can never actually return. */
-export function nearestIcoColor(color: Color): Color {
+export function nearestIcoColor(color: Readonly<Color>): Color {
   return nearestIcoMatch(color).color;
 }
 
@@ -120,7 +120,7 @@ export function readColorRef(
 }
 
 /** The inverse of readColorRef for a concrete colour: red, green, blue, then fAuto 0x00 ("use these components"), the only form this package writes. */
-export function colorRefBytes(color: Color): number[] {
+export function colorRefBytes(color: Readonly<Color>): number[] {
   const byte = (component: number): number =>
     Math.round(component * COLOR_COMPONENT_MAX);
   return [byte(color.r), byte(color.g), byte(color.b), 0x00];

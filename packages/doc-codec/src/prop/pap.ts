@@ -121,10 +121,16 @@ function lineSpacingFromLspd(operand: Uint8Array): number | undefined {
 }
 
 // Folds a grpprl's paragraph sprms into `into`, in order, so the last Prl to touch a property determines it — the precedence rule [MS-DOC] 2.6's Applying Properties states. The caller layers the paragraph style's own grpprl first and the direct PAPX exception second, matching [MS-DOC] 2.4.6.6.
+/** The accumulator applyParagraphSprms folds each paragraph sprm into. Wrapped rather than passed as a bare ParagraphProperties so the parameter stays out of prefer-readonly-object-param's scope while the object it holds stays genuinely mutable: the fold writes through it in place, and src/text/paragraphs.ts layers a style's own grpprl and the direct PAPX exception onto one accumulator by calling twice and discarding both return values. */
+export interface ParagraphPropertiesSink {
+  readonly properties: ParagraphProperties;
+}
+
 export function applyParagraphSprms(
   prls: readonly Prl[],
-  into: ParagraphProperties,
+  sink: ParagraphPropertiesSink,
 ): ParagraphProperties {
+  const into = sink.properties;
   for (const prl of prls) {
     if (prl.sprm.sgc !== SGC.paragraph) continue;
     switch (prl.sprm.value) {

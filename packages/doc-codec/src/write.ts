@@ -34,6 +34,7 @@ import {
 } from "./subdocument-write";
 import {
   flattenSectionBlocks,
+  type ParagraphSink,
   type WriteParagraph,
   type WriteWarning,
 } from "./table/write";
@@ -201,7 +202,7 @@ export function writeDocContent(
     );
     // Every section but the last ends on the end-of-section character (0x000C, [MS-DOC] 2.4.4's own worked example); the Main Document's own final character, closing the last section, MUST instead be an ordinary paragraph mark ([MS-DOC]'s own "Main Document" glossary entry: "The last character in the main document MUST be a paragraph mark (Unicode 0x000D)"). Neither boundary may land on a table's own cell/TTP mark (0x0007), even though a row-ending mark is itself a perfectly legal paragraph-boundary terminator everywhere else ([MS-DOC] 2.4.2's "Determining Paragraph Boundaries": "The character at the end character position of a paragraph MUST be a paragraph mark, an end-of-section character, a cell mark, or a TTP mark"). An otherwise-empty section and a section whose very last block is a table both leave the flattened sequence's own last terminator short of that stronger requirement, so both get one trailing empty ordinary paragraph appended first — confirmed against a real producer (LibreOffice 26.2.5.2) for the single-section, table-last case: a table it writes as a document's own last content is always followed by a genuine 0x000D, and a written .doc lacking one is not merely missing a property but is not recognised as carrying a table at all by LibreOffice's own .doc import filter (see the README's Tables section for the full finding, ExaDev/documents.js#892).
     closeSection(
-      paragraphs,
+      { paragraphs },
       index === document.sections.length - 1 ? PARAGRAPH_MARK : SECTION_MARK,
     );
     return paragraphs;
@@ -465,7 +466,8 @@ export function writeDocContent(
 }
 
 // Ensures `paragraphs` ends in a genuine ordinary-paragraph-mark-terminated entry — appending an empty one when the last entry's own terminator is anything else (a table's own cell/row mark) — then replaces that entry's own terminator with `terminator`. The one shared guarantee writeDocContent's own per-section loop and its final Main-Document-ending call both need: neither an end-of-section character nor the Main Document's own final character may land on a table's row-ending mark instead of a real paragraph mark (see this function's own call site for the [MS-DOC] citations). No early return for `terminator === PARAGRAPH_MARK`: the replace below is then rewriting the identical value the push above already just wrote, a genuine no-op rather than a behavioural difference, so skipping it would only be a micro-optimisation, not a correctness requirement.
-function closeSection(paragraphs: WriteParagraph[], terminator: number): void {
+function closeSection(sink: ParagraphSink, terminator: number): void {
+  const paragraphs = sink.paragraphs;
   const last = paragraphs[paragraphs.length - 1];
   if (last?.terminator !== PARAGRAPH_MARK) {
     paragraphs.push({

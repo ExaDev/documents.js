@@ -6,7 +6,9 @@ import { readGrpprl } from "./sprm";
 
 function roundTrip(section: Parameters<typeof encodeSectionGrpprl>[0]) {
   const bytes = encodeSectionGrpprl(section);
-  return applySectionSprms(readGrpprl(new Uint8Array(bytes)), {});
+  return applySectionSprms(readGrpprl(new Uint8Array(bytes)), {
+    properties: {},
+  });
 }
 
 const SECTION = {

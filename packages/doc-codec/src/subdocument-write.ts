@@ -58,14 +58,13 @@ function buildCpOnlyPlex(keys: readonly number[]): Uint8Array<ArrayBuffer> {
 
 // Finishes a subdocument whose stories were already appended: adds the one paragraph mark beyond the last story's end every one of these plexes' own "second-to-last CP MUST be ccp - 1" rule requires, and builds the plex from the story starts plus that rule's two trailing keys.
 function finishSubdocument(
-  paragraphs: WriteParagraph[],
+  paragraphs: readonly WriteParagraph[],
   storyStarts: readonly number[],
   characters: number,
 ): StorySubdocument {
-  paragraphs.push(guardParagraph());
   const ccp = characters + 1;
   return {
-    paragraphs,
+    paragraphs: [...paragraphs, guardParagraph()],
     plex: buildCpOnlyPlex([...storyStarts, characters, ccp]),
     ccp,
   };
