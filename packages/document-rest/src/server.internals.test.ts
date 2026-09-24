@@ -68,7 +68,7 @@ vi.mock("document-operations", async (importOriginal) => {
   };
 });
 
-const { createRestServer } = await import("./server");
+const { createRestServer, HTTP_STATUS } = await import("./server");
 
 interface RunningServer {
   readonly baseUrl: string;
@@ -122,7 +122,7 @@ describe("createRestServer, against a patched document-operations registry", () 
       body: "{}",
     });
 
-    expect(response.status).toBe(200);
+    expect(response.status).toBe(HTTP_STATUS.ok);
     const body = (await response.json()) as { result: { hasSignal: boolean } };
     expect(body.result.hasSignal).toBe(true);
   });
@@ -157,7 +157,7 @@ describe("createRestServer, against a patched document-operations registry", () 
       }),
     });
 
-    expect(response.status).toBe(400);
+    expect(response.status).toBe(HTTP_STATUS.badRequest);
     const body = (await response.json()) as {
       error: string;
       availableReports: string[];

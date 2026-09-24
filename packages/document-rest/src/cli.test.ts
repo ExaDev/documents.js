@@ -1,6 +1,7 @@
 import type { Server } from "node:http";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { DEFAULT_PORT, main } from "./cli";
+import { DEFAULT_PORT, MAX_TCP_PORT, main } from "./cli";
+import { HTTP_STATUS } from "./server";
 
 // Reads back the TCP port a listening server actually bound, failing loudly if it somehow bound a pipe/Unix socket instead — every test below only ever binds a numeric port, so this can never legitimately see anything else.
 function boundPort(server: Server): number {
@@ -50,7 +51,7 @@ describe("main", () => {
     expect(port).toBeGreaterThan(0);
 
     const response = await fetch(`http://127.0.0.1:${String(port)}/`);
-    expect(response.status).toBe(200);
+    expect(response.status).toBe(HTTP_STATUS.ok);
   });
 
   it("accepts --port=<value> form", async () => {
@@ -84,7 +85,7 @@ describe("main", () => {
   it("accepts the maximum valid --port value of 65535", async () => {
     process.argv = ["node", "bin.js", "--port", "65535"];
     server = await main();
-    expect(boundPort(server)).toBe(65535);
+    expect(boundPort(server)).toBe(MAX_TCP_PORT);
   });
 
   it("rejects a non-integer --port", async () => {
