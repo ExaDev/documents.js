@@ -8,8 +8,17 @@ describe("flattenCubic", () => {
     // p0 and p1 are offset from the origin in both axes (never 0) so a sign error in the chord vector (d - a computed as d + a) is not accidentally masked by a zero coordinate. c1/c2 sit exactly on the p0-p1 line (at t = 1/3 and 2/3), so the perpendicular distance from each to the chord is exactly zero and the curve is recognised as flat on the first check.
     const p0 = { x: 5, y: 3 };
     const p1 = { x: 45, y: 23 };
-    const c1 = { x: 5 + 40 / 3, y: 3 + 20 / 3 };
-    const c2 = { x: 5 + 80 / 3, y: 3 + 40 / 3 };
+    const thirds = 3;
+    const oneThird = 1 / thirds;
+    const twoThirds = 2 / thirds;
+    const c1 = {
+      x: p0.x + (p1.x - p0.x) * oneThird,
+      y: p0.y + (p1.y - p0.y) * oneThird,
+    };
+    const c2 = {
+      x: p0.x + (p1.x - p0.x) * twoThirds,
+      y: p0.y + (p1.y - p0.y) * twoThirds,
+    };
     expect(flattenCubic(p0, c1, c2, p1)).toEqual([p1]);
   });
 
@@ -60,8 +69,9 @@ describe("flattenCubic", () => {
       if (actual === undefined || want === undefined) {
         throw new Error("fixture setup: point count already asserted equal");
       }
-      expect(actual.x).toBeCloseTo(want.x, 9);
-      expect(actual.y).toBeCloseTo(want.y, 9);
+      const precisionDigits = 9;
+      expect(actual.x).toBeCloseTo(want.x, precisionDigits);
+      expect(actual.y).toBeCloseTo(want.y, precisionDigits);
     }
   });
 
@@ -87,23 +97,35 @@ describe("flattenCubic", () => {
   it("caps recursion at the documented depth for a curve whose flatness never converges under floating-point precision", () => {
     // At this coordinate scale (~5.6e15) the double-precision ULP is itself larger than FLATTEN_TOLERANCE_PX, so the distance-to-chord measurement never settles below tolerance and only the depth cap terminates the recursion — a curve that instead relied on the tolerance check alone at ordinary coordinate scales would never exercise this branch, or the depth+1 counter, at all. A mutated depth comparison (>, <, or a forced false) or a depth step of -1 instead of +1 removes the only termination condition this input can reach, and the recursion runs away until it exhausts the call stack.
     const base = 5623413251903491;
+    // Arbitrary small offsets, chosen only to be well within the precision-limited region at this coordinate scale; their exact values carry no separate significance.
+    const offsetA = 0.3;
+    const offsetB = 0.6;
+    const offsetC = 0.7;
+    const offsetD = 0.4;
+    // The exact recursion-cap point count is this curve's own fixed point, verified once against a reference run of the same algorithm and shared by both directions of the walk below.
+    const expectedPointCount = 17;
     const p0 = { x: base, y: base };
     const p1 = { x: base + 1, y: base };
-    const c1 = { x: base + 0.3, y: base + 0.6 };
-    const c2 = { x: base + 0.7, y: base - 0.4 };
+    const c1 = { x: base + offsetA, y: base + offsetB };
+    const c2 = { x: base + offsetC, y: base - offsetD };
     const points = flattenCubic(p0, c1, c2, p1);
-    // Most branches of the subdivision still converge under tolerance within a few levels once they cover a small enough piece of the curve; only the handful straddling the precision-limited region recurse all the way to the cap. The exact count is this curve's own fixed point, verified once against a reference run of the same algorithm.
-    expect(points.length).toBe(17);
+    // Most branches of the subdivision still converge under tolerance within a few levels once they cover a small enough piece of the curve; only the handful straddling the precision-limited region recurse all the way to the cap.
+    expect(points.length).toBe(expectedPointCount);
   });
 
   it("caps recursion at the documented depth on the second half of a subdivided curve too", () => {
     // The same precision-limited curve as the previous test, walked in the opposite direction (endpoints and control points swapped): the two recursive calls the subdivision makes are not interchangeable — each carries its own depth argument — and the previous test's specific curve happens to only ever drive the FIRST of those two calls deep enough to need the cap. Reversing the curve moves the precision-limited region onto the SECOND call's own side of the split, so this is what actually exercises its depth bookkeeping independently of the first.
     const base = 5623413251903491;
+    const offsetA = 0.3;
+    const offsetB = 0.6;
+    const offsetC = 0.7;
+    const offsetD = 0.4;
+    const expectedPointCount = 17;
     const p0 = { x: base + 1, y: base };
     const p1 = { x: base, y: base };
-    const c1 = { x: base + 0.7, y: base - 0.4 };
-    const c2 = { x: base + 0.3, y: base + 0.6 };
+    const c1 = { x: base + offsetC, y: base - offsetD };
+    const c2 = { x: base + offsetA, y: base + offsetB };
     const points = flattenCubic(p0, c1, c2, p1);
-    expect(points.length).toBe(17);
+    expect(points.length).toBe(expectedPointCount);
   });
 });
