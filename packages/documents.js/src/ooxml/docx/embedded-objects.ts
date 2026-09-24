@@ -65,17 +65,12 @@ interface DetectedParagraphOleObject {
   readonly block: ContentEmbeddedObjectBlock;
 }
 
-// w:object's own w:dxaOrig/w:dyaOrig (twips) size the frame, mirroring ooxml.js's own readObjectEmbeddedObject exactly (typed/docx/read.ts) — an inline flow object has no absolute position of its own, so the frame sits at the origin, positioned by the flow like every other block this pass inserts. Malformed geometry (a non-numeric ST_TwipsMeasure) degrades to no block rather than emitting one no geometry schema accepts, the same guard the upstream reader applies before it will even resolve the payload.
+// w:object's own w:dxaOrig/w:dyaOrig (twips) size the frame, mirroring ooxml.js's own readObjectEmbeddedObject exactly (typed/docx/read.ts) — an inline flow object has no absolute position of its own, so the frame sits at the origin, positioned by the flow like every other block this pass inserts. Malformed geometry (a non-numeric ST_TwipsMeasure, or a missing attribute altogether) degrades to no block rather than emitting one no geometry schema accepts, the same guard the upstream reader applies before it will even resolve the payload: a missing attribute reads as undefined, Number(undefined) is NaN, and the one finite check below rejects absent and non-numeric geometry alike, so a separate missing-attribute guard ahead of it would only restate the same outcome.
 function objectFrame(
   object: XmlElement,
 ): { widthPt: number; heightPt: number } | undefined {
-  const dxaOrig = attr(object, "w:dxaOrig");
-  const dyaOrig = attr(object, "w:dyaOrig");
-  if (dxaOrig === undefined || dyaOrig === undefined) {
-    return undefined;
-  }
-  const widthPt = twipsToPt(Number(dxaOrig));
-  const heightPt = twipsToPt(Number(dyaOrig));
+  const widthPt = twipsToPt(Number(attr(object, "w:dxaOrig")));
+  const heightPt = twipsToPt(Number(attr(object, "w:dyaOrig")));
   return Number.isFinite(widthPt) && Number.isFinite(heightPt)
     ? { widthPt, heightPt }
     : undefined;
@@ -147,20 +142,13 @@ function isOleObjectOnlyRun(
   );
 }
 
-// The generalisation of the old isEquationOnlyParagraph: a paragraph carrying nothing but non-content markers, recognised equations, recognised vector-only runs, and recognised legacy-embedding-only runs is itself the embedded object(s), not a paragraph that merely contains one.
+// The generalisation of the old isEquationOnlyParagraph: a paragraph carrying nothing but non-content markers, recognised equations, recognised vector-only runs, and recognised legacy-embedding-only runs is itself the embedded object(s), not a paragraph that merely contains one. Its one caller (paragraphEmbeddings, below) invokes it only after establishing that at least one equation rendered, vector, or legacy embedding was detected — the rendered-empty branch there returns before this point — so this function needs no "nothing was detected" guard of its own: every arrival carries at least one detection, and an all-empty paragraph is decided by that earlier branch instead.
 function isEmbeddedObjectOnlyParagraph(
   paragraph: XmlElement,
   equations: readonly XmlElement[],
   vectors: readonly DetectedParagraphVector[],
   oleObjects: readonly DetectedParagraphOleObject[],
 ): boolean {
-  if (
-    equations.length === 0 &&
-    vectors.length === 0 &&
-    oleObjects.length === 0
-  ) {
-    return false;
-  }
   for (const child of paragraph.children) {
     if (child.type === "text") {
       if (child.value.trim().length > 0) {
@@ -214,14 +202,8 @@ function paragraphEmbeddings(
   const equations = collectOfficeMathElements(paragraph.children);
   const vectors = collectParagraphVectors(paragraph);
   const oleObjects = collectParagraphOleObjects(paragraph, rels, pkg);
-  if (
-    equations.length === 0 &&
-    vectors.length === 0 &&
-    oleObjects.length === 0
-  ) {
-    return { placements: [], consume: false };
-  }
 
+  // No "nothing detected at all" guard here: a paragraph carrying no equation, vector, or embedding falls through to the rendered-empty branch below, which returns the identical no-op result (no placements, paragraph kept) — an early return at this point would only duplicate it, and would leave isEmbeddedObjectOnlyParagraph's own identical-looking guard dead, since every caller of that function arrives through here.
   const converted = equations.map((equation) => ({
     equation,
     ...readOfficeMath(equation),
