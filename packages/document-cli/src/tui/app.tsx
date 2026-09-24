@@ -89,7 +89,12 @@ export function App(props: {
 }
 
 // The router lives here, and here only: a screen never renders another screen directly, it pushes onto `state.stack` and lets this switch resolve it. Most screen kinds map to a single zero-prop component that reads `currentScreen(state)`/`useAppState()` itself; the docx/odt and pptx/odp root screens (`bodyList`/`slideList`) are the two places this switch itself has to pick a format-specific component, since paragraph-family/slide-family's shared body-list/slide-list components are constructed per format (DocxBodyListScreen vs OdtBodyListScreen, PptxSlideListScreen vs OdpSlideListScreen) rather than being one component that branches internally. `cellDetail` is a real Screen union member with no reachable route: OdsCellEditor (the ODS cell-editing UI) is rendered inline by OdsSpreadsheetGridScreen itself rather than pushed as its own stack screen, so this case is kept only for the switch's own exhaustiveness and is never actually hit.
-function ScreenBody({ screen }: { readonly screen: Screen }): ReactElement {
+// Exported (in addition to being used internally by AppShell below) so a test can render it directly against an arbitrarily seeded screen stack: two Screen union members, "cellDetail" and "exportOptions", are real, permanently-kept switch cases with no reachable route through the app's own UI (see each one's own case comment below), so proving their case labels actually resolve to the right component needs a harness that can push that exact screen kind onto the stack directly, which nothing reachable from <App> alone can do.
+export function ScreenBody({
+  screen,
+}: {
+  readonly screen: Screen;
+}): ReactElement {
   const state = useAppState();
   const format = state.openDocument?.format;
 
