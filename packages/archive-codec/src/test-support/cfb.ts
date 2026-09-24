@@ -150,7 +150,7 @@ export function compoundFile(
 
   // Directory entry IDs: the root is 0, then depth-first in insertion order.
   const records: DirectoryRecord[] = [];
-  const record = (node: StorageNode): DirectoryRecord => {
+  const buildRecord = (node: StorageNode): DirectoryRecord => {
     const created: DirectoryRecord = {
       node,
       id: records.length,
@@ -158,15 +158,15 @@ export function compoundFile(
       childId: NOSTREAM,
     };
     records.push(created);
-    // Sibling chains, linked directly off this recursive call's own return values rather than a later Map lookup: node.children.map(record) always returns one real DirectoryRecord per child (record() never returns anything else), so iterating it directly never meets its own out-of-range undefined — only childRecords[i + 1], at the true last sibling, ever is, and that is the genuine "no next sibling" case NOSTREAM already means. created's own child link is set the same way, directly from childRecords[0], rather than left for a later pass to re-derive by looking node.children[0] up in a separate node -> record map that could only ever find what this same call already has in hand.
-    const childRecords = node.children.map(record);
+    // Sibling chains, linked directly off this recursive call's own return values rather than a later Map lookup: node.children.map(buildRecord) always returns one real DirectoryRecord per child (buildRecord() never returns anything else), so iterating it directly never meets its own out-of-range undefined — only childRecords[i + 1], at the true last sibling, ever is, and that is the genuine "no next sibling" case NOSTREAM already means. created's own child link is set the same way, directly from childRecords[0], rather than left for a later pass to re-derive by looking node.children[0] up in a separate node -> record map that could only ever find what this same call already has in hand.
+    const childRecords = node.children.map(buildRecord);
     childRecords.forEach((childRecord, i) => {
       childRecord.rightId = childRecords[i + 1]?.id ?? NOSTREAM;
     });
     created.childId = childRecords[0]?.id ?? NOSTREAM;
     return created;
   };
-  record(root);
+  buildRecord(root);
 
   // Narrowed through a type predicate rather than a boolean one, because `filter` with a boolean callback leaves the element type alone: the two partitions below would still carry `stream?: Uint8Array` even though the predicate is exactly what rules the absent case out, and every later read would need a fallback that can never be taken.
   const smallStreamRecords = records
