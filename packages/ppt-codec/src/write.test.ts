@@ -602,7 +602,9 @@ describe("writePptContent / readPptContent round trip", () => {
     const diagnostics: PptDiagnostic[] = [];
     const { slides } = readPptContent(
       writePptContent(document, {
-        sink: (diagnostic) => diagnostics.push(diagnostic),
+        sink: (diagnostic) => {
+          diagnostics.push(diagnostic);
+        },
       }),
     );
     expect(slides[0]?.shapes[0]?.blocks).toEqual([
@@ -850,7 +852,11 @@ describe("writePptContent / readPptContent round trip", () => {
               }),
             ],
           },
-          { sink: (diagnostic) => diagnostics.push(diagnostic) },
+          {
+            sink: (diagnostic) => {
+              diagnostics.push(diagnostic);
+            },
+          },
         ),
       );
       expect(slides[0]?.shapes[0]?.blocks).toEqual([
@@ -907,7 +913,11 @@ describe("writePptContent / readPptContent round trip", () => {
               }),
             ],
           },
-          { sink: (diagnostic) => diagnostics.push(diagnostic) },
+          {
+            sink: (diagnostic) => {
+              diagnostics.push(diagnostic);
+            },
+          },
         ),
       );
       const images = slides[0]?.shapes[0]?.blocks.filter(
@@ -1235,7 +1245,11 @@ describe("writePptContent / readPptContent round trip", () => {
               }),
             ],
           },
-          { sink: (diagnostic) => diagnostics.push(diagnostic) },
+          {
+            sink: (diagnostic) => {
+              diagnostics.push(diagnostic);
+            },
+          },
         ),
       );
       expect(slides[0]?.shapes[0]?.blocks).toEqual([
@@ -1277,7 +1291,11 @@ describe("writePptContent / readPptContent round trip", () => {
             metadata: {},
             slides: [slide({ shapes: [tableShape([table, table])] })],
           },
-          { sink: (diagnostic) => diagnostics.push(diagnostic) },
+          {
+            sink: (diagnostic) => {
+              diagnostics.push(diagnostic);
+            },
+          },
         ),
       );
       expect(slides[0]?.shapes[0]?.blocks).toHaveLength(1);
@@ -1320,7 +1338,11 @@ describe("writePptContent / readPptContent round trip", () => {
               }),
             ],
           },
-          { sink: (diagnostic) => diagnostics.push(diagnostic) },
+          {
+            sink: (diagnostic) => {
+              diagnostics.push(diagnostic);
+            },
+          },
         ),
       );
       // The spanning cell is written one column wide and one row tall, and reads back as a plain cell.
@@ -1848,7 +1870,9 @@ describe("OLE embedded objects", () => {
       { metadata: content.metadata, slides: content.slides },
       {
         serialiseEmbeddedObject: () => new Uint8Array([1, 2, 3]),
-        sink: (diagnostic) => diagnostics.push(diagnostic),
+        sink: (diagnostic) => {
+          diagnostics.push(diagnostic);
+        },
       },
     );
     expect(diagnostics).toEqual([]);
@@ -1940,7 +1964,9 @@ describe("OLE embedded objects", () => {
       { metadata: content.metadata, slides: content.slides },
       {
         serialiseEmbeddedObject: () => undefined,
-        sink: (diagnostic) => diagnostics.push(diagnostic),
+        sink: (diagnostic) => {
+          diagnostics.push(diagnostic);
+        },
       },
     );
     expect(diagnostics).toEqual([

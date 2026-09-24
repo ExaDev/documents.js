@@ -83,6 +83,14 @@ function progIdFor(
     case "chart":
       return undefined;
   }
+  return assertNeverObjectKind(objectKind);
+}
+
+// Reached only if ContentEmbeddedObjectKind ever gains a member progIdFor's own switch does not match: every current member has a case there, so `objectKind` narrows to `never` at this call, and adding an uncovered member makes that narrowing fail and the call stop compiling. Exists so the switch's exhaustiveness, proven by the type checker rather than by a catch-all default that would silently write no ProgIDAtom for a genuinely new kind, still gives consistent-return an explicit statement to see past the switch. Exported so embedded-write.test.ts can exercise the throw directly with a forced-invalid cast, since it is otherwise unreachable through progIdFor.
+export function assertNeverObjectKind(objectKind: never): never {
+  throw new Error(
+    `progIdFor: unhandled embedded object kind ${JSON.stringify(objectKind)}`,
+  );
 }
 
 export interface WritableOleEmbed {

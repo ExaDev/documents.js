@@ -490,7 +490,9 @@ describe("writeSlideDrawing: table cell spans and content", () => {
     const diagnostics: PptDiagnostic[] = [];
     const context: DrawingWriteContext = {
       ...CONTEXT,
-      sink: (diagnostic) => diagnostics.push(diagnostic),
+      sink: (diagnostic) => {
+        diagnostics.push(diagnostic);
+      },
     };
     writeSlideDrawing(shapes, context);
     return diagnostics;
@@ -600,7 +602,12 @@ describe("writeSlideDrawing: table cell spans and content", () => {
           clientData: undefined,
         },
       ],
-      { ...CONTEXT, sink: (diagnostic) => diagnostics.push(diagnostic) },
+      {
+        ...CONTEXT,
+        sink: (diagnostic) => {
+          diagnostics.push(diagnostic);
+        },
+      },
     );
     const [entry] = readDrawingShapes(readRecordAt(written.bytes, 0));
     if (entry === undefined || !("cells" in entry)) {
@@ -659,7 +666,9 @@ describe("writeSlideDrawing: table cell spans and content", () => {
       {
         ...CONTEXT,
         describeMessage: (reason) => `slide 1: ${reason}`,
-        sink: (diagnostic) => diagnostics.push(diagnostic),
+        sink: (diagnostic) => {
+          diagnostics.push(diagnostic);
+        },
       },
     );
     expect(
@@ -776,7 +785,9 @@ describe("writeSlideDrawing: block planning", () => {
     const diagnostics: PptDiagnostic[] = [];
     const context: DrawingWriteContext = {
       ...CONTEXT,
-      sink: (diagnostic) => diagnostics.push(diagnostic),
+      sink: (diagnostic) => {
+        diagnostics.push(diagnostic);
+      },
     };
     writeSlideDrawing(shapes, context);
     return diagnostics;
