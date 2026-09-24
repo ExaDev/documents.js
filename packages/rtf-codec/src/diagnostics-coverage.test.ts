@@ -112,7 +112,7 @@ describe("every read-side diagnostic code is reachable", () => {
   });
 
   it("rtf/block-construct-extents-crossed", () => {
-    // Two bookmarks whose \bkmkend/\bkmkstart both land in the same paragraph produce genuinely crossing block extents (ExaDev/documents.js#1040) — see read.test.ts's own "bookmarks" describe block for the full round-trip assertion.
+    // Two bookmarks whose \bkmkend/\bkmkstart both land in the same paragraph produce genuinely crossing block extents (ExaDev/documents.js#1040) — see read-constructs.test.ts's own "bookmarks" describe block for the full round-trip assertion.
     expect(
       readCodes(
         `${HEADER}\\trowd\\trleft0\\cellx4320\\pard\\intbl{\\*\\bkmkstart A}one\\par\\pard\\intbl two{\\*\\bkmkend A}{\\*\\bkmkstart B}three\\par\\pard\\intbl{\\*\\bkmkend B}four\\cell\\row\\pard x\\par}`,
