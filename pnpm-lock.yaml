@@ -602,7 +602,7 @@ importers:
         specifier: 2.0.0
         version: 2.0.0
       document-operations:
-        specifier: 1.1.84
+        specifier: 1.1.85
         version: link:../document-operations
       documents.js:
         specifier: 14.4.23
@@ -797,7 +797,7 @@ importers:
   packages/document-rest:
     dependencies:
       document-operations:
-        specifier: 1.1.84
+        specifier: 1.1.85
         version: link:../document-operations
       documents.js:
         specifier: 14.4.23
