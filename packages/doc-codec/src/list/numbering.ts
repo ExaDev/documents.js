@@ -23,7 +23,7 @@ const LFO_SIZE = 16;
 /** LSTF's own flags byte ([MS-DOC] 2.9.147), bit 0: "this LSTF represents a simple (one-level) list that has one corresponding LVL. Otherwise... a multi-level list that has nine corresponding LVLs." */
 const LSTF_FLAG_SIMPLE_LIST = 0x01;
 
-/** MSONFC ([MS-OSHARED] 2.2.1.3), mapped to its own documented ST_NumberFormat equivalent — the identical vocabulary ooxml.js's NumberingLevel.format carries verbatim from word/numbering.xml's own w:numFmt/@w:val. Every member through msonfcUCRus (0x3B) is a real numbered/lettered/ideograph format; 0x17 (msonfcBullet) is handled separately below since PlfLfo also treats it as the "no number sequence, but has bullets" case LVLF's own field text calls out by name. */
+/** MSONFC ([MS-OSHARED] 2.2.1.3), mapped to its own documented ST_NumberFormat equivalent — the identical vocabulary ooxml.js's NumberingLevel.format carries verbatim from word/numbering.xml's own `w:numFmt/@w:val`. Every member through msonfcUCRus (0x3B) is a real numbered/lettered/ideograph format; 0x17 (msonfcBullet) is handled separately below since PlfLfo also treats it as the "no number sequence, but has bullets" case LVLF's own field text calls out by name. */
 // Exported so numbering-write.ts can invert it (numbering-write.ts's own top comment) rather than hand-maintaining a second, independently-drifting copy of the same MSONFC vocabulary.
 export const NUMBER_FORMAT_BY_NFC: Readonly<Record<number, string>> = {
   0x00: "decimal",
@@ -101,7 +101,7 @@ function numberFormatFor(nfc: number): string {
 export interface NumberingLevel {
   /** The ST_NumberFormat-equivalent string MSONFC's own value maps to ("decimal", "upperRoman", "bullet", ...), or "none" for a level with no number sequence at all ([MS-DOC] 2.9.150's own nfc field text: "If this is equal to 0xFF..., this level does not have a number sequence"). */
   readonly format: string;
-  /** The level's own text template: a placeholder pattern like '%1.' or '%2)' for a numbered format (the digit names which zero-based level's own counter substitutes at that position, one-based in the placeholder itself) — the identical convention ooxml.js's own NumberingLevel.text carries verbatim from w:lvlText/@w:val — or a literal bullet glyph string for format 'bullet'. Decoded from the level's own Xst (a raw UTF-16 string) plus its rgbxchNums array, which names which character POSITIONS in that string are placeholders rather than literal text — see readLevelText below. */
+  /** The level's own text template: a placeholder pattern like '%1.' or '%2)' for a numbered format (the digit names which zero-based level's own counter substitutes at that position, one-based in the placeholder itself) — the identical convention ooxml.js's own NumberingLevel.text carries verbatim from `w:lvlText/@w:val` — or a literal bullet glyph string for format 'bullet'. Decoded from the level's own Xst (a raw UTF-16 string) plus its rgbxchNums array, which names which character POSITIONS in that string are placeholders rather than literal text — see readLevelText below. */
   readonly text: string;
   /** iStartAt: the value this level's counter begins from. Meaningless (and not read as anything but 1) for a level with no number sequence. */
   readonly startAt: number;

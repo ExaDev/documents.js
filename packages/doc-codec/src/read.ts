@@ -52,7 +52,7 @@ export interface DocStreams {
   readonly wordDocument: Uint8Array;
   readonly table: Uint8Array;
   readonly fib: Fib;
-  /** The raw "\x05SummaryInformation" stream bytes, or undefined when the container carries none — a valid, spec-conformant Word Binary File need not carry document properties at all. */
+  /** The raw `\x05SummaryInformation` stream bytes, or undefined when the container carries none — a valid, spec-conformant Word Binary File need not carry document properties at all. */
   readonly metadata: Uint8Array<ArrayBuffer> | undefined;
   /** The raw "Data" stream bytes, or undefined when the container carries none — a valid Word Binary File with no pictures need not have one. sprmCPicLocation's operand addresses this stream (pictures.ts). */
   readonly data: Uint8Array<ArrayBuffer> | undefined;

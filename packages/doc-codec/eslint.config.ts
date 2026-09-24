@@ -8,7 +8,6 @@ export default packageLintConfig({
     "@typescript-eslint/no-shadow",
     "@typescript-eslint/strict-boolean-expressions",
     "@typescript-eslint/strict-void-return",
-    "tsdoc/syntax",
   ],
   isomorphic: true,
   // Off: see PackageLintOptions.preferReadonlyParams in eslint.shared.ts for why — this package's own hand-rolled [MS-DOC] readers/writers genuinely mutate several array/object parameters in place. Tracked for burn-down.
