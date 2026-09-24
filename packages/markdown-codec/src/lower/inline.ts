@@ -44,13 +44,18 @@ function buildRun(
   };
 }
 
+// The paragraph's own run array and the run-level construct extents opened over it, always threaded and mutated together as the inline walk descends — a titled link's extent needs both the runs its children produced AND its own position within them, so splitting this into two separate sinks would only recreate the pairing at every call site.
+interface RunAccumulator {
+  readonly runs: ContentRun[];
+  readonly extents: RunConstructExtent[];
+}
+
 function lowerNestedEmphasisLike(
   kind: "italic" | "bold" | "strike",
   node: { children: readonly MarkdownInlineNode[] },
   style: RunStyle,
   context: InlineLowerContext,
-  runs: ContentRun[],
-  extents: RunConstructExtent[],
+  acc: RunAccumulator,
 ): void {
   const alreadyActive = style[kind] === true;
   if (alreadyActive) {
@@ -61,38 +66,37 @@ function lowerNestedEmphasisLike(
     });
   }
   const childStyle: RunStyle = { ...style, [kind]: true };
-  lowerNodesInto(node.children, childStyle, context, runs, extents);
+  lowerNodesInto(node.children, childStyle, context, acc);
 }
 
 // One MarkdownInlineNode appended onto the paragraph's own run array, threading the accumulated style (bold/italic/strike/hyperlink) down through nested emphasis/strong/strikethrough/link — CommonMark permits arbitrary nesting of all four, and ContentRun's own flat bold/italic/strike/hyperlink fields represent any COMBINATION of them correctly (an italic link inside a bold span is genuinely bold+italic+hyperlink on one run); only nesting the SAME construct inside itself loses information (see lowerNestedEmphasisLike above).
 //
-// The walk APPENDS into a shared run array rather than returning per-node slices because a titled link's extent must name the paragraph's FINAL run positions: recording runs.length on the way into the link and again on the way out is the only way to know the range the link's own children landed in once emphasis, breaks, and siblings have all been flattened into one sequence.
+// The walk APPENDS into a shared run array rather than returning per-node slices because a titled link's extent must name the paragraph's FINAL run positions: recording acc.runs.length on the way into the link and again on the way out is the only way to know the range the link's own children landed in once emphasis, breaks, and siblings have all been flattened into one sequence.
 function lowerInlineNodeInto(
   node: MarkdownInlineNode,
   style: RunStyle,
   context: InlineLowerContext,
-  runs: ContentRun[],
-  extents: RunConstructExtent[],
+  acc: RunAccumulator,
 ): void {
   switch (node.type) {
     // text and entity both carry their materialised text in the same field, and are handled identically — one shared body, rather than two separately-mutable cases whose bodies are textually forced to stay identical anyway.
     case "text":
     case "entity":
-      if (node.value.length > 0) runs.push(buildRun(node.value, style));
+      if (node.value.length > 0) acc.runs.push(buildRun(node.value, style));
       return;
     case "softBreak":
       // See this module's own top-of-file note: the run's materialised text is an ordinary space (the correct fallback for any consumer with no concept of a soft break), and the residue is this package's own spelling for a same-format writer to restore instead — a bare newline, CommonMark's own literal soft-break convention.
-      runs.push({
+      acc.runs.push({
         ...buildRun(" ", style),
         source: { format: "markdown", xml: "\n" },
       });
       return;
     case "hardBreak":
-      runs.push(buildRun("\n", style));
+      acc.runs.push(buildRun("\n", style));
       return;
     case "codeSpan":
       // A code span's own fontFamily is indistinguishable from a genuinely monospace run on the way back out — see MarkdownDiagnosticCodes.CODE_SPAN_AS_MONOSPACE_RUN (src/emit/inline.ts), the write-side half of this same mapping.
-      runs.push(buildRun(node.literal, style, MONOSPACE_FONT_FAMILY));
+      acc.runs.push(buildRun(node.literal, style, MONOSPACE_FONT_FAMILY));
       return;
     case "rawHtml":
       if (context.rawHtml === "drop") {
@@ -110,7 +114,7 @@ function lowerInlineNodeInto(
           "inline raw HTML was preserved as literal text; it will not be rendered as HTML by any consumer of the resulting ContentDocument, and its verbatim original rides the run's own markdown residue for this package's writer to re-emit as-is",
       });
       if (node.literal.length > 0)
-        runs.push({
+        acc.runs.push({
           ...buildRun(node.literal, style),
           source: { format: "markdown", xml: node.literal },
         });
@@ -123,19 +127,19 @@ function lowerInlineNodeInto(
         message:
           "inline math (\\( \\)) was preserved as literal raw LaTeX text; it is not parsed as LaTeX or converted to MathML by this package",
       });
-      runs.push(buildRun(node.literal, style, MATH_INLINE_FONT_MARKER));
+      acc.runs.push(buildRun(node.literal, style, MATH_INLINE_FONT_MARKER));
       return;
     case "footnoteReference": {
       // The reference half of a footnote, now a real anchor construct: a POINT run-level extent (RunConstructExtent, document-schema.js 4.5.0 — the mechanism whose absence once parked this as a font-marker-marked run) on the paragraph the reference sits inside, never splitting that paragraph to host a block wrapper. The run keeps the reference's own source spelling as ordinary text — the materialised rendering, so a consumer that knows nothing about footnotes still shows `[^1]` rather than nothing — and the extent carries the semantics, exactly the dual carry a titled link's runs and a blockquote's indent already play. The point names the boundary BEFORE the spelling run's own index, the same spelling ooxml.js's docx reader mints for a w:footnoteReference run (its mark run renders nothing, so the boundary and the run occupy one position). The write side's inverse is src/emit/inline.ts's renderLeaf, which spells a named run back out as `[^label]` rather than escaping it — exactly what tells a genuine reference apart from a literal `\[^1\]` an author escaped deliberately, the fact the retired font marker used to carry.
-      runs.push(buildRun(`[^${node.label}]`, style));
-      extents.push({
+      acc.runs.push(buildRun(`[^${node.label}]`, style));
+      acc.extents.push({
         descriptor: {
           kind: "anchor",
           anchorType: "footnote",
           name: node.label,
         },
-        startRun: runs.length - 1,
-        endRun: runs.length - 1,
+        startRun: acc.runs.length - 1,
+        endRun: acc.runs.length - 1,
       });
       return;
     }
@@ -143,28 +147,28 @@ function lowerInlineNodeInto(
       const destination = node.email
         ? `mailto:${node.destination}`
         : node.destination;
-      runs.push(
+      acc.runs.push(
         buildRun(node.destination, { ...style, hyperlink: destination }),
       );
       return;
     }
     case "link": {
       const childStyle: RunStyle = { ...style, hyperlink: node.destination };
-      const startRun = runs.length;
-      lowerNodesInto(node.children, childStyle, context, runs, extents);
+      const startRun = acc.runs.length;
+      lowerNodesInto(node.children, childStyle, context, acc);
       // A link with no visible text at all ("[](/url)") produces no child runs to carry the hyperlink on — ContentRun is the only place `hyperlink` can live, so an empty-text link still needs one run (empty text, the hyperlink set) or the link itself silently disappears rather than degrading. The push happens before the extent below so a titled empty link's extent covers that synthetic run.
-      if (runs.length === startRun) {
-        runs.push(buildRun("", childStyle));
+      if (acc.runs.length === startRun) {
+        acc.runs.push(buildRun("", childStyle));
       }
       if (node.title !== undefined) {
-        extents.push({
+        acc.extents.push({
           descriptor: {
             kind: "link",
             target: { kind: "external", uri: node.destination },
             title: node.title,
           },
           startRun,
-          endRun: runs.length,
+          endRun: acc.runs.length,
         });
       }
       return;
@@ -178,16 +182,18 @@ function lowerInlineNodeInto(
           message: `image title "${node.title}" has no ContentRun equivalent and was dropped`,
         });
       }
-      runs.push(buildRun(node.alt, { ...style, hyperlink: node.destination }));
+      acc.runs.push(
+        buildRun(node.alt, { ...style, hyperlink: node.destination }),
+      );
       return;
     case "emphasis":
-      lowerNestedEmphasisLike("italic", node, style, context, runs, extents);
+      lowerNestedEmphasisLike("italic", node, style, context, acc);
       return;
     case "strong":
-      lowerNestedEmphasisLike("bold", node, style, context, runs, extents);
+      lowerNestedEmphasisLike("bold", node, style, context, acc);
       return;
     case "strikethrough":
-      lowerNestedEmphasisLike("strike", node, style, context, runs, extents);
+      lowerNestedEmphasisLike("strike", node, style, context, acc);
       return;
   }
 }
@@ -196,11 +202,10 @@ function lowerNodesInto(
   nodes: readonly MarkdownInlineNode[],
   style: RunStyle,
   context: InlineLowerContext,
-  runs: ContentRun[],
-  extents: RunConstructExtent[],
+  acc: RunAccumulator,
 ): void {
   for (const node of nodes) {
-    lowerInlineNodeInto(node, style, context, runs, extents);
+    lowerInlineNodeInto(node, style, context, acc);
   }
 }
 
@@ -208,10 +213,9 @@ export function lowerInlineNodes(
   nodes: readonly MarkdownInlineNode[],
   context: InlineLowerContext,
 ): InlineLowerResult {
-  const runs: ContentRun[] = [];
-  const extents: RunConstructExtent[] = [];
-  lowerNodesInto(nodes, {}, context, runs, extents);
-  return { runs, runConstructExtents: extents };
+  const acc: RunAccumulator = { runs: [], extents: [] };
+  lowerNodesInto(nodes, {}, context, acc);
+  return { runs: acc.runs, runConstructExtents: acc.extents };
 }
 
 // A code block's literal content -> a single monospace run — shared by the fenced- and indented-code-block lowering in src/lower/lower.ts, kept here since it is genuinely inline-run construction, just for a whole block's worth of text at once rather than a parsed inline tree.
