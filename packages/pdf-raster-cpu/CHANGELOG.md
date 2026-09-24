@@ -1,3 +1,9 @@
+## [1.0.49](https://github.com/ExaDev/documents.js/compare/pdf-raster-cpu%401.0.48...pdf-raster-cpu%401.0.49) (2026-09-24)
+
+### Bug Fixes
+
+* **pdf-raster-cpu:** split rasteriser.test.ts under max-lines and enable it ([89c7c56](https://github.com/ExaDev/documents.js/commit/89c7c56f882ab92f9c7b4590d85e5e09efd6a107))
+
 ## [1.0.48](https://github.com/ExaDev/documents.js/compare/pdf-raster-cpu%401.0.47...pdf-raster-cpu%401.0.48) (2026-09-24)
 
 
