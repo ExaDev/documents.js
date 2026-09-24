@@ -9,7 +9,7 @@ import {
 } from "@mantine/core";
 import { createFileRoute } from "@tanstack/react-router";
 import type { DocumentFormat } from "documents.js";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { createFileAccess } from "../adapters/fileAccess/createFileAccess";
 import { NoDocumentOpen } from "../document/NoDocumentOpen";
@@ -71,9 +71,12 @@ function MetadataPanel({
   const title = titleOverride ?? readMetadata.data?.title ?? "";
   const author = authorOverride ?? readMetadata.data?.author ?? "";
 
-  // Runs once, for the one document this panel instance will ever see: a fresh open remounts a whole new instance (see the key above) rather than this effect re-running to reset anything.
+  // Runs once, for the one document this panel instance will ever see: a fresh open remounts a whole new instance (see the key above) rather than this effect re-running to reset anything. A `hasRun` ref guard stands in for a dependency array here, not out of preference, but because one is provably impossible to write correctly: `format`, `file`, and `readMetadataMutate` are guaranteed stable for this panel's entire lifetime (the key above is what enforces that), so there is no reactive value a dependency list could ever meaningfully name.
   const { mutate: readMetadataMutate } = readMetadata;
+  const hasRun = useRef(false);
   useEffect(() => {
+    if (hasRun.current) return;
+    hasRun.current = true;
     readMetadataMutate(
       { format, bytes: file.bytes },
       {
@@ -82,7 +85,7 @@ function MetadataPanel({
         },
       },
     );
-  }, [format, file, readMetadataMutate]);
+  });
 
   const handleSave = () => {
     writeMetadata.mutate(
