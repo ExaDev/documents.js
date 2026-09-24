@@ -6,7 +6,7 @@ import type { RasterPageGeometry } from "pdf-codec/raster";
 
 // Three bytes per pixel (r, g, b), matching rasteriser.ts's own fixed canvas layout.
 const RGB_CHANNELS = 3;
-const RGB_CHANNEL_MAX = 255;
+export const RGB_CHANNEL_MAX = 255;
 
 export function pixelAt(
   image: RawImage,
@@ -27,6 +27,9 @@ export const WHITE: readonly [number, number, number] = [
   RGB_CHANNEL_MAX,
 ];
 export const BLACK: readonly [number, number, number] = [0, 0, 0];
+export const RED: readonly [number, number, number] = [RGB_CHANNEL_MAX, 0, 0];
+export const GREEN: readonly [number, number, number] = [0, RGB_CHANNEL_MAX, 0];
+export const BLUE: readonly [number, number, number] = [0, 0, RGB_CHANNEL_MAX];
 
 export function pageGeometry(
   widthPx: number,
