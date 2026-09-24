@@ -10,6 +10,7 @@ import {
   zipPackage,
 } from "./index";
 import type { CompactPackage, Package, XmlElement } from "./index";
+import { assertNeverCompactXmlNodeCode } from "./compact";
 
 function enc(s: string): Uint8Array<ArrayBuffer> {
   return new TextEncoder().encode(s);
@@ -384,5 +385,20 @@ describe("compact adversarial cases", () => {
     expect(compact.s).toHaveLength(1);
     expect(compact.s[0]).toBe(largeBase64);
     expect(fromCompact(compact)).toEqual(pkg);
+  });
+});
+
+describe("assertNeverCompactXmlNodeCode", () => {
+  it("throws naming the unhandled type code, proving decodeNode's own exhaustiveness guard actually fires at runtime", () => {
+    let caught: unknown;
+    try {
+      assertNeverCompactXmlNodeCode([99] as never);
+    } catch (error) {
+      caught = error;
+    }
+    expect(caught).toBeInstanceOf(Error);
+    expect((caught as Error).message).toBe(
+      "decodeNode: unhandled CompactXmlNode type code [99]",
+    );
   });
 });

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isXmlNode } from "./node";
+import { assertNeverXmlNodeType, isXmlNode } from "./node";
 
 describe("isXmlNode: non-record inputs", () => {
   it("is false for null, even though typeof null === 'object'", () => {
@@ -183,5 +183,20 @@ describe("isXmlNode: element", () => {
         ],
       }),
     ).toBe(true);
+  });
+});
+
+describe("assertNeverXmlNodeType", () => {
+  it("throws naming the unhandled type, proving encodeNode's and toOrderedNode's own exhaustiveness guard actually fires at runtime", () => {
+    let caught: unknown;
+    try {
+      assertNeverXmlNodeType({ type: "bogus" } as never);
+    } catch (error) {
+      caught = error;
+    }
+    expect(caught).toBeInstanceOf(Error);
+    expect((caught as Error).message).toBe(
+      'XmlNode: unhandled type {"type":"bogus"}',
+    );
   });
 });

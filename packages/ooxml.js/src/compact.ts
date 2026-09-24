@@ -1,6 +1,10 @@
 import { z } from "zod";
 import { type Package, PackageSchema } from "./model/package";
-import type { Attribute, XmlNode } from "./model/node";
+import {
+  assertNeverXmlNodeType,
+  type Attribute,
+  type XmlNode,
+} from "./model/node";
 import { decodePackage, encodePackage } from "./codec";
 
 // A flat number[] of alternating [nameIdx, valueIdx, ...] pairs into the string table.
@@ -125,6 +129,7 @@ function encodeNode(node: XmlNode, table: StringTable): CompactXmlNode {
         node.children.map((child) => encodeNode(child, table)),
       ];
   }
+  return assertNeverXmlNodeType(node);
 }
 
 function packageToCompact(pkg: Package): CompactPackage {
@@ -168,6 +173,13 @@ function decodeAttrs(
   return attributes;
 }
 
+// Reached only if CompactXmlNode ever gains a variant decodeNode's own switch does not match: every current member is covered there, so `value` narrows to `never` at the real call site, and adding an uncovered leading type code makes that narrowing fail and this call stop compiling. That is the real safety net. Exported so compact.test.ts can exercise the throw directly with a forced-invalid cast: it is otherwise unreachable, since every real CompactXmlNode type code is already handled by a case in decodeNode.
+export function assertNeverCompactXmlNodeCode(value: never): never {
+  throw new Error(
+    `decodeNode: unhandled CompactXmlNode type code ${JSON.stringify(value)}`,
+  );
+}
+
 function decodeNode(node: CompactXmlNode, strings: readonly string[]): XmlNode {
   switch (node[0]) {
     case 1:
@@ -192,6 +204,7 @@ function decodeNode(node: CompactXmlNode, strings: readonly string[]): XmlNode {
         children: node[3].map((child) => decodeNode(child, strings)),
       };
   }
+  return assertNeverCompactXmlNodeCode(node);
 }
 
 function compactToPackage(cpkg: CompactPackage): Package {
