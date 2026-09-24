@@ -35,20 +35,20 @@ export function escherContainer(
 }
 
 /** [MS-ODRAW] OfficeArtFBSE: the fixed fields this package's own readBseImage reads past, then an embedded blip record's own bytes — nameData is always omitted (cbName 0), which every real BSE this reader is meant to accept also does when the file carries no picture name. */
-export function bseEntry(embeddedBlip: readonly number[]): number[] {
+export function bseEntry(embeddedBlipBytes: readonly number[]): number[] {
   return [
     0x00, // btWin32
     0x00, // btMacOS
     ...new Array<number>(16).fill(0), // rgbUid
     ...u16(0xff), // tag
-    ...u32(embeddedBlip.length), // size
+    ...u32(embeddedBlipBytes.length), // size
     ...u32(1), // cRef
     ...u32(0), // foDelay
     0x00, // unused1
     0x00, // cbName
     0x00, // unused2
     0x00, // unused3
-    ...embeddedBlip,
+    ...embeddedBlipBytes,
   ];
 }
 
