@@ -120,14 +120,12 @@ export function compoundFile(
   // "Root Entry" from the start, not a placeholder overridden at write time: nothing else ever reads this node's own name (it is never a sibling, so it never enters a name comparison), so there is no reason to carry a second, different string that would only be discarded later.
   const root: StorageNode = { name: "Root Entry", children: [] };
   for (const entry of entries) {
-    const segments = entry.path.split("/");
-    const leaf = segments.pop();
-    // String.prototype.split always returns at least one element, so .pop() on it is genuinely never undefined here — only ever a string, possibly empty — but the type is still string | undefined, so both cases are spelled out explicitly rather than relying on a falsy check to catch them identically.
-    if (
-      leaf === undefined ||
-      leaf.length === 0 ||
-      segments.some((segment) => segment.length === 0)
-    ) {
+    // Split the leaf off the string itself rather than popping it off the array: an array element is typed string | undefined under noUncheckedIndexedAccess, which forced a `leaf === undefined` branch that String.prototype.split's own guarantee of at least one element made unreachable, so no test could ever distinguish it. slice always yields a string, so every branch below is one a real path can actually take.
+    const lastSlash = entry.path.lastIndexOf("/");
+    const leaf = entry.path.slice(lastSlash + 1);
+    const segments =
+      lastSlash === -1 ? [] : entry.path.slice(0, lastSlash).split("/");
+    if (leaf.length === 0 || segments.some((segment) => segment.length === 0)) {
       throw new Error(
         `compoundFile entry paths must be slash-separated with no empty segments (got ${JSON.stringify(entry.path)})`,
       );
