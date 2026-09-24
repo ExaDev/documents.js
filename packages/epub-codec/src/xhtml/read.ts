@@ -45,6 +45,32 @@ import {
   QUOTE_STYLE_ID,
 } from "./style-constants";
 
+// Every container this package maps transparently (li, blockquote, aside, div/section/..., and the top-level body itself) is, per the XHTML content model, legally allowed to mix real block-level children with bare phrasing content (text and inline markup with no block wrapper) as siblings — <li>text<ul>...</ul></li> is exactly as real as <li><p>text</p><ul>...</ul></li>, and both idioms appear in real EPUBs. A dispatcher that only recurses into element children whose own tag it recognises as a block would silently drop the phrasing case outright: any stray text node sitting among block siblings is skipped, wherever it falls. This walks the children in source order instead, accumulating a run of phrasing content into its own implicit paragraph (dropped if it produces no runs) and flushing it the moment a real block-level element is reached — the same "anonymous block box" rule every browser's own HTML block-formatting context applies to inline content sitting beside block siblings. Every block-level dispatch point in this module (a <p>'s own children, a <li>'s, a <blockquote>'s, an <aside>'s, and every other container's default passthrough) reaches content exclusively through this one function; nothing else in the module walks a raw children array directly.
+export const BLOCK_LEVEL_TAGS = new Set([
+  "p",
+  "h1",
+  "h2",
+  "h3",
+  "h4",
+  "h5",
+  "h6",
+  "ul",
+  "ol",
+  "dl",
+  "table",
+  "blockquote",
+  "pre",
+  "hr",
+  "figure",
+  "figcaption",
+  "div",
+  "section",
+  "article",
+  "aside",
+  "nav",
+  "img",
+]);
+
 // EPUB 3.3 content documents are well-formed XHTML by spec (not tag-soup HTML), read through the shared fast-xml-parser stack every module in this package uses — no bespoke HTML parser anywhere. This module maps one XHTML content document's <body> to document-schema.js's ContentBlock[], the shape one ContentSection's own `blocks` field carries; src/read.ts calls this once per spine itemref and wraps the result in a section.
 
 interface ListContext {
@@ -59,8 +85,8 @@ interface ListItemContext {
 }
 
 interface IdMinter {
-  mintNumId(options: MintListNumIdOptions): string;
-  mintItemId(): string;
+  mintNumId: (options: MintListNumIdOptions) => string;
+  mintItemId: () => string;
 }
 
 function createIdMinter(): IdMinter {
@@ -336,32 +362,6 @@ export function readXhtmlBody(
   const source = readStyleResidue(html, context);
   return { blocks, source };
 }
-
-// Every container this package maps transparently (li, blockquote, aside, div/section/..., and the top-level body itself) is, per the XHTML content model, legally allowed to mix real block-level children with bare phrasing content (text and inline markup with no block wrapper) as siblings — <li>text<ul>...</ul></li> is exactly as real as <li><p>text</p><ul>...</ul></li>, and both idioms appear in real EPUBs. A dispatcher that only recurses into element children whose own tag it recognises as a block would silently drop the phrasing case outright: any stray text node sitting among block siblings is skipped, wherever it falls. This walks the children in source order instead, accumulating a run of phrasing content into its own implicit paragraph (dropped if it produces no runs) and flushing it the moment a real block-level element is reached — the same "anonymous block box" rule every browser's own HTML block-formatting context applies to inline content sitting beside block siblings. Every block-level dispatch point in this module (a <p>'s own children, a <li>'s, a <blockquote>'s, an <aside>'s, and every other container's default passthrough) reaches content exclusively through this one function; nothing else in the module walks a raw children array directly.
-export const BLOCK_LEVEL_TAGS = new Set([
-  "p",
-  "h1",
-  "h2",
-  "h3",
-  "h4",
-  "h5",
-  "h6",
-  "ul",
-  "ol",
-  "dl",
-  "table",
-  "blockquote",
-  "pre",
-  "hr",
-  "figure",
-  "figcaption",
-  "div",
-  "section",
-  "article",
-  "aside",
-  "nav",
-  "img",
-]);
 
 function readContainerChildren(
   nodes: readonly XmlNode[],

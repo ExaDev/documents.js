@@ -1,3 +1,4 @@
+import { assertNeverXmlNode } from "./build";
 import { describe, expect, it } from "vitest";
 import { buildXml } from "./build";
 
@@ -84,5 +85,13 @@ describe("buildXml", () => {
         },
       ]),
     ).toBe("<div><span>x</span></div>");
+  });
+});
+
+describe("assertNeverXmlNode", () => {
+  it("throws naming the unhandled xml node, proving the switch's own exhaustiveness guard fires at runtime", () => {
+    expect(() => {
+      assertNeverXmlNode({ type: "bogus" } as never);
+    }).toThrow('epub-codec: unhandled xml node {"type":"bogus"}');
   });
 });

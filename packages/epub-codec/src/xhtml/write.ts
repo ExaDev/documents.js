@@ -256,6 +256,7 @@ function writeLeafBlock(
       });
       return [];
   }
+  return assertNeverLeafBlock(block);
 }
 
 // A paragraph carrying document-schema.js's own preformatted flag, or codeLanguage, or (for a foreign producer's document that sets neither) exactly one monospace run whose text embeds a literal newline (an inline code span essentially never does; a <pre> block's own single run, read verbatim including its real line breaks, always might), is this package's own <pre><code> round-trip shape (src/xhtml/read.ts's readPre). The preformatted check is checked first and alone decides the common case: readPre sets it unconditionally on every paragraph it produces, so this is the one reliable signal for a paragraph this package itself read out of a <pre> — unlike run count, which a footnote reference (or any other construct) nested inside the block changes with no bearing on whether the block is preformatted (a <pre> containing one recognised construct produces 2+ runs via readPreRuns, which a runs.length===1 check would misclassify as an ordinary paragraph, silently losing the block's own verbatim whitespace on write). Every other paragraph is an ordinary <p>/<hr>.
@@ -625,4 +626,9 @@ function writeImage(
   const attrs: Record<string, string> = { src: href };
   attrs.alt = image.altText ?? "";
   return element("img", attrs);
+}
+
+// Reached only if the union behind `block` ever gains a member writeLeafBlock's own switch does not match: every current member has a case there, so `block` narrows to `never` at the call, and adding an uncovered member makes that narrowing fail and the call stop compiling. Exists so the switch's own exhaustiveness, proven by the type checker rather than by a catch-all default that would silently emit nothing for a genuinely new member, still gives consistent-return an explicit statement to see past the switch. Exported so a test can exercise the throw directly with a forced-invalid cast, since it is otherwise unreachable.
+export function assertNeverLeafBlock(value: never): never {
+  throw new Error(`epub-codec: unhandled leaf block ${JSON.stringify(value)}`);
 }

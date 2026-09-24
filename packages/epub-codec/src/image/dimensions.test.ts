@@ -5,6 +5,10 @@ import {
   readImageDimensions,
 } from "./dimensions";
 
+const BYTE_MASK = 0xff;
+
+const BITS_PER_BYTE = 8;
+
 // Mirrors dimensions.ts's own private layout constants so the fixtures below stay tied to the format's real structure rather than restating its offsets as independent literals. Kept local rather than imported: these are dimensions.ts's own implementation details, not part of its public contract.
 const PNG_SIG_HIGH_BIT_MARKER = 0x89;
 const PNG_SIG_P = 0x50;
@@ -186,9 +190,6 @@ function jpegSegment(marker: number, payload: readonly number[]): number[] {
     ...payload,
   ];
 }
-
-const BITS_PER_BYTE = 8;
-const BYTE_MASK = 0xff;
 
 function concatBytes(...chunks: readonly number[][]): Uint8Array {
   return new Uint8Array(chunks.flat());

@@ -1,3 +1,4 @@
+import { assertNeverLeafBlock } from "./write";
 import type { ContentBlock } from "document-schema.js";
 import { describe, expect, it } from "vitest";
 import {
@@ -1470,5 +1471,13 @@ describe("writeXhtmlBody: a table breaking the grid rule", () => {
       },
     ]);
     expect(error).toBeInstanceOf(EpubTableGridFaultError);
+  });
+});
+
+describe("assertNeverLeafBlock", () => {
+  it("throws naming the unhandled leaf block, proving the switch's own exhaustiveness guard fires at runtime", () => {
+    expect(() => {
+      assertNeverLeafBlock({ kind: "bogus" } as never);
+    }).toThrow('epub-codec: unhandled leaf block {"kind":"bogus"}');
   });
 });

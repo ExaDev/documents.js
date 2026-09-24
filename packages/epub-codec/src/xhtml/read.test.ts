@@ -1,6 +1,6 @@
 import type { ContentTableCell, ContentTableRow } from "document-schema.js";
 import { describe, expect, it, vi } from "vitest";
-import type { EpubDiagnostic } from "../diagnostics";
+import type { EpubDiagnostic, EpubDiagnosticSink } from "../diagnostics";
 import { readXhtmlBody, scanXhtmlAnchors } from "./read";
 
 const CONTENT_WIDTH_PT = 451.28; // A4 minus 1in margins each side, matching src/read.ts's own default section geometry
@@ -69,7 +69,7 @@ describe("headings", () => {
   });
 
   it("degrades a heading's own direct-child <img> to alt text with a diagnostic, same as one reached via inline nesting", () => {
-    const sink = vi.fn();
+    const sink = vi.fn<EpubDiagnosticSink>();
     const blocks = read(
       body('<h2>Title <img src="a.png" alt="pic"/></h2>'),
       sink,
@@ -149,7 +149,7 @@ describe("paragraphs and inline styling", () => {
   });
 
   it("maps <sub>/<sup> onto ContentRun.verticalAlign, composing with nested emphasis like the other inline styles", () => {
-    const sink = vi.fn();
+    const sink = vi.fn<EpubDiagnosticSink>();
     const blocks = read(
       body("<p>x<sup>2</sup> and <strong>H<sub>2</sub>O</strong></p>"),
       sink,
@@ -220,7 +220,7 @@ describe("hyperlinks", () => {
   });
 
   it("stores a cross-document href verbatim, with a diagnostic", () => {
-    const sink = vi.fn();
+    const sink = vi.fn<EpubDiagnosticSink>();
     const blocks = read(body('<p><a href="chapter2.xhtml">next</a></p>'), sink);
     expect(blocks).toEqual([
       {
@@ -295,7 +295,7 @@ describe("lists", () => {
   });
 
   it("recovers a <ul> nested directly as a sibling of <li> rather than inside one, with a diagnostic", () => {
-    const sink = vi.fn();
+    const sink = vi.fn<EpubDiagnosticSink>();
     const blocks = read(body("<ul><li>a</li><ul><li>b</li></ul></ul>"), sink);
     expect(blocks).toEqual([
       {
@@ -319,7 +319,7 @@ describe("lists", () => {
   });
 
   it("recovers a stray <img> sitting directly inside a <ul> as a continuation of the preceding <li>", () => {
-    const sink = vi.fn();
+    const sink = vi.fn<EpubDiagnosticSink>();
     const blocks = read(
       body('<ul><li>a</li><img src="a.png" alt="ulpic"/></ul>'),
       sink,
@@ -345,7 +345,7 @@ describe("lists", () => {
   });
 
   it("recovers stray text that sits before the very first <li>, with no list membership of its own, positioned immediately before the list's own items", () => {
-    const sink = vi.fn();
+    const sink = vi.fn<EpubDiagnosticSink>();
     const blocks = read(body("<ul>stray<li>a</li></ul>"), sink);
     expect(blocks).toEqual([
       { kind: "paragraph", runs: [{ text: "stray" }] },
@@ -365,7 +365,7 @@ describe("lists", () => {
   });
 
   it("recovers a <ul> nested directly before the very first <li> as its own separate top-level list, rather than losing it — issue #994's own headline repro", () => {
-    const sink = vi.fn();
+    const sink = vi.fn<EpubDiagnosticSink>();
     const blocks = read(body("<ul><ul><li>b</li></ul><li>a</li></ul>"), sink);
     expect(blocks).toEqual([
       {
@@ -403,7 +403,7 @@ describe("lists", () => {
   });
 
   it("fires only the stray image's own diagnostic, not an additional list-content-outside-item, when the stray content resolves to zero blocks", () => {
-    const sink = vi.fn();
+    const sink = vi.fn<EpubDiagnosticSink>();
     const blocks = read(
       body('<ul><li>a</li><img src="missing.png"/></ul>'),
       sink,
@@ -450,7 +450,7 @@ describe("lists", () => {
   });
 
   it("still drops genuinely whitespace-only content before the very first <li>, firing no diagnostic", () => {
-    const sink = vi.fn();
+    const sink = vi.fn<EpubDiagnosticSink>();
     const blocks = read(body("<ul>\n  <li>a</li>\n</ul>"), sink);
     expect(blocks).toEqual([
       {
@@ -463,7 +463,7 @@ describe("lists", () => {
   });
 
   it("ignores inter-element whitespace between <li> siblings, firing no diagnostic, for the pretty-printed shape essentially all real-world HTML uses", () => {
-    const sink = vi.fn();
+    const sink = vi.fn<EpubDiagnosticSink>();
     const blocks = read(body("<ul>\n  <li>a</li>\n  <li>b</li>\n</ul>"), sink);
     expect(blocks).toEqual([
       {
@@ -481,7 +481,7 @@ describe("lists", () => {
   });
 
   it("ignores inter-element whitespace across a multi-item indented <ol>, firing no diagnostic", () => {
-    const sink = vi.fn();
+    const sink = vi.fn<EpubDiagnosticSink>();
     const blocks = read(
       body("<ol>\n  <li>a</li>\n  <li>b</li>\n  <li>c</li>\n</ol>"),
       sink,
@@ -493,7 +493,7 @@ describe("lists", () => {
   });
 
   it("skips a <script> script-supporting element sitting directly inside a <ul> entirely, never leaking it into content", () => {
-    const sink = vi.fn();
+    const sink = vi.fn<EpubDiagnosticSink>();
     const blocks = read(
       body("<ul><li>a</li><script>var x = 1;</script><li>b</li></ul>"),
       sink,
@@ -516,7 +516,7 @@ describe("lists", () => {
   });
 
   it("skips a <template> script-supporting element sitting directly inside an <ol> entirely", () => {
-    const sink = vi.fn();
+    const sink = vi.fn<EpubDiagnosticSink>();
     const blocks = read(
       body("<ol><li>a</li><template><li>fake</li></template><li>b</li></ol>"),
       sink,
@@ -539,7 +539,7 @@ describe("lists", () => {
   });
 
   it("skips a <noscript> sitting directly inside a <ul> entirely, but reports the drop unlike script/template", () => {
-    const sink = vi.fn();
+    const sink = vi.fn<EpubDiagnosticSink>();
     const blocks = read(
       body("<ul><li>a</li><noscript><li>fake</li></noscript><li>b</li></ul>"),
       sink,
@@ -589,7 +589,7 @@ describe("lists", () => {
   // Regression coverage for the emptiness-probe defect: flushListStrayContent used to decide whether to recover its collected stray nodes by building their inline runs (buildInlineRuns, which only ever produces TEXT) and checking whether that text was blank — so any stray block-level content whose text projection happens to be empty (a resolved image with no alt text, an <hr>, a table or nested list whose only content is such an image) was misjudged as "whitespace-only" and silently dropped, with no diagnostic, exactly like real pretty-printed whitespace. The fix asks the real question instead: does readContainerChildren's own result carry any blocks at all. Each case below recovers a resolved image inline PNG (fakePng, defined further down this file — a function declaration, hoisted) so the stray content's own text projection is genuinely empty while its block projection is not.
   it("recovers a stray, resolved <img> with no alt attribute as a real image block, not judging it whitespace-only by its absent text projection", () => {
     const bytes = fakePng(FAKE_IMAGE_WIDTH_PX, FAKE_IMAGE_WIDTH_PX);
-    const sink = vi.fn();
+    const sink = vi.fn<EpubDiagnosticSink>();
     const { blocks } = readXhtmlBody(
       body('<ul><li>a</li><img src="a.png"/></ul>'),
       {
@@ -608,7 +608,7 @@ describe("lists", () => {
 
   it('recovers a stray, resolved <img alt=""> as a real image block', () => {
     const bytes = fakePng(FAKE_IMAGE_WIDTH_PX, FAKE_IMAGE_WIDTH_PX);
-    const sink = vi.fn();
+    const sink = vi.fn<EpubDiagnosticSink>();
     const { blocks } = readXhtmlBody(
       body('<ul><li>a</li><img src="a.png" alt=""/></ul>'),
       {
@@ -627,7 +627,7 @@ describe("lists", () => {
 
   it("recovers a nested <ul> stray sibling whose only <li> content is a resolved image with no text — issue #994's own headline shape, which the emptiness-probe regression defeated", () => {
     const bytes = fakePng(FAKE_IMAGE_WIDTH_PX, FAKE_IMAGE_WIDTH_PX);
-    const sink = vi.fn();
+    const sink = vi.fn<EpubDiagnosticSink>();
     const { blocks } = readXhtmlBody(
       body('<ul><li>a</li><ul><li><img src="a.png" alt=""/></li></ul></ul>'),
       {
@@ -649,7 +649,7 @@ describe("lists", () => {
   });
 
   it("recovers a stray <hr/> sitting directly inside a <ul> as a real paragraph block, not empty-runs judged whitespace-only", () => {
-    const sink = vi.fn();
+    const sink = vi.fn<EpubDiagnosticSink>();
     const blocks = read(body("<ul><li>a</li><hr/></ul>"), sink);
     expect(blocks).toEqual([
       {
@@ -671,7 +671,7 @@ describe("lists", () => {
 
   it("recovers a stray <table> whose only cell content is a resolved image with no alt text — readTable always yields a real table block regardless of its cells' own text", () => {
     const bytes = fakePng(FAKE_IMAGE_WIDTH_PX, FAKE_IMAGE_WIDTH_PX);
-    const sink = vi.fn();
+    const sink = vi.fn<EpubDiagnosticSink>();
     const { blocks } = readXhtmlBody(
       body(
         '<ul><li>a</li><table><tr><td><img src="a.png" alt=""/></td></tr></table></ul>',
@@ -705,7 +705,7 @@ describe("lists", () => {
     "recovers a stray <%s> wrapping only a resolved, alt-less image",
     (_tag, fragment, expectedBlockCount) => {
       const bytes = fakePng(FAKE_IMAGE_WIDTH_PX, FAKE_IMAGE_WIDTH_PX);
-      const sink = vi.fn();
+      const sink = vi.fn<EpubDiagnosticSink>();
       const { blocks } = readXhtmlBody(body(`<ul><li>a</li>${fragment}</ul>`), {
         resolveImage: (href) => (href === "a.png" ? bytes : undefined),
         sink,
@@ -721,7 +721,7 @@ describe("lists", () => {
   );
 
   it("recovers stray content before the first <li> of a NESTED list inheriting the outer <li>'s own list membership, not none, when the enclosing list is itself nested", () => {
-    const sink = vi.fn();
+    const sink = vi.fn<EpubDiagnosticSink>();
     const blocks = read(
       body("<ul><li>outer<ul>stray<li>inner</li></ul></li></ul>"),
       sink,
@@ -752,7 +752,7 @@ describe("lists", () => {
 
 describe("inert elements outside lists (script/template/style/noscript)", () => {
   it("never leaks a <script>'s raw source as document text when it sits directly inside a <p>, firing no diagnostic", () => {
-    const sink = vi.fn();
+    const sink = vi.fn<EpubDiagnosticSink>();
     const blocks = read(
       body("<p>before<script>var x=1;</script>after</p>"),
       sink,
@@ -764,7 +764,7 @@ describe("inert elements outside lists (script/template/style/noscript)", () => 
   });
 
   it("never leaks a <style>'s own CSS text as document prose when it sits directly inside <body> content, firing no diagnostic", () => {
-    const sink = vi.fn();
+    const sink = vi.fn<EpubDiagnosticSink>();
     const blocks = read(
       body("<p>before</p><style>p{color:red}</style><p>after</p>"),
       sink,
@@ -778,7 +778,7 @@ describe("inert elements outside lists (script/template/style/noscript)", () => 
 
   // Unlike <script>/<template>/<style> (never legitimate content regardless of where reached), a <noscript>'s own children CAN be ordinary, genuinely renderable markup — this package cannot tell that case apart from a producer's own "please enable JavaScript" placeholder from the markup alone, so it fires its own dedicated diagnostic naming the drop rather than staying silent about it the way the other three do.
   it("never leaks a <noscript>'s fallback markup as document prose when it sits directly inside a <p>, but reports the drop unlike script/template/style", () => {
-    const sink = vi.fn();
+    const sink = vi.fn<EpubDiagnosticSink>();
     const blocks = read(
       body("<p>before<noscript>Enable JavaScript</noscript>after</p>"),
       sink,
@@ -1007,7 +1007,7 @@ describe("definition lists", () => {
   });
 
   it("recovers a stray <p> sitting directly inside a <dl> between dt/dd, with a diagnostic", () => {
-    const sink = vi.fn();
+    const sink = vi.fn<EpubDiagnosticSink>();
     const blocks = read(
       body("<dl><dt>Term</dt><p>stray</p><dd>Definition</dd></dl>"),
       sink,
@@ -1038,7 +1038,7 @@ describe("definition lists", () => {
   });
 
   it("recovers stray text sitting before the very first dt inside a <dl>, with a diagnostic", () => {
-    const sink = vi.fn();
+    const sink = vi.fn<EpubDiagnosticSink>();
     const blocks = read(body("<dl>stray<dt>Term</dt></dl>"), sink);
     expect(blocks).toEqual([
       { kind: "paragraph", runs: [{ text: "stray" }] },
@@ -1053,7 +1053,7 @@ describe("definition lists", () => {
 
   it("recovers a stray, resolved <img> sitting directly inside a <dl> as a real image block, with a diagnostic", () => {
     const bytes = fakePng(FAKE_IMAGE_WIDTH_PX, FAKE_IMAGE_WIDTH_PX);
-    const sink = vi.fn();
+    const sink = vi.fn<EpubDiagnosticSink>();
     const { blocks } = readXhtmlBody(
       body('<dl><dt>Term</dt><img src="a.png" alt="pic"/></dl>'),
       {
@@ -1073,7 +1073,7 @@ describe("definition lists", () => {
   });
 
   it("skips a <script> sitting directly inside a <dl>, firing no diagnostic", () => {
-    const sink = vi.fn();
+    const sink = vi.fn<EpubDiagnosticSink>();
     const blocks = read(
       body(
         "<dl><dt>Term</dt><script>var x=1;</script><dd>Definition</dd></dl>",
@@ -1092,7 +1092,7 @@ describe("definition lists", () => {
   });
 
   it("skips a <noscript> sitting directly inside a <dl>, but reports the drop unlike script", () => {
-    const sink = vi.fn();
+    const sink = vi.fn<EpubDiagnosticSink>();
     const blocks = read(
       body(
         "<dl><dt>Term</dt><noscript>Enable JS</noscript><dd>Definition</dd></dl>",
@@ -1114,7 +1114,7 @@ describe("definition lists", () => {
   });
 
   it("ignores inter-element whitespace inside a <dl>, firing no diagnostic, for the pretty-printed shape essentially all real-world HTML uses", () => {
-    const sink = vi.fn();
+    const sink = vi.fn<EpubDiagnosticSink>();
     const blocks = read(
       body("<dl>\n  <dt>Term</dt>\n  <dd>Definition</dd>\n</dl>"),
       sink,
@@ -1127,7 +1127,7 @@ describe("definition lists", () => {
   });
 
   it("recovers a <section> wrapping a dt/dd pair as degraded, concatenated plain text, with a diagnostic — <div> is the only wrapper HTML5's own <dl> content model actually names as legal", () => {
-    const sink = vi.fn();
+    const sink = vi.fn<EpubDiagnosticSink>();
     const blocks = read(
       body("<dl><section><dt>Term</dt><dd>Definition</dd></section></dl>"),
       sink,
@@ -1438,7 +1438,7 @@ describe("tables", () => {
   });
 
   it("recovers a CDATA section sitting directly inside a <tbody> outside any <tr>, with a diagnostic, positioned immediately before the table", () => {
-    const sink = vi.fn();
+    const sink = vi.fn<EpubDiagnosticSink>();
     const blocks = read(
       body(
         "<table><tbody><![CDATA[stray]]><tr><td>x</td></tr></tbody></table>",
@@ -1490,7 +1490,7 @@ describe("tables", () => {
   });
 
   it("recovers stray text sitting directly inside a <tbody> outside any <tr>, with a diagnostic, positioned immediately before the table", () => {
-    const sink = vi.fn();
+    const sink = vi.fn<EpubDiagnosticSink>();
     const blocks = read(
       body("<table><tbody>stray<tr><td>x</td></tr></tbody></table>"),
       sink,
@@ -1513,7 +1513,7 @@ describe("tables", () => {
   });
 
   it("recovers a stray <p> sitting directly inside a <thead> outside any <tr>, with a diagnostic", () => {
-    const sink = vi.fn();
+    const sink = vi.fn<EpubDiagnosticSink>();
     const blocks = read(
       body("<table><thead><p>stray</p><tr><th>H</th></tr></thead></table>"),
       sink,
@@ -1542,7 +1542,7 @@ describe("tables", () => {
 
   it("recovers a stray, resolved <img> sitting directly inside a <tfoot> outside any <tr>, as a real image block, with a diagnostic", () => {
     const bytes = fakePng(FAKE_IMAGE_WIDTH_PX, FAKE_IMAGE_WIDTH_PX);
-    const sink = vi.fn();
+    const sink = vi.fn<EpubDiagnosticSink>();
     const { blocks } = readXhtmlBody(
       body(
         '<table><tfoot><img src="a.png" alt="pic"/><tr><td>x</td></tr></tfoot></table>',
@@ -1563,7 +1563,7 @@ describe("tables", () => {
   });
 
   it("recovers a nested <ul> sitting directly inside a <tbody> outside any <tr>, as a properly nested list, with a diagnostic", () => {
-    const sink = vi.fn();
+    const sink = vi.fn<EpubDiagnosticSink>();
     const blocks = read(
       body(
         "<table><tbody><ul><li>item</li></ul><tr><td>x</td></tr></tbody></table>",
@@ -1616,7 +1616,7 @@ describe("tables", () => {
   it("reads a <caption> as one or more paragraphs before the table, splitting a direct-child <img> into its own real image block, with a diagnostic", () => {
     const expectedBlockCount = 3;
     const bytes = fakePng(FAKE_IMAGE_WIDTH_PX, FAKE_IMAGE_WIDTH_PX);
-    const sink = vi.fn();
+    const sink = vi.fn<EpubDiagnosticSink>();
     const { blocks } = readXhtmlBody(
       body(
         '<table><caption>Cap <img src="a.png" alt="cappic"/></caption><tr><td>cell</td></tr></table>',
@@ -1652,7 +1652,7 @@ describe("tables", () => {
   });
 
   it("drops an empty <caption> entirely, firing no diagnostic, matching the package's own empty-paragraph-drop rule", () => {
-    const sink = vi.fn();
+    const sink = vi.fn<EpubDiagnosticSink>();
     const blocks = read(
       body("<table><caption></caption><tr><td>x</td></tr></table>"),
       sink,
@@ -1674,7 +1674,7 @@ describe("tables", () => {
   });
 
   it("drops a whitespace-only <caption> entirely, firing no diagnostic", () => {
-    const sink = vi.fn();
+    const sink = vi.fn<EpubDiagnosticSink>();
     const blocks = read(
       body("<table><caption>   </caption><tr><td>x</td></tr></table>"),
       sink,
@@ -1716,7 +1716,7 @@ describe("tables", () => {
   });
 
   it("keeps a caption whose only content is a construct with no surrounding text, rather than dropping it as empty", () => {
-    const sink = vi.fn();
+    const sink = vi.fn<EpubDiagnosticSink>();
     const blocks = read(
       body(
         '<table><caption><a epub:type="noteref" href="#fn1"></a></caption><tr><td>x</td></tr></table>' +
@@ -1778,7 +1778,7 @@ describe("tables", () => {
   });
 
   it("recovers stray text sitting directly inside a <tr> as its own cell, with a diagnostic", () => {
-    const sink = vi.fn();
+    const sink = vi.fn<EpubDiagnosticSink>();
     const blocks = read(body("<table><tr>stray<td>x</td></tr></table>"), sink);
     expect(blocks).toEqual([
       {
@@ -1807,7 +1807,7 @@ describe("tables", () => {
   });
 
   it("recovers stray text sitting directly inside a <tr> after its last <td> as its own trailing cell, with a diagnostic", () => {
-    const sink = vi.fn();
+    const sink = vi.fn<EpubDiagnosticSink>();
     const blocks = read(body("<table><tr><td>x</td>stray</tr></table>"), sink);
     expect(blocks).toEqual([
       {
@@ -1832,7 +1832,7 @@ describe("tables", () => {
   });
 
   it("skips a <script> sitting directly inside a <tr>, firing no diagnostic", () => {
-    const sink = vi.fn();
+    const sink = vi.fn<EpubDiagnosticSink>();
     const blocks = read(
       body("<table><tr><script>var x=1;</script><td>x</td></tr></table>"),
       sink,
@@ -1854,7 +1854,7 @@ describe("tables", () => {
   });
 
   it("skips a <noscript> sitting directly inside a <tr>, but reports the drop unlike script", () => {
-    const sink = vi.fn();
+    const sink = vi.fn<EpubDiagnosticSink>();
     const blocks = read(
       body("<table><tr><noscript>Enable JS</noscript><td>x</td></tr></table>"),
       sink,
@@ -1879,7 +1879,7 @@ describe("tables", () => {
   });
 
   it("recovers a stray <p> sitting directly inside a <table> outside any row/caption, with a diagnostic, positioned immediately before the table", () => {
-    const sink = vi.fn();
+    const sink = vi.fn<EpubDiagnosticSink>();
     const blocks = read(
       body("<table><p>stray</p><tr><td>x</td></tr></table>"),
       sink,
@@ -1902,7 +1902,7 @@ describe("tables", () => {
   });
 
   it("recovers stray text sitting directly inside a <table> outside any row/caption, with a diagnostic", () => {
-    const sink = vi.fn();
+    const sink = vi.fn<EpubDiagnosticSink>();
     const blocks = read(body("<table>stray<tr><td>x</td></tr></table>"), sink);
     expect(blocks).toEqual([
       { kind: "paragraph", runs: [{ text: "stray" }] },
@@ -1924,7 +1924,7 @@ describe("tables", () => {
   it("recovers a stray <img> sitting directly inside a <colgroup> as its own real image block, not degraded to alt text", () => {
     // Distinguishes routing a <colgroup>'s own stray content through collectColgroupStrayContent (a flat list of the colgroup's OWN children, so a stray <img> reaches readContainerChildren's block-level dispatch and becomes a real ContentImageBlock) from mistakenly treating the whole <colgroup> element itself as one inline stray node (which would instead degrade the same <img> to alt text via buildInlineRuns' own inline-image fallback).
     const bytes = fakePng(FAKE_IMAGE_WIDTH_PX, FAKE_IMAGE_WIDTH_PX);
-    const sink = vi.fn();
+    const sink = vi.fn<EpubDiagnosticSink>();
     const { blocks } = readXhtmlBody(
       body(
         '<table><colgroup><img src="a.png" alt="colimg"/><col/></colgroup><tr><td>x</td></tr></table>',
@@ -1943,7 +1943,7 @@ describe("tables", () => {
   });
 
   it("skips a <colgroup>/<script> sitting directly inside a <table>, firing no diagnostic", () => {
-    const sink = vi.fn();
+    const sink = vi.fn<EpubDiagnosticSink>();
     const blocks = read(
       body(
         "<table><colgroup><col/><col/></colgroup><script>var x=1;</script><tr><td>a</td><td>b</td></tr></table>",
@@ -2218,7 +2218,7 @@ describe("pre / code blocks", () => {
   });
 
   it("states the exact generic <img> label and full degrade message when the <img> has no src at all", () => {
-    const sink = vi.fn();
+    const sink = vi.fn<EpubDiagnosticSink>();
     read(body('<pre><img alt="text"/></pre>'), sink);
     expect(sink).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -2229,7 +2229,7 @@ describe("pre / code blocks", () => {
   });
 
   it("splices an <img>'s alt text into the extracted text with a diagnostic, instead of vanishing", () => {
-    const sink = vi.fn();
+    const sink = vi.fn<EpubDiagnosticSink>();
     const blocks = read(
       body('<pre>code <img src="a.png" alt="pic"/> more</pre>'),
       sink,
@@ -2247,7 +2247,7 @@ describe("pre / code blocks", () => {
   });
 
   it("reaches an <img> nested a level deeper, inside <code>", () => {
-    const sink = vi.fn();
+    const sink = vi.fn<EpubDiagnosticSink>();
     const blocks = read(
       body('<pre><code>x<img src="a.png"/>y</code></pre>'),
       sink,
@@ -2294,7 +2294,7 @@ describe("pre / code blocks", () => {
   });
 
   it("skips a <noscript>'s fallback markup when it sits directly inside a <pre>, but reports the drop unlike script/template", () => {
-    const sink = vi.fn();
+    const sink = vi.fn<EpubDiagnosticSink>();
     const blocks = read(
       body("<pre>before<noscript>Enable JS</noscript>after</pre>"),
       sink,
@@ -2312,7 +2312,7 @@ describe("pre / code blocks", () => {
   });
 
   it("skips a <noscript>'s fallback markup when it sits inside a <pre> that also carries a footnote reference (readPreRuns' own run-splitting path), but reports the drop", () => {
-    const sink = vi.fn();
+    const sink = vi.fn<EpubDiagnosticSink>();
     read(
       body(
         '<pre>before<noscript>Enable JS</noscript><a epub:type="noteref" href="#fn1">1</a></pre>' +
@@ -2451,7 +2451,7 @@ describe("pre / code blocks", () => {
   });
 
   it("splices an <img>'s alt text into the run-splitting readPreRuns path too, when the same <pre> also carries a real footnote reference", () => {
-    const sink = vi.fn();
+    const sink = vi.fn<EpubDiagnosticSink>();
     const blocks = read(
       body(
         '<pre><img src="a.png" alt="pic"/><a epub:type="noteref" href="#fn1">1</a></pre>' +
@@ -2634,7 +2634,7 @@ describe("images", () => {
   });
 
   it("degrades to alt text with a diagnostic when the manifest has no such part", () => {
-    const sink = vi.fn();
+    const sink = vi.fn<EpubDiagnosticSink>();
     const blocks = read(
       body('<img src="missing.png" alt="fallback text"/>'),
       sink,
@@ -2657,7 +2657,7 @@ describe("images", () => {
   });
 
   it("degrades to alt text with a diagnostic for a resolved but unsupported format", () => {
-    const sink = vi.fn();
+    const sink = vi.fn<EpubDiagnosticSink>();
     const { blocks } = readXhtmlBody(body('<img src="a.gif" alt="a gif"/>'), {
       resolveImage: () => new Uint8Array(GIF_SIG_PREFIX),
       sink,
@@ -2685,7 +2685,7 @@ describe("images", () => {
   });
 
   it("degrades an <img> nested inside a <span> to its alt text with a diagnostic, instead of vanishing", () => {
-    const sink = vi.fn();
+    const sink = vi.fn<EpubDiagnosticSink>();
     const blocks = read(
       body('<p>before <span><img src="a.png" alt="nested"/></span> after</p>'),
       sink,
@@ -2704,7 +2704,7 @@ describe("images", () => {
   });
 
   it("degrades an <img> nested inside an <a> to its alt text, carrying the same hyperlink", () => {
-    const sink = vi.fn();
+    const sink = vi.fn<EpubDiagnosticSink>();
     const blocks = read(
       body(
         '<p><a href="https://example.com"><img src="a.png" alt="linked"/></a></p>',
@@ -2725,7 +2725,7 @@ describe("images", () => {
   });
 
   it("produces no run but still diagnoses an <img> nested inline with no alt text", () => {
-    const sink = vi.fn();
+    const sink = vi.fn<EpubDiagnosticSink>();
     const blocks = read(
       body('<p>before <span><img src="a.png"/></span> after</p>'),
       sink,
@@ -2989,7 +2989,7 @@ describe("footnotes: EPUB 3 aside + noteref", () => {
   });
 
   it("reads a plain, non-footnote <aside> as ordinary content, with no construct wrapper and no diagnostic", () => {
-    const sink = vi.fn();
+    const sink = vi.fn<EpubDiagnosticSink>();
     const blocks = read(body("<aside><p>Just a sidebar.</p></aside>"), sink);
     expect(blocks).toEqual([
       { kind: "paragraph", runs: [{ text: "Just a sidebar." }] },
@@ -2998,7 +2998,7 @@ describe("footnotes: EPUB 3 aside + noteref", () => {
   });
 
   it("reads a footnote <aside> with no id as ordinary content, with a diagnostic naming the loss", () => {
-    const sink = vi.fn();
+    const sink = vi.fn<EpubDiagnosticSink>();
     const blocks = read(
       body('<aside epub:type="footnote"><p>Orphan note.</p></aside>'),
       sink,
@@ -3092,7 +3092,7 @@ describe("block content inside table cells, captions, dt/dd, figcaption (#1023)"
   });
 
   it("fires table-caption-unsupported exactly once for a multi-paragraph caption, not once per resulting paragraph", () => {
-    const sink = vi.fn();
+    const sink = vi.fn<EpubDiagnosticSink>();
     read(
       body(
         "<table><caption><p>Alpha</p><p>Beta</p></caption><tr><td>x</td></tr></table>",

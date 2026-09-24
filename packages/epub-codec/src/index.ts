@@ -6,7 +6,7 @@ export * from "./package-io/read";
 export * from "./package-io/write";
 export * from "./diagnostics";
 export * from "./ocf/container";
-export * from "./opf/types";
+export type * from "./opf/types";
 export * from "./opf/metadata";
 export * from "./opf/parse";
 export * from "./opf/write";

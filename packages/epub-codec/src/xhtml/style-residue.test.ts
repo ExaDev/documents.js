@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import type { EpubDiagnosticSink } from "../diagnostics";
 import { readXhtmlBody } from "./read";
 
 const CONTENT_WIDTH_PT = 451.28;
@@ -9,7 +10,7 @@ function bodyWithHead(headInner: string): string {
 
 describe("readXhtmlBody: <head> style residue", () => {
   it("quarantines a <link rel=stylesheet> as residue, with a diagnostic", () => {
-    const sink = vi.fn();
+    const sink = vi.fn<EpubDiagnosticSink>();
     const { source } = readXhtmlBody(
       bodyWithHead('<link rel="stylesheet" href="styles.css"/>'),
       {
@@ -67,7 +68,7 @@ describe("readXhtmlBody: <head> style residue", () => {
   });
 
   it("states the exact style-residue diagnostic message", () => {
-    const sink = vi.fn();
+    const sink = vi.fn<EpubDiagnosticSink>();
     readXhtmlBody(bodyWithHead("<style>p { color: red; }</style>"), {
       resolveImage: () => undefined,
       sink,
