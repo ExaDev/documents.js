@@ -1,13 +1,6 @@
 import type { DocumentFormat } from "documents.js";
 import type { ReactNode } from "react";
-import {
-  createContext,
-  useCallback,
-  useContext,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import { createContext, useContext, useMemo, useRef, useState } from "react";
 
 import type { OpenedFile } from "../ports/fileAccess";
 import { inferFormatFromFilename } from "../shared/extensionToFormat";
@@ -33,13 +26,16 @@ export function OpenDocumentProvider({ children }: { children: ReactNode }) {
   const [document, setDocument] = useState<OpenDocument | undefined>(undefined);
   const nextId = useRef(1);
 
-  const openDocument = useCallback((file: OpenedFile) => {
-    setDocument({
-      id: nextId.current++,
-      file,
-      format: inferFormatFromFilename(file.name),
-    });
-  }, []);
+  // Memoised via a lazy `useState` initialiser rather than `useCallback(fn, [])`. This closure captures nothing from render scope (`nextId` is itself a ref, and `setDocument` is already stable), so there is no reactive value a dependency array could ever meaningfully name; an empty array is the only array `useCallback` could ever be given here, which is exactly what makes it provably impossible for a test to distinguish from one that isn't empty. `useState`'s own initialiser runs once and only once, giving the same forever-stable reference without reading a ref during render (banned by react-hooks/refs).
+  const [openDocument] = useState<(file: OpenedFile) => void>(
+    () => (file: OpenedFile) => {
+      setDocument({
+        id: nextId.current++,
+        file,
+        format: inferFormatFromFilename(file.name),
+      });
+    },
+  );
 
   const value = useMemo<OpenDocumentContextValue>(
     () => ({ document, openDocument }),
