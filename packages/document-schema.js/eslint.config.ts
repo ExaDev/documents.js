@@ -15,6 +15,4 @@ export default packageLintConfig({
   isomorphic: true,
   // scripts/ holds a standalone build step importing from ../dist, the same reason test/ is ignored.
   additionalIgnores: ["scripts"],
-  // Off: see PackageLintOptions.preferReadonlyParams in eslint.shared.ts for why — this package's own decompose/flatten tree builders genuinely mutate several array/object parameters in place (a stack push/pop, a scope's children array). Tracked for burn-down.
-  preferReadonlyParams: "off",
 });

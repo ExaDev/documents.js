@@ -33,6 +33,6 @@ function toHexByte(component: number): string {
 }
 
 // The exact inverse of rgbHexToColor, rounding each component to the nearest byte; always returns a lowercase 6-digit hex string with no leading '#'.
-export function colorToRgbHex(color: Color): string {
+export function colorToRgbHex(color: Readonly<Color>): string {
   return `${toHexByte(color.r)}${toHexByte(color.g)}${toHexByte(color.b)}`;
 }

@@ -85,6 +85,6 @@ export function parseRangeReference(ref: string): CellRange | undefined {
   };
 }
 
-export function rangeReference(range: CellRange): string {
+export function rangeReference(range: Readonly<CellRange>): string {
   return `${cellReference(range.startRow, range.startColumn)}:${cellReference(range.endRow, range.endColumn)}`;
 }

@@ -752,11 +752,11 @@ function constructStart(descriptor: ConstructDescriptor): ContentBlock {
 
 function constructParagraph(
   text: string,
-  options: {
+  options: Readonly<{
     headingLevel?: number;
     listLevel?: number;
     indentLeftPt?: number;
-  } = {},
+  }> = {},
 ): ContentBlock {
   return {
     kind: "paragraph",

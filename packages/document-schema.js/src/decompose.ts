@@ -112,7 +112,7 @@ function decomposeSectionBlocks(
 }
 
 // Consumes a section flow off the cursor, returning at the constructEnd marker that closes the region it was called for (or at end of stream, for the container's own outermost call).
-function walkSectionBlocks(cursor: BlockCursor): SectionChild[] {
+function walkSectionBlocks(cursor: Readonly<BlockCursor>): SectionChild[] {
   const root: SectionChild[] = [];
   // Heading groups currently open, deepest last. Each entry is the group itself — a group carries both its anchor paragraph (and thereby its level) and its children, so it is the scope. An empty stack means the section root: content before any heading, and sections with no headings at all, attach directly to the section group's children.
   const headingStack: HeadingGroupNode[] = [];
@@ -155,7 +155,7 @@ function walkSectionBlocks(cursor: BlockCursor): SectionChild[] {
       (parent !== undefined ? parent.children : root).push(group);
       headingStack.push(group);
     } else if (isListParagraph(block)) {
-      openListGroup(listStack, headingScope(), block);
+      openListGroup({ listStack, scopeChildren: headingScope() }, block);
     } else {
       listStack.length = 0;
       headingScope().push(block);
@@ -199,7 +199,7 @@ function decomposeShapeBlocks(blocks: readonly ContentBlock[]): ShapeChild[] {
 }
 
 // Consumes a shape (or list-item) flow off the cursor, on the same return-at-my-close-marker contract walkSectionBlocks holds.
-function walkShapeBlocks(cursor: BlockCursor): ShapeChild[] {
+function walkShapeBlocks(cursor: Readonly<BlockCursor>): ShapeChild[] {
   const root: ShapeChild[] = [];
   const listStack: ListGroupNode[] = [];
   for (let step = cursor.next(); step.done !== true; step = cursor.next()) {
@@ -219,7 +219,7 @@ function walkShapeBlocks(cursor: BlockCursor): ShapeChild[] {
       continue;
     }
     if (isListParagraph(block)) {
-      openListGroup(listStack, root, block);
+      openListGroup({ listStack, scopeChildren: root }, block);
       continue;
     }
     // A paragraph with no list membership sits directly under the shape group and closes any open list nesting, so document order survives the walk back out. This includes a paragraph carrying headingLevel: in a shape's flow that field is not a depth signal (see decomposeShape), so the paragraph is plain content here.
@@ -229,22 +229,24 @@ function walkShapeBlocks(cursor: BlockCursor): ShapeChild[] {
   return root;
 }
 
-// Opens a list-item group anchored on `paragraph` at its list.level under the deepest open list group with a strictly shallower level (or directly under `scopeChildren` when none is open), popping equal-or-deeper groups closed — the same stack semantics heading groups follow, on list.level's 0-based scale, so a level jump nests directly under the nearest shallower item with no synthetic intermediates.
-function openListGroup(
-  listStack: ListGroupNode[],
-  scopeChildren: SectionChild[] | ShapeChild[],
-  paragraph: ListParagraph,
-): void {
+// The two arrays openListGroup writes into, wrapped together: the list stack it pops closed groups off and pushes the new one onto, and the scope children array the new group attaches to when no list group is already open. Neither is a caller's own data to protect — both are the walk's own accumulators, created fresh per walkSectionBlocks/walkShapeBlocks call — so the wrapper keeps them genuinely mutable while staying out of prefer-readonly-array-param's scope.
+interface ListScopeSink {
+  readonly listStack: ListGroupNode[];
+  readonly scopeChildren: SectionChild[] | ShapeChild[];
+}
+
+// Opens a list-item group anchored on `paragraph` at its list.level under the deepest open list group with a strictly shallower level (or directly under `sink.scopeChildren` when none is open), popping equal-or-deeper groups closed — the same stack semantics heading groups follow, on list.level's 0-based scale, so a level jump nests directly under the nearest shallower item with no synthetic intermediates.
+function openListGroup(sink: ListScopeSink, paragraph: ListParagraph): void {
   const level = paragraph.list.level;
   for (
-    let top = listStack.at(-1);
+    let top = sink.listStack.at(-1);
     top !== undefined && top.node.list.level >= level;
-    top = listStack.at(-1)
+    top = sink.listStack.at(-1)
   ) {
-    listStack.pop();
+    sink.listStack.pop();
   }
   const group: ListGroupNode = { node: paragraph, children: [] };
-  const parent = listStack.at(-1);
-  (parent !== undefined ? parent.children : scopeChildren).push(group);
-  listStack.push(group);
+  const parent = sink.listStack.at(-1);
+  (parent !== undefined ? parent.children : sink.scopeChildren).push(group);
+  sink.listStack.push(group);
 }
