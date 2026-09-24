@@ -216,7 +216,7 @@ describe("applyParagraphStyleProperties and applyRunStyleProperties", () => {
     };
     const effective = applyParagraphStyleProperties(BODY.paragraph, paragraph);
     expect(effective.alignment).toBe("center");
-    expect(effective.spacingAfterPt).toBe(6);
+    expect(effective.spacingAfterPt).toBe(BODY.paragraph?.spacingAfterPt);
     expect(effective).not.toBe(paragraph);
     expect(paragraph.spacingAfterPt).toBeUndefined();
   });
@@ -245,7 +245,7 @@ describe("applyParagraphStyleProperties and applyRunStyleProperties", () => {
   it("applies run defaults under the run's own properties — the chain's one extra level down", () => {
     const run: ContentRun = { text: "x", sizePt: 9 };
     const effective = applyRunStyleProperties(EMPHASIS.run, run);
-    expect(effective.sizePt).toBe(9);
+    expect(effective.sizePt).toBe(run.sizePt);
     expect(effective.italic).toBe(true);
   });
 
@@ -273,39 +273,51 @@ describe("overlayStyleEntries isolates each paragraph property's own overlay gua
       paragraph: { list: { level: 1 } },
     });
     expect(merged.paragraph?.list).toEqual({ level: 1 });
-    expect(merged.paragraph?.spacingBeforePt).toBe(1);
+    expect(merged.paragraph?.spacingBeforePt).toBe(
+      outerParagraph.paragraph?.spacingBeforePt,
+    );
   });
 
   it("spacingBeforePt: fills from inner, and leaves lineSpacing untouched", () => {
+    const spacingBeforeOverridePt = 5;
     const merged = overlayStyleEntries(outerParagraph, {
-      paragraph: { spacingBeforePt: 5 },
+      paragraph: { spacingBeforePt: spacingBeforeOverridePt },
     });
-    expect(merged.paragraph?.spacingBeforePt).toBe(5);
-    expect(merged.paragraph?.lineSpacing).toBe(1.5);
+    expect(merged.paragraph?.spacingBeforePt).toBe(spacingBeforeOverridePt);
+    expect(merged.paragraph?.lineSpacing).toBe(
+      outerParagraph.paragraph?.lineSpacing,
+    );
   });
 
   it("lineSpacing: fills from inner, and leaves indentLeftPt untouched", () => {
+    const lineSpacingOverride = 3;
     const merged = overlayStyleEntries(outerParagraph, {
-      paragraph: { lineSpacing: 3 },
+      paragraph: { lineSpacing: lineSpacingOverride },
     });
-    expect(merged.paragraph?.lineSpacing).toBe(3);
-    expect(merged.paragraph?.indentLeftPt).toBe(10);
+    expect(merged.paragraph?.lineSpacing).toBe(lineSpacingOverride);
+    expect(merged.paragraph?.indentLeftPt).toBe(
+      outerParagraph.paragraph?.indentLeftPt,
+    );
   });
 
   it("indentLeftPt: fills from inner, and leaves indentFirstLinePt untouched", () => {
+    const indentLeftOverridePt = 99;
     const merged = overlayStyleEntries(outerParagraph, {
-      paragraph: { indentLeftPt: 99 },
+      paragraph: { indentLeftPt: indentLeftOverridePt },
     });
-    expect(merged.paragraph?.indentLeftPt).toBe(99);
-    expect(merged.paragraph?.indentFirstLinePt).toBe(20);
+    expect(merged.paragraph?.indentLeftPt).toBe(indentLeftOverridePt);
+    expect(merged.paragraph?.indentFirstLinePt).toBe(
+      outerParagraph.paragraph?.indentFirstLinePt,
+    );
   });
 
   it("indentFirstLinePt: fills from inner, and leaves list untouched — closing the cycle back to the first field", () => {
+    const indentFirstLineOverridePt = 99;
     const merged = overlayStyleEntries(outerParagraph, {
-      paragraph: { indentFirstLinePt: 99 },
+      paragraph: { indentFirstLinePt: indentFirstLineOverridePt },
     });
-    expect(merged.paragraph?.indentFirstLinePt).toBe(99);
-    expect(merged.paragraph?.list).toEqual({ level: 0 });
+    expect(merged.paragraph?.indentFirstLinePt).toBe(indentFirstLineOverridePt);
+    expect(merged.paragraph?.list).toEqual(outerParagraph.paragraph?.list);
   });
 });
 
@@ -353,13 +365,16 @@ describe("overlayStyleEntries isolates each run property's own overlay guard", (
       run: { fontFamily: "Times" },
     });
     expect(merged.run?.fontFamily).toBe("Times");
-    expect(merged.run?.sizePt).toBe(10);
+    expect(merged.run?.sizePt).toBe(outerRun.run?.sizePt);
   });
 
   it("sizePt: fills from inner, and leaves color untouched — also proving the merge starts from a copy of outer, not an empty object", () => {
-    const merged = overlayStyleEntries(outerRun, { run: { sizePt: 20 } });
-    expect(merged.run?.sizePt).toBe(20);
-    expect(merged.run?.color).toEqual({ r: 0, g: 0, b: 0 });
+    const sizePtOverride = 20;
+    const merged = overlayStyleEntries(outerRun, {
+      run: { sizePt: sizePtOverride },
+    });
+    expect(merged.run?.sizePt).toBe(sizePtOverride);
+    expect(merged.run?.color).toEqual(outerRun.run?.color);
   });
 
   it("color: fills from inner, and leaves bold untouched — closing the cycle back to the first field", () => {
@@ -373,6 +388,9 @@ describe("overlayStyleEntries isolates each run property's own overlay guard", (
 
 describe("applyParagraphStyleProperties isolates each field's own gap-fill guard", () => {
   const paragraphBase: ContentParagraph = { kind: "paragraph", runs: [] };
+  // Shared across every "node's own value wins" test below: a value the node itself sets, and a distinct value the style tries to fill the same field with, arbitrary beyond being non-zero and distinct from each other.
+  const NODE_OWN_VALUE_PT = 3;
+  const STYLE_GAP_FILL_PT = 9;
 
   it("adds no property at all when the style entry supplies nothing, for every field", () => {
     const untouched = applyParagraphStyleProperties({}, paragraphBase);
@@ -413,26 +431,39 @@ describe("applyParagraphStyleProperties isolates each field's own gap-fill guard
   });
 
   it("spacingBeforePt: the node's own value wins, and the style fills a real gap", () => {
-    const node: ContentParagraph = { ...paragraphBase, spacingBeforePt: 3 };
+    const node: ContentParagraph = {
+      ...paragraphBase,
+      spacingBeforePt: NODE_OWN_VALUE_PT,
+    };
     expect(
-      applyParagraphStyleProperties({ spacingBeforePt: 9 }, node)
-        .spacingBeforePt,
-    ).toBe(3);
+      applyParagraphStyleProperties(
+        { spacingBeforePt: STYLE_GAP_FILL_PT },
+        node,
+      ).spacingBeforePt,
+    ).toBe(NODE_OWN_VALUE_PT);
     expect(
-      applyParagraphStyleProperties({ spacingBeforePt: 9 }, paragraphBase)
-        .spacingBeforePt,
-    ).toBe(9);
+      applyParagraphStyleProperties(
+        { spacingBeforePt: STYLE_GAP_FILL_PT },
+        paragraphBase,
+      ).spacingBeforePt,
+    ).toBe(STYLE_GAP_FILL_PT);
   });
 
   it("spacingAfterPt: the node's own value wins, and the style fills a real gap", () => {
-    const node: ContentParagraph = { ...paragraphBase, spacingAfterPt: 3 };
+    const node: ContentParagraph = {
+      ...paragraphBase,
+      spacingAfterPt: NODE_OWN_VALUE_PT,
+    };
     expect(
-      applyParagraphStyleProperties({ spacingAfterPt: 9 }, node).spacingAfterPt,
-    ).toBe(3);
-    expect(
-      applyParagraphStyleProperties({ spacingAfterPt: 9 }, paragraphBase)
+      applyParagraphStyleProperties({ spacingAfterPt: STYLE_GAP_FILL_PT }, node)
         .spacingAfterPt,
-    ).toBe(9);
+    ).toBe(NODE_OWN_VALUE_PT);
+    expect(
+      applyParagraphStyleProperties(
+        { spacingAfterPt: STYLE_GAP_FILL_PT },
+        paragraphBase,
+      ).spacingAfterPt,
+    ).toBe(STYLE_GAP_FILL_PT);
   });
 
   it("lineSpacing: the node's own value wins, and the style fills a real gap", () => {
@@ -447,29 +478,39 @@ describe("applyParagraphStyleProperties isolates each field's own gap-fill guard
   });
 
   it("indentLeftPt: the node's own value wins, and the style fills a real gap", () => {
-    const node: ContentParagraph = { ...paragraphBase, indentLeftPt: 3 };
+    const node: ContentParagraph = {
+      ...paragraphBase,
+      indentLeftPt: NODE_OWN_VALUE_PT,
+    };
     expect(
-      applyParagraphStyleProperties({ indentLeftPt: 9 }, node).indentLeftPt,
-    ).toBe(3);
-    expect(
-      applyParagraphStyleProperties({ indentLeftPt: 9 }, paragraphBase)
+      applyParagraphStyleProperties({ indentLeftPt: STYLE_GAP_FILL_PT }, node)
         .indentLeftPt,
-    ).toBe(9);
+    ).toBe(NODE_OWN_VALUE_PT);
+    expect(
+      applyParagraphStyleProperties(
+        { indentLeftPt: STYLE_GAP_FILL_PT },
+        paragraphBase,
+      ).indentLeftPt,
+    ).toBe(STYLE_GAP_FILL_PT);
   });
 
   it("indentFirstLinePt: the node's own value wins, and the style fills a real gap", () => {
     const node: ContentParagraph = {
       ...paragraphBase,
-      indentFirstLinePt: 3,
+      indentFirstLinePt: NODE_OWN_VALUE_PT,
     };
     expect(
-      applyParagraphStyleProperties({ indentFirstLinePt: 9 }, node)
-        .indentFirstLinePt,
-    ).toBe(3);
+      applyParagraphStyleProperties(
+        { indentFirstLinePt: STYLE_GAP_FILL_PT },
+        node,
+      ).indentFirstLinePt,
+    ).toBe(NODE_OWN_VALUE_PT);
     expect(
-      applyParagraphStyleProperties({ indentFirstLinePt: 9 }, paragraphBase)
-        .indentFirstLinePt,
-    ).toBe(9);
+      applyParagraphStyleProperties(
+        { indentFirstLinePt: STYLE_GAP_FILL_PT },
+        paragraphBase,
+      ).indentFirstLinePt,
+    ).toBe(STYLE_GAP_FILL_PT);
   });
 
   it("pageBreakBefore: the node's own value wins, and the style fills a real gap", () => {
@@ -564,9 +605,15 @@ describe("applyRunStyleProperties isolates each field's own gap-fill guard", () 
   });
 
   it("sizePt: the run's own value wins, and the style fills a real gap", () => {
-    const run: ContentRun = { ...runBase, sizePt: 9 };
-    expect(applyRunStyleProperties({ sizePt: 20 }, run).sizePt).toBe(9);
-    expect(applyRunStyleProperties({ sizePt: 20 }, runBase).sizePt).toBe(20);
+    const runOwnSizePt = 9;
+    const styleGapFillSizePt = 20;
+    const run: ContentRun = { ...runBase, sizePt: runOwnSizePt };
+    expect(
+      applyRunStyleProperties({ sizePt: styleGapFillSizePt }, run).sizePt,
+    ).toBe(runOwnSizePt);
+    expect(
+      applyRunStyleProperties({ sizePt: styleGapFillSizePt }, runBase).sizePt,
+    ).toBe(styleGapFillSizePt);
   });
 
   it("color: the run's own value wins, and the style fills a real gap", () => {
