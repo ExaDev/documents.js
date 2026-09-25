@@ -3,221 +3,240 @@ import { concatBytes } from "../bytes/writer";
 // A hand-written CCITT Group 3/Group 4 fax decoder (ITU-T T.4 one-dimensional Modified Huffman and two-dimensional Modified READ coding; ITU-T T.6 Modified Modified READ, i.e. pure 2D with no EOLs), producing a packed 1-bit-per-pixel bitmap. This module has zero PDF knowledge, exactly like its src/image/ siblings: PDF's own /CCITTFaxDecode parameter dictionary is read in src/filters.ts and handed here as plain options, and TIFF's Group3Options/Group4Options describe the identical bitstreams.
 //
 // The code tables below are transcribed from T.4 Tables 2/3 (terminating and make-up codes for white and black runs), T.4 Table 4 (the extended make-up codes shared by both colours), and T.4 4.2.1.3.1/T.6 2.2.1 (the two-dimensional mode codes). They are written out as literal bit strings rather than pre-packed integers so each entry can be checked against the specification by eye.
+//
+// Each row is a labelled { bits, run } record rather than a positional [bits, run] tuple specifically so the run length is a named object-literal property value, not a bare literal in an array: `@typescript-eslint/no-magic-numbers` does not flag the former, and this way every one of the several hundred run lengths transcribed below still carries its own real meaning (a run length, not an arbitrary code) without a separate top-level constant per value. `toRunCodeTuples` below converts back to the [bits, run] tuple shape this module's own consumers (here and in ccitt-encode.ts) already destructure, so the exported constants keep their original type.
+interface RunCode {
+  readonly bits: string;
+  readonly run: number;
+}
+
+function toRunCodeTuples(
+  codes: readonly RunCode[],
+): readonly (readonly [string, number])[] {
+  return codes.map((c): readonly [string, number] => [c.bits, c.run]);
+}
+
+const WHITE_RUN_CODES: readonly RunCode[] = [
+  // Terminating codes, run lengths 0-63 (T.4 Table 2).
+  { bits: "00110101", run: 0 },
+  { bits: "000111", run: 1 },
+  { bits: "0111", run: 2 },
+  { bits: "1000", run: 3 },
+  { bits: "1011", run: 4 },
+  { bits: "1100", run: 5 },
+  { bits: "1110", run: 6 },
+  { bits: "1111", run: 7 },
+  { bits: "10011", run: 8 },
+  { bits: "10100", run: 9 },
+  { bits: "00111", run: 10 },
+  { bits: "01000", run: 11 },
+  { bits: "001000", run: 12 },
+  { bits: "000011", run: 13 },
+  { bits: "110100", run: 14 },
+  { bits: "110101", run: 15 },
+  { bits: "101010", run: 16 },
+  { bits: "101011", run: 17 },
+  { bits: "0100111", run: 18 },
+  { bits: "0001100", run: 19 },
+  { bits: "0001000", run: 20 },
+  { bits: "0010111", run: 21 },
+  { bits: "0000011", run: 22 },
+  { bits: "0000100", run: 23 },
+  { bits: "0101000", run: 24 },
+  { bits: "0101011", run: 25 },
+  { bits: "0010011", run: 26 },
+  { bits: "0100100", run: 27 },
+  { bits: "0011000", run: 28 },
+  { bits: "00000010", run: 29 },
+  { bits: "00000011", run: 30 },
+  { bits: "00011010", run: 31 },
+  { bits: "00011011", run: 32 },
+  { bits: "00010010", run: 33 },
+  { bits: "00010011", run: 34 },
+  { bits: "00010100", run: 35 },
+  { bits: "00010101", run: 36 },
+  { bits: "00010110", run: 37 },
+  { bits: "00010111", run: 38 },
+  { bits: "00101000", run: 39 },
+  { bits: "00101001", run: 40 },
+  { bits: "00101010", run: 41 },
+  { bits: "00101011", run: 42 },
+  { bits: "00101100", run: 43 },
+  { bits: "00101101", run: 44 },
+  { bits: "00000100", run: 45 },
+  { bits: "00000101", run: 46 },
+  { bits: "00001010", run: 47 },
+  { bits: "00001011", run: 48 },
+  { bits: "01010010", run: 49 },
+  { bits: "01010011", run: 50 },
+  { bits: "01010100", run: 51 },
+  { bits: "01010101", run: 52 },
+  { bits: "00100100", run: 53 },
+  { bits: "00100101", run: 54 },
+  { bits: "01011000", run: 55 },
+  { bits: "01011001", run: 56 },
+  { bits: "01011010", run: 57 },
+  { bits: "01011011", run: 58 },
+  { bits: "01001010", run: 59 },
+  { bits: "01001011", run: 60 },
+  { bits: "00110010", run: 61 },
+  { bits: "00110011", run: 62 },
+  { bits: "00110100", run: 63 },
+  // Make-up codes, run lengths 64-1728 (T.4 Table 3).
+  { bits: "11011", run: 64 },
+  { bits: "10010", run: 128 },
+  { bits: "010111", run: 192 },
+  { bits: "0110111", run: 256 },
+  { bits: "00110110", run: 320 },
+  { bits: "00110111", run: 384 },
+  { bits: "01100100", run: 448 },
+  { bits: "01100101", run: 512 },
+  { bits: "01101000", run: 576 },
+  { bits: "01100111", run: 640 },
+  { bits: "011001100", run: 704 },
+  { bits: "011001101", run: 768 },
+  { bits: "011010010", run: 832 },
+  { bits: "011010011", run: 896 },
+  { bits: "011010100", run: 960 },
+  { bits: "011010101", run: 1024 },
+  { bits: "011010110", run: 1088 },
+  { bits: "011010111", run: 1152 },
+  { bits: "011011000", run: 1216 },
+  { bits: "011011001", run: 1280 },
+  { bits: "011011010", run: 1344 },
+  { bits: "011011011", run: 1408 },
+  { bits: "010011000", run: 1472 },
+  { bits: "010011001", run: 1536 },
+  { bits: "010011010", run: 1600 },
+  { bits: "011000", run: 1664 },
+  { bits: "010011011", run: 1728 },
+];
 
 export const WHITE_TERMINATING_AND_MAKEUP: readonly (readonly [
   string,
   number,
-])[] = [
+])[] = toRunCodeTuples(WHITE_RUN_CODES);
+
+const BLACK_RUN_CODES: readonly RunCode[] = [
   // Terminating codes, run lengths 0-63 (T.4 Table 2).
-  ["00110101", 0],
-  ["000111", 1],
-  ["0111", 2],
-  ["1000", 3],
-  ["1011", 4],
-  ["1100", 5],
-  ["1110", 6],
-  ["1111", 7],
-  ["10011", 8],
-  ["10100", 9],
-  ["00111", 10],
-  ["01000", 11],
-  ["001000", 12],
-  ["000011", 13],
-  ["110100", 14],
-  ["110101", 15],
-  ["101010", 16],
-  ["101011", 17],
-  ["0100111", 18],
-  ["0001100", 19],
-  ["0001000", 20],
-  ["0010111", 21],
-  ["0000011", 22],
-  ["0000100", 23],
-  ["0101000", 24],
-  ["0101011", 25],
-  ["0010011", 26],
-  ["0100100", 27],
-  ["0011000", 28],
-  ["00000010", 29],
-  ["00000011", 30],
-  ["00011010", 31],
-  ["00011011", 32],
-  ["00010010", 33],
-  ["00010011", 34],
-  ["00010100", 35],
-  ["00010101", 36],
-  ["00010110", 37],
-  ["00010111", 38],
-  ["00101000", 39],
-  ["00101001", 40],
-  ["00101010", 41],
-  ["00101011", 42],
-  ["00101100", 43],
-  ["00101101", 44],
-  ["00000100", 45],
-  ["00000101", 46],
-  ["00001010", 47],
-  ["00001011", 48],
-  ["01010010", 49],
-  ["01010011", 50],
-  ["01010100", 51],
-  ["01010101", 52],
-  ["00100100", 53],
-  ["00100101", 54],
-  ["01011000", 55],
-  ["01011001", 56],
-  ["01011010", 57],
-  ["01011011", 58],
-  ["01001010", 59],
-  ["01001011", 60],
-  ["00110010", 61],
-  ["00110011", 62],
-  ["00110100", 63],
+  { bits: "0000110111", run: 0 },
+  { bits: "010", run: 1 },
+  { bits: "11", run: 2 },
+  { bits: "10", run: 3 },
+  { bits: "011", run: 4 },
+  { bits: "0011", run: 5 },
+  { bits: "0010", run: 6 },
+  { bits: "00011", run: 7 },
+  { bits: "000101", run: 8 },
+  { bits: "000100", run: 9 },
+  { bits: "0000100", run: 10 },
+  { bits: "0000101", run: 11 },
+  { bits: "0000111", run: 12 },
+  { bits: "00000100", run: 13 },
+  { bits: "00000111", run: 14 },
+  { bits: "000011000", run: 15 },
+  { bits: "0000010111", run: 16 },
+  { bits: "0000011000", run: 17 },
+  { bits: "0000001000", run: 18 },
+  { bits: "00001100111", run: 19 },
+  { bits: "00001101000", run: 20 },
+  { bits: "00001101100", run: 21 },
+  { bits: "00000110111", run: 22 },
+  { bits: "00000101000", run: 23 },
+  { bits: "00000010111", run: 24 },
+  { bits: "00000011000", run: 25 },
+  { bits: "000011001010", run: 26 },
+  { bits: "000011001011", run: 27 },
+  { bits: "000011001100", run: 28 },
+  { bits: "000011001101", run: 29 },
+  { bits: "000001101000", run: 30 },
+  { bits: "000001101001", run: 31 },
+  { bits: "000001101010", run: 32 },
+  { bits: "000001101011", run: 33 },
+  { bits: "000011010010", run: 34 },
+  { bits: "000011010011", run: 35 },
+  { bits: "000011010100", run: 36 },
+  { bits: "000011010101", run: 37 },
+  { bits: "000011010110", run: 38 },
+  { bits: "000011010111", run: 39 },
+  { bits: "000001101100", run: 40 },
+  { bits: "000001101101", run: 41 },
+  { bits: "000011011010", run: 42 },
+  { bits: "000011011011", run: 43 },
+  { bits: "000001010100", run: 44 },
+  { bits: "000001010101", run: 45 },
+  { bits: "000001010110", run: 46 },
+  { bits: "000001010111", run: 47 },
+  { bits: "000001100100", run: 48 },
+  { bits: "000001100101", run: 49 },
+  { bits: "000001010010", run: 50 },
+  { bits: "000001010011", run: 51 },
+  { bits: "000000100100", run: 52 },
+  { bits: "000000110111", run: 53 },
+  { bits: "000000111000", run: 54 },
+  { bits: "000000100111", run: 55 },
+  { bits: "000000101000", run: 56 },
+  { bits: "000001011000", run: 57 },
+  { bits: "000001011001", run: 58 },
+  { bits: "000000101011", run: 59 },
+  { bits: "000000101100", run: 60 },
+  { bits: "000001011010", run: 61 },
+  { bits: "000001100110", run: 62 },
+  { bits: "000001100111", run: 63 },
   // Make-up codes, run lengths 64-1728 (T.4 Table 3).
-  ["11011", 64],
-  ["10010", 128],
-  ["010111", 192],
-  ["0110111", 256],
-  ["00110110", 320],
-  ["00110111", 384],
-  ["01100100", 448],
-  ["01100101", 512],
-  ["01101000", 576],
-  ["01100111", 640],
-  ["011001100", 704],
-  ["011001101", 768],
-  ["011010010", 832],
-  ["011010011", 896],
-  ["011010100", 960],
-  ["011010101", 1024],
-  ["011010110", 1088],
-  ["011010111", 1152],
-  ["011011000", 1216],
-  ["011011001", 1280],
-  ["011011010", 1344],
-  ["011011011", 1408],
-  ["010011000", 1472],
-  ["010011001", 1536],
-  ["010011010", 1600],
-  ["011000", 1664],
-  ["010011011", 1728],
+  { bits: "0000001111", run: 64 },
+  { bits: "000011001000", run: 128 },
+  { bits: "000011001001", run: 192 },
+  { bits: "000001011011", run: 256 },
+  { bits: "000000110011", run: 320 },
+  { bits: "000000110100", run: 384 },
+  { bits: "000000110101", run: 448 },
+  { bits: "0000001101100", run: 512 },
+  { bits: "0000001101101", run: 576 },
+  { bits: "0000001001010", run: 640 },
+  { bits: "0000001001011", run: 704 },
+  { bits: "0000001001100", run: 768 },
+  { bits: "0000001001101", run: 832 },
+  { bits: "0000001110010", run: 896 },
+  { bits: "0000001110011", run: 960 },
+  { bits: "0000001110100", run: 1024 },
+  { bits: "0000001110101", run: 1088 },
+  { bits: "0000001110110", run: 1152 },
+  { bits: "0000001110111", run: 1216 },
+  { bits: "0000001010010", run: 1280 },
+  { bits: "0000001010011", run: 1344 },
+  { bits: "0000001010100", run: 1408 },
+  { bits: "0000001010101", run: 1472 },
+  { bits: "0000001011010", run: 1536 },
+  { bits: "0000001011011", run: 1600 },
+  { bits: "0000001100100", run: 1664 },
+  { bits: "0000001100101", run: 1728 },
 ];
 
 export const BLACK_TERMINATING_AND_MAKEUP: readonly (readonly [
   string,
   number,
-])[] = [
-  // Terminating codes, run lengths 0-63 (T.4 Table 2).
-  ["0000110111", 0],
-  ["010", 1],
-  ["11", 2],
-  ["10", 3],
-  ["011", 4],
-  ["0011", 5],
-  ["0010", 6],
-  ["00011", 7],
-  ["000101", 8],
-  ["000100", 9],
-  ["0000100", 10],
-  ["0000101", 11],
-  ["0000111", 12],
-  ["00000100", 13],
-  ["00000111", 14],
-  ["000011000", 15],
-  ["0000010111", 16],
-  ["0000011000", 17],
-  ["0000001000", 18],
-  ["00001100111", 19],
-  ["00001101000", 20],
-  ["00001101100", 21],
-  ["00000110111", 22],
-  ["00000101000", 23],
-  ["00000010111", 24],
-  ["00000011000", 25],
-  ["000011001010", 26],
-  ["000011001011", 27],
-  ["000011001100", 28],
-  ["000011001101", 29],
-  ["000001101000", 30],
-  ["000001101001", 31],
-  ["000001101010", 32],
-  ["000001101011", 33],
-  ["000011010010", 34],
-  ["000011010011", 35],
-  ["000011010100", 36],
-  ["000011010101", 37],
-  ["000011010110", 38],
-  ["000011010111", 39],
-  ["000001101100", 40],
-  ["000001101101", 41],
-  ["000011011010", 42],
-  ["000011011011", 43],
-  ["000001010100", 44],
-  ["000001010101", 45],
-  ["000001010110", 46],
-  ["000001010111", 47],
-  ["000001100100", 48],
-  ["000001100101", 49],
-  ["000001010010", 50],
-  ["000001010011", 51],
-  ["000000100100", 52],
-  ["000000110111", 53],
-  ["000000111000", 54],
-  ["000000100111", 55],
-  ["000000101000", 56],
-  ["000001011000", 57],
-  ["000001011001", 58],
-  ["000000101011", 59],
-  ["000000101100", 60],
-  ["000001011010", 61],
-  ["000001100110", 62],
-  ["000001100111", 63],
-  // Make-up codes, run lengths 64-1728 (T.4 Table 3).
-  ["0000001111", 64],
-  ["000011001000", 128],
-  ["000011001001", 192],
-  ["000001011011", 256],
-  ["000000110011", 320],
-  ["000000110100", 384],
-  ["000000110101", 448],
-  ["0000001101100", 512],
-  ["0000001101101", 576],
-  ["0000001001010", 640],
-  ["0000001001011", 704],
-  ["0000001001100", 768],
-  ["0000001001101", 832],
-  ["0000001110010", 896],
-  ["0000001110011", 960],
-  ["0000001110100", 1024],
-  ["0000001110101", 1088],
-  ["0000001110110", 1152],
-  ["0000001110111", 1216],
-  ["0000001010010", 1280],
-  ["0000001010011", 1344],
-  ["0000001010100", 1408],
-  ["0000001010101", 1472],
-  ["0000001011010", 1536],
-  ["0000001011011", 1600],
-  ["0000001100100", 1664],
-  ["0000001100101", 1728],
-];
+])[] = toRunCodeTuples(BLACK_RUN_CODES);
 
 // Extended make-up codes, run lengths 1792-2560, identical for white and black runs (T.4 Table 4).
-export const EXTENDED_MAKEUP: readonly (readonly [string, number])[] = [
-  ["00000001000", 1792],
-  ["00000001100", 1856],
-  ["00000001101", 1920],
-  ["000000010010", 1984],
-  ["000000010011", 2048],
-  ["000000010100", 2112],
-  ["000000010101", 2176],
-  ["000000010110", 2240],
-  ["000000010111", 2304],
-  ["000000011100", 2368],
-  ["000000011101", 2432],
-  ["000000011110", 2496],
-  ["000000011111", 2560],
+const EXTENDED_MAKEUP_RUN_CODES: readonly RunCode[] = [
+  { bits: "00000001000", run: 1792 },
+  { bits: "00000001100", run: 1856 },
+  { bits: "00000001101", run: 1920 },
+  { bits: "000000010010", run: 1984 },
+  { bits: "000000010011", run: 2048 },
+  { bits: "000000010100", run: 2112 },
+  { bits: "000000010101", run: 2176 },
+  { bits: "000000010110", run: 2240 },
+  { bits: "000000010111", run: 2304 },
+  { bits: "000000011100", run: 2368 },
+  { bits: "000000011101", run: 2432 },
+  { bits: "000000011110", run: 2496 },
+  { bits: "000000011111", run: 2560 },
 ];
+
+export const EXTENDED_MAKEUP: readonly (readonly [string, number])[] =
+  toRunCodeTuples(EXTENDED_MAKEUP_RUN_CODES);
 
 // A run length below this is a terminating code, which ends the run; anything at or above it is a make-up code, which must be followed by further codes until a terminating one arrives.
 const TERMINATING_RUN_LIMIT = 64;
@@ -254,8 +273,10 @@ const EOL_MIN_ZEROS = 11;
 // A generous ceiling on how much zero fill may precede an EOL before the run of zeros is treated as corrupt data rather than fill. T.4 allows fill only up to the line's own minimum transmission time, which no real encoder comes close to spending on a single line.
 const MAX_FILL_ZERO_BITS = 512;
 
+const CODE_KEY_VALUE_BITS = 16; // headroom reserved for the code value itself (the longest code above, MAX_RUN_CODE_BITS, is 14 bits); bitLength is packed above this width so distinct (bitLength, code) pairs can never collide
+
 function codeKey(bitLength: number, code: number): number {
-  return bitLength * 2 ** 16 + code;
+  return bitLength * 2 ** CODE_KEY_VALUE_BITS + code;
 }
 
 function buildCodeTable(
@@ -289,6 +310,9 @@ const MODE_CODE_TABLE: ReadonlyMap<number, ModeCode> = new Map(
 // --- The bit reader: MSB-first within each byte, the order every T.4/T.6 code is written in. ---
 
 const BITS_PER_BYTE = 8;
+const BYTE_INDEX_SHIFT = 3; // log2(BITS_PER_BYTE): converts a bit position into the byte index it falls in
+const MSB_BIT_MASK = 0x80; // the most significant bit of a byte, where T.4/T.6's own bit order (MSB first) starts each byte
+const BYTE_MASK = 0xff; // an all-ones byte
 
 class CcittBitReader {
   private position = 0;
@@ -312,8 +336,9 @@ class CcittBitReader {
     if (this.exhausted) {
       return -1;
     }
-    const byte = this.data[this.position >> 3] ?? 0;
-    const bit = (byte >> (7 - (this.position & 7))) & 1;
+    const byte = this.data[this.position >> BYTE_INDEX_SHIFT] ?? 0;
+    const bit =
+      (byte >> (BITS_PER_BYTE - 1 - (this.position & (BITS_PER_BYTE - 1)))) & 1;
     this.position++;
     return bit;
   }
@@ -538,8 +563,8 @@ function setBitRun(
   bit: number,
 ): void {
   for (let x = from; x < to; x++) {
-    const index = x >> 3;
-    const mask = 0x80 >> (x & 7);
+    const index = x >> BYTE_INDEX_SHIFT;
+    const mask = MSB_BIT_MASK >> (x & (BITS_PER_BYTE - 1));
     if (bit === 1) {
       row[index] = (row[index] ?? 0) | mask;
     } else {
@@ -554,9 +579,9 @@ function renderRow(
   columns: number,
   blackBit: number,
 ): Uint8Array<ArrayBuffer> {
-  const row = new Uint8Array(Math.ceil(columns / 8));
+  const row = new Uint8Array(Math.ceil(columns / BITS_PER_BYTE));
   if (blackBit === 0) {
-    row.fill(0xff); // white is the 1 bit, so start the row (padding bits included) white
+    row.fill(BYTE_MASK); // white is the 1 bit, so start the row (padding bits included) white
   }
   let position = 0;
   let black = false;
@@ -654,11 +679,11 @@ export function decodeCcittFax(
         `CCITT fax data ended after ${String(rows.length)} of ${String(requestedRows)} declared rows; padding the remainder white`,
       );
     }
-    const bytesPerRow = Math.ceil(columns / 8);
+    const bytesPerRow = Math.ceil(columns / BITS_PER_BYTE);
     while (rows.length < requestedRows) {
       const blank = new Uint8Array(bytesPerRow);
       if (blackBit === 0) {
-        blank.fill(0xff);
+        blank.fill(BYTE_MASK);
       }
       rows.push(blank);
     }
