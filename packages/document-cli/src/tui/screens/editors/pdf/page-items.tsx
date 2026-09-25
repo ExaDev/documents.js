@@ -26,6 +26,12 @@ import {
   requirePdfDocument,
 } from "./shared.js";
 
+// The size, type size, and line reach a newly added item takes when the operator leaves the field blank.
+const DEFAULT_ITEM_WIDTH_PT = 100;
+const DEFAULT_ITEM_HEIGHT_PT = 60;
+const DEFAULT_TEXT_SIZE_PT = 12;
+const DEFAULT_LINE_END_X_PT = 100;
+
 // Long enough to tell two similarly-worded paragraphs apart at a glance while still leaving room for the kind label and index prefix on one row.
 const TEXT_PREVIEW_MAX_CHARS = 48;
 
@@ -188,8 +194,14 @@ function readFrame(values: Readonly<Record<string, string>>): {
   return {
     xPt: parseNumberField(requireFieldValue(values, "xPt"), 0),
     yPt: parseNumberField(requireFieldValue(values, "yPt"), 0),
-    widthPt: parseNumberField(requireFieldValue(values, "widthPt"), 100),
-    heightPt: parseNumberField(requireFieldValue(values, "heightPt"), 60),
+    widthPt: parseNumberField(
+      requireFieldValue(values, "widthPt"),
+      DEFAULT_ITEM_WIDTH_PT,
+    ),
+    heightPt: parseNumberField(
+      requireFieldValue(values, "heightPt"),
+      DEFAULT_ITEM_HEIGHT_PT,
+    ),
   };
 }
 
@@ -212,7 +224,10 @@ async function applyAddKind(
           style: parseFontStyle(requireFieldValue(values, "fontStyle")),
         },
         sizePt: Math.max(
-          parseNumberField(requireFieldValue(values, "sizePt"), 12),
+          parseNumberField(
+            requireFieldValue(values, "sizePt"),
+            DEFAULT_TEXT_SIZE_PT,
+          ),
           Number.EPSILON,
         ),
         color: parseColorField(requireFieldValue(values, "color")) ?? {
@@ -257,7 +272,10 @@ async function applyAddKind(
         init: {
           x1Pt: parseNumberField(requireFieldValue(values, "fromXPt"), 0),
           y1Pt: parseNumberField(requireFieldValue(values, "fromYPt"), 0),
-          x2Pt: parseNumberField(requireFieldValue(values, "toXPt"), 100),
+          x2Pt: parseNumberField(
+            requireFieldValue(values, "toXPt"),
+            DEFAULT_LINE_END_X_PT,
+          ),
           y2Pt: parseNumberField(requireFieldValue(values, "toYPt"), 0),
           color: parseColorField(requireFieldValue(values, "color")) ?? {
             r: 0,

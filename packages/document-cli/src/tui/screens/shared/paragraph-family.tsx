@@ -51,6 +51,10 @@ import {
   truncatePreview,
 } from "./text.js";
 
+// The size a newly added image takes when the operator leaves the field blank.
+const DEFAULT_IMAGE_WIDTH_PT = 120;
+const DEFAULT_IMAGE_HEIGHT_PT = 40;
+
 // docx, odt and markdown share one paragraph/run/table model closely enough (see documents.js's own README: "readDocxContent and readOdtContent both produce the identical wordprocessing-variant ContentDocument shape", and readMarkdownContent is the third format sharing that same pivot) that DocxParagraph/OdtParagraph/MarkdownParagraph and DocxRun/OdtRun/MarkdownRun are structurally interchangeable for every screen in this family — the union types below let every helper and screen here take whichever the open document actually is without a branch, mirroring state/reducer.ts's own `WordprocessingOpenDocument` narrowing (not exported from there, so restated here for this screen family's own use). MarkdownRun/MarkdownParagraph are a genuinely narrower shape than DocxRun/DocxParagraph's own (no underline/colour/fontFamily/sizePt on a run, no alignment on a paragraph) — see `supportsRunStyleExtras` below for how call sites that need those fields narrow the union down. doc joined this family when documents.js gained its DocEditor: DocParagraph/DocRun/DocTable hold direct references into the same wordprocessing ContentDocument pivot, and DocRun/DocParagraph carry the full docx/odt styling field set (underline, colour, fontFamily, sizePt, alignment) because doc-codec's writer genuinely round-trips all of them.
 export type ParagraphFamilyOpenDocument =
   DocxOpenDocument | OdtOpenDocument | MarkdownOpenDocument | DocOpenDocument;
@@ -260,8 +264,14 @@ function readFormulaFrame(
   return {
     xPt: parseNumberField(requireFieldValue(values, "xPt"), 0),
     yPt: parseNumberField(requireFieldValue(values, "yPt"), 0),
-    widthPt: parseNumberField(requireFieldValue(values, "widthPt"), 120),
-    heightPt: parseNumberField(requireFieldValue(values, "heightPt"), 40),
+    widthPt: parseNumberField(
+      requireFieldValue(values, "widthPt"),
+      DEFAULT_IMAGE_WIDTH_PT,
+    ),
+    heightPt: parseNumberField(
+      requireFieldValue(values, "heightPt"),
+      DEFAULT_IMAGE_HEIGHT_PT,
+    ),
   };
 }
 

@@ -26,6 +26,10 @@ import {
 } from "../../shared/paragraph-family.js";
 import { parseNumberField } from "../../shared/text.js";
 
+// The size a newly added image takes when the operator leaves the field blank.
+const DEFAULT_IMAGE_WIDTH_PT = 100;
+const DEFAULT_IMAGE_HEIGHT_PT = 60;
+
 // A run's own current sizePt has no sensible zero-ish fallback the way a blank colour prompt does (an empty hex input just means "no colour") — a font size prompt that fails to parse falls back to the run's OWN current size (or, for a run with none set yet, this codebase's own standard body size) rather than silently writing 0pt.
 const DEFAULT_RUN_SIZE_PT = 12;
 
@@ -66,10 +70,13 @@ async function applyInsertImage(
   }
   try {
     const bytes = new Uint8Array(await readInput(path));
-    const widthPt = parseNumberField(requireFieldValue(values, "widthPt"), 100);
+    const widthPt = parseNumberField(
+      requireFieldValue(values, "widthPt"),
+      DEFAULT_IMAGE_WIDTH_PT,
+    );
     const heightPt = parseNumberField(
       requireFieldValue(values, "heightPt"),
-      60,
+      DEFAULT_IMAGE_HEIGHT_PT,
     );
     const altTextRaw = requireFieldValue(values, "altText").trim();
     dispatch({
