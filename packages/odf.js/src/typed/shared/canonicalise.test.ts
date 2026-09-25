@@ -78,11 +78,13 @@ describe("canonicalRun", () => {
   });
 
   it("quantises color through canonicalColor's own hex-pair round trip when stated", () => {
+    const rgbChannelMax = 255;
+    const quantizedRed = 230; // round(0.9 * 255)
     expect(
       canonicalRun({ text: "x", color: { r: 0.9, g: 0, b: 0 } }),
     ).toStrictEqual({
       text: "x",
-      color: { r: 230 / 255, g: 0, b: 0 },
+      color: { r: quantizedRed / rgbChannelMax, g: 0, b: 0 },
     });
   });
 
@@ -413,13 +415,15 @@ describe("canonicalTable", () => {
   }
 
   it("columns is copied, not aliased", () => {
+    const widthA = 12;
+    const widthB = 34;
     const table: ContentTable = {
       kind: "table",
-      columns: [{ widthPt: 12 }, { widthPt: 34 }],
+      columns: [{ widthPt: widthA }, { widthPt: widthB }],
       rows: [],
     };
     const result = canonicalTable(table, freshListState());
-    expect(result.columns.map((c) => c.widthPt)).toEqual([12, 34]);
+    expect(result.columns.map((c) => c.widthPt)).toEqual([widthA, widthB]);
     expect(result.columns).not.toBe(table.columns);
   });
 

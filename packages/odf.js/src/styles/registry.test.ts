@@ -355,8 +355,9 @@ describe("rule (b): unknown attributes opt a style out of reuse, not out of exis
     ]);
     const registry = StyleRegistry.forPart(pkg, "content.xml");
 
+    const iterationCount = 5;
     const names = new Set<string>();
-    for (let i = 0; i < 5; i += 1) {
+    for (let i = 0; i < iterationCount; i += 1) {
       names.add(
         registry.intern({
           properties: { indentFirstLinePt: i + 1 },
@@ -386,7 +387,8 @@ describe("rule (c): fingerprint includes parentStyleName, kept separate from pro
       properties: { alignment: "center" },
       family: "paragraph",
     }); // no parent at all
-    expect(new Set([a, b, c]).size).toBe(3);
+    const expectedUniqueCount = 3;
+    expect(new Set([a, b, c]).size).toBe(expectedUniqueCount);
   });
 
   it("fingerprint() reflects the parentStyleName distinction directly, without needing intern()", () => {
@@ -562,7 +564,8 @@ describe("rule (e): content.xml and styles.xml registries use distinct name-mint
 
     const contentNames = new Set<string>();
     const stylesNames = new Set<string>();
-    for (let i = 0; i < 4; i += 1) {
+    const iterationCount = 4;
+    for (let i = 0; i < iterationCount; i += 1) {
       contentNames.add(
         contentRegistry.intern({
           properties: { indentFirstLinePt: i },
