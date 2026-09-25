@@ -11,6 +11,7 @@ import {
 } from "./index";
 import type { CompactPackage, Package, XmlElement } from "./index";
 import { assertNeverCompactXmlNodeCode } from "./compact";
+import { PNG_SIGNATURE } from "./image/sniff";
 
 function enc(s: string): Uint8Array<ArrayBuffer> {
   return new TextEncoder().encode(s);
@@ -24,8 +25,14 @@ const ROOT_RELS = enc(
   '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>',
 );
 
+// The genuine PNG signature followed by five arbitrary trailing bytes standing in for whatever real image data would normally follow it: their exact values carry no meaning, so they simply count upward.
+const ARBITRARY_TRAILING_BYTE_COUNT = 5;
 const PNG_BYTES: Uint8Array<ArrayBuffer> = new Uint8Array([
-  0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3, 4, 5,
+  ...PNG_SIGNATURE,
+  ...Array.from(
+    { length: ARBITRARY_TRAILING_BYTE_COUNT },
+    (_unused, index) => index + 1,
+  ),
 ]);
 
 function docxParts(): Record<string, Uint8Array<ArrayBuffer>> {
@@ -182,6 +189,11 @@ describe("compact size", () => {
 });
 
 describe("isCompactXmlNode (via CompactXmlNodeSchema)", () => {
+  // The same tuple type-code discriminants compact.ts itself names (NODE_TAG_ELEMENT through NODE_TAG_PI); element (0), text (1), and cdata (2) stay bare literals below since the shared no-magic-numbers ignore list already exempts -1/0/1/2.
+  const NODE_TAG_COMMENT = 3;
+  const NODE_TAG_DECLARATION = 4;
+  const NODE_TAG_PI = 5;
+
   it("rejects a non-array value", () => {
     expect(CompactXmlNodeSchema.safeParse("nope").success).toBe(false);
     expect(CompactXmlNodeSchema.safeParse({ 0: 1, 1: 0 }).success).toBe(false);
@@ -190,51 +202,84 @@ describe("isCompactXmlNode (via CompactXmlNodeSchema)", () => {
   it("accepts a text/cdata/comment node ([1|2|3, number])", () => {
     expect(CompactXmlNodeSchema.safeParse([1, 0]).success).toBe(true);
     expect(CompactXmlNodeSchema.safeParse([2, 0]).success).toBe(true);
-    expect(CompactXmlNodeSchema.safeParse([3, 0]).success).toBe(true);
+    expect(CompactXmlNodeSchema.safeParse([NODE_TAG_COMMENT, 0]).success).toBe(
+      true,
+    );
   });
 
   it("rejects a text/cdata/comment node with the wrong tuple length", () => {
     expect(CompactXmlNodeSchema.safeParse([1, 0, 0]).success).toBe(false);
     expect(CompactXmlNodeSchema.safeParse([2, 0, 0]).success).toBe(false);
-    expect(CompactXmlNodeSchema.safeParse([3, 0, 0]).success).toBe(false);
+    expect(
+      CompactXmlNodeSchema.safeParse([NODE_TAG_COMMENT, 0, 0]).success,
+    ).toBe(false);
     expect(CompactXmlNodeSchema.safeParse([1]).success).toBe(false);
   });
 
   it("rejects a text/cdata/comment node whose value slot is not a number", () => {
     expect(CompactXmlNodeSchema.safeParse([1, "x"]).success).toBe(false);
     expect(CompactXmlNodeSchema.safeParse([2, "x"]).success).toBe(false);
-    expect(CompactXmlNodeSchema.safeParse([3, "x"]).success).toBe(false);
+    expect(
+      CompactXmlNodeSchema.safeParse([NODE_TAG_COMMENT, "x"]).success,
+    ).toBe(false);
   });
 
   it("accepts a declaration node ([4, attrPairs])", () => {
-    expect(CompactXmlNodeSchema.safeParse([4, [0, 1]]).success).toBe(true);
-    expect(CompactXmlNodeSchema.safeParse([4, []]).success).toBe(true);
+    expect(
+      CompactXmlNodeSchema.safeParse([NODE_TAG_DECLARATION, [0, 1]]).success,
+    ).toBe(true);
+    expect(
+      CompactXmlNodeSchema.safeParse([NODE_TAG_DECLARATION, []]).success,
+    ).toBe(true);
   });
 
   it("rejects a declaration node with the wrong tuple length", () => {
-    expect(CompactXmlNodeSchema.safeParse([4, [0, 1], 9]).success).toBe(false);
-    expect(CompactXmlNodeSchema.safeParse([4]).success).toBe(false);
+    // An arbitrary extra tuple element: only its presence matters, to push the tuple one slot past the declaration's own [tag, attrPairs] length.
+    const ARBITRARY_EXTRA_TUPLE_ELEMENT = 9;
+    expect(
+      CompactXmlNodeSchema.safeParse([
+        NODE_TAG_DECLARATION,
+        [0, 1],
+        ARBITRARY_EXTRA_TUPLE_ELEMENT,
+      ]).success,
+    ).toBe(false);
+    expect(CompactXmlNodeSchema.safeParse([NODE_TAG_DECLARATION]).success).toBe(
+      false,
+    );
   });
 
   it("rejects a declaration node whose attr pairs are not a valid CompactAttrPairs", () => {
-    expect(CompactXmlNodeSchema.safeParse([4, "not-an-array"]).success).toBe(
-      false,
-    );
-    expect(CompactXmlNodeSchema.safeParse([4, [0, "x"]]).success).toBe(false);
+    expect(
+      CompactXmlNodeSchema.safeParse([NODE_TAG_DECLARATION, "not-an-array"])
+        .success,
+    ).toBe(false);
+    expect(
+      CompactXmlNodeSchema.safeParse([NODE_TAG_DECLARATION, [0, "x"]]).success,
+    ).toBe(false);
   });
 
   it("accepts a pi node ([5, number, number])", () => {
-    expect(CompactXmlNodeSchema.safeParse([5, 0, 1]).success).toBe(true);
+    expect(CompactXmlNodeSchema.safeParse([NODE_TAG_PI, 0, 1]).success).toBe(
+      true,
+    );
   });
 
   it("rejects a pi node with the wrong tuple length", () => {
-    expect(CompactXmlNodeSchema.safeParse([5, 0]).success).toBe(false);
-    expect(CompactXmlNodeSchema.safeParse([5, 0, 1, 2]).success).toBe(false);
+    expect(CompactXmlNodeSchema.safeParse([NODE_TAG_PI, 0]).success).toBe(
+      false,
+    );
+    expect(CompactXmlNodeSchema.safeParse([NODE_TAG_PI, 0, 1, 2]).success).toBe(
+      false,
+    );
   });
 
   it("rejects a pi node whose target or content slot is not a number", () => {
-    expect(CompactXmlNodeSchema.safeParse([5, "x", 1]).success).toBe(false);
-    expect(CompactXmlNodeSchema.safeParse([5, 0, "x"]).success).toBe(false);
+    expect(CompactXmlNodeSchema.safeParse([NODE_TAG_PI, "x", 1]).success).toBe(
+      false,
+    );
+    expect(CompactXmlNodeSchema.safeParse([NODE_TAG_PI, 0, "x"]).success).toBe(
+      false,
+    );
   });
 
   it("accepts an element node ([0, tag, attrPairs, children])", () => {
@@ -245,9 +290,17 @@ describe("isCompactXmlNode (via CompactXmlNodeSchema)", () => {
   });
 
   it("rejects an element node with the wrong tuple length", () => {
-    expect(CompactXmlNodeSchema.safeParse([0, 0, [], [], 9]).success).toBe(
-      false,
-    );
+    // An arbitrary extra tuple element: only its presence matters, to push the tuple one slot past the element's own [tag, tagIdx, attrPairs, children] length.
+    const ARBITRARY_EXTRA_TUPLE_ELEMENT = 9;
+    expect(
+      CompactXmlNodeSchema.safeParse([
+        0,
+        0,
+        [],
+        [],
+        ARBITRARY_EXTRA_TUPLE_ELEMENT,
+      ]).success,
+    ).toBe(false);
     expect(CompactXmlNodeSchema.safeParse([0, 0, []]).success).toBe(false);
   });
 
@@ -279,8 +332,15 @@ describe("isCompactXmlNode (via CompactXmlNodeSchema)", () => {
   });
 
   it("rejects an unrecognised leading type code, even one that happens to satisfy the element-shape checks", () => {
-    expect(CompactXmlNodeSchema.safeParse([9]).success).toBe(false);
-    expect(CompactXmlNodeSchema.safeParse([9, 0, [], []]).success).toBe(false);
+    // A type-code value past NODE_TAG_PI (5), the highest one compact.ts defines: any code beyond it is unrecognised regardless of what shape follows.
+    const UNRECOGNISED_NODE_TAG = 9;
+    expect(
+      CompactXmlNodeSchema.safeParse([UNRECOGNISED_NODE_TAG]).success,
+    ).toBe(false);
+    expect(
+      CompactXmlNodeSchema.safeParse([UNRECOGNISED_NODE_TAG, 0, [], []])
+        .success,
+    ).toBe(false);
   });
 });
 
@@ -314,9 +374,14 @@ describe("compact adversarial cases", () => {
   });
 
   it("round-trips 16 levels of nested elements", () => {
+    // Arbitrary but deep enough to genuinely exercise the recursive encode/decode across several levels, without approaching a real call-stack limit.
+    const NESTED_ELEMENT_TEST_DEPTH = 16;
     const pkg: Package = {
       parts: {
-        "word/document.xml": { kind: "xml", nodes: [nestedElement(16)] },
+        "word/document.xml": {
+          kind: "xml",
+          nodes: [nestedElement(NESTED_ELEMENT_TEST_DEPTH)],
+        },
       },
     };
     expect(fromCompact(toCompact(pkg))).toEqual(pkg);
@@ -353,19 +418,23 @@ describe("compact adversarial cases", () => {
   });
 
   it("throws with the out-of-range string index when a string-table lookup fails", () => {
+    // Any index is out of range against an empty string table; this one has no significance beyond that.
+    const OUT_OF_RANGE_STRING_INDEX = 5;
     const cpkg: CompactPackage = {
       s: [],
-      p: { "word/document.xml": [[1, 5]] },
+      p: { "word/document.xml": [[1, OUT_OF_RANGE_STRING_INDEX]] },
     };
     expect(() => fromCompact(cpkg)).toThrow(
-      "fromCompact: string table index 5 is out of range",
+      `fromCompact: string table index ${OUT_OF_RANGE_STRING_INDEX} is out of range`,
     );
   });
 
   it("throws when an attribute index-pairs array has odd length", () => {
+    // The declaration tuple's own type-code discriminant (compact.ts's NODE_TAG_DECLARATION).
+    const NODE_TAG_DECLARATION = 4;
     const cpkg: CompactPackage = {
       s: ["name-only"],
-      p: { "word/document.xml": [[4, [0]]] },
+      p: { "word/document.xml": [[NODE_TAG_DECLARATION, [0]]] },
     };
     expect(() => fromCompact(cpkg)).toThrow(
       "fromCompact: attribute index pairs array has odd length",
@@ -373,9 +442,15 @@ describe("compact adversarial cases", () => {
   });
 
   it("round-trips a large base64 binary part as a single interned string", () => {
-    const largeBase64 = Buffer.from(new Uint8Array(64 * 1024).fill(7)).toString(
-      "base64",
-    );
+    // Large enough to genuinely exercise the "large binary" path rather than the size mattering in itself, filled with a single arbitrary repeated byte since the content itself is irrelevant to string-table interning.
+    const LARGE_BINARY_SIZE_KIB = 64;
+    const BYTES_PER_KIB = 1024;
+    const ARBITRARY_FILL_BYTE = 7;
+    const largeBase64 = Buffer.from(
+      new Uint8Array(LARGE_BINARY_SIZE_KIB * BYTES_PER_KIB).fill(
+        ARBITRARY_FILL_BYTE,
+      ),
+    ).toString("base64");
     const pkg: Package = {
       parts: {
         "word/media/large.bin": { kind: "binary", base64: largeBase64 },
@@ -390,15 +465,17 @@ describe("compact adversarial cases", () => {
 
 describe("assertNeverCompactXmlNodeCode", () => {
   it("throws naming the unhandled type code, proving decodeNode's own exhaustiveness guard actually fires at runtime", () => {
+    // Any value past NODE_TAG_PI (5), the highest type code compact.ts defines, is unhandled by construction.
+    const UNHANDLED_NODE_TAG = 99;
     let caught: unknown;
     try {
-      assertNeverCompactXmlNodeCode([99] as never);
+      assertNeverCompactXmlNodeCode([UNHANDLED_NODE_TAG] as never);
     } catch (error) {
       caught = error;
     }
     expect(caught).toBeInstanceOf(Error);
     expect((caught as Error).message).toBe(
-      "decodeNode: unhandled CompactXmlNode type code [99]",
+      `decodeNode: unhandled CompactXmlNode type code [${UNHANDLED_NODE_TAG}]`,
     );
   });
 });
