@@ -5,6 +5,9 @@
 export const TWIPS_PER_POINT = 20;
 export const HALF_POINTS_PER_POINT = 2;
 
+// \slN states a line-spacing multiple, paired with \slmult1, in 240ths of a line rather than as a direct fraction. Shared between read-builder.ts's own reader and write-body.ts's own writer so the two stay each other's exact inverse.
+export const LINE_SPACING_UNITS_PER_LINE = 240;
+
 // The pixel row of the spec's own units table: "Pixels — typically 96/inch". Used only for \picwN/\pichN, which state a bitmap's size in pixels when no \picwgoalN/\pichgoalN twip size accompanies it; "typically" is the spec's own word, so this is the documented convention rather than an exact conversion, and a picture carrying a goal size never reaches it.
 const PIXELS_PER_INCH = 96;
 const POINTS_PER_INCH = 72;

@@ -188,6 +188,8 @@ const DTTM_MONTH_MASK = 0xf;
 const DTTM_YEAR_SHIFT = 20;
 const DTTM_YEAR_MASK = 0x1ff;
 const DTTM_YEAR_EPOCH = 1900;
+const MONTHS_PER_YEAR = 12;
+const YEAR_PAD_WIDTH = 4; // ISO 8601's own 4-digit year field.
 
 export function isoFromDttm(value: number): string | undefined {
   // A DTTM is emitted "as a long integer", so a value with its top bit set arrives here signed; the unsigned right shift restores the 32-bit pattern the bit field is defined over.
@@ -198,11 +200,11 @@ export function isoFromDttm(value: number): string | undefined {
   const month = (bits >>> DTTM_MONTH_SHIFT) & DTTM_MONTH_MASK;
   const year = ((bits >>> DTTM_YEAR_SHIFT) & DTTM_YEAR_MASK) + DTTM_YEAR_EPOCH;
   // A zero DTTM — day 0, month 0 — is what a producer writes for "no time recorded", and it is not a date. Rejecting it here keeps a fabricated 1900-00-00 out of dateIso rather than letting the field claim a timestamp the document never carried. No day-range upper check is needed alongside month>12: day is already masked to 0-31 by DTTM_DAY_MASK above, so it can never exceed 31 in the first place — unlike month, whose own 4-bit mask reaches as high as 15.
-  if (day === 0 || month === 0 || month > 12) {
+  if (day === 0 || month === 0 || month > MONTHS_PER_YEAR) {
     return undefined;
   }
   return (
-    `${pad(year, 4)}-${pad(month, 2)}-${pad(day, 2)}` +
+    `${pad(year, YEAR_PAD_WIDTH)}-${pad(month, 2)}-${pad(day, 2)}` +
     `T${pad(hour, 2)}:${pad(minute, 2)}:00`
   );
 }
