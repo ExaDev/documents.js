@@ -176,6 +176,10 @@ export interface InterpretContext {
 const MAX_FORM_XOBJECT_DEPTH = 12;
 // An unremarkable mid-range glyph advance (half an em) used only when a shown font resource can't be resolved to any width table at all — purely to stop subsequent glyphs collapsing onto the same point; the position is already degraded at that point regardless, and is reported via a diagnostic.
 const FALLBACK_GLYPH_WIDTH_PER_1000 = 500;
+// Every "...Per1000" value above is expressed in thousandths of a text-space unit, matching PDF's own /Widths convention (see widthPer1000's own comment); dividing by this converts back to text-space units before scaling by the font size.
+const GLYPH_SPACE_PER_TEXT_SPACE_UNIT = 1000;
+// The ASCII space character: word spacing (Tw) applies only to a single-byte code equal to this value (ISO 32000-1 9.3.3).
+const ASCII_SPACE = 0x20;
 // ISO 32000-1 Table 52: the graphics state's own line width parameter defaults to 1.0 (user-space units) until a `w` operator sets it explicitly.
 const DEFAULT_LINE_WIDTH_PT = 1;
 
@@ -289,37 +293,49 @@ function rgbColor(operands: readonly PdfObject[]): LayoutColor {
   };
 }
 
+// K is the fourth operand of the CMYK colour-setting operators (k/K/the 4-numeric-operand form of sc/SC/scn/SCN), 0-indexed.
+const CMYK_K_INDEX = 3;
+
 function cmykColor(operands: readonly PdfObject[]): LayoutColor {
   const c = numAt(operands, 0);
   const m = numAt(operands, 1);
   const y = numAt(operands, 2);
-  const k = numAt(operands, 3);
+  const k = numAt(operands, CMYK_K_INDEX);
   return { r: (1 - c) * (1 - k), g: (1 - m) * (1 - k), b: (1 - y) * (1 - k) };
 }
 
 // The generic sc/SC/scn/SCN operators set a colour in whatever space a prior `cs`/`CS` selected, which can be an arbitrary ICC/Indexed/Separation/Pattern resource — fully resolving that is out of v1 scope. This heuristic (dispatch purely on operand count) covers the overwhelming common case where the selected space is in fact DeviceGray/RGB/CMYK; a trailing pattern-name operand (SCN's own Pattern form) is left as `undefined`, meaning "leave the current colour unchanged," which is honest given a pattern fill has no single flat colour to report anyway.
+// DeviceRGB and DeviceCMYK are distinguished purely by how many numeric operands a generic sc/SC/scn/SCN call carries, per the genericColor comment above.
+const RGB_COMPONENT_COUNT = 3;
+const CMYK_COMPONENT_COUNT = 4;
+
 function genericColor(operands: readonly PdfObject[]): LayoutColor | undefined {
   const numericOperands = operands.filter((o) => o.kind === "number");
   if (numericOperands.length === 1) {
     return grayColor(numAt(numericOperands, 0));
   }
-  if (numericOperands.length === 3) {
+  if (numericOperands.length === RGB_COMPONENT_COUNT) {
     return rgbColor(numericOperands);
   }
-  if (numericOperands.length === 4) {
+  if (numericOperands.length === CMYK_COMPONENT_COUNT) {
     return cmykColor(numericOperands);
   }
   return undefined;
 }
+
+// The cm/Tm operators' own six operands, a b c d e f (ISO 32000-1 8.3.4 / 9.4.2): the last three (d, e, f) fall outside this rule's own ignored range (0-2).
+const MATRIX_D_INDEX = 3;
+const MATRIX_E_INDEX = 4;
+const MATRIX_F_INDEX = 5;
 
 function matrixFromOperands(operands: readonly PdfObject[]): Matrix {
   return [
     numAt(operands, 0),
     numAt(operands, 1),
     numAt(operands, 2),
-    numAt(operands, 3),
-    numAt(operands, 4),
-    numAt(operands, 5),
+    numAt(operands, MATRIX_D_INDEX),
+    numAt(operands, MATRIX_E_INDEX),
+    numAt(operands, MATRIX_F_INDEX),
   ];
 }
 
@@ -394,12 +410,15 @@ function closedPolygonCorners(subpath: ExtractedSubpath): Point[] | undefined {
 }
 
 // A single closed four-corner straight-line subpath is an axis-aligned rectangle exactly when every corner sits on both an x extreme and a y extreme AND every edge moves along exactly one axis. The second condition is what rejects a bowtie — four points that individually sit on the right extremes but are traversed in an order that crosses the middle — which the first alone would happily accept. Both winding directions and either starting corner satisfy this equally, so no normalisation is needed.
+// A closed four-corner straight-line subpath, per the detectRect comment above.
+const RECTANGLE_CORNER_COUNT = 4;
+
 function detectRect(
   subpath: ExtractedSubpath,
   paint: ExtractedPaint,
 ): ExtractedRect | undefined {
   const corners = closedPolygonCorners(subpath);
-  if (corners?.length !== 4) {
+  if (corners?.length !== RECTANGLE_CORNER_COUNT) {
     return undefined;
   }
   const { minX, minY, maxX, maxY } = boundsOf(corners);
@@ -501,6 +520,9 @@ function expectedEllipseControl(
 }
 
 // A closed subpath of exactly four cubic segments whose on-curve points are the four cardinal extremes of its bounding box, and whose eight control points all sit at the kappa offset those extremes imply, is the four-quadrant Bezier ellipse — the only way an axis-aligned ellipse is ever expressible in PDF. A rotated ellipse deliberately does not match: its on-curve points are no longer at its bounding box's cardinal extremes, and document-schema.js's LayoutEllipse carries no rotation to report one with, so leaving it as a general path is the honest outcome rather than a silently unrotated ellipse.
+// A four-quadrant Bezier ellipse (per the detectEllipse comment above) always has exactly four cubic segments, four cardinal on-curve extremes, and four control-point pairs.
+const ELLIPSE_SEGMENT_COUNT = 4;
+
 function detectEllipse(
   subpath: ExtractedSubpath,
   paint: ExtractedPaint,
@@ -508,14 +530,14 @@ function detectEllipse(
   const segments = subpath.segments;
   if (
     !subpath.closed ||
-    segments.length !== 4 ||
+    segments.length !== ELLIPSE_SEGMENT_COUNT ||
     segments.some((segment) => segment.kind !== "cubic")
   ) {
     return undefined;
   }
   const start: Point = { x: subpath.startXPt, y: subpath.startYPt };
   const onCurve: Point[] = [start];
-  for (const segment of segments.slice(0, 3)) {
+  for (const segment of segments.slice(0, ELLIPSE_SEGMENT_COUNT - 1)) {
     onCurve.push({ x: segment.xPt, y: segment.yPt });
   }
   const { minX, minY, maxX, maxY } = boundsOf(onCurve);
@@ -544,19 +566,19 @@ function detectEllipse(
   );
   if (
     extremes.some((extreme) => extreme === undefined) ||
-    new Set(extremes).size !== 4
+    new Set(extremes).size !== ELLIPSE_SEGMENT_COUNT
   ) {
     return undefined;
   }
   const kx = rx * BEZIER_KAPPA;
   const ky = ry * BEZIER_KAPPA;
   const controlTolerance = Math.max(tolX, tolY);
-  for (let i = 0; i < 4; i += 1) {
+  for (let i = 0; i < ELLIPSE_SEGMENT_COUNT; i += 1) {
     const segment = segments[i];
     const from = onCurve[i];
     const fromKind = extremes[i];
-    const to = onCurve[(i + 1) % 4];
-    const toKind = extremes[(i + 1) % 4];
+    const to = onCurve[(i + 1) % ELLIPSE_SEGMENT_COUNT];
+    const toKind = extremes[(i + 1) % ELLIPSE_SEGMENT_COUNT];
     if (
       segment?.kind !== "cubic" ||
       from === undefined ||
@@ -691,6 +713,15 @@ class MarkedContentStack {
   }
 }
 
+// The `re` operator's own four operands, x y w h (ISO 32000-1 8.5.2.1): h is the fourth, 0-indexed, falling outside this rule's own ignored range (0-2).
+const RE_HEIGHT_INDEX = 3;
+// Path-construction operator operand indices (ISO 32000-1 8.5.2.2 Table 59): each pair of operands is one point's x, y. 0-2 fall inside this rule's own ignored range; the 4th operand (index 3) is a control point's y in the full 6-operand cubic (c) or an endpoint's y in the 4-operand shorthand cubics (v, y), and the 5th/6th (indices 4, 5) are the endpoint's x, y in the full cubic.
+const OPERAND_INDEX_3 = 3;
+const OPERAND_INDEX_4 = 4;
+const OPERAND_INDEX_5 = 5;
+// Tz sets horizontal scaling as a percentage (ISO 32000-1 9.3.4); dividing by this converts it to the scale factor gs.horizScale stores.
+const TZ_PERCENT_DIVISOR = 100;
+
 export function interpretContentStream(
   bytes: Uint8Array<ArrayBuffer>,
   resources: PdfDict,
@@ -804,7 +835,7 @@ function runContentStream(
     const x = numAt(operands, 0);
     const y = numAt(operands, 1);
     const w = numAt(operands, 2);
-    const h = numAt(operands, 3);
+    const h = numAt(operands, RE_HEIGHT_INDEX);
     const p1 = applyMatrix(ctm, { x, y });
     const p2 = applyMatrix(ctm, { x: x + w, y });
     const p3 = applyMatrix(ctm, { x: x + w, y: y + h });
@@ -898,7 +929,8 @@ function runContentStream(
       }
       const widthPer1000 = glyph?.widthPer1000 ?? FALLBACK_GLYPH_WIDTH_PER_1000;
       const byteLength = glyph?.byteLengthConsumed ?? 1;
-      const isSingleByteSpace = byteLength === 1 && codes[offset] === 0x20;
+      const isSingleByteSpace =
+        byteLength === 1 && codes[offset] === ASCII_SPACE;
       const spacing = gs.charSpace + (isSingleByteSpace ? gs.wordSpace : 0);
       // ISO 32000-1 9.4.4's own two displacement formulas. Horizontal advances by the glyph's width along x, scaled by Tz; vertical advances by the glyph's own w1y along y, which Tz does not touch since it scales horizontally only.
       const vertical = glyph?.vertical;
@@ -906,7 +938,9 @@ function runContentStream(
         vertical === undefined
           ? multiplyMatrices(
               translationMatrix(
-                ((widthPer1000 / 1000) * gs.fontSizePt + spacing) *
+                ((widthPer1000 / GLYPH_SPACE_PER_TEXT_SPACE_UNIT) *
+                  gs.fontSizePt +
+                  spacing) *
                   gs.horizScale,
                 0,
               ),
@@ -915,7 +949,10 @@ function runContentStream(
           : multiplyMatrices(
               translationMatrix(
                 0,
-                (vertical.displacementPer1000 / 1000) * gs.fontSizePt + spacing,
+                (vertical.displacementPer1000 /
+                  GLYPH_SPACE_PER_TEXT_SPACE_UNIT) *
+                  gs.fontSizePt +
+                  spacing,
               ),
               text.tm,
             );
@@ -941,8 +978,8 @@ function runContentStream(
       return undefined;
     }
     return {
-      x: vertical.positionXPer1000 / 1000,
-      y: vertical.positionYPer1000 / 1000,
+      x: vertical.positionXPer1000 / GLYPH_SPACE_PER_TEXT_SPACE_UNIT,
+      y: vertical.positionYPer1000 / GLYPH_SPACE_PER_TEXT_SPACE_UNIT,
     };
   };
 
@@ -969,7 +1006,8 @@ function runContentStream(
         advanceThroughString(el.bytes);
       } else if (el.kind === "number") {
         // ISO 32000-1 9.4.3: the adjustment is subtracted from whichever coordinate the writing mode advances along, and Tz scales the horizontal one only.
-        const adjustment = -(el.value / 1000) * gs.fontSizePt;
+        const adjustment =
+          -(el.value / GLYPH_SPACE_PER_TEXT_SPACE_UNIT) * gs.fontSizePt;
         text.tm = multiplyMatrices(
           vertical
             ? translationMatrix(0, adjustment)
@@ -1190,11 +1228,11 @@ function runContentStream(
         });
         const c2 = applyMatrix(gs.ctm, {
           x: numAt(operands, 2),
-          y: numAt(operands, 3),
+          y: numAt(operands, OPERAND_INDEX_3),
         });
         const p = applyMatrix(gs.ctm, {
-          x: numAt(operands, 4),
-          y: numAt(operands, 5),
+          x: numAt(operands, OPERAND_INDEX_4),
+          y: numAt(operands, OPERAND_INDEX_5),
         });
         currentSubpath?.segments.push({
           kind: "cubic",
@@ -1217,7 +1255,7 @@ function runContentStream(
           });
           const p = applyMatrix(gs.ctm, {
             x: numAt(operands, 2),
-            y: numAt(operands, 3),
+            y: numAt(operands, OPERAND_INDEX_3),
           });
           currentSubpath.segments.push({
             kind: "cubic",
@@ -1239,7 +1277,7 @@ function runContentStream(
         });
         const p = applyMatrix(gs.ctm, {
           x: numAt(operands, 2),
-          y: numAt(operands, 3),
+          y: numAt(operands, OPERAND_INDEX_3),
         });
         currentSubpath?.segments.push({
           kind: "cubic",
@@ -1298,7 +1336,7 @@ function runContentStream(
         gs = { ...gs, wordSpace: numAt(operands, 0) };
         break;
       case "Tz":
-        gs = { ...gs, horizScale: numAt(operands, 0) / 100 };
+        gs = { ...gs, horizScale: numAt(operands, 0) / TZ_PERCENT_DIVISOR };
         break;
       case "TL":
         gs = { ...gs, leading: numAt(operands, 0) };
