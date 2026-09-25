@@ -385,7 +385,8 @@ export {
 } from "./ooo1/ns";
 export type { Ooo1NamespacePrefix, Ooo1Extension } from "./ooo1/ns";
 
-export { transformOoo1Package, transformToOoo1Package } from "./ooo1/transform";
+export { transformOoo1Package } from "./ooo1/transform";
+export { transformToOoo1Package } from "./ooo1/transform-reverse";
 
 export {
   readSxw,
