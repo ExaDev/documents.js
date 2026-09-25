@@ -1,3 +1,11 @@
+## [1.1.108](https://github.com/ExaDev/documents.js/compare/document-operations%401.1.107...document-operations%401.1.108) (2026-09-25)
+
+
+### Dependencies
+
+- Updated documents.js to 14.4.45
+- Updated document-compute.js to 1.6.55
+
 ## [1.1.107](https://github.com/ExaDev/documents.js/compare/document-operations%401.1.106...document-operations%401.1.107) (2026-09-25)
 
 
