@@ -26,32 +26,36 @@ const VALUE_TYPE_BY_VAL_TYPE: ReadonlyMap<
   "whole" | "decimal" | "list" | "date" | "time" | "textLength" | "custom"
 > = new Map(
   // valType in [MS-XLS] order. 0x0 ("any type, no check") has no dedicated schema member and degrades to 'custom' with no operator/formula, the same "no real type signal" default readContentValidation (odf.js's own data-validation.ts) already uses for a condition it cannot parse at all; 0x7 is the genuinely custom one.
-  [
-    "custom",
-    "whole",
-    "decimal",
-    "list",
-    "date",
-    "time",
-    "textLength",
-    "custom",
-  ].map((type, index) => [index, type] as const),
+  (
+    [
+      "custom",
+      "whole",
+      "decimal",
+      "list",
+      "date",
+      "time",
+      "textLength",
+      "custom",
+    ] as const
+  ).map((type, index) => [index, type] as const),
 );
 
 // typOperator's own value table is a different ordering from SheetRuleOperatorSchema's, so this is a real mapping, not a reinterpretation of the same enum under a new name.
 const OPERATOR_BY_TYP_OPERATOR: ReadonlyMap<number, SheetRuleOperator> =
   new Map(
     // typOperator's value table in spec order, zero-based per [MS-XLS] 2.4.95.
-    [
-      "between",
-      "notBetween",
-      "equal",
-      "notEqual",
-      "greaterThan",
-      "lessThan",
-      "greaterThanOrEqual",
-      "lessThanOrEqual",
-    ].map((operator, index) => [index, operator] as const),
+    (
+      [
+        "between",
+        "notBetween",
+        "equal",
+        "notEqual",
+        "greaterThan",
+        "lessThan",
+        "greaterThanOrEqual",
+        "lessThanOrEqual",
+      ] as const
+    ).map((operator, index) => [index, operator] as const),
   );
 
 const ERROR_STYLE_BY_ERR_STYLE: ReadonlyMap<
