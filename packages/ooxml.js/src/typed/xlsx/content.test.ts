@@ -25,6 +25,7 @@ import {
   DEFAULT_COLUMN_WIDTH_CHARS,
   DEFAULT_ROW_HEIGHT_PT,
 } from "./units";
+import { EMU_PER_INCH, POINTS_PER_INCH } from "../shared/units";
 import {
   assertNeverNonEmptyContentCellValueKind,
   assertNeverNumberFormatClassKind,
@@ -40,6 +41,22 @@ function hasOwn(obj: object, key: string): boolean {
 // This suite reads real, unmodified LibreOffice-generated .xlsx fixtures (src/typed/xlsx/fixtures/*.xlsx). Both fixtures are genuine LibreOffice xlsx-exports (`soffice --headless --convert-to xlsx`) of odf.js's own src/typed/ods/fixtures/{kitchen-sink,minimal}.ods — the same feature set that package's own readOds test suite already validates against ODF's equivalent mechanisms, run back through LibreOffice's real SpreadsheetML export filter so this suite exercises genuine, LibreOffice-authored xlsx markup (column-width character units, row heights, hidden rows/columns, every value-type LibreOffice's own xlsx exporter distinguishes, a real merged range, a real cross-sheet formula, and real print settings including Print_Area/Print_Titles defined names) rather than a hand-built approximation of what that markup might look like. A handful of narrow scope-boundary/error-path tests at the end use small, synthetic, hand-built packages instead (via el/txt), mirroring readOds's own established convention for the identical reason.
 
 const FIXTURES_DIR = join(dirname(fileURLToPath(import.meta.url)), "fixtures");
+
+// toBeCloseTo's precision argument used throughout this file's point-conversion assertions: 5 decimal digits is tight enough to catch a wrong formula or unit while tolerating the ordinary floating-point rounding pixel/EMU/twip conversions produce.
+const CLOSE_TO_PRECISION = 5;
+
+// This fixture family's own repeated drawing-anchor geometry, reused verbatim across several of the chart/image describe blocks below: a two-cell-anchored drawing whose <xdr:from> col/colOff names 19050 EMU into column 0, and whose columns are 10 and 20 characters wide.
+const ANCHOR_OFFSET_X_EMU = 19050;
+const ANCHOR_OFFSET_X_PT =
+  (ANCHOR_OFFSET_X_EMU / EMU_PER_INCH) * POINTS_PER_INCH;
+const ANCHOR_COLUMN_0_WIDTH_CHARS = 10;
+const ANCHOR_COLUMN_1_WIDTH_CHARS = 20;
+// The xdr:ext size these same fixtures anchor: 1828800 x 914400 EMU, i.e. 2in x 1in.
+const TWO_INCH_EXTENT_PT = 2 * POINTS_PER_INCH;
+
+// This fixture family's own default row height (see DEFAULT_ROW_HEIGHT_PT), spanning ROW_SPAN_COUNT rows (1 through 4) for the two-cell-anchored drawings.
+const ROW_SPAN_COUNT = 3;
+const THREE_ROW_HEIGHT_PT = ROW_SPAN_COUNT * DEFAULT_ROW_HEIGHT_PT;
 
 function loadFixture(name: string): Package {
   const bytes = new Uint8Array(readFileSync(join(FIXTURES_DIR, name)));
@@ -75,13 +92,30 @@ describe("readXlsxContent: kitchen-sink.xlsx (real LibreOffice output)", () => {
   describe("column widths (real <col width> character units) and hidden columns", () => {
     it("converts the stored character-unit width to points via the documented MDW=7 pixel formula", () => {
       const widths = data.columns.map((column) => column.widthPt);
-      expect(widths[0]).toBeCloseTo(columnWidthCharsToPt(15.32), 5);
-      expect(widths[1]).toBeCloseTo(columnWidthCharsToPt(12.76), 5);
-      expect(widths[2]).toBeCloseTo(columnWidthCharsToPt(10.21), 5);
+      // This fixture's own real, LibreOffice-authored stored character-unit widths for the first three columns.
+      const FIRST_COLUMN_WIDTH_CHARS = 15.32;
+      const SECOND_COLUMN_WIDTH_CHARS = 12.76;
+      const THIRD_COLUMN_WIDTH_CHARS = 10.21;
+      expect(widths[0]).toBeCloseTo(
+        columnWidthCharsToPt(FIRST_COLUMN_WIDTH_CHARS),
+        CLOSE_TO_PRECISION,
+      );
+      expect(widths[1]).toBeCloseTo(
+        columnWidthCharsToPt(SECOND_COLUMN_WIDTH_CHARS),
+        CLOSE_TO_PRECISION,
+      );
+      expect(widths[2]).toBeCloseTo(
+        columnWidthCharsToPt(THIRD_COLUMN_WIDTH_CHARS),
+        CLOSE_TO_PRECISION,
+      );
     });
 
     it('marks column G (index 6, the Fee column) hidden via <col hidden="true">', () => {
-      const hiddenColumn = data.columns.find((column) => column.index === 6);
+      // Column G, the Fee column.
+      const HIDDEN_COLUMN_INDEX = 6;
+      const hiddenColumn = data.columns.find(
+        (column) => column.index === HIDDEN_COLUMN_INDEX,
+      );
       expect(hiddenColumn?.hidden).toBe(true);
       expect(
         data.columns.filter((column) => column.hidden === true),
@@ -94,10 +128,11 @@ describe("readXlsxContent: kitchen-sink.xlsx (real LibreOffice output)", () => {
     });
 
     it("reads one ContentSheetColumn per real <col> element (each min=max in this fixture)", () => {
-      expect(data.columns).toHaveLength(9);
-      expect(data.columns.map((column) => column.index)).toEqual([
-        0, 1, 2, 3, 4, 5, 6, 7, 8,
-      ]);
+      const COLUMN_COUNT = 9;
+      expect(data.columns).toHaveLength(COLUMN_COUNT);
+      expect(data.columns.map((column) => column.index)).toEqual(
+        Array.from({ length: COLUMN_COUNT }, (_, index) => index),
+      );
     });
 
     // Regression coverage for ExaDev/documents.js#953: this fixture's own real, LibreOffice-authored stored widths (15.32, 12.76, 10.21, ...) are exactly the kind of value that used to keep re-approximating narrower on every further write — see units.test.ts's own convergence suite for the underlying arithmetic proof and units.ts's ptToColumnWidthChars for why rounding up (never to nearest) fixes it.
@@ -152,21 +187,36 @@ describe("readXlsxContent: kitchen-sink.xlsx (real LibreOffice output)", () => {
     it("reads the header row and first data row's own explicit heights verbatim", () => {
       const headerRow = data.rows.find((row) => row.index === 0);
       const firstDataRow = data.rows.find((row) => row.index === 1);
-      expect(headerRow?.heightPt).toBe(25.5);
-      expect(firstDataRow?.heightPt).toBe(17);
+      // This fixture's own real, LibreOffice-authored stored <row ht="..."> values.
+      const HEADER_ROW_HEIGHT_PT = 25.5;
+      const FIRST_DATA_ROW_HEIGHT_PT = 17;
+      expect(headerRow?.heightPt).toBe(HEADER_ROW_HEIGHT_PT);
+      expect(firstDataRow?.heightPt).toBe(FIRST_DATA_ROW_HEIGHT_PT);
     });
 
     it('marks row 10 (index 9, "Hidden Row Content") hidden via <row hidden="true">, while its own real content still reads', () => {
-      const hiddenRow = data.rows.find((row) => row.index === 9);
+      const HIDDEN_ROW_INDEX = 9;
+      const hiddenRow = data.rows.find((row) => row.index === HIDDEN_ROW_INDEX);
       expect(hiddenRow?.hidden).toBe(true);
       const hiddenCell = data.cells.find(
-        (cell) => cell.row === 9 && cell.column === 0,
+        (cell) => cell.row === HIDDEN_ROW_INDEX && cell.column === 0,
       );
       expect(hiddenCell?.displayText).toBe("Hidden Row Content");
     });
 
     it("reads one ContentSheetRow per real <row> element — no repeat-compression mechanism to guard against, unlike ODF", () => {
-      expect(data.rows.map((row) => row.index)).toEqual([0, 1, 2, 5, 6, 9]);
+      // Rows 3, 4, 7, and 8 carry no explicit <row> element in the fixture (no height/hidden override, no cell content of their own), so no ContentSheetRow is produced for them. Row 5 is the A6:B7 merge anchor and row 6 its continuation (see the "merged range" describe block below); row 9 is the hidden row.
+      const MERGED_RANGE_ANCHOR_ROW_INDEX = 5;
+      const MERGED_RANGE_CONTINUATION_ROW_INDEX = 6;
+      const HIDDEN_ROW_INDEX = 9;
+      expect(data.rows.map((row) => row.index)).toEqual([
+        0,
+        1,
+        2,
+        MERGED_RANGE_ANCHOR_ROW_INDEX,
+        MERGED_RANGE_CONTINUATION_ROW_INDEX,
+        HIDDEN_ROW_INDEX,
+      ]);
     });
   });
 
@@ -181,6 +231,14 @@ describe("readXlsxContent: kitchen-sink.xlsx (real LibreOffice output)", () => {
       return cell;
     };
 
+    // This fixture's own column layout, by role (columns 0/1/2 are exempt from naming: string, number, boolean).
+    const DUE_DATE_COLUMN = 3;
+    const DUE_TIME_COLUMN = 4;
+    const RATE_COLUMN = 5;
+    const FEE_COLUMN = 6;
+    const FORMULA_COLUMN = 7;
+    const ERROR_COLUMN = 8;
+
     it('reads a shared-string cell (t="s")', () => {
       expect(cellAt(0).value).toEqual({ kind: "string", value: "Acme Corp" });
       expect(cellAt(0).displayText).toBe("Acme Corp");
@@ -194,13 +252,22 @@ describe("readXlsxContent: kitchen-sink.xlsx (real LibreOffice output)", () => {
     // Cross-checked against an INDEPENDENT oracle, not just against this reader's own view of the format codes: the source these fixtures were exported from, odf.js's own src/typed/ods/fixtures/kitchen-sink.ods, declares these same four cells explicitly typed — office:value-type="date" office:date-value="2026-07-31", office:value-type="time" office:time-value="PT14H30M00S", office:value-type="percentage" office:value="0.4256", and office:value-type="currency" office:currency="GBP" office:value="99.99". Every kind, value, and the ISO 4217 code recovered below matches what the author originally entered, recovered from nothing but a style index and a numFmt string.
     it("recovers the date/time/percentage/currency kinds xlsx itself has no cell type for, from the numFmt code each cell's own style points at", () => {
       // Due Date: numFmtId 166, "[$-809]yyyy\\-mm\\-dd" — a locale-only bracket (NOT currency) plus real y/m/d codes; serial 46234 in this workbook's 1900 date system (workbookPr@date1904="false").
-      expect(cellAt(3).value).toEqual({ kind: "date", value: "2026-07-31" });
+      expect(cellAt(DUE_DATE_COLUMN).value).toEqual({
+        kind: "date",
+        value: "2026-07-31",
+      });
       // Due Time: numFmtId 167, "[$-809]hh:mm:ss" — the 'mm' resolves to MINUTES here (nearest preceding code is 'hh'), unlike the identical 'mm' in the date format above, where it resolves to a month.
-      expect(cellAt(4).value).toEqual({ kind: "time", value: "14:30:00" });
+      expect(cellAt(DUE_TIME_COLUMN).value).toEqual({
+        kind: "time",
+        value: "14:30:00",
+      });
       // Rate: numFmtId 168, "[$-809]0.00%" — the value stays the raw stored fraction, not the 42.56 Excel displays.
-      expect(cellAt(5).value).toEqual({ kind: "percentage", value: 0.4256 });
+      expect(cellAt(RATE_COLUMN).value).toEqual({
+        kind: "percentage",
+        value: 0.4256,
+      });
       // Fee: numFmtId 169, "[$GBP-809]#,##0.00" — an ISO 4217 code between the '$' and the '-', so `currency` is populated rather than left honestly absent.
-      expect(cellAt(6).value).toEqual({
+      expect(cellAt(FEE_COLUMN).value).toEqual({
         kind: "currency",
         value: 99.99,
         currency: "GBP",
@@ -208,19 +275,21 @@ describe("readXlsxContent: kitchen-sink.xlsx (real LibreOffice output)", () => {
     });
 
     it("carries each cell's own raw numFmt code verbatim alongside its classified kind", () => {
-      expect(cellAt(3).numberFormatCode).toBe("[$-809]yyyy\\-mm\\-dd");
-      expect(cellAt(4).numberFormatCode).toBe("[$-809]hh:mm:ss");
-      expect(cellAt(5).numberFormatCode).toBe("[$-809]0.00%");
-      expect(cellAt(6).numberFormatCode).toBe("[$GBP-809]#,##0.00");
+      expect(cellAt(DUE_DATE_COLUMN).numberFormatCode).toBe(
+        "[$-809]yyyy\\-mm\\-dd",
+      );
+      expect(cellAt(DUE_TIME_COLUMN).numberFormatCode).toBe("[$-809]hh:mm:ss");
+      expect(cellAt(RATE_COLUMN).numberFormatCode).toBe("[$-809]0.00%");
+      expect(cellAt(FEE_COLUMN).numberFormatCode).toBe("[$GBP-809]#,##0.00");
       // This fixture's own Amount cell resolves through a redefined numFmtId 164 whose own code IS the literal string "General" (some producers write it out explicitly rather than relying on the built-in default) — carried verbatim like any other resolved code, not specially suppressed.
       expect(cellAt(1).numberFormatCode).toBe("General");
     });
 
     it("leaves displayText as the plain typed-value spelling — this reader classifies a number format, it does not render through one", () => {
-      expect(cellAt(3).displayText).toBe("2026-07-31");
-      expect(cellAt(4).displayText).toBe("14:30:00");
-      expect(cellAt(5).displayText).toBe("0.4256"); // not "42.56%"
-      expect(cellAt(6).displayText).toBe("99.99"); // not "£99.99"
+      expect(cellAt(DUE_DATE_COLUMN).displayText).toBe("2026-07-31");
+      expect(cellAt(DUE_TIME_COLUMN).displayText).toBe("14:30:00");
+      expect(cellAt(RATE_COLUMN).displayText).toBe("0.4256"); // not "42.56%"
+      expect(cellAt(FEE_COLUMN).displayText).toBe("99.99"); // not "£99.99"
     });
 
     it('reads a boolean cell (t="b") and derives an Excel-style TRUE/FALSE displayText — its own numFmtId 165 ("TRUE";"TRUE";"FALSE") style never gets a say, since only numeric cells are classified', () => {
@@ -229,13 +298,13 @@ describe("readXlsxContent: kitchen-sink.xlsx (real LibreOffice output)", () => {
     });
 
     it("carries a real formula string verbatim, alongside its own cached numeric result", () => {
-      const formulaCell = cellAt(7);
+      const formulaCell = cellAt(FORMULA_COLUMN);
       expect(formulaCell.formula).toBe("SUM(B2:B3)");
       expect(formulaCell.value).toEqual({ kind: "number", value: 1276.56 });
     });
 
     it('reads a genuine formula-error cell (=1/0) as kind "error", carrying the real #DIV/0! text as both value and displayText', () => {
-      const errorCell = cellAt(8);
+      const errorCell = cellAt(ERROR_COLUMN);
       expect(errorCell.formula).toBe("1/0");
       expect(errorCell.value).toEqual({ kind: "error", value: "#DIV/0!" });
       expect(errorCell.displayText).toBe("#DIV/0!");
@@ -243,9 +312,13 @@ describe("readXlsxContent: kitchen-sink.xlsx (real LibreOffice output)", () => {
   });
 
   describe('merged range (<mergeCells><mergeCell ref="A6:B7"/></mergeCells>)', () => {
+    // A6:B7, 0-based: row 5 (the anchor, A6) through row 6 (the continuation, row 7).
+    const MERGED_RANGE_ANCHOR_ROW = 5;
+    const MERGED_RANGE_CONTINUATION_ROW = 6;
+
     it("reads the anchor cell with its own colSpan/rowSpan and text", () => {
       const anchor = data.cells.find(
-        (cell) => cell.row === 5 && cell.column === 0,
+        (cell) => cell.row === MERGED_RANGE_ANCHOR_ROW && cell.column === 0,
       );
       expect(anchor).toMatchObject({
         colSpan: 2,
@@ -256,13 +329,21 @@ describe("readXlsxContent: kitchen-sink.xlsx (real LibreOffice output)", () => {
 
     it('emits nothing at all for the covered positions (B6, A7, B7) — xlsx writes a bare, valueless <c> for each, and readCell\'s own "no v/is/f -> skip" rule already drops them', () => {
       expect(
-        data.cells.find((cell) => cell.row === 5 && cell.column === 1),
+        data.cells.find(
+          (cell) => cell.row === MERGED_RANGE_ANCHOR_ROW && cell.column === 1,
+        ),
       ).toBeUndefined();
       expect(
-        data.cells.find((cell) => cell.row === 6 && cell.column === 0),
+        data.cells.find(
+          (cell) =>
+            cell.row === MERGED_RANGE_CONTINUATION_ROW && cell.column === 0,
+        ),
       ).toBeUndefined();
       expect(
-        data.cells.find((cell) => cell.row === 6 && cell.column === 1),
+        data.cells.find(
+          (cell) =>
+            cell.row === MERGED_RANGE_CONTINUATION_ROW && cell.column === 1,
+        ),
       ).toBeUndefined();
     });
   });
@@ -280,13 +361,17 @@ describe("readXlsxContent: kitchen-sink.xlsx (real LibreOffice output)", () => {
   describe("print settings (real <pageSetup>/<printOptions>/<pageMargins>, and sheet-scoped _xlnm.Print_Area/_xlnm.Print_Titles)", () => {
     it('resolves the Data sheet\'s own A4 page size (paperSize="9") and inch-based margins converted to points', () => {
       expect(data.printSettings.pageSize).toEqual(PAGE_SIZE_A4);
+      // This fixture's own stored <pageMargins left="..."/top="..."> values, in inches.
+      const LEFT_MARGIN_INCHES = 0.590277777777778;
+      const TOP_MARGIN_INCHES = 0.570833333333333;
+      const MARGIN_CLOSE_TO_PRECISION = 6;
       expect(data.printSettings.margins.leftPt).toBeCloseTo(
-        0.590277777777778 * 72,
-        6,
+        LEFT_MARGIN_INCHES * POINTS_PER_INCH,
+        MARGIN_CLOSE_TO_PRECISION,
       );
       expect(data.printSettings.margins.topPt).toBeCloseTo(
-        0.570833333333333 * 72,
-        6,
+        TOP_MARGIN_INCHES * POINTS_PER_INCH,
+        MARGIN_CLOSE_TO_PRECISION,
       );
     });
 
@@ -300,7 +385,9 @@ describe("readXlsxContent: kitchen-sink.xlsx (real LibreOffice output)", () => {
     });
 
     it('reads a percentage scale from pageSetup@scale="150" when sheetPr/pageSetUpPr@fitToPage is "false"', () => {
-      expect(data.printSettings.scalePercent).toBe(150);
+      // This fixture's own stored pageSetup@scale.
+      const DATA_SHEET_SCALE_PERCENT = 150;
+      expect(data.printSettings.scalePercent).toBe(DATA_SHEET_SCALE_PERCENT);
       expect(data.printSettings.fitToPages).toBeUndefined();
     });
 
@@ -327,9 +414,12 @@ describe("readXlsxContent: kitchen-sink.xlsx (real LibreOffice output)", () => {
     });
 
     it('reads manual page breaks from rowBreaks/colBreaks <brk id="..."> at the break\'s own real 0-based index', () => {
+      // This fixture's own stored <rowBreaks>/<colBreaks> brk id values, 0-based.
+      const ROW_BREAK_INDEX = 15;
+      const COLUMN_BREAK_INDEX = 3;
       expect(data.printSettings.manualBreaks).toEqual({
-        rows: [15],
-        columns: [3],
+        rows: [ROW_BREAK_INDEX],
+        columns: [COLUMN_BREAK_INDEX],
       });
       expect(summary.printSettings.manualBreaks).toBeUndefined();
     });
@@ -385,7 +475,9 @@ describe("readXlsxContent: minimal.xlsx (real LibreOffice output, default/unmodi
     expect(sheet.printSettings.gridlines).toBe(false);
     expect(sheet.printSettings.headers).toBe(false);
     expect(sheet.printSettings.pageOrder).toBe("downThenOver");
-    expect(sheet.printSettings.scalePercent).toBe(100);
+    // Excel's own default explicit scale for an unmodified worksheet.
+    const DEFAULT_SCALE_PERCENT = 100;
+    expect(sheet.printSettings.scalePercent).toBe(DEFAULT_SCALE_PERCENT);
     expect(sheet.printSettings.fitToPages).toBeUndefined();
     expect(sheet.printSettings.printRange).toBeUndefined();
     expect(sheet.printSettings.repeatRows).toBeUndefined();
@@ -1011,7 +1103,11 @@ describe("readXlsxContent: row/column geometry edge cases (synthetic packages)",
     const worksheet = el("worksheet", {}, [
       el("sheetData", {}, [el("row", { r: "5" })]),
     ]);
-    expect(readSheetFromWorksheet(worksheet).rows[0]?.index).toBe(4);
+    // r="5" minus 1 (1-based to 0-based), not r="5" plus 1.
+    const EXPECTED_ROW_INDEX = 4;
+    expect(readSheetFromWorksheet(worksheet).rows[0]?.index).toBe(
+      EXPECTED_ROW_INDEX,
+    );
   });
 
   it("marks a row hidden only when its own hidden attribute reads true, never as a side effect of any other attribute", () => {
@@ -1050,7 +1146,12 @@ describe("readXlsxContent: row/column geometry edge cases (synthetic packages)",
       el("sheetData", {}),
     ]);
     const columns = readSheetFromWorksheet(worksheet).columns;
-    expect(columns[0]?.widthPt).toBeCloseTo(columnWidthCharsToPt(20), 10);
+    const COLUMN_WIDTH_CHARS = 20;
+    const WIDTH_PT_CLOSE_TO_PRECISION = 10;
+    expect(columns[0]?.widthPt).toBeCloseTo(
+      columnWidthCharsToPt(COLUMN_WIDTH_CHARS),
+      WIDTH_PT_CLOSE_TO_PRECISION,
+    );
     expect(hasOwn(columns[1] ?? {}, "widthPt")).toBe(false);
   });
 
@@ -1207,21 +1308,27 @@ describe("readXlsxContent: merged-range span arithmetic (synthetic packages)", (
   it("computes colSpan and rowSpan from the true end-minus-start distance, not an end-plus-start sum, for a merge anchored away from row/column 0", () => {
     const { cells } = readFirstCell(mergedWorksheet("B2:D4", "B2"));
     const anchor = cells[0];
-    expect(anchor?.colSpan).toBe(3);
-    expect(anchor?.rowSpan).toBe(3);
+    // B2:D4 spans 3 columns (B, C, D) and 3 rows (2, 3, 4).
+    const SPAN_OF_THREE = 3;
+    expect(anchor?.colSpan).toBe(SPAN_OF_THREE);
+    expect(anchor?.rowSpan).toBe(SPAN_OF_THREE);
   });
 
   it("sets colSpan alone for a 1-row, multi-column merge, never fabricating a rowSpan", () => {
     const { cells } = readFirstCell(mergedWorksheet("B2:D2", "B2"));
     const anchor = cells[0];
-    expect(anchor?.colSpan).toBe(3);
+    // B2:D2 spans 3 columns (B, C, D).
+    const SPAN_OF_THREE = 3;
+    expect(anchor?.colSpan).toBe(SPAN_OF_THREE);
     expect(hasOwn(anchor ?? {}, "rowSpan")).toBe(false);
   });
 
   it("sets rowSpan alone for a 1-column, multi-row merge, never fabricating a colSpan", () => {
     const { cells } = readFirstCell(mergedWorksheet("B2:B4", "B2"));
     const anchor = cells[0];
-    expect(anchor?.rowSpan).toBe(3);
+    // B2:B4 spans 3 rows (2, 3, 4).
+    const SPAN_OF_THREE = 3;
+    expect(anchor?.rowSpan).toBe(SPAN_OF_THREE);
     expect(hasOwn(anchor ?? {}, "colSpan")).toBe(false);
   });
 
@@ -1380,14 +1487,28 @@ describe("readXlsxContent: chart graphic frames", () => {
     expect(chart?.anchorColumn).toBe(0);
     expect(chart?.anchorRow).toBe(1);
     // The frame: anchored at column 0 offset 19050 EMU, row 1, spanning to the start of column 2 and row 4 — absolute position from the sheet's left edge through the declared column widths and default row height, size the difference of the two anchors.
-    const col0 = columnWidthCharsToPt(10);
-    const col1 = columnWidthCharsToPt(20);
-    const offsetX = (19050 / 914400) * 72;
-    expect(chart?.offsetXPt).toBeCloseTo(offsetX, 5);
-    expect(chart?.frame.xPt).toBeCloseTo(offsetX, 5);
-    expect(chart?.frame.yPt).toBeCloseTo(15, 5);
-    expect(chart?.frame.widthPt).toBeCloseTo(col0 + col1 - offsetX, 5);
-    expect(chart?.frame.heightPt).toBeCloseTo(45, 5);
+    const col0 = columnWidthCharsToPt(ANCHOR_COLUMN_0_WIDTH_CHARS);
+    const col1 = columnWidthCharsToPt(ANCHOR_COLUMN_1_WIDTH_CHARS);
+    expect(chart?.offsetXPt).toBeCloseTo(
+      ANCHOR_OFFSET_X_PT,
+      CLOSE_TO_PRECISION,
+    );
+    expect(chart?.frame.xPt).toBeCloseTo(
+      ANCHOR_OFFSET_X_PT,
+      CLOSE_TO_PRECISION,
+    );
+    expect(chart?.frame.yPt).toBeCloseTo(
+      DEFAULT_ROW_HEIGHT_PT,
+      CLOSE_TO_PRECISION,
+    );
+    expect(chart?.frame.widthPt).toBeCloseTo(
+      col0 + col1 - ANCHOR_OFFSET_X_PT,
+      CLOSE_TO_PRECISION,
+    );
+    expect(chart?.frame.heightPt).toBeCloseTo(
+      THREE_ROW_HEIGHT_PT,
+      CLOSE_TO_PRECISION,
+    );
     // The payload is the cached model, verbatim c:v text, laid out the way the pptx chart reader spells its table: a header row of series names over a category column, one row per category.
     expect(chart?.document.kind).toBe("spreadsheet");
     const sheet =
@@ -1641,13 +1762,27 @@ describe("readXlsxContent: chart graphic frames (oneCellAnchor)", () => {
     expect(chart?.anchorColumn).toBe(0);
     expect(chart?.anchorRow).toBe(1);
     // Position from the from-marker through the same grid geometry the two-cell spelling uses; size verbatim from xdr:ext (1828800 x 914400 EMU = 144 x 72 pt).
-    const offsetX = (19050 / 914400) * 72;
-    expect(chart?.offsetXPt).toBeCloseTo(offsetX, 5);
+    expect(chart?.offsetXPt).toBeCloseTo(
+      ANCHOR_OFFSET_X_PT,
+      CLOSE_TO_PRECISION,
+    );
     expect(chart?.offsetYPt).toBe(0);
-    expect(chart?.frame.xPt).toBeCloseTo(offsetX, 5);
-    expect(chart?.frame.yPt).toBeCloseTo(15, 5);
-    expect(chart?.frame.widthPt).toBeCloseTo(144, 5);
-    expect(chart?.frame.heightPt).toBeCloseTo(72, 5);
+    expect(chart?.frame.xPt).toBeCloseTo(
+      ANCHOR_OFFSET_X_PT,
+      CLOSE_TO_PRECISION,
+    );
+    expect(chart?.frame.yPt).toBeCloseTo(
+      DEFAULT_ROW_HEIGHT_PT,
+      CLOSE_TO_PRECISION,
+    );
+    expect(chart?.frame.widthPt).toBeCloseTo(
+      TWO_INCH_EXTENT_PT,
+      CLOSE_TO_PRECISION,
+    );
+    expect(chart?.frame.heightPt).toBeCloseTo(
+      POINTS_PER_INCH,
+      CLOSE_TO_PRECISION,
+    );
     expect(chart?.document.kind).toBe("spreadsheet");
     const sheet =
       chart?.document.kind === "spreadsheet"
@@ -1811,13 +1946,21 @@ describe("readXlsxContent: drawing pictures", () => {
     expect(image?.anchorColumn).toBe(0);
     expect(image?.anchorRow).toBe(1);
     // Same anchor geometry as the chart row: anchored at column 0 offset 19050 EMU, row 1, spanning to the start of column 2 and row 4, size the difference of the two anchors.
-    const col0 = columnWidthCharsToPt(10);
-    const col1 = columnWidthCharsToPt(20);
-    const offsetX = (19050 / 914400) * 72;
-    expect(image?.offsetXPt).toBeCloseTo(offsetX, 5);
+    const col0 = columnWidthCharsToPt(ANCHOR_COLUMN_0_WIDTH_CHARS);
+    const col1 = columnWidthCharsToPt(ANCHOR_COLUMN_1_WIDTH_CHARS);
+    expect(image?.offsetXPt).toBeCloseTo(
+      ANCHOR_OFFSET_X_PT,
+      CLOSE_TO_PRECISION,
+    );
     expect(image?.offsetYPt).toBe(0);
-    expect(image?.widthPt).toBeCloseTo(col0 + col1 - offsetX, 5);
-    expect(image?.heightPt).toBeCloseTo(45, 5);
+    expect(image?.widthPt).toBeCloseTo(
+      col0 + col1 - ANCHOR_OFFSET_X_PT,
+      CLOSE_TO_PRECISION,
+    );
+    expect(image?.heightPt).toBeCloseTo(
+      THREE_ROW_HEIGHT_PT,
+      CLOSE_TO_PRECISION,
+    );
     // A drawing carrying only a picture, no chart graphic frame at all, leaves embeddedObjects absent rather than an empty array — the same "undefined means none, [] means none for images specifically" split the module doc comment states.
     expect(document.sheets[0]?.embeddedObjects).toBeUndefined();
   });
@@ -1962,12 +2105,14 @@ describe("readXlsxContent: drawing pictures (oneCellAnchor)", () => {
     // Position and anchor fields come from the from-marker exactly as in the two-cell spelling: column 0 offset 19050 EMU, row 1, no offset.
     expect(image?.anchorColumn).toBe(0);
     expect(image?.anchorRow).toBe(1);
-    const offsetX = (19050 / 914400) * 72;
-    expect(image?.offsetXPt).toBeCloseTo(offsetX, 5);
+    expect(image?.offsetXPt).toBeCloseTo(
+      ANCHOR_OFFSET_X_PT,
+      CLOSE_TO_PRECISION,
+    );
     expect(image?.offsetYPt).toBe(0);
     // The size is the anchor's own xdr:ext verbatim: 1828800 x 914400 EMU is 2 x 1 inches, 144 x 72 pt.
-    expect(image?.widthPt).toBeCloseTo(144, 5);
-    expect(image?.heightPt).toBeCloseTo(72, 5);
+    expect(image?.widthPt).toBeCloseTo(TWO_INCH_EXTENT_PT, CLOSE_TO_PRECISION);
+    expect(image?.heightPt).toBeCloseTo(POINTS_PER_INCH, CLOSE_TO_PRECISION);
   });
 
   it("skips a one-cell picture whose ext size is not positive, the same degenerate-anchor guard the two-cell spelling has", () => {
@@ -2109,11 +2254,15 @@ describe("readXlsxContent: drawing pictures (absoluteAnchor)", () => {
     // pos 60 pt sits 7.5 pt into column 1 (52.5 pt wide column 0 first); pos 15 pt sits exactly on the row-1 boundary, the same cell a from-marker row=1 rowOff=0 names.
     expect(image?.anchorColumn).toBe(1);
     expect(image?.anchorRow).toBe(1);
-    expect(image?.offsetXPt).toBeCloseTo(7.5, 5);
+    const ABSOLUTE_ANCHOR_OFFSET_X_PT = 7.5;
+    expect(image?.offsetXPt).toBeCloseTo(
+      ABSOLUTE_ANCHOR_OFFSET_X_PT,
+      CLOSE_TO_PRECISION,
+    );
     expect(image?.offsetYPt).toBe(0);
     // Size verbatim from xdr:ext: 1828800 x 914400 EMU is 144 x 72 pt.
-    expect(image?.widthPt).toBeCloseTo(144, 5);
-    expect(image?.heightPt).toBeCloseTo(72, 5);
+    expect(image?.widthPt).toBeCloseTo(TWO_INCH_EXTENT_PT, CLOSE_TO_PRECISION);
+    expect(image?.heightPt).toBeCloseTo(POINTS_PER_INCH, CLOSE_TO_PRECISION);
   });
 
   it("skips an absolute picture whose ext size is not positive, the same degenerate-anchor guard the marker spellings have", () => {
@@ -2126,7 +2275,10 @@ describe("readXlsxContent: drawing pictures (absoluteAnchor)", () => {
 
   it("locates a position sitting exactly on a column boundary as the start of the next column, not an offset into the previous one", () => {
     // Column 0 is 10 chars = columnWidthCharsToPt(10) pt exactly, i.e. that many EMU at 12700 EMU/pt — pos x lands exactly on the column 0/1 boundary, pos y at 0 keeps the row/height math out of it entirely.
-    const boundaryEmu = Math.round(columnWidthCharsToPt(10) * 12700);
+    const EMU_PER_POINT = 12700;
+    const boundaryEmu = Math.round(
+      columnWidthCharsToPt(ANCHOR_COLUMN_0_WIDTH_CHARS) * EMU_PER_POINT,
+    );
     const document = readXlsxContent(
       absolutePicturePackage("1828800", "914400", String(boundaryEmu), "0"),
     );
@@ -2136,7 +2288,7 @@ describe("readXlsxContent: drawing pictures (absoluteAnchor)", () => {
     const image = document.sheets[0]?.images[0];
     // A position exactly at the boundary belongs to the column it starts (column 1, offset 0), not the tail end of column 0 (column 0, offset = the whole column width).
     expect(image?.anchorColumn).toBe(1);
-    expect(image?.offsetXPt).toBeCloseTo(0, 5);
+    expect(image?.offsetXPt).toBeCloseTo(0, CLOSE_TO_PRECISION);
   });
 
   it("round-trips the whole document through ContentDocumentSchema, so the absolute-anchored sheet image is schema-valid as read", () => {
@@ -2299,13 +2451,30 @@ describe("readXlsxContent: chart graphic frames (absoluteAnchor)", () => {
     const chart = document.sheets[0]?.embeddedObjects?.[0];
     expect(chart?.objectKind).toBe("chart");
     // The frame keeps the page-absolute position verbatim (762000 x 190500 EMU = 60 x 15 pt); the anchor fields name the same re-based cell the picture row lands on: column 1 offset 7.5 pt, row 1 offset 0.
-    expect(chart?.frame.xPt).toBeCloseTo(60, 5);
-    expect(chart?.frame.yPt).toBeCloseTo(15, 5);
-    expect(chart?.frame.widthPt).toBeCloseTo(144, 5);
-    expect(chart?.frame.heightPt).toBeCloseTo(72, 5);
+    const ABSOLUTE_FRAME_X_PT = 60;
+    const ABSOLUTE_ANCHOR_OFFSET_X_PT = 7.5;
+    expect(chart?.frame.xPt).toBeCloseTo(
+      ABSOLUTE_FRAME_X_PT,
+      CLOSE_TO_PRECISION,
+    );
+    expect(chart?.frame.yPt).toBeCloseTo(
+      DEFAULT_ROW_HEIGHT_PT,
+      CLOSE_TO_PRECISION,
+    );
+    expect(chart?.frame.widthPt).toBeCloseTo(
+      TWO_INCH_EXTENT_PT,
+      CLOSE_TO_PRECISION,
+    );
+    expect(chart?.frame.heightPt).toBeCloseTo(
+      POINTS_PER_INCH,
+      CLOSE_TO_PRECISION,
+    );
     expect(chart?.anchorColumn).toBe(1);
     expect(chart?.anchorRow).toBe(1);
-    expect(chart?.offsetXPt).toBeCloseTo(7.5, 5);
+    expect(chart?.offsetXPt).toBeCloseTo(
+      ABSOLUTE_ANCHOR_OFFSET_X_PT,
+      CLOSE_TO_PRECISION,
+    );
     expect(chart?.offsetYPt).toBe(0);
     expect(chart?.document.kind).toBe("spreadsheet");
   });
@@ -2439,8 +2608,12 @@ describe("readXlsxContent: drawing pictures (mixed anchor spellings)", () => {
     if (document.kind !== "spreadsheet") {
       throw new Error("expected a spreadsheet ContentDocument");
     }
+    // This fixture's own third picture (absolute-anchor spelling) is the only one whose anchorRow needs naming; the others fall inside the ignored small-integer range.
+    const THIRD_PICTURE_ANCHOR_ROW = 3;
     expect(document.sheets[0]?.images.map((image) => image.anchorRow)).toEqual([
-      2, 1, 3,
+      2,
+      1,
+      THIRD_PICTURE_ANCHOR_ROW,
     ]);
     expect(
       document.sheets[0]?.images.map((image) => image.anchorColumn),
@@ -2598,7 +2771,7 @@ describe("readXlsxContent: SheetGridGeometry (synthetic packages)", () => {
     // Column 0 must fall back to the default width, not the malformed range's huge declared one.
     expect(images[0]?.widthPt).toBeCloseTo(
       columnWidthCharsToPt(DEFAULT_COLUMN_WIDTH_CHARS),
-      5,
+      CLOSE_TO_PRECISION,
     );
   });
 
@@ -2616,7 +2789,11 @@ describe("readXlsxContent: SheetGridGeometry (synthetic packages)", () => {
         onePicTwoCellAnchor({ toCol: 1 }),
       ),
     );
-    expect(images[0]?.widthPt).toBeCloseTo(columnWidthCharsToPt(40), 5);
+    const INNER_RANGE_WIDTH_CHARS = 40;
+    expect(images[0]?.widthPt).toBeCloseTo(
+      columnWidthCharsToPt(INNER_RANGE_WIDTH_CHARS),
+      CLOSE_TO_PRECISION,
+    );
   });
 
   it("reads a real sheetFormatPr defaultRowHeight rather than falling back to the built-in default", () => {
@@ -2629,7 +2806,11 @@ describe("readXlsxContent: SheetGridGeometry (synthetic packages)", () => {
         onePicTwoCellAnchor({ toRow: 1 }),
       ),
     );
-    expect(images[0]?.heightPt).toBeCloseTo(30, 5);
+    const DECLARED_DEFAULT_ROW_HEIGHT_PT = 30;
+    expect(images[0]?.heightPt).toBeCloseTo(
+      DECLARED_DEFAULT_ROW_HEIGHT_PT,
+      CLOSE_TO_PRECISION,
+    );
   });
 
   it("reads a declared row's own height, offset by one from its 1-based r, in preference to the default", () => {
@@ -2643,7 +2824,11 @@ describe("readXlsxContent: SheetGridGeometry (synthetic packages)", () => {
       ),
     );
     // r="1" names the FIRST row (0-based index 0) — the very row this anchor spans, not the one after it.
-    expect(images[0]?.heightPt).toBeCloseTo(50, 5);
+    const DECLARED_ROW_HEIGHT_PT = 50;
+    expect(images[0]?.heightPt).toBeCloseTo(
+      DECLARED_ROW_HEIGHT_PT,
+      CLOSE_TO_PRECISION,
+    );
   });
 
   it("ignores a declared row whose r is below 1, or whose ht does not parse, falling back to the default height", () => {
@@ -2659,7 +2844,12 @@ describe("readXlsxContent: SheetGridGeometry (synthetic packages)", () => {
         onePicTwoCellAnchor({ toRow: 1 }),
       ),
     );
-    expect(images[0]?.heightPt).toBeCloseTo(15, 5);
+    // Coincidentally the same value as this package's own DEFAULT_ROW_HEIGHT_PT, but asserting the fixture's real, explicit sheetFormatPr@defaultRowHeight="15" is honoured, not merely that the built-in fallback happens to match it.
+    const FIXTURE_DEFAULT_ROW_HEIGHT_PT = 15;
+    expect(images[0]?.heightPt).toBeCloseTo(
+      FIXTURE_DEFAULT_ROW_HEIGHT_PT,
+      CLOSE_TO_PRECISION,
+    );
   });
 
   it("defaults editAs to twoCell (sizing from the to-marker) when the attribute is absent, and reads it when present", () => {
@@ -2670,9 +2860,10 @@ describe("readXlsxContent: SheetGridGeometry (synthetic packages)", () => {
       ),
     );
     // No editAs at all: sized from the to-marker difference (2 default-width columns), not the picture's own 1"x1" (72pt) xdr:ext.
+    const TO_MARKER_COLUMN_SPAN = 2;
     expect(defaulted[0]?.widthPt).toBeCloseTo(
-      2 * columnWidthCharsToPt(DEFAULT_COLUMN_WIDTH_CHARS),
-      5,
+      TO_MARKER_COLUMN_SPAN * columnWidthCharsToPt(DEFAULT_COLUMN_WIDTH_CHARS),
+      CLOSE_TO_PRECISION,
     );
 
     const oneCell = imagesOf(
@@ -2682,7 +2873,10 @@ describe("readXlsxContent: SheetGridGeometry (synthetic packages)", () => {
       ),
     );
     // editAs="oneCell" on a twoCellAnchor (Excel's real spelling for "move but don't size with cells"): sized from the shape's own transform extent (1in = 72pt) instead, ignoring the to-marker entirely.
-    expect(oneCell[0]?.widthPt).toBeCloseTo(72, 5);
+    expect(oneCell[0]?.widthPt).toBeCloseTo(
+      POINTS_PER_INCH,
+      CLOSE_TO_PRECISION,
+    );
   });
 
   it("never applies a declared column range to an index below its own min, even when that index is within the range's max", () => {
@@ -2698,7 +2892,7 @@ describe("readXlsxContent: SheetGridGeometry (synthetic packages)", () => {
     // Column 0 sits below the declared range's own min (2, 0-based) — it must fall back to the default width, not the range's huge declared one merely because 0 <= the range's own max.
     expect(images[0]?.widthPt).toBeCloseTo(
       columnWidthCharsToPt(DEFAULT_COLUMN_WIDTH_CHARS),
-      5,
+      CLOSE_TO_PRECISION,
     );
   });
 });
@@ -2714,7 +2908,8 @@ describe("readXlsxContent: anchor marker fields (synthetic packages)", () => {
     );
     // The row axis carries a real offset; the column axis stays at its own default (0).
     expect(images[0]?.offsetXPt).toBe(0);
-    expect(images[0]?.offsetYPt).toBeCloseTo(4, 5);
+    const ROW_OFFSET_PT = 4;
+    expect(images[0]?.offsetYPt).toBeCloseTo(ROW_OFFSET_PT, CLOSE_TO_PRECISION);
   });
 
   it("extracts a marker child's numeric text past a non-text sibling node, rather than letting that sibling corrupt the joined value", () => {
@@ -2728,7 +2923,8 @@ describe("readXlsxContent: anchor marker fields (synthetic packages)", () => {
       ),
     );
     // The comment sibling contributes nothing to the joined text; the real numeric value is "5", not corrupted by whatever a non-text node's own placeholder text would join in as.
-    expect(images[0]?.anchorColumn).toBe(5);
+    const EXPECTED_ANCHOR_COLUMN = 5;
+    expect(images[0]?.anchorColumn).toBe(EXPECTED_ANCHOR_COLUMN);
   });
 });
 
@@ -3081,7 +3277,14 @@ describe("readXlsxContent: dataValidation and conditionalFormatting — what is 
         ]),
       ]),
     );
-    const anchor = cells.find((cell) => cell.row === 5 && cell.column === 5);
+    // F6 in A1 notation, 0-based: column F is index 5, row 6 is index 5.
+    const RESIDUE_ANCHOR_ROW = 5;
+    const RESIDUE_ANCHOR_COLUMN = 5;
+    const anchor = cells.find(
+      (cell) =>
+        cell.row === RESIDUE_ANCHOR_ROW &&
+        cell.column === RESIDUE_ANCHOR_COLUMN,
+    );
     expect(anchor).toMatchObject({ value: { kind: "empty" }, displayText: "" });
   });
 
