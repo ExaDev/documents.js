@@ -6,20 +6,43 @@ import { recoverFromFormatError } from "../biff/records";
 import { recordByteLength, type RecordGroup } from "../biff/substreams";
 import { RECORD_CF } from "../biff/record-types";
 
+// DXFN's own flags word bit layout ([MS-XLS] 2.4): grbit1's high bits name which sub-structures follow (num at 25, font at 26, alignment at 27, border at 28, pattern at 29); DXFALC and DXFBdr are each 8 bytes; DXFPat's word packs a 6-bit fill pattern at bit 10 and 7-bit colour indexes at bits 16 and 23. A CF record's own header before the dxf is 6 bytes, Ref8U is 8, and CFHeader's nID occupies the top 15 bits of its word past bit 1.
+const DXFN_FLAG_NUM_SHIFT = 25;
+const DXFN_FLAG_FONT_SHIFT = 26;
+const DXFN_FLAG_ALC_SHIFT = 27;
+const DXFN_FLAG_BORDER_SHIFT = 28;
+const DXFN_FLAG_PATTERN_SHIFT = 29;
+const FLAG_MASK = 0x1;
+const DXFALC_SIZE = 8;
+const DXFBDR_SIZE = 8;
+const PAT_FILL_PATTERN_SHIFT = 10;
+const PAT_FILL_PATTERN_MASK = 0x3f;
+const PAT_FOREGROUND_SHIFT = 16;
+const PAT_BACKGROUND_SHIFT = 23;
+const PAT_COLOUR_INDEX_MASK = 0x7f;
+const CF_HEADER_SIZE = 6;
+const REF8U_SIZE = 8;
+const NID_SHIFT = 1;
+const NID_MASK = 0x7fff;
+
 // CondFmt ([MS-XLS] 2.4.56) marks the start of 1-3 CF ([MS-XLS] 2.4.42) records sharing one cell-range list — the binary equivalent of ODF's calcext:conditional-format wrapping several rule children, and xlsx's own conditionalFormatting wrapping several cfRule children (ExaDev/documents.js#758). Base BIFF8 (Excel 97) conditional formatting has exactly two rule shapes, both handled here: a comparison ("Cell Value Is") condition and a formula condition. Every richer rule type Excel 2007+ added — top10, aboveAverage, colour scale, data bar, icon set, duplicate/unique values, text/date conditions — has no representation in the base CF record at all; it rides a CF12 record instead, or, for a rule Excel keeps expressible as a legacy formula condition for pre-2007 readers (the containsText family), a CFEx extension record glued to this CondFmt's own CF children by nID (conditional-format-ex.ts).
 //
 // A CF record's own layout is a real, precisely published Microsoft spec (https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/d6dcadf2-7e07-4f7d-a60a-0f643780225d), not a producer convention transcribed from source the way ODF's calcext:condition needed: ct (condition type: 0x01 comparison, 0x02 formula — the latter has no closed-form structure to promote, the same 'expression' boundary xlsx's own cfRule reading and this package's data-validation.ts both already draw), cp (the comparison operator when ct is 0x01), cce1/cce2 (byte lengths of the two formula operands), a DXFN structure naming the rule's own resulting font-colour/fill-background override, then the two CFParsedFormulaNoCCE operands themselves — the identical Ptg token grammar a cell's own Formula record carries, read with the same parseFormulaText this reader already uses there.
 
-const CP_TO_OPERATOR: ReadonlyMap<number, SheetRuleOperator> = new Map([
-  [0x01, "between"],
-  [0x02, "notBetween"],
-  [0x03, "equal"],
-  [0x04, "notEqual"],
-  [0x05, "greaterThan"],
-  [0x06, "lessThan"],
-  [0x07, "greaterThanOrEqual"],
-  [0x08, "lessThanOrEqual"],
-]);
+// cp values 1 through 8 in the spec's own order; the map is derived from that order rather than restating each code.
+const CP_OPERATOR_NAMES = [
+  "between",
+  "notBetween",
+  "equal",
+  "notEqual",
+  "greaterThan",
+  "lessThan",
+  "greaterThanOrEqual",
+  "lessThanOrEqual",
+] as const;
+const CP_TO_OPERATOR: ReadonlyMap<number, SheetRuleOperator> = new Map(
+  CP_OPERATOR_NAMES.map((operator, index) => [index + 1, operator] as const),
+);
 
 export interface RawConditionalFormatFill {
   readonly fillPattern: number;
@@ -44,7 +67,10 @@ export interface RawConditionalFormat {
 //
 // dxfnum (when ibitAtrNum) comes first and is skipped, never read: this reader has no use for a conditional format's own number-format override. Its own length is unambiguous ONLY in the DXFNumIFmt form (ibitAtrNum but not fIfmtUser — a fixed 2 bytes); the DXFNumUsr form (fIfmtUser set, a user format-code string) states its own total size in a leading cb field, but [MS-XLS]'s own prose for cb ("specifies the size of this structure") does not settle whether cb counts itself, and no second real-world implementation was found to confirm it either way. Rather than guess and risk silently misaligning every field that follows (dxffntd, dxfpat — exactly the style data this function exists to extract), a CF whose dxf carries a DXFNumUsr degrades to no style at all: an honest "we don't have one" beats a wrong colour, the same "narrow rather than guess" boundary this package's own data-validation.ts and odf.js's conditional-format.ts already draw elsewhere.
 const DXFFNTD_LENGTH = 122; // cchFont(1) + [stFontName+unused1, always 63 bytes combined] + Stxp(16) + icvFore(4) + reserved(4) + tsNinch(4) + fSssNinch(4) + fUlsNinch(4) + fBlsNinch(4) + unused2(4) + ich(4) + cch(4) + iFnt(2)
-const DXFFNTD_ICV_FORE_OFFSET = 64 + 16; // past the 64-byte font-name block and the 16-byte Stxp
+const DXFFNTD_FONT_NAME_BLOCK_SIZE = 64;
+const DXFFNTD_STXP_SIZE = 16;
+const DXFFNTD_ICV_FORE_OFFSET =
+  DXFFNTD_FONT_NAME_BLOCK_SIZE + DXFFNTD_STXP_SIZE; // past both
 const DXF_DEFAULT_FOREGROUND_TEXT_COLOR = 32767; // DXFFntD.icvFore's own documented "use the default foreground text colour" sentinel — not a real override
 
 // Exported for reuse by conditional-format-12.ts: DXFN12 ([MS-XLS] 2.4) is a cbDxf-prefixed wrapper around this exact same DXFN payload, so a CF12 ct 0x05 filter rule's style (the one CF12 rule shape [MS-XLS] does not force cbDxf to zero for) resolves through the identical font/fill extraction a base CF record's style already does.
@@ -56,11 +82,11 @@ export function parseDxfStyle(
     const cursor = new BlockCursor([dxfBytes]);
     const flags1 = cursor.u32();
     const flags2 = cursor.u16();
-    const hasNum = ((flags1 >>> 25) & 0x1) !== 0;
-    const hasFnt = ((flags1 >>> 26) & 0x1) !== 0;
-    const hasAlc = ((flags1 >>> 27) & 0x1) !== 0;
-    const hasBdr = ((flags1 >>> 28) & 0x1) !== 0;
-    const hasPat = ((flags1 >>> 29) & 0x1) !== 0;
+    const hasNum = ((flags1 >>> DXFN_FLAG_NUM_SHIFT) & FLAG_MASK) !== 0;
+    const hasFnt = ((flags1 >>> DXFN_FLAG_FONT_SHIFT) & FLAG_MASK) !== 0;
+    const hasAlc = ((flags1 >>> DXFN_FLAG_ALC_SHIFT) & FLAG_MASK) !== 0;
+    const hasBdr = ((flags1 >>> DXFN_FLAG_BORDER_SHIFT) & FLAG_MASK) !== 0;
+    const hasPat = ((flags1 >>> DXFN_FLAG_PATTERN_SHIFT) & FLAG_MASK) !== 0;
     const fIfmtUser = (flags2 & 0x1) !== 0;
 
     if (hasNum) {
@@ -85,10 +111,10 @@ export function parseDxfStyle(
     }
 
     if (hasAlc) {
-      cursor.skip(8); // DXFALC, not modelled — ContentSheetConditionalFormatStyleSchema has no alignment field
+      cursor.skip(DXFALC_SIZE); // DXFALC, not modelled
     }
     if (hasBdr) {
-      cursor.skip(8); // DXFBdr, not modelled — the schema's own top comment limits style to font colour and fill background
+      cursor.skip(DXFBDR_SIZE); // DXFBdr, not modelled
     }
 
     let fill: RawConditionalFormatFill | undefined;
@@ -96,9 +122,12 @@ export function parseDxfStyle(
       // DXFPat ([MS-XLS] 2.4.97's own nested structure): unused1(10 bits) fls(6) icvForeground(7) icvBackground(7) unused2(2), LSB first — the identical bit-packing XF's own CellXF fill fields use (biff/xf-colors.ts's resolveFillBackground/resolveIcvColor), so resolution is deferred to content.ts the same way a regular cell's own fill already is.
       const patWord = cursor.u32();
       fill = {
-        fillPattern: (patWord >>> 10) & 0x3f,
-        fillForegroundIcv: (patWord >>> 16) & 0x7f,
-        fillBackgroundIcv: (patWord >>> 23) & 0x7f,
+        fillPattern:
+          (patWord >>> PAT_FILL_PATTERN_SHIFT) & PAT_FILL_PATTERN_MASK,
+        fillForegroundIcv:
+          (patWord >>> PAT_FOREGROUND_SHIFT) & PAT_COLOUR_INDEX_MASK,
+        fillBackgroundIcv:
+          (patWord >>> PAT_BACKGROUND_SHIFT) & PAT_COLOUR_INDEX_MASK,
       };
     }
 
@@ -135,7 +164,7 @@ function parseCfBytes(record: RecordGroup):
     const cp = cursor.u8();
     const cce1 = cursor.u16();
     const cce2 = cursor.u16();
-    const dxfLength = recordByteLength(record) - 6 - cce1 - cce2;
+    const dxfLength = recordByteLength(record) - CF_HEADER_SIZE - cce1 - cce2;
     const dxfBytes = cursor.take(dxfLength);
     const rgce1 = cursor.take(cce1);
     const rgce2 = cursor.take(cce2);
@@ -221,8 +250,8 @@ export function readCondFmtGroup(
     const cursor = new BlockCursor(condFmt.blocks);
     const ccf = cursor.u16();
     const fToughRecalcAndNID = cursor.u16(); // A - fToughRecalc(1 bit, unused) + nID(15 bits), [MS-XLS] 2.5.56
-    const nID = (fToughRecalcAndNID >>> 1) & 0x7fff;
-    cursor.skip(8); // refBound (Ref8U) — a bounding superset of sqref, redundant for this reader's purposes
+    const nID = (fToughRecalcAndNID >>> NID_SHIFT) & NID_MASK;
+    cursor.skip(REF8U_SIZE); // refBound (Ref8U), a redundant superset of sqref
     const crefCount = cursor.u16();
     const ranges: ContentSheetRange[] = [];
     for (let index = 0; index < crefCount; index += 1) {
