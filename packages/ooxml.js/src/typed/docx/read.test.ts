@@ -10,6 +10,7 @@ import type {
   ContentTable,
 } from "document-schema.js";
 import { rgbHexToColor } from "document-schema.js";
+import { COMPOUND_FILE_MAGIC } from "archive-codec";
 import { el, txt } from "../../xml/fragment";
 import { bytesToBase64 } from "byte-codec";
 import { zipPackage } from "../../zip";
@@ -19,7 +20,7 @@ import {
   minimalPptxBytes,
   minimalXlsxBytes,
 } from "../../test-support/embedded";
-import { eighthPointsToPt } from "../shared/units";
+import { POINTS_PER_INCH, eighthPointsToPt } from "../shared/units";
 import { attr, childrenWithTag, elementsWithTag, rootElement } from "../util";
 import { readDocxContent } from "./read";
 import { buildDocxPackageFromContent } from "./write";
@@ -386,7 +387,9 @@ describe("readDocxContent: style cascade", () => {
     const doc = readDocxContent(buildFixturePackage());
     const title = asParagraph(doc.sections[0]?.blocks[0]);
     expect(title.styleId).toBe("Heading1");
-    expect(title.runs[0]?.sizePt).toBe(18); // Heading1's own 36 half-points, overriding docDefaults' 20
+    // Heading1's own sz val="36" half-points, halved to 18pt, overriding docDefaults' own 20 half-points (10pt).
+    const HEADING1_SIZE_PT = 18;
+    expect(title.runs[0]?.sizePt).toBe(HEADING1_SIZE_PT);
     expect(title.runs[0]?.bold).toBe(true); // from Heading1
   });
 
@@ -485,7 +488,11 @@ describe("readDocxContent: heading levels", () => {
 
   it("narrows Word outline levels beyond six onto the schema heading domain's top level", () => {
     const doc = readDocxContent(buildHeadingFixturePackage());
-    expect(asParagraph(doc.sections[0]?.blocks[3]).headingLevel).toBe(6);
+    // The schema's ContentHeading domain tops out at level 6; Word's own outline levels run 1-9, so anything from 6 upward narrows onto this same top level.
+    const MAX_SCHEMA_HEADING_LEVEL = 6;
+    expect(asParagraph(doc.sections[0]?.blocks[3]).headingLevel).toBe(
+      MAX_SCHEMA_HEADING_LEVEL,
+    );
   });
 
   it("leaves headingLevel undefined for a paragraph with no outline level anywhere in its cascade", () => {
@@ -740,7 +747,12 @@ describe("readDocxContent: tables", () => {
   it("reads column widths and a horizontally-merged cell's colSpan and background", () => {
     const doc = readDocxContent(buildFixturePackage());
     const table = asTable(doc.sections[0]?.blocks[19]);
-    expect(table.columns.map((c) => c.widthPt)).toEqual([144, 144]);
+    // Both gridCol widths are 2880 twips in the fixture below (twipsToPt(2880)).
+    const GRID_COL_WIDTH_PT = 144;
+    expect(table.columns.map((c) => c.widthPt)).toEqual([
+      GRID_COL_WIDTH_PT,
+      GRID_COL_WIDTH_PT,
+    ]);
     expect(table.rows[0]?.cells[0]?.colSpan).toBe(2);
     expect(table.rows[0]?.cells[0]?.background).toEqual({
       kind: "solid",
@@ -769,7 +781,9 @@ describe("readDocxContent: tables", () => {
   it("computes a vMerge anchor's rowSpan by scanning subsequent continuation rows, leaving them empty", () => {
     const doc = readDocxContent(buildFixturePackage());
     const table = asTable(doc.sections[0]?.blocks[19]);
-    expect(table.rows[1]?.cells[0]?.rowSpan).toBe(3);
+    // The vMerge anchor plus its two continuation rows below.
+    const MERGED_CELL_ROW_SPAN = 3;
+    expect(table.rows[1]?.cells[0]?.rowSpan).toBe(MERGED_CELL_ROW_SPAN);
     expect(table.rows[2]?.cells[0]?.blocks).toEqual([]);
     expect(table.rows[3]?.cells[0]?.blocks).toEqual([]);
     expect(asParagraph(table.rows[1]?.cells[1]?.blocks[0]).runs[0]?.text).toBe(
@@ -797,7 +811,13 @@ describe("readDocxContent: tables", () => {
     };
     const doc = readDocxContent(pkg);
     const table = asTable(doc.sections[0]?.blocks[0]);
-    expect(table.rows[0]?.heightPt).toBeCloseTo(28, 5); // 560 twips / 20 = 28 pt
+    // 560 twips (twipsToPt(560)); a 5-digit precision is tighter than this exact division needs but costs nothing.
+    const ROW_HEIGHT_PT = 28;
+    const ROW_HEIGHT_PRECISION = 5;
+    expect(table.rows[0]?.heightPt).toBeCloseTo(
+      ROW_HEIGHT_PT,
+      ROW_HEIGHT_PRECISION,
+    );
   });
 });
 
@@ -1300,8 +1320,11 @@ describe("readDocxContent: images", () => {
     // section 1 blocks: [0] secondSectionPara, [1] inlineImagePara (empty text), [2] its image, [3] floatingImagePara, [4] its image.
     const image = asImage(doc.sections[1]?.blocks[2]);
     expect(image.format).toBe("png");
-    expect(image.widthPt).toBe(72); // 914400 EMU -> 1in -> 72pt
-    expect(image.heightPt).toBe(36); // 457200 EMU -> 0.5in -> 36pt
+    // 914400 EMU is exactly 1 inch.
+    expect(image.widthPt).toBe(POINTS_PER_INCH);
+    // 457200 EMU is exactly half an inch, half of POINTS_PER_INCH.
+    const HALF_INCH_IMAGE_HEIGHT_PT = 36;
+    expect(image.heightPt).toBe(HALF_INCH_IMAGE_HEIGHT_PT);
     expect(image.altText).toBe("Inline alt text");
     expect(image.base64).toBe(
       "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=",
@@ -1353,7 +1376,9 @@ describe("readDocxContent: lifted-image anchors (anchorRunIndex/anchorOffset)", 
     // The image sits between two runs: anchor names the run whose text it followed (index 0, "Hello ") and the position after that run's whole text.
     const image = asImage(doc.sections[0]?.blocks[1]);
     expect(image.anchorRunIndex).toBe(0);
-    expect(image.anchorOffset).toBe(6);
+    // "Hello " (including its trailing space) is 6 characters.
+    const ANCHOR_OFFSET_AFTER_HELLO_SPACE = 6;
+    expect(image.anchorOffset).toBe(ANCHOR_OFFSET_AFTER_HELLO_SPACE);
   });
 
   it("anchors an image at the paragraph's very start to (0, 0)", () => {
@@ -1378,7 +1403,9 @@ describe("readDocxContent: lifted-image anchors (anchorRunIndex/anchorOffset)", 
     );
     const image = asImage(doc.sections[0]?.blocks[1]);
     expect(image.anchorRunIndex).toBe(0);
-    expect(image.anchorOffset).toBe(3);
+    // "foo" is 3 characters.
+    const ANCHOR_OFFSET_AFTER_FOO = 3;
+    expect(image.anchorOffset).toBe(ANCHOR_OFFSET_AFTER_FOO);
   });
 
   it("anchors an image inside a hyperlink through the run the walk emitted for it", () => {
@@ -1409,7 +1436,9 @@ describe("readDocxContent: lifted-image anchors (anchorRunIndex/anchorOffset)", 
     // Runs as walked: [0] "See ", [1] "the proof" (hyperlink-wrapped), [2] the image's own empty run — the anchor names run 1 at its full length.
     const image = asImage(doc.sections[0]?.blocks[1]);
     expect(image.anchorRunIndex).toBe(1);
-    expect(image.anchorOffset).toBe(9);
+    // "the proof" is 9 characters.
+    const ANCHOR_OFFSET_AT_HYPERLINK_RUN_END = 9;
+    expect(image.anchorOffset).toBe(ANCHOR_OFFSET_AT_HYPERLINK_RUN_END);
   });
 
   it("round-trips an end-of-paragraph image's anchor through buildDocxPackageFromContent", () => {
@@ -1422,7 +1451,9 @@ describe("readDocxContent: lifted-image anchors (anchorRunIndex/anchorOffset)", 
     const after = readDocxContent(buildDocxPackageFromContent(before));
     const image = asImage(after.sections[0]?.blocks[1]);
     expect(image.anchorRunIndex).toBe(0);
-    expect(image.anchorOffset).toBe(8);
+    // "Signed: " (including its trailing space) is 8 characters.
+    const ANCHOR_OFFSET_AFTER_SIGNED_COLON_SPACE = 8;
+    expect(image.anchorOffset).toBe(ANCHOR_OFFSET_AFTER_SIGNED_COLON_SPACE);
   });
 });
 
@@ -1533,7 +1564,9 @@ describe("readDocxContent: embedded OLE objects", () => {
       base64: bytesToBase64(minimalXlsxBytes()),
     };
     const doc = readDocxContent(pkg);
-    expect(doc.sections[0]?.blocks).toHaveLength(3);
+    // The object's own paragraph, the embedded object block, and the lifted drawing image after it.
+    const EXPECTED_BLOCK_COUNT = 3;
+    expect(doc.sections[0]?.blocks).toHaveLength(EXPECTED_BLOCK_COUNT);
     expect(asEmbeddedObject(doc.sections[0]?.blocks[1]).objectKind).toBe(
       "spreadsheet",
     );
@@ -1576,12 +1609,19 @@ describe("readDocxContent: embedded OLE objects", () => {
     const pkg = oleObjectFixturePackage({
       target: "embeddings/oleObject1.bin",
     });
+    // Arbitrary filler bytes with no meaning of their own beyond being distinct values after the two ignorable ones (0x01, 0x02) above them.
+    const ARBITRARY_FILLER_BYTE_3 = 0x03;
+    const ARBITRARY_FILLER_BYTE_4 = 0x04;
     pkg.parts["word/embeddings/oleObject1.bin"] = {
       kind: "binary",
+      // The genuine CFB/OLE2 magic, followed by arbitrary filler bytes with no walkable compound-file structure behind them, matching the CompoundFileFormatError this decode is expected to throw and degrade past. The filler bytes' own values carry no meaning; they simply count upward.
       base64: bytesToBase64(
         new Uint8Array([
-          0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1, 0x01, 0x02, 0x03,
-          0x04,
+          ...COMPOUND_FILE_MAGIC,
+          0x01,
+          0x02,
+          ARBITRARY_FILLER_BYTE_3,
+          ARBITRARY_FILLER_BYTE_4,
         ]),
       ),
     };
@@ -1800,7 +1840,9 @@ describe("embedded OLE objects: write-side round trip", () => {
     };
     const written = buildDocxPackageFromContent(readDocxContent(pkg));
     const after = readDocxContent(written);
-    expect(after.sections[0]?.blocks).toHaveLength(3);
+    // The shared paragraph plus the two w:object runs, both recovered as their own embedded block.
+    const EXPECTED_BLOCK_COUNT = 3;
+    expect(after.sections[0]?.blocks).toHaveLength(EXPECTED_BLOCK_COUNT);
     expect(asEmbeddedObject(after.sections[0]?.blocks[1]).objectKind).toBe(
       "spreadsheet",
     );
@@ -1829,7 +1871,9 @@ describe("embedded OLE objects: write-side round trip", () => {
     const after = readDocxContent(
       buildDocxPackageFromContent(readDocxContent(pkg)),
     );
-    expect(after.sections[0]?.blocks).toHaveLength(3);
+    // The object's own paragraph, the embedded object block, and the lifted drawing image after it.
+    const EXPECTED_BLOCK_COUNT = 3;
+    expect(after.sections[0]?.blocks).toHaveLength(EXPECTED_BLOCK_COUNT);
     expect(asEmbeddedObject(after.sections[0]?.blocks[1]).objectKind).toBe(
       "spreadsheet",
     );
@@ -2288,7 +2332,9 @@ describe("readDocxContent: a mid-run page-type w:br splits the paragraph", () =>
     ]);
     const doc = readDocxContent(paragraphPackage(paragraph));
     const blocks = doc.sections[0]?.blocks ?? [];
-    expect(blocks).toHaveLength(3);
+    // The paragraph's own text before the page break, the pageBreak marker block itself, and the paragraph continuing after it.
+    const EXPECTED_BLOCK_COUNT = 3;
+    expect(blocks).toHaveLength(EXPECTED_BLOCK_COUNT);
     expect(asParagraph(blocks[0]).runs.map((r) => r.text)).toEqual(["before"]);
     expect(blocks[1]?.kind).toBe("pageBreak");
     expect(asParagraph(blocks[2]).runs.map((r) => r.text)).toEqual(["after"]);
@@ -2306,7 +2352,9 @@ describe("readDocxContent: a mid-run page-type w:br splits the paragraph", () =>
     ]);
     const doc = readDocxContent(paragraphPackage(paragraph));
     const blocks = doc.sections[0]?.blocks ?? [];
-    expect(blocks).toHaveLength(3);
+    // The paragraph's own text before the page break, the pageBreak marker block itself, and the paragraph continuing after it.
+    const EXPECTED_BLOCK_COUNT = 3;
+    expect(blocks).toHaveLength(EXPECTED_BLOCK_COUNT);
     expect(asParagraph(blocks[0]).runs.map((r) => r.text)).toEqual([
       "first run",
       "mid before",
@@ -2431,7 +2479,9 @@ describe("readDocxContent: a mid-run page-type w:br splits the paragraph", () =>
     ]);
     const doc = readDocxContent(paragraphPackage(paragraph));
     const blocks = doc.sections[0]?.blocks ?? [];
-    expect(blocks).toHaveLength(3);
+    // The paragraph's own text before the page break, the pageBreak marker block itself, and the paragraph continuing after it.
+    const EXPECTED_BLOCK_COUNT = 3;
+    expect(blocks).toHaveLength(EXPECTED_BLOCK_COUNT);
     expect(asParagraph(blocks[0]).runs[0]?.text).toBe("first");
     expect(blocks[1]?.kind).toBe("pageBreak");
     expect(asParagraph(blocks[2]).runs[0]?.text).toBe("second\nthird");
@@ -2503,7 +2553,9 @@ describe("readDocxContent: a mid-run page-type w:br splits the paragraph", () =>
     ]);
     const doc = readDocxContent(paragraphPackage(paragraph));
     const blocks = doc.sections[0]?.blocks ?? [];
-    expect(blocks).toHaveLength(3);
+    // The paragraph's own text before the page break, the pageBreak marker block itself, and the paragraph continuing after it.
+    const EXPECTED_BLOCK_COUNT = 3;
+    expect(blocks).toHaveLength(EXPECTED_BLOCK_COUNT);
     expect(asParagraph(blocks[0]).constructs).toBeUndefined();
     const after = asParagraph(blocks[2]);
     expect(after.runs.map((r) => r.text)).toEqual(["after", "tail", "trail"]);
@@ -3156,14 +3208,16 @@ describe("readDocxContent: cell border w:start/w:end aliases, default width, and
         el("w:end", { "w:val": "single", "w:color": "445566" }),
       ]),
     );
+    // Half a point in eighth-point units, the default this test's own name describes for a missing @w:sz.
+    const DEFAULT_BORDER_WIDTH_EIGHTH_POINTS = 4;
     expect(table.rows[0]?.cells[0]?.borders?.left).toEqual({
       color: rgbHexToColor("112233"),
-      widthPt: eighthPointsToPt(4),
+      widthPt: eighthPointsToPt(DEFAULT_BORDER_WIDTH_EIGHTH_POINTS),
       style: "solid",
     });
     expect(table.rows[0]?.cells[0]?.borders?.right).toEqual({
       color: rgbHexToColor("445566"),
-      widthPt: eighthPointsToPt(4),
+      widthPt: eighthPointsToPt(DEFAULT_BORDER_WIDTH_EIGHTH_POINTS),
       style: "solid",
     });
   });
@@ -3191,15 +3245,21 @@ describe("readDocxContent: cell border w:start/w:end aliases, default width, and
   });
 
   it("reads a right-only border edge with an explicit @w:sz", () => {
+    // Matches this fixture's own w:right/@w:sz="16" (2pt).
+    const BORDER_WIDTH_EIGHTH_POINTS = 16;
     const table = tableWithCellBorders(
       el("w:tcBorders", {}, [
-        el("w:right", { "w:val": "single", "w:sz": "16", "w:color": "010203" }),
+        el("w:right", {
+          "w:val": "single",
+          "w:sz": String(BORDER_WIDTH_EIGHTH_POINTS),
+          "w:color": "010203",
+        }),
       ]),
     );
     expect(table.rows[0]?.cells[0]?.borders).toEqual({
       right: {
         color: rgbHexToColor("010203"),
-        widthPt: eighthPointsToPt(16),
+        widthPt: eighthPointsToPt(BORDER_WIDTH_EIGHTH_POINTS),
         style: "solid",
       },
     });
@@ -3322,7 +3382,9 @@ describe("readDocxContent: block-level bookmarks, duplicate ids, and out-of-orde
     expect(asParagraph(doc.sections[0]?.blocks[3]).runs[0]?.text).toBe(
       "Unnamed bookmark paragraph",
     );
-    expect(doc.sections[0]?.blocks).toHaveLength(4);
+    // constructStart for the named bookmark, its paragraph, the matching constructEnd, then the unnamed bookmark's own paragraph — an unnamed w:bookmarkStart/End pair opens no construct block of its own.
+    const EXPECTED_BLOCK_COUNT = 4;
+    expect(doc.sections[0]?.blocks).toHaveLength(EXPECTED_BLOCK_COUNT);
   });
 
   it("drops a range marker pair with a duplicate id (two starts sharing one id)", () => {
@@ -4185,7 +4247,9 @@ describe("readDocxContent: discovery-order tie-breaks between constructs sharing
       el("w:bookmarkEnd", { "w:id": "7" }),
     ]);
     const blocks = doc.sections[0]?.blocks ?? [];
-    expect(blocks).toHaveLength(5);
+    // constructStart for the bookmark, constructStart for the content control, the paragraph it wraps, and the two matching constructEnds, in that open/close order.
+    const EXPECTED_BLOCK_COUNT = 5;
+    expect(blocks).toHaveLength(EXPECTED_BLOCK_COUNT);
     expect(asConstructStart(blocks[0]).descriptor).toEqual({
       kind: "anchor",
       anchorType: "bookmark",
@@ -4211,7 +4275,9 @@ describe("readDocxContent: discovery-order tie-breaks between constructs sharing
       el("w:bookmarkEnd", { "w:id": "10" }),
     ]);
     const blocks = doc.sections[0]?.blocks ?? [];
-    expect(blocks).toHaveLength(7);
+    // constructStart(Wide), the "One" paragraph, constructStart(FirstPoint), constructEnd(FirstPoint), constructEnd(Wide), constructStart(SecondPoint), constructEnd(SecondPoint).
+    const EXPECTED_BLOCK_COUNT = 7;
+    expect(blocks).toHaveLength(EXPECTED_BLOCK_COUNT);
     expect(asConstructStart(blocks[0]).descriptor).toEqual({
       kind: "anchor",
       anchorType: "bookmark",
@@ -4393,7 +4459,9 @@ describe("readDocxContent: table column and merge arithmetic", () => {
     const rows = asTable(
       readDocxContent(paragraphPackage(table)).sections[0]?.blocks[0],
     ).rows;
-    expect(rows[0]?.cells.length).toBe(3);
+    // 3 w:gridCol entries: the gridSpan="2" cell counts as itself plus one placeholder continuation cell, plus the trailing plain cell.
+    const GRID_COLUMN_COUNT = 3;
+    expect(rows[0]?.cells.length).toBe(GRID_COLUMN_COUNT);
     expect(rows[0]?.cells[0]?.colSpan).toBe(2);
     expect(rows[0]?.cells[1]?.blocks).toEqual([]);
     expect(rows[0]?.cells[2]?.colSpan).toBeUndefined();
@@ -4411,9 +4479,10 @@ describe("readDocxContent: table column and merge arithmetic", () => {
       ]),
     ]);
     const doc = readDocxContent(paragraphPackage(table));
+    // The first gridCol's 1440 twips is exactly 1 inch (POINTS_PER_INCH); the second has no @w:w at all, hence zero.
     expect(
       asTable(doc.sections[0]?.blocks[0]).columns.map((c) => c.widthPt),
-    ).toEqual([72, 0]);
+    ).toEqual([POINTS_PER_INCH, 0]);
   });
 });
 
@@ -4510,7 +4579,9 @@ describe("readDocxContent: paragraph-scoped comment markers and empty-paragraph 
     ]);
     const doc = readDocxContent(paragraphPackage(paragraph));
     const blocks = doc.sections[0]?.blocks ?? [];
-    expect(blocks).toHaveLength(3);
+    // The bookmark's constructStart, the (empty) paragraph it wraps, and the matching constructEnd.
+    const EXPECTED_BLOCK_COUNT = 3;
+    expect(blocks).toHaveLength(EXPECTED_BLOCK_COUNT);
     expect(asConstructStart(blocks[0]).descriptor).toEqual({
       kind: "anchor",
       anchorType: "bookmark",
@@ -4679,7 +4750,11 @@ describe("readDocxContent: lifted-image anchor offsets across tab, break, and de
     ]);
     const doc = readDocxContent(paragraphPackage(paragraph, offsetParts()));
     expect(anchorOf(doc).anchorRunIndex).toBe(0);
-    expect(anchorOf(doc).anchorOffset).toBe(3);
+    // "ab" (2 characters) plus the tab counted as one character of offset.
+    const ANCHOR_OFFSET_AFTER_AB_PLUS_CONTROL_CHAR = 3;
+    expect(anchorOf(doc).anchorOffset).toBe(
+      ANCHOR_OFFSET_AFTER_AB_PLUS_CONTROL_CHAR,
+    );
   });
 
   it("counts a line break before an image in the same run as one character of offset", () => {
@@ -4692,7 +4767,11 @@ describe("readDocxContent: lifted-image anchor offsets across tab, break, and de
     ]);
     const doc = readDocxContent(paragraphPackage(paragraph, offsetParts()));
     expect(anchorOf(doc).anchorRunIndex).toBe(0);
-    expect(anchorOf(doc).anchorOffset).toBe(3);
+    // "ab" (2 characters) plus the line break counted as one character of offset.
+    const ANCHOR_OFFSET_AFTER_AB_PLUS_CONTROL_CHAR = 3;
+    expect(anchorOf(doc).anchorOffset).toBe(
+      ANCHOR_OFFSET_AFTER_AB_PLUS_CONTROL_CHAR,
+    );
   });
 
   it("counts a carriage return before an image in the same run as one character of offset", () => {
@@ -4705,7 +4784,11 @@ describe("readDocxContent: lifted-image anchor offsets across tab, break, and de
     ]);
     const doc = readDocxContent(paragraphPackage(paragraph, offsetParts()));
     expect(anchorOf(doc).anchorRunIndex).toBe(0);
-    expect(anchorOf(doc).anchorOffset).toBe(3);
+    // "ab" (2 characters) plus the carriage return counted as one character of offset.
+    const ANCHOR_OFFSET_AFTER_AB_PLUS_CONTROL_CHAR = 3;
+    expect(anchorOf(doc).anchorOffset).toBe(
+      ANCHOR_OFFSET_AFTER_AB_PLUS_CONTROL_CHAR,
+    );
   });
 
   it("counts deleted text before an image inside a carried deletion", () => {
