@@ -24,7 +24,7 @@ import { cellReference } from "../shared/a1";
 import {} from "../shared/border";
 import {} from "./read";
 import { synthesiseContentValidationCondition } from "./data-validation";
-import { coverageKey } from "./write";
+import { coverageKey } from "./write-canonical";
 
 import {
   calextDateForTimePeriod,
