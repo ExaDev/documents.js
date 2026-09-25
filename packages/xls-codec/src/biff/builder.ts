@@ -2,6 +2,13 @@
 //
 // Segments are kept as separate Uint8Array parts and concatenated once in build(), rather than pushed byte-by-byte into a single growing array or spread into it: a spread (`array.push(...bytes)`) blows the engine's argument-count limit for a large byte run (the same hazard biff/strings.ts's readCharacters comment notes for String.fromCharCode), which a shared string table's long strings can realistically reach.
 
+// Little-endian byte assembly: each byte's own place value is 8 bits.
+const BYTE_MASK = 0xff;
+const WORD_MASK = 0xffff;
+const BITS_PER_BYTE = 8;
+const DOUBLE_BITS_PER_BYTE = 16;
+const TRIPLE_BITS_PER_BYTE = 24;
+const DOUBLE_BYTE_LENGTH = 8;
 export class RecordBuilder {
   private readonly parts: Uint8Array<ArrayBuffer>[] = [];
 
@@ -11,22 +18,25 @@ export class RecordBuilder {
   }
 
   u8(value: number): this {
-    return this.pushBytes(value & 0xff);
+    return this.pushBytes(value & BYTE_MASK);
   }
 
   u16(value: number): this {
-    const bits = value & 0xffff;
-    return this.pushBytes(bits & 0xff, (bits >>> 8) & 0xff);
+    const bits = value & WORD_MASK;
+    return this.pushBytes(
+      bits & BYTE_MASK,
+      (bits >>> BITS_PER_BYTE) & BYTE_MASK,
+    );
   }
 
   /** Composed with multiplication rather than `<< 24`, matching biff/cursor.ts's own u32 reader: a shift would produce a signed result for any value with the top bit set. */
   u32(value: number): this {
     const bits = value >>> 0;
     return this.pushBytes(
-      bits & 0xff,
-      (bits >>> 8) & 0xff,
-      (bits >>> 16) & 0xff,
-      (bits >>> 24) & 0xff,
+      bits & BYTE_MASK,
+      (bits >>> BITS_PER_BYTE) & BYTE_MASK,
+      (bits >>> DOUBLE_BITS_PER_BYTE) & BYTE_MASK,
+      (bits >>> TRIPLE_BITS_PER_BYTE) & BYTE_MASK,
     );
   }
 
@@ -36,7 +46,7 @@ export class RecordBuilder {
 
   /** An Xnum ([MS-XLS] 2.5.342): a little-endian IEEE 754 double. */
   f64(value: number): this {
-    const buffer = new ArrayBuffer(8);
+    const buffer = new ArrayBuffer(DOUBLE_BYTE_LENGTH);
     new DataView(buffer).setFloat64(0, value, true);
     this.parts.push(new Uint8Array(buffer));
     return this;
