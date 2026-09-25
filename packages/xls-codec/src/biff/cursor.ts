@@ -1,5 +1,11 @@
 import { BiffFormatError } from "./records";
 
+// Byte reassembly places and the double's own byte length.
+const BITS_PER_BYTE = 8;
+const DOUBLE_BITS_PER_BYTE = 16;
+const DOUBLE_BYTE_PLACE = 0x10000;
+const DOUBLE_BYTES = 8;
+
 /** u8()'s own context label — reused, not restated, by take()'s per-byte copy loop below: once take()'s own upfront remainingTotal() check has passed, that loop's nextByte() call can never actually run out (there are provably at least `count` bytes left across the blocks it is about to walk), so its label has nothing of its own to name and borrows the one real caller's already-exercised text instead of building an independent, permanently unobservable template literal every copy. */
 const U8_CONTEXT = "u8";
 
@@ -67,14 +73,14 @@ export class BlockCursor {
   u16(): number {
     const low = this.nextByte("u16");
     const high = this.nextByte("u16");
-    return low | (high << 8);
+    return low | (high << BITS_PER_BYTE);
   }
 
   u32(): number {
     // Composed with multiplication rather than `<< 24`, which would produce a signed result for any value with the top bit set.
     const low = this.u16();
     const high = this.u16();
-    return low + high * 0x10000;
+    return low + high * DOUBLE_BYTE_PLACE;
   }
 
   i32(): number {
@@ -83,12 +89,12 @@ export class BlockCursor {
 
   /** A signed 16-bit integer, sign-extended by shifting the raw value out of and back into the low 16 bits — what XTI's itabFirst/itabLast ([MS-XLS] 2.5.344) and a handful of other structures carry. */
   i16(): number {
-    return (this.u16() << 16) >> 16;
+    return (this.u16() << DOUBLE_BITS_PER_BYTE) >> DOUBLE_BITS_PER_BYTE;
   }
 
   /** An Xnum ([MS-XLS] 2.5.342): a little-endian IEEE 754 double. */
   f64(): number {
-    const raw = this.take(8);
+    const raw = this.take(DOUBLE_BYTES);
     return new DataView(raw.buffer, raw.byteOffset, raw.byteLength).getFloat64(
       0,
       true,
