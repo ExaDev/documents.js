@@ -65,6 +65,7 @@ function placeGlyph(
 }
 
 const RANGE_RECORD_SIZE = 6; // uint16 startGlyphID + uint16 endGlyphID + uint16 (startCoverageIndex | class) — the identical record layout Coverage format 2 and ClassDef format 2 both use
+const RANGE_RECORD_VALUE_OFFSET = 4; // byte offset of the trailing uint16 (startCoverageIndex | class) field within a range record, after the two uint16 glyph IDs
 
 // Reads the shared start/end/value record array both format 2 tables store, at `recordsOffset`, and returns it sorted by start glyph. A record whose end precedes its start is dropped rather than treated as empty or inverted: it describes no glyphs either way, and keeping it would only put an unsearchable entry in the bisection list.
 function parseRangeRecords(
@@ -86,7 +87,7 @@ function parseRangeRecords(
     ranges.push({
       startGlyphId,
       endGlyphId,
-      value: u16(bytes, recordOffset + 4),
+      value: u16(bytes, recordOffset + RANGE_RECORD_VALUE_OFFSET),
     });
   }
   ranges.sort((a, b) => a.startGlyphId - b.startGlyphId);
@@ -168,6 +169,7 @@ export function parseCoverage(
 }
 
 const CLASS_DEF_FORMAT_1_HEADER_SIZE = 6; // uint16 classFormat + uint16 startGlyphID + uint16 glyphCount
+const CLASS_DEF_FORMAT_1_GLYPH_COUNT_OFFSET = 4; // byte offset of the glyphCount field within a format 1 header, after uint16 classFormat and uint16 startGlyphID
 const CLASS_DEF_FORMAT_2_HEADER_SIZE = 4; // uint16 classFormat + uint16 classRangeCount
 
 // A parsed ClassDef table. Class 0 is the spec's own catch-all for "every glyph the table does not otherwise assign", so this resolves to a class for any glyph rather than to `undefined` — an unlisted glyph genuinely is in class 0, not absent.
@@ -188,7 +190,10 @@ export function parseClassDef(
       return undefined;
     }
     const startGlyphId = u16(bytes, classDefOffset + 2);
-    const glyphCount = u16(bytes, classDefOffset + 4);
+    const glyphCount = u16(
+      bytes,
+      classDefOffset + CLASS_DEF_FORMAT_1_GLYPH_COUNT_OFFSET,
+    );
     const classArrayOffset = classDefOffset + CLASS_DEF_FORMAT_1_HEADER_SIZE;
     if (!hasBytes(bytes, classArrayOffset, glyphCount * 2)) {
       return undefined;
