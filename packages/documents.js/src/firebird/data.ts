@@ -9,6 +9,9 @@ import {
   formatFirebirdTimestamp,
 } from "./date";
 
+// BigInt's own zero, the sign boundary of an arbitrary-precision integer.
+const BIGINT_ZERO = 0n;
+
 // rec_relation_data (row data) parsing — see the burp.h grammar comment: `<rec_relation_data> <rel attributes> <gen id> <indices> <data> <trigger-old> <rec_relation_end>`, where a relation's own rows are addressed purely by NAME (att_relation_name), resolved against the FirebirdRelation schema map schema.ts already built from the earlier, separate rec_relation pass. Row VALUES only ever arrive here as a `rec_data` record's own att_data_data payload, and only when the whole backup's own att_backup_transportable attribute is TRUE (confirmed true in every real fixture this reader was built against) — see canonical.cpp's CAN_encode_decode, the exact per-SQL-type XDR shape this module's decodeRowValues mirrors field-for-field.
 
 // rec_type values this module's own row-group loop needs to recognise (restated locally — see schema.ts's identical note on why these aren't a shared enum import).
@@ -127,7 +130,7 @@ function storedFieldsOf(
 
 // unscaled * 10^-decimalScale as an exact, arbitrary-precision decimal digit string, built via BigInt digit manipulation rather than the floating multiplication (`raw * 10 ** field.scale`) this module's own first implementation used — that multiplication is exactly the kind of rounding-prone arithmetic this function exists to avoid for a large stored integer. Mirrors src/hsqldb/rowformat.ts's own identically-named-in-spirit helper, restated locally rather than imported: src/firebird/ deliberately carries no value-level dependency on src/hsqldb (only a type-only one, for HsqldbTable/HsqldbColumn — see this package's README on that isolation), and this is a self-contained handful of lines, the same "duplicate a small port-level helper rather than couple two independent decoder tiers" call this package already makes for throwIfAborted.
 function exactDecimalDigits(unscaled: bigint, decimalScale: number): string {
-  const isNegative = unscaled < 0n;
+  const isNegative = unscaled < BIGINT_ZERO;
   const magnitudeDigits = (isNegative ? -unscaled : unscaled).toString();
   const sign = isNegative ? "-" : "";
   if (decimalScale <= 0) {

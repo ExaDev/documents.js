@@ -1,5 +1,8 @@
 import type { Box, Point } from "document-schema.js";
 
+// Pi radians expressed in degrees: the degrees-to-radians conversion factor.
+const PI_RADIANS_IN_DEGREES = 180;
+
 // Converts a Box from a top-left-origin, y-down coordinate space (OOXML's own convention, and ContentShape.frame's) into a bottom-left-origin, y-up space (PDF's own convention, and every LayoutItem's) of the given total height, or back again — the transform is its own exact inverse. This did NOT move to document-schema.js: it's PDF-specific, a concern document-schema.js has no notion of.
 export function flipY(box: Box, containerHeightPt: number): Box {
   return {
@@ -16,7 +19,7 @@ export function rotatePointAboutCenter(
   center: Point,
   degrees: number,
 ): Point {
-  const radians = (degrees * Math.PI) / 180;
+  const radians = (degrees * Math.PI) / PI_RADIANS_IN_DEGREES;
   const cos = Math.cos(radians);
   const sin = Math.sin(radians);
   const dx = point.x - center.x;

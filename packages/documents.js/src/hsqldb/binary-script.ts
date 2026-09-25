@@ -10,6 +10,9 @@ import {
 import type { HsqldbTable } from "./script";
 import { parseHsqldbScript } from "./script";
 
+// Every length, type and count field in this format is a 32-bit integer: four bytes.
+const INT32_BYTE_LENGTH = 4;
+
 // Tier 4 — HSQLDB's own whole-script BINARY (hsqldb.script_format=1) and COMPRESSED (=3) serialisations of database/script, the two alternatives to the TEXT format (=0) src/hsqldb/script.ts parses. These are NOT a different encoding of the same SQL text: org.hsqldb.scriptio.ScriptWriterBinary writes the database's own DDL as one org.hsqldb.Result record (the identical Result DatabaseScript.getScript builds for the TEXT writer, serialised through Result.write/RowOutputBinary rather than printed), followed by a per-table section carrying each MEMORY/TEXT table's rows in the SAME per-column binary encoding src/hsqldb/rowformat.ts already decodes for a CACHED table's row store. COMPRESSED is that identical byte stream wrapped in ordinary zlib DEFLATE (RFC 1950) — ScriptWriterZipped's own java.util.zip.DeflaterOutputStream, whose default framing is zlib, not gzip — and nothing else.
 //
 // The consequence for this package is that Tier 4 needs no new value decoding at all: it recovers the DDL text, hands it to Tier 1's own parseHsqldbScript to get the table/column definitions, and then splices in the row values the binary section carries. A CACHED table's rows are still NOT in the script in either format (ScriptWriterBase.writeExistingData only writes a table's rows when includeCachedData is set, which it never is for a checkpoint script), so a Tier 4 script from a database with CACHED tables still needs Tier 2's own database/data decode on top — and gets it, because the DDL this module recovers includes the same SET TABLE ... INDEX'...' lines Tier 2 reads its roots from.
@@ -63,7 +66,7 @@ class BinaryScriptCursor {
 
   // Whether a further 4-byte record-length field can still be read. org.hsqldb.scriptio.ScriptReaderBinary.readRow treats an EOFException here as an ordinary end of stream rather than an error, so a script that simply stops (no trailing zero-size data terminator) is legitimate and this mirrors that.
   hasRecordLength(): boolean {
-    return this.cursor.position + 4 <= this.length;
+    return this.cursor.position + INT32_BYTE_LENGTH <= this.length;
   }
 
   require(byteCount: number, what: string): void {
@@ -76,7 +79,7 @@ class BinaryScriptCursor {
   }
 
   readInt32(what: string): number {
-    this.require(4, what);
+    this.require(INT32_BYTE_LENGTH, what);
     return this.cursor.readInt32();
   }
 
@@ -131,7 +134,7 @@ function readDdlStatements(reader: BinaryScriptCursor): string[] {
   const recordLength = reader.readInt32(
     "the leading DDL result record's own length",
   );
-  if (recordLength <= 4) {
+  if (recordLength <= INT32_BYTE_LENGTH) {
     throw new HsqldbBinaryScriptParseError(
       `the leading DDL result record declares an implausible length ${recordLength} — not a recognisable HSQLDB binary script`,
       recordStart,
@@ -249,7 +252,10 @@ function readTableSection(
       );
     }
     const rowEnd = rowStart + rowLength;
-    reader.require(rowLength - 4, `a row in table "${tableName}"`);
+    reader.require(
+      rowLength - INT32_BYTE_LENGTH,
+      `a row in table "${tableName}"`,
+    );
     rows.push(
       typeCodes.map((typeCode) =>
         readHsqldbColumnValue(reader.cursor, typeCode, options),

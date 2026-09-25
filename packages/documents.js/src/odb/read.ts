@@ -11,6 +11,16 @@ import { parseHsqldbScript } from "../hsqldb/script";
 import { readManifest } from "odf.js";
 import { readFirebirdBackup } from "../firebird/backup";
 
+// RFC 1950 zlib header fields: the CMF method nibble mask, deflate as the one defined method, the radix that joins two header bytes into the 16-bit word the check reads, and that check's modulus. The text screen's own byte classes follow.
+const CMF_METHOD_MASK = 0x0f;
+const DEFLATE_METHOD = 8;
+const USHORT_RADIX = 256;
+const FLATE_CHECK_MODULUS = 31;
+const PRINTABLE_ASCII_FLOOR = 0x20;
+const CHARACTER_TAB = 0x09;
+const LINE_FEED = 0x0a;
+const CARRIAGE_RETURN = 0x0d;
+
 // readOdbTables(pkg) is the decoder-selection shell for .odb (ODF database front-end) packages: it inspects what odf.js's own readOdbInventory and the package's own manifest-media-type-classified parts actually contain, and routes to the implemented decoders, or throws a specific, named diagnostic naming exactly what was found otherwise — never a silent empty result. Every embedded storage shape HSQLDB and Firebird can produce is now decoded: src/hsqldb/script.ts's Tier 1 TEXT-script parser (hsqldb.script_format=0), extended by src/hsqldb/cache.ts's Tier 2 CACHED-table binary row-store decoder whenever a database/data part is present; src/firebird/backup.ts's Tier 3 gbak-backup-format reader for a Firebird-backed .odb; and src/hsqldb/binary-script.ts's Tier 4 whole-script BINARY/COMPRESSED reader (hsqldb.script_format=1 and =3, the latter being that identical byte stream under ordinary zlib DEFLATE — see this module's own classifyScriptBytes comment). Tier 4's own recovered DDL feeds Tier 2 exactly as Tier 1's does, so a BINARY-format script belonging to a database with CACHED tables decodes end to end too. One failure mode remains permanently out of scope rather than merely unimplemented: an external-only connection, with no embedded engine to read from at all.
 
 export class OdbNoEmbeddedDataSourceError extends Error {
@@ -65,7 +75,11 @@ function isZlibHeader(bytes: Uint8Array): boolean {
   if (cmf === undefined || flg === undefined) {
     return false;
   }
-  return (cmf & 0x0f) === 8 && (cmf * 256 + flg) % 31 === 0;
+  // RFC 1950's own zlib header: the low nibble of CMF names the compression method and 8 is the only defined value (deflate), and the two header bytes as one 16-bit word are divisible by 31 so any corruption is detectable.
+  return (
+    (cmf & CMF_METHOD_MASK) === DEFLATE_METHOD &&
+    (cmf * USHORT_RADIX + flg) % FLATE_CHECK_MODULUS === 0
+  );
 }
 
 // A crude but decisive text/binary classifier for database/script's own raw bytes. HSQLDB's TEXT script format (hsqldb.script_format=0) is, by construction, printable SQL — no NUL or other C0 control byte outside \t/\n/\r appears anywhere in genuine output, and it is always valid UTF-8. hsqldb.script_format=1 (BINARY) and =3 (COMPRESSED — detected directly via its own zlib header, checked first since a compressed stream's bytes would otherwise also fail the control-byte scan for an unrelated reason) both fail this test: BINARY's own row encoding embeds arbitrary non-text byte values throughout, and COMPRESSED is zlib-compressed bytes, never valid UTF-8 SQL text. A false positive — real binary/compressed content that happens to pass this screen — is not a realistic residual risk: passing this check only hands the bytes to parseHsqldbScript, which throws its own HsqldbScriptParseError for anything that doesn't look like a real CREATE TABLE/INSERT INTO/ignorable statement, so a misclassified file still fails loudly rather than silently producing wrong data.
@@ -76,7 +90,13 @@ function classifyScriptBytes(
     return "compressed";
   }
   for (const byte of bytes) {
-    if (byte < 0x20 && byte !== 0x09 && byte !== 0x0a && byte !== 0x0d) {
+    // Printable ASCII plus the three whitespace controls it excludes: tab, line feed, carriage return.
+    if (
+      byte < PRINTABLE_ASCII_FLOOR &&
+      byte !== CHARACTER_TAB &&
+      byte !== LINE_FEED &&
+      byte !== CARRIAGE_RETURN
+    ) {
       return "binary";
     }
   }

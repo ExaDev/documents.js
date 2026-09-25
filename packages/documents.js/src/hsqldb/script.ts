@@ -1,5 +1,8 @@
 import type { ContentCellValue } from "document-schema.js";
 
+// A percentage is hundredths of the whole.
+const PERCENT_SCALE = 100;
+
 // HSQLDB's historical TEXT script format (hsqldb.script_format=0, the default LibreOffice's embedded engine writes) renders an entire database as literal SQL text: CREATE TABLE/CREATE USER/GRANT/INSERT INTO statements, one per logical statement, human-readable. This module is a bounded DDL/DML text parser over exactly that format — a small SQL SUBSET, not a database engine — extracting column names/types from CREATE TABLE and row values from INSERT INTO, and tolerating (skipping) every other statement kind this package has no use for (users, grants, sequences, indexes, views, schema/session SET commands). It deliberately imports nothing beyond document-schema.js's own ContentCellValue type: no odf.js Package/XmlElement knowledge belongs here at all — the caller (src/odb/read.ts) is responsible for extracting database/script's own raw bytes from a real .odb package and handing them to parseHsqldbScript; this module never sees a Package.
 //
 // Statement recognition is a closed allowlist on both sides: CREATE TABLE (any of MEMORY/CACHED/TEXT/TEMP/TEMPORARY/GLOBAL TEMPORARY) and INSERT INTO are the two statement kinds this module extracts data from; a second, explicit allowlist (IGNORABLE_STATEMENT_PREFIXES) names every statement kind real HSQLDB script output is known to emit that carries no table/row data this package models. A statement matching NEITHER list throws HsqldbScriptParseError rather than being silently skipped — an unrecognised statement might carry data this bounded parser doesn't know how to interpret, and silently dropping it would risk exactly the "accuracy compromised" failure mode this module is required to avoid.
@@ -42,7 +45,7 @@ export function displayTextFor(value: ContentCellValue): string {
     case "number":
       return String(value.value);
     case "percentage":
-      return `${value.value * 100}%`;
+      return `${value.value * PERCENT_SCALE}%`;
     case "currency":
       return value.currency === undefined
         ? String(value.value)

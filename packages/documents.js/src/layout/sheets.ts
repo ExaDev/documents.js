@@ -55,6 +55,9 @@ import type {
   LayoutText,
 } from "pdf-codec";
 
+// A percentage is hundredths of the whole.
+const PERCENT_SCALE = 100;
+
 // ContentDocument (the spreadsheet variant) -> LayoutDocument: ods/xlsx's own layout direction, genuinely distinct from both docx's flow/pagination (engine.ts) and pptx's direct placement (slides.ts). A sheet paginates over TWO axes at once (column bands x row bands, not just rows), print settings (range/scale/fit-to-page/repeat rows-columns/gridlines/headers/page order/manual breaks) drive the page grid directly rather than being ignored the way a docx section's margins alone would be, and cell overflow is bounded per cell (###, spill, truncate) rather than wrapped the way paragraph text is. This is also the first layout algorithm in the package genuinely long-running enough (a real sheet can carry tens of thousands of populated cells) to need cooperative cancellation wired into its own per-cell emission loop, not just checked once at the top of the function the way reconstruct.ts's own page/slide loops do.
 //
 // ContentSheetCellSchema carries real per-cell decoration as of document-schema.js 2.0.0 — background, borders, alignment, and verticalAlignment — all four of which odf.js's own readOdsContent genuinely populates from a cell's resolved style chain (typed/shared/table.ts's readCellStyleDecoration), so every one of them is live data here, not a speculatively-consumed field. The z-order below emits a real background LayoutRect and real border LayoutLines accordingly, and a cell's own explicit alignment/verticalAlignment override the value-kind default rather than being ignored. A border's own dash STYLE now carries through too, as of document-schema.js 2.1.0 adding that same optional enum to LayoutLineSchema/LayoutPathSchema — see pushCellBorderLines (src/layout/shared.ts) for the mechanism, and for the separate, still-open question of whether pdf-codec's own write.ts does anything with it yet.
@@ -288,7 +291,7 @@ function resolveScale(
   totalContentHeightPt: number,
 ): number {
   if (printSettings.scalePercent !== undefined) {
-    return Math.max(printSettings.scalePercent / 100, MINIMUM_SCALE);
+    return Math.max(printSettings.scalePercent / PERCENT_SCALE, MINIMUM_SCALE);
   }
   if (printSettings.fitToPages !== undefined) {
     const budgetWidthPt = availableWidthPt * printSettings.fitToPages.width;

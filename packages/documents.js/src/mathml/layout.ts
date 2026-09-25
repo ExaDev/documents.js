@@ -27,6 +27,16 @@ import { buildRadicalSign } from "./radical";
 import type { MathVariant } from "./variant";
 import { applyMathVariant, isMathVariant } from "./variant";
 
+// Hex, for formatting a code point the way Unicode itself writes it; a percentage is hundredths of the whole.
+const HEX_RADIX = 16;
+const UNICODE_HEX_DIGITS = 4;
+const PERCENT_SCALE = 100;
+// U+221A, the radical sign the vertical construction stretches from.
+const RADICAL_SIGN = 0x221a;
+// An mtable's own default inter-column and inter-row gaps, in em (MathML3's table defaults).
+const TABLE_COLUMN_GAP_EM = 0.8;
+const TABLE_ROW_GAP_EM = 0.5;
+
 export interface LayoutFormulaOptions {
   readonly metrics: MathFontMetrics;
   readonly sizePt: number;
@@ -105,7 +115,7 @@ function layoutToken(
     if (glyph === undefined) {
       ctx.diagnostics.push({
         kind: "missing-glyph",
-        detail: `U+${codePoint.toString(16).toUpperCase().padStart(4, "0")}`,
+        detail: `U+${codePoint.toString(HEX_RADIX).toUpperCase().padStart(UNICODE_HEX_DIGITS, "0")}`,
       });
       continue;
     }
@@ -778,7 +788,7 @@ function wrapRadical(
   //
   // The construction is stretched to (signHeightPt - radicalExtraAscenderPt) and its ink-top placed at y = radicalExtraAscenderPt — the SAME y as the separately drawn vinculum rule below — so the glyph's own top shelf and the vinculum read as one continuous bar rather than a step. Stretching to the reduced target (not the full signHeightPt) keeps the hook's bottom at the radicand's bottom (signHeightPt) once the ink-top is lowered by radicalExtraAscenderPt: the glyph spans [extraAscender, signHeightPt].
   const stretched = ctx.metrics.stretch(
-    0x221a,
+    RADICAL_SIGN,
     "vertical",
     signHeightPt - metrics.radicalExtraAscenderPt,
     ctx.sizePt,
@@ -827,7 +837,8 @@ function wrapRadical(
   if (index !== undefined) {
     // The degree sits raised from the sign's own bottom by radicalDegreeBottomRaisePercent% of the sign's own visible height (ascentPt + descentPt of the WHOLE radical, per the OpenType MATH spec's own definition) — a real, font-driven placement, not a fixed fraction picked by this module.
     const raisePt =
-      ((ascentPt + descentPt) * metrics.radicalDegreeBottomRaisePercent) / 100;
+      ((ascentPt + descentPt) * metrics.radicalDegreeBottomRaisePercent) /
+      PERCENT_SCALE;
     const degreeBaselineFromTopPt =
       ascentPt + descentPt - raisePt - index.descentPt;
     items.push(
@@ -875,8 +886,8 @@ function layoutTable(element: MathMlElement, ctx: LayoutContext): MathBox {
     rowCells.reduce((max, row) => Math.max(max, row[column]?.widthPt ?? 0), 0),
   );
 
-  const columnGapPt = 0.8 * ctx.sizePt;
-  const rowGapPt = 0.5 * ctx.sizePt;
+  const columnGapPt = TABLE_COLUMN_GAP_EM * ctx.sizePt;
+  const rowGapPt = TABLE_ROW_GAP_EM * ctx.sizePt;
 
   const items: MathLayoutItem[] = [];
   let cursorYTopPt = 0;

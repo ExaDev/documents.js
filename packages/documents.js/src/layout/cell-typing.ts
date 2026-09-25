@@ -1,5 +1,11 @@
 import type { ContentCellValue } from "document-schema.js";
 
+// An ISO date is four year digits then two each for month and day; a month abbreviation is its name's first three letters; and one comma group in the grouped-number pattern is exactly four characters, a comma plus three digits.
+const YEAR_DIGITS = 4;
+const MONTH_DAY_DIGITS = 2;
+const MONTH_ABBREVIATION_LENGTH = 3;
+const COMMA_GROUP_LENGTH = 4;
+
 // HEURISTIC CELL RE-TYPING: turning a spreadsheet cell's RENDERED text back into a typed value.
 //
 // READ THIS FIRST — THIS IS PROBABILISTIC BEST-EFFORT RECOVERY, NOT A FIDELITY GUARANTEE. A rendered PDF genuinely never carries a spreadsheet cell's own typed value: a PDF page holds only the string the authoring application chose to print. Everything below is therefore inference from that string alone, and a string that looks exactly like a number may genuinely have BEEN a string in the source spreadsheet — a part number, a version, a phone extension. Nothing in this module, or anywhere downstream of it, can tell those apart with certainty, and no amount of further heuristic would change that. Callers who need certainty must not use a PDF as their source; callers who need the printed form regardless of what was inferred always have it, because ContentSheetCell.displayText is a REQUIRED field carrying the rendered string verbatim, independent of value.kind (verified against document-schema.js's own ContentSheetCellSchema, and preserved through the write side by src/edit/ods/content.ts's appendCell, which assigns displayText AFTER value precisely so the value setter's own generic formatting cannot overwrite it).
@@ -73,7 +79,7 @@ const MONTH_NAMES: ReadonlyMap<string, number> = new Map(
     "december",
   ].flatMap((name, index) => [
     [name, index + 1] as const,
-    [name.slice(0, 3), index + 1] as const,
+    [name.slice(0, MONTH_ABBREVIATION_LENGTH), index + 1] as const,
   ]),
 );
 
@@ -131,7 +137,7 @@ function parseNumericLiteral(
       return { declined: "leading-zero-digits" };
     }
     // A single comma group with no decimal point ("1,234") reads as 1234 under this module's own convention and as 1.234 under the European one — a thousandfold difference with nothing in the string to settle it. Two or more groups, or a group plus a real decimal point, cannot be read the European way at all and are accepted.
-    const groupCount = groups!.length / 4;
+    const groupCount = groups!.length / COMMA_GROUP_LENGTH;
     if (groupCount === 1 && fraction === undefined) {
       return { declined: "ambiguous-grouping-separator" };
     }
@@ -244,7 +250,7 @@ function isRealCalendarDate(year: number, month: number, day: number): boolean {
 }
 
 function isoDateValue(year: number, month: number, day: number): string {
-  return `${String(year).padStart(4, "0")}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+  return `${String(year).padStart(YEAR_DIGITS, "0")}-${String(month).padStart(MONTH_DAY_DIGITS, "0")}-${String(day).padStart(MONTH_DAY_DIGITS, "0")}`;
 }
 
 function inferDate(text: string): CellTypeInferenceResult | undefined {

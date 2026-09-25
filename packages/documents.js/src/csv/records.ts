@@ -2,6 +2,8 @@
 //
 // The dialect, RFC 4180 (https://www.rfc-editor.org/rfc/rfc4180) with two deliberate tolerances: a field containing the delimiter, a double quote, CR, or LF is wrapped in double quotes with embedded double quotes doubled; records are joined with CRLF. Tolerance one: RFC 4180 mandates CRLF record breaks, but real-world files arrive LF-only (and classic Mac exports arrive CR-only), so the parser accepts all three as a break while the writer always emits CRLF — accepting a lone break never mis-parses a conforming file. Tolerance two: RFC 4180 allows a quote only immediately after a record break or delimiter; a quote appearing mid-field is taken as a literal character rather than a parse error, matching what spreadsheet exporters actually emit for text like {5" drive}.
 
+// How much of an unterminated field the error quotes back: enough to recognise the field without flooding the message.
+const FIELD_PREVIEW_LENGTH = 40;
 export const DEFAULT_CSV_DELIMITER = ",";
 export const TSV_DELIMITER = "\t";
 
@@ -94,7 +96,7 @@ export function parseCsvRecords(
 
   if (inQuotedField) {
     throw new CsvParseError(
-      `unterminated quoted field: no closing double quote before end of input (field so far: ${field.slice(0, 40)})`,
+      `unterminated quoted field: no closing double quote before end of input (field so far: ${field.slice(0, FIELD_PREVIEW_LENGTH)})`,
     );
   }
   // A trailing record break already ended the final record above; input not ending in a break leaves a partial field (or a field-only record) to end here.

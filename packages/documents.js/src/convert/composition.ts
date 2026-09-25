@@ -82,6 +82,15 @@ import {
 import { type ContentVariant, UnsupportedConversionError } from "./capability";
 import { type DocumentFormat } from "./port";
 
+// Latin-1's own ceiling as a character code; hex, for formatting a code point the way Unicode itself writes it.
+const LATIN1_MAX_CODE = 0xff;
+const HEX_RADIX = 16;
+const UNICODE_HEX_DIGITS = 4;
+
+// The graph's own edge costs: a conversion routed through pdf costs three edges-worth, and a resolved path may span at most four nodes (three hops).
+const THROUGH_PDF_EDGE_COST = 3;
+const MAX_CONVERSION_PATH_NODES = 4;
+
 // The single source of truth for "which primitives does each format use". read/build closures thread their own per-format option subset internally: docx and pptx read/build both pull onMathDiagnostic (mirroring readDocxContent's/readPptxContent's own `{ onMathDiagnostic }` and buildDocxPackage's/buildPptxPackage's own option — ExaDev/documents.js#563 gave pptx the identical OMML degrade-diagnostic channel docx already had), markdown read pulls signal/images (mirroring readMarkdownContent's ReadMarkdownOptions), csv read pulls delimiter/onCellTypeInference and csv build pulls delimiter/sheet (mirroring readCsvContent's ReadCsvContentOptions and buildCsvText's BuildCsvTextOptions), svg read pulls onSvgDiagnostic and svg build pulls page/onSvgDiagnostic (mirroring readSvgContent's ReadSvgContentOptions and buildSvgText's BuildSvgTextOptions), and every other format's read/build accept and ignore the thread. docxToPdf's openDocx(bytes).toPackage() and decodeOoxmlPackage(bytes) produce the identical Package (openDocx wraps decodeOoxmlPackage and toPackage returns it unmutated), so decode uses the package codec directly for uniformity — byte-identical to docxToPdf at every downstream call site.
 export const FORMAT_NODES: Readonly<Record<ContentFormat, FormatNode>> = {
   docx: {
@@ -465,9 +474,9 @@ function latin1ToBytes(text: string): Uint8Array<ArrayBuffer> {
   const bytes = new Uint8Array(text.length);
   for (let index = 0; index < text.length; index += 1) {
     const code = text.charCodeAt(index);
-    if (code > 0xff) {
+    if (code > LATIN1_MAX_CODE) {
       throw new TypeError(
-        `latin1ToBytes: character at index ${String(index)} is U+${code.toString(16).toUpperCase().padStart(4, "0")}, above U+00FF — this string no longer holds the file's original bytes`,
+        `latin1ToBytes: character at index ${String(index)} is U+${code.toString(HEX_RADIX).toUpperCase().padStart(UNICODE_HEX_DIGITS, "0")}, above U+00FF — this string no longer holds the file's original bytes`,
       );
     }
     bytes[index] = code;
@@ -719,7 +728,7 @@ function buildCompositionGraph(): ReadonlyMap<
   // toPdf/fromPdf edges (cost 3) for every layout-capable format. xlsx and csv are absent, so each reaches pdf only through its ods bridge.
   for (const format of CONTENT_FORMATS) {
     if (LAYOUT_CAPABLE.has(format)) {
-      addEdge(format, "pdf", 3);
+      addEdge(format, "pdf", THROUGH_PDF_EDGE_COST);
     }
   }
 
@@ -735,7 +744,7 @@ function buildCompositionGraph(): ReadonlyMap<
       }
     }
     if (LAYOUT_CAPABLE.has(source)) {
-      addDirected(source, "pdf", 3);
+      addDirected(source, "pdf", THROUGH_PDF_EDGE_COST);
     }
   }
 
@@ -803,7 +812,7 @@ export function resolveCompositionPlan(
     return undefined;
   }
   // path.length includes both endpoints: 2 nodes = 1 hop, 4 nodes = 3 hops (the cap).
-  if (path.length > 4) {
+  if (path.length > MAX_CONVERSION_PATH_NODES) {
     return undefined;
   }
   const hops: CompositionHop[] = [];

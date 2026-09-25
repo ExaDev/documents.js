@@ -11,9 +11,13 @@ export interface OperatorProperties {
 
 // The four spacing classes this dictionary distinguishes, in em (relative to the operator's own font size) — a coarser approximation of MathML's own per-operator lspace/rspace table (which assigns one of six named space keywords, from 0em to thickmathspace = 5/18em, per operator and per form), but the same shape: named classes, not per-operator hand-tuned values.
 const ZERO_SPACE = 0;
-const THIN_SPACE = 1 / 6; // MathML's own 'thinmathspace'
-const MEDIUM_SPACE = 2 / 9; // 'mediummathspace' — ordinary binary arithmetic operators
-const THICK_SPACE = 5 / 18; // 'thickmathspace' — relations, logical connectives, arrows
+const SPACE_EM_DENOMINATOR = 18;
+const THIN_SPACE_NUMERATOR = 3;
+const MEDIUM_SPACE_NUMERATOR = 4;
+const THICK_SPACE_NUMERATOR = 5;
+const THIN_SPACE = THIN_SPACE_NUMERATOR / SPACE_EM_DENOMINATOR; // MathML's own 'thinmathspace'
+const MEDIUM_SPACE = MEDIUM_SPACE_NUMERATOR / SPACE_EM_DENOMINATOR; // 'mediummathspace', for ordinary binary arithmetic operators
+const THICK_SPACE = THICK_SPACE_NUMERATOR / SPACE_EM_DENOMINATOR; // 'thickmathspace', for relations, logical connectives, arrows
 
 const DEFAULT_OPERATOR: OperatorProperties = {
   lspaceEm: THICK_SPACE,

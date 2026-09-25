@@ -7,6 +7,9 @@ import { decodeOdfText, encodeOdfText } from "../../xml/odf-text";
 import { populateParagraph } from "../odt/content";
 import { OdtParagraph } from "../odt/paragraph";
 
+// A percentage is hundredths of the whole.
+const PERCENT_SCALE = 100;
+
 const VALUE_TYPE_ATTR = "office:value-type";
 const VALUE_ATTR = "office:value";
 const BOOLEAN_VALUE_ATTR = "office:boolean-value";
@@ -113,7 +116,7 @@ export class OdsCell {
       case "percentage":
         setAttr(this.node, VALUE_TYPE_ATTR, "percentage");
         setAttr(this.node, VALUE_ATTR, String(value.value));
-        this.displayText = `${value.value * 100}%`;
+        this.displayText = `${value.value * PERCENT_SCALE}%`;
         break;
       // Confirmed via a genuine soffice --headless open/save round trip (not just this package's own readOdsContent): a currency cell written this way — office:value-type="currency" plus office:currency, with no accompanying number:currency-style/style:data-style-name (this editor writes no number-format styles at all, a documented, bounded gap, see content.ts's own module doc) — round-trips correctly through THIS package's own readOdsContent, but real Calc itself silently downgrades it to a plain float cell on its own next save, since Calc ties the "currency" semantic to having a real currency-formatted style, not just the bare value-type/currency attributes. Not a defect in this setter — writing a currency number-format style is out of scope here, same as every other number-format concern — but worth knowing before assuming a currency cell survives a REAL Calc round trip, as distinct from this package's own.
       case "currency":
