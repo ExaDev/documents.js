@@ -74,6 +74,17 @@ const MATH_VALUE_RECORD_COUNT = 51;
 const RADICAL_DEGREE_BOTTOM_RAISE_PERCENT_OFFSET =
   MATH_VALUE_RECORDS_START + MATH_VALUE_RECORD_COUNT * MATH_VALUE_RECORD_SIZE;
 
+// The MATH table header (spec, "MATH Table Header"): MajorVersion/MinorVersion uint16 each, then three Offset16 fields, MathConstantsOffset, MathGlyphInfoOffset, MathVariantsOffset, in that order.
+const MATH_TABLE_HEADER_CONSTANTS_OFFSET_FIELD = 4;
+const MATH_TABLE_HEADER_GLYPH_INFO_OFFSET_FIELD = 6;
+const MATH_TABLE_HEADER_VARIANTS_OFFSET_FIELD = 8;
+
+// MathConstants' leading ScriptPercentScaleDown/ScriptScriptPercentScaleDown fields are stored as a whole-number percentage; this module pre-divides them into the 0..1 fraction MathFontMetrics.scriptPercentScaleDown/scriptScriptPercentScaleDown expect.
+const PERCENT_SCALE_DENOMINATOR = 100;
+
+// A MathItalicsCorrectionInfo/MathTopAccentAttachment table's own header before its MathValueRecord array: Offset16 Coverage + uint16 count.
+const MATH_VALUE_TABLE_HEADER_SIZE = 4;
+
 function mathValueRecord(
   bytes: Uint8Array<ArrayBuffer>,
   constantsOffset: number,
@@ -89,12 +100,16 @@ function parseMathConstants(
   bytes: Uint8Array<ArrayBuffer>,
   mathTableOffset: number,
 ): MathConstants {
-  const constantsOffset = mathTableOffset + u16(bytes, mathTableOffset + 4);
+  const constantsOffset =
+    mathTableOffset +
+    u16(bytes, mathTableOffset + MATH_TABLE_HEADER_CONSTANTS_OFFSET_FIELD);
   const field = (index: number): number =>
     mathValueRecord(bytes, constantsOffset, index);
   return {
-    scriptPercentScaleDown: i16(bytes, constantsOffset + 0) / 100,
-    scriptScriptPercentScaleDown: i16(bytes, constantsOffset + 2) / 100,
+    scriptPercentScaleDown:
+      i16(bytes, constantsOffset + 0) / PERCENT_SCALE_DENOMINATOR,
+    scriptScriptPercentScaleDown:
+      i16(bytes, constantsOffset + 2) / PERCENT_SCALE_DENOMINATOR,
     axisHeight: field(MATH_VALUE_RECORD_INDEX.axisHeight),
     subscriptShiftDown: field(MATH_VALUE_RECORD_INDEX.subscriptShiftDown),
     subscriptBaselineDropMin: field(
@@ -166,7 +181,15 @@ function parseGlyphValueTable(
     return values;
   }
   for (const [glyphId, coverageIndex] of coverage.entries()) {
-    values.set(glyphId, i16(bytes, tableOffset + 4 + coverageIndex * 4));
+    values.set(
+      glyphId,
+      i16(
+        bytes,
+        tableOffset +
+          MATH_VALUE_TABLE_HEADER_SIZE +
+          coverageIndex * MATH_VALUE_RECORD_SIZE,
+      ),
+    );
   }
   return values;
 }
@@ -180,7 +203,9 @@ function parseMathGlyphInfo(
   bytes: Uint8Array<ArrayBuffer>,
   mathTableOffset: number,
 ): MathGlyphInfo {
-  const glyphInfoOffset = mathTableOffset + u16(bytes, mathTableOffset + 6);
+  const glyphInfoOffset =
+    mathTableOffset +
+    u16(bytes, mathTableOffset + MATH_TABLE_HEADER_GLYPH_INFO_OFFSET_FIELD);
   const italicsInfoOffset = u16(bytes, glyphInfoOffset + 0);
   const topAccentOffset = u16(bytes, glyphInfoOffset + 2);
   return {
@@ -234,6 +259,19 @@ const GLYPH_PART_RECORD_SIZE = 10; // uint16 glyphID + three UFWORDs + uint16 pa
 const GLYPH_PART_FLAG_EXTENDER = 0x0001;
 const MATH_VARIANTS_HEADER_SIZE = 10; // uint16 minConnectorOverlap + two Offset16 coverages + two uint16 counts, before the two Offset16 construction arrays
 
+// Field offsets within one GlyphPartRecord (glyphID uint16 @0, startConnectorLength UFWORD @2, then these three).
+const GLYPH_PART_END_CONNECTOR_OFFSET = 4;
+const GLYPH_PART_FULL_ADVANCE_OFFSET = 6;
+const GLYPH_PART_FLAGS_OFFSET = 8;
+
+// A MathGlyphConstruction table's own header before its MathGlyphVariantRecord array: Offset16 glyphAssembly + uint16 variantCount.
+const MATH_GLYPH_CONSTRUCTION_HEADER_SIZE = 4;
+
+// Field offsets within the MathVariants header, alongside MinConnectorOverlap @0 and VertGlyphCoverage @2 (both already covered by ignored literals 0/2).
+const MATH_VARIANTS_HORIZONTAL_COVERAGE_OFFSET_FIELD = 4;
+const MATH_VARIANTS_VERTICAL_COUNT_FIELD = 6;
+const MATH_VARIANTS_HORIZONTAL_COUNT_FIELD = 8;
+
 function parseGlyphAssembly(
   bytes: Uint8Array<ArrayBuffer>,
   assemblyOffset: number,
@@ -246,10 +284,15 @@ function parseGlyphAssembly(
     parts.push({
       glyphId: u16(bytes, recordOffset),
       startConnectorLength: u16(bytes, recordOffset + 2),
-      endConnectorLength: u16(bytes, recordOffset + 4),
-      fullAdvance: u16(bytes, recordOffset + 6),
+      endConnectorLength: u16(
+        bytes,
+        recordOffset + GLYPH_PART_END_CONNECTOR_OFFSET,
+      ),
+      fullAdvance: u16(bytes, recordOffset + GLYPH_PART_FULL_ADVANCE_OFFSET),
       isExtender:
-        (u16(bytes, recordOffset + 8) & GLYPH_PART_FLAG_EXTENDER) !== 0,
+        (u16(bytes, recordOffset + GLYPH_PART_FLAGS_OFFSET) &
+          GLYPH_PART_FLAG_EXTENDER) !==
+        0,
     });
   }
   return { italicsCorrection: i16(bytes, assemblyOffset), parts };
@@ -264,7 +307,9 @@ function parseGlyphConstruction(
   const variants: MathGlyphVariant[] = [];
   for (let i = 0; i < variantCount; i++) {
     const recordOffset =
-      constructionOffset + 4 + i * MATH_GLYPH_VARIANT_RECORD_SIZE;
+      constructionOffset +
+      MATH_GLYPH_CONSTRUCTION_HEADER_SIZE +
+      i * MATH_GLYPH_VARIANT_RECORD_SIZE;
     variants.push({
       glyphId: u16(bytes, recordOffset),
       advanceMeasurement: u16(bytes, recordOffset + 2),
@@ -317,7 +362,10 @@ function parseMathVariants(
   bytes: Uint8Array<ArrayBuffer>,
   mathTableOffset: number,
 ): MathVariants {
-  const variantsTableOffset = u16(bytes, mathTableOffset + 8);
+  const variantsTableOffset = u16(
+    bytes,
+    mathTableOffset + MATH_TABLE_HEADER_VARIANTS_OFFSET_FIELD,
+  );
   if (variantsTableOffset === 0) {
     return {
       minConnectorOverlap: 0,
@@ -327,9 +375,18 @@ function parseMathVariants(
   }
   const variantsOffset = mathTableOffset + variantsTableOffset;
   const verticalCoverageOffset = u16(bytes, variantsOffset + 2);
-  const horizontalCoverageOffset = u16(bytes, variantsOffset + 4);
-  const verticalCount = u16(bytes, variantsOffset + 6);
-  const horizontalCount = u16(bytes, variantsOffset + 8);
+  const horizontalCoverageOffset = u16(
+    bytes,
+    variantsOffset + MATH_VARIANTS_HORIZONTAL_COVERAGE_OFFSET_FIELD,
+  );
+  const verticalCount = u16(
+    bytes,
+    variantsOffset + MATH_VARIANTS_VERTICAL_COUNT_FIELD,
+  );
+  const horizontalCount = u16(
+    bytes,
+    variantsOffset + MATH_VARIANTS_HORIZONTAL_COUNT_FIELD,
+  );
   const verticalArrayOffset = variantsOffset + MATH_VARIANTS_HEADER_SIZE;
   const horizontalArrayOffset = verticalArrayOffset + verticalCount * 2;
   return {
