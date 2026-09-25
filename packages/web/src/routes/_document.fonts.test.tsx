@@ -37,6 +37,21 @@ afterEach(() => {
 });
 
 describe("FontsPage", () => {
+  it("says a format with no font-embedding concept has nothing to list, without calling the extractor", () => {
+    const client = createMockRpcClient();
+    vi.mocked(getRpcClient).mockReturnValue(client);
+    const mounted = mountFontsPage();
+    act(() => {
+      openDocument(openedFile("notes.md"));
+    });
+    expect(mounted.container.textContent).toContain(
+      "A markdown document has nowhere to embed a font face",
+    );
+    // The extractor throws for exactly these formats, so reaching it would report a failure where the honest answer is that the format has nowhere to embed one.
+    expect(client.fonts.extractSourceFonts).not.toHaveBeenCalled();
+    expect(notifyError).not.toHaveBeenCalled();
+  });
+
   it("prompts to open a document before anything is open", () => {
     const client = createMockRpcClient();
     vi.mocked(getRpcClient).mockReturnValue(client);

@@ -1,5 +1,6 @@
-import { Paper, Table, Text } from "@mantine/core";
+import { Alert, Loader, Paper, Table, Text } from "@mantine/core";
 import { createFileRoute } from "@tanstack/react-router";
+import { isFontSourceFormat } from "documents.js";
 import { useEffect } from "react";
 
 import { NoDocumentOpen } from "../document/NoDocumentOpen";
@@ -21,6 +22,8 @@ function FontsPage() {
   const { mutate: extractFontsMutate } = extractFonts;
   useEffect(() => {
     if (document?.format === undefined) return;
+    // Asking first, rather than calling and catching: extractSourceFontsForFormat throws for a format with no source-embedded font concept at all, and a markdown or pdf document reaching it reported "Could not read fonts" as though something had gone wrong, when the honest answer is that the format has nowhere to embed one.
+    if (!isFontSourceFormat(document.format)) return;
     extractFontsMutate(
       { format: document.format, bytes: document.file.bytes },
       {
@@ -39,6 +42,22 @@ function FontsPage() {
         </NoDocumentOpen>
       ) : document.format === undefined ? (
         <UnrecognisedFormatAlert fileName={document.file.name} />
+      ) : !isFontSourceFormat(document.format) ? (
+        <Paper withBorder p="md">
+          <Text c="dimmed">
+            A {document.format} document has nowhere to embed a font face, so
+            there is nothing to list. Embedded fonts come from docx, pptx, odt,
+            odp, ods and odg documents.
+          </Text>
+        </Paper>
+      ) : extractFonts.isPending ? (
+        <Paper withBorder p="md">
+          <Loader size="sm" />
+        </Paper>
+      ) : extractFonts.error !== null ? (
+        <Alert color="red" title="Could not read this document's fonts">
+          {extractFonts.error.message}
+        </Alert>
       ) : (
         extractFonts.data && (
           <Paper withBorder p="md">
