@@ -3,6 +3,11 @@
 const DIRECTORY_HEADER_SIZE = 12;
 const RECORD_SIZE = 16;
 const SFNT_VERSION_TRUETYPE = 0x00010000;
+// The sfnt table directory header's own numTables field offset (spec clause 5.1.1: sfntVersion is 4 bytes, numTables follows at 4).
+const SFNT_NUM_TABLES_OFFSET = 4;
+// A table record's own offset and length field offsets (spec clause 5.1.1: tag 4 bytes, checkSum 4 bytes at 4, offset 4 bytes at 8, length 4 bytes at 12).
+const TABLE_RECORD_OFFSET_FIELD = 8;
+const TABLE_RECORD_LENGTH_FIELD = 12;
 
 export function buildSfnt(
   tables: ReadonlyMap<string, Uint8Array<ArrayBuffer>>,
@@ -16,13 +21,13 @@ export function buildSfnt(
   const font = new Uint8Array(totalLength);
   const view = new DataView(font.buffer);
   view.setUint32(0, SFNT_VERSION_TRUETYPE);
-  view.setUint16(4, entries.length);
+  view.setUint16(SFNT_NUM_TABLES_OFFSET, entries.length);
   let offset = directorySize;
   entries.forEach(([tag, bytes], index) => {
     const recordOffset = DIRECTORY_HEADER_SIZE + index * RECORD_SIZE;
     font.set(new TextEncoder().encode(tag), recordOffset);
-    view.setUint32(recordOffset + 8, offset);
-    view.setUint32(recordOffset + 12, bytes.length);
+    view.setUint32(recordOffset + TABLE_RECORD_OFFSET_FIELD, offset);
+    view.setUint32(recordOffset + TABLE_RECORD_LENGTH_FIELD, bytes.length);
     font.set(bytes, offset);
     offset += bytes.length;
   });
@@ -33,66 +38,100 @@ export function buildSfnt(
 export interface CmapSubtableSpec {
   readonly platformId: number;
   readonly encodingId: number;
-  readonly format: 0 | 4 | 6 | 12;
+  readonly format:
+    0 | typeof CMAP_FORMAT_4 | typeof CMAP_FORMAT_6 | typeof CMAP_FORMAT_12;
   readonly mappings: ReadonlyMap<number, number>;
 }
 
+// Format 0 header: format(2) + length(2) + language(2) = 6 bytes, immediately followed by the 256-entry glyphIdArray (clause 5.2.4).
+const FORMAT0_HEADER_SIZE = 6;
+const FORMAT0_GLYPH_COUNT = 256;
+
 // Format 0 (byte encoding table, clause 5.2.4): a fixed 256-entry glyph-ID array, so only codes 0..255 can appear.
 function buildFormat0(mappings: ReadonlyMap<number, number>): Uint8Array {
-  const subtable = new Uint8Array(262);
+  const subtable = new Uint8Array(FORMAT0_HEADER_SIZE + FORMAT0_GLYPH_COUNT);
   const view = new DataView(subtable.buffer);
   // The format field (offset 0) is already 0 from Uint8Array's own zero-initialization — format 0 is the one subtable format whose own numeric value needs no explicit write.
   view.setUint16(2, subtable.length);
   for (const [code, glyphId] of mappings) {
-    subtable[6 + code] = glyphId;
+    subtable[FORMAT0_HEADER_SIZE + code] = glyphId;
   }
   return subtable;
 }
+
+// Format 4 subtable format number (clause 5.2.5.1).
+const CMAP_FORMAT_4 = 4;
+// Format 4 header field offsets, up to where the endCode array starts (clause 5.2.5.2): format(2) + length(2) + language(2) + segCountX2(2) + searchRange(2) + entrySelector(2) + rangeShift(2) = 14 bytes.
+const FORMAT4_SEGCOUNTX2_OFFSET = 6;
+const FORMAT4_SEARCH_RANGE_OFFSET = 8;
+const FORMAT4_ENTRY_SELECTOR_OFFSET = 10;
+const FORMAT4_RANGE_SHIFT_OFFSET = 12;
+const FORMAT4_HEADER_SIZE = 14;
+// After the header: endCode[segCount], a reservedPad word, startCode[segCount], idDelta[segCount], and idRangeOffset[segCount] left zero-filled (valid per spec: zero selects the idDelta-only mapping this builder always uses), four uint16 arrays of segCount entries plus the pad word.
+const FORMAT4_RESERVED_PAD_SIZE = 2;
+const FORMAT4_ARRAYS_PER_SEGMENT = 4;
+const FORMAT4_ARRAY_ENTRY_SIZE = 2;
+// The mandatory final segment's endCode/startCode value (clause 5.2.5.2): the sentinel that terminates the segment list.
+const FORMAT4_TERMINATOR_CODE = 0xffff;
+const UINT16_MASK = 0xffff;
 
 // Format 4 (segment mapping to delta values): emitted as one single-code segment per mapping plus the mandatory 0xFFFF terminator, which is a legal — if deliberately unoptimised — encoding of any mapping and exercises the idDelta path rather than the glyph-index-array one.
 function buildFormat4(mappings: ReadonlyMap<number, number>): Uint8Array {
   const codes = [...mappings.keys()].sort((a, b) => a - b);
   const segCount = codes.length + 1;
-  const length = 16 + segCount * 8;
+  const length =
+    FORMAT4_HEADER_SIZE +
+    FORMAT4_RESERVED_PAD_SIZE +
+    segCount * FORMAT4_ARRAYS_PER_SEGMENT * FORMAT4_ARRAY_ENTRY_SIZE;
   const subtable = new Uint8Array(length);
   const view = new DataView(subtable.buffer);
   const searchRange = 2 * 2 ** Math.floor(Math.log2(segCount));
-  view.setUint16(0, 4);
+  view.setUint16(0, CMAP_FORMAT_4);
   view.setUint16(2, length);
-  view.setUint16(6, segCount * 2);
-  view.setUint16(8, searchRange);
-  view.setUint16(10, Math.log2(searchRange / 2));
-  view.setUint16(12, segCount * 2 - searchRange);
-  const endCodes = 14;
-  const startCodes = endCodes + segCount * 2 + 2;
+  view.setUint16(FORMAT4_SEGCOUNTX2_OFFSET, segCount * 2);
+  view.setUint16(FORMAT4_SEARCH_RANGE_OFFSET, searchRange);
+  view.setUint16(FORMAT4_ENTRY_SELECTOR_OFFSET, Math.log2(searchRange / 2));
+  view.setUint16(FORMAT4_RANGE_SHIFT_OFFSET, segCount * 2 - searchRange);
+
+  const startCodes =
+    FORMAT4_HEADER_SIZE + segCount * 2 + FORMAT4_RESERVED_PAD_SIZE;
   const idDeltas = startCodes + segCount * 2;
   codes.forEach((code, index) => {
-    view.setUint16(endCodes + index * 2, code);
+    view.setUint16(FORMAT4_HEADER_SIZE + index * 2, code);
     view.setUint16(startCodes + index * 2, code);
     view.setUint16(
       idDeltas + index * 2,
-      ((mappings.get(code) ?? 0) - code) & 0xffff,
+      ((mappings.get(code) ?? 0) - code) & UINT16_MASK,
     );
   });
-  view.setUint16(endCodes + codes.length * 2, 0xffff);
-  view.setUint16(startCodes + codes.length * 2, 0xffff);
+  view.setUint16(
+    FORMAT4_HEADER_SIZE + codes.length * 2,
+    FORMAT4_TERMINATOR_CODE,
+  );
+  view.setUint16(startCodes + codes.length * 2, FORMAT4_TERMINATOR_CODE);
   view.setUint16(idDeltas + codes.length * 2, 1);
   return subtable;
 }
+
+// Format 6 subtable format number (clause 5.2.6), and its header: format(2) + length(2) + language(2) + firstCode(2) + entryCount(2) = 10 bytes, immediately followed by the glyphIdArray.
+const CMAP_FORMAT_6 = 6;
+const FORMAT6_FIRST_CODE_OFFSET = 6;
+const FORMAT6_ENTRY_COUNT_OFFSET = 8;
+const FORMAT6_HEADER_SIZE = 10;
 
 // Format 6 (trimmed table mapping): one contiguous run of codes with an explicit glyph ID each.
 function buildFormat6(mappings: ReadonlyMap<number, number>): Uint8Array {
   const codes = [...mappings.keys()].sort((a, b) => a - b);
   const firstCode = codes[0] ?? 0;
   const entryCount = (codes[codes.length - 1] ?? 0) - firstCode + 1;
-  const subtable = new Uint8Array(10 + entryCount * 2);
+  const subtable = new Uint8Array(FORMAT6_HEADER_SIZE + entryCount * 2);
   const view = new DataView(subtable.buffer);
-  view.setUint16(0, 6);
+  view.setUint16(0, CMAP_FORMAT_6);
   view.setUint16(2, subtable.length);
-  view.setUint16(6, firstCode);
-  view.setUint16(8, entryCount);
+  view.setUint16(FORMAT6_FIRST_CODE_OFFSET, firstCode);
+  view.setUint16(FORMAT6_ENTRY_COUNT_OFFSET, entryCount);
   for (const [code, glyphId] of mappings) {
-    view.setUint16(10 + (code - firstCode) * 2, glyphId);
+    view.setUint16(FORMAT6_HEADER_SIZE + (code - firstCode) * 2, glyphId);
   }
   return subtable;
 }
@@ -100,23 +139,39 @@ function buildFormat6(mappings: ReadonlyMap<number, number>): Uint8Array {
 // A format 12 segmented subtable (OpenType cmap, "Format 12: Segmented Coverage"): one group per
 // code, each covering the single code point it maps, which is the only shape this builder needs —
 // every test mapping is expressible as single-code groups.
+// Format 12 subtable format number ("Format 12: Segmented Coverage"). Header: format(2) + reserved(2) + length(4) + language(4) + numGroups(4) = 16 bytes; each SequentialMapGroup is startCharCode(4) + endCharCode(4) + startGlyphID(4) = 12 bytes.
+const CMAP_FORMAT_12 = 12;
+const FORMAT12_LENGTH_OFFSET = 4;
+const FORMAT12_NUM_GROUPS_OFFSET = 12;
+const FORMAT12_HEADER_SIZE = 16;
+const FORMAT12_GROUP_SIZE = 12;
+const FORMAT12_GROUP_END_CHAR_OFFSET = 4;
+const FORMAT12_GROUP_START_GLYPH_OFFSET = 8;
+
 function buildFormat12(mappings: ReadonlyMap<number, number>): Uint8Array {
   const groups: { startCode: number; glyphId: number }[] = [...mappings]
     .sort((a, b) => a[0] - b[0])
     .map(([code, glyphId]) => ({ startCode: code, glyphId }));
-  const subtable = new Uint8Array(16 + groups.length * 12);
+  const subtable = new Uint8Array(
+    FORMAT12_HEADER_SIZE + groups.length * FORMAT12_GROUP_SIZE,
+  );
   const view = new DataView(subtable.buffer);
-  view.setUint16(0, 12);
-  view.setUint32(4, subtable.length);
-  view.setUint32(12, groups.length);
+  view.setUint16(0, CMAP_FORMAT_12);
+  view.setUint32(FORMAT12_LENGTH_OFFSET, subtable.length);
+  view.setUint32(FORMAT12_NUM_GROUPS_OFFSET, groups.length);
   groups.forEach((group, index) => {
-    const at = 16 + index * 12;
+    const at = FORMAT12_HEADER_SIZE + index * FORMAT12_GROUP_SIZE;
     view.setUint32(at, group.startCode);
-    view.setUint32(at + 4, group.startCode);
-    view.setUint32(at + 8, group.glyphId);
+    view.setUint32(at + FORMAT12_GROUP_END_CHAR_OFFSET, group.startCode);
+    view.setUint32(at + FORMAT12_GROUP_START_GLYPH_OFFSET, group.glyphId);
   });
   return subtable;
 }
+
+// The cmap table's own header (version(2) + numTables(2) = 4 bytes) and each encoding record (platformID(2) + encodingID(2) + offset(4) = 8 bytes), per clause 5.2.1.
+const CMAP_TABLE_HEADER_SIZE = 4;
+const CMAP_ENCODING_RECORD_SIZE = 8;
+const CMAP_ENCODING_RECORD_OFFSET_FIELD = 4;
 
 export function buildCmapTable(
   subtables: readonly CmapSubtableSpec[],
@@ -126,13 +181,14 @@ export function buildCmapTable(
     bytes:
       spec.format === 0
         ? buildFormat0(spec.mappings)
-        : spec.format === 4
+        : spec.format === CMAP_FORMAT_4
           ? buildFormat4(spec.mappings)
-          : spec.format === 12
+          : spec.format === CMAP_FORMAT_12
             ? buildFormat12(spec.mappings)
             : buildFormat6(spec.mappings),
   }));
-  const headerSize = 4 + subtables.length * 8;
+  const headerSize =
+    CMAP_TABLE_HEADER_SIZE + subtables.length * CMAP_ENCODING_RECORD_SIZE;
   const total = encoded.reduce(
     (sum, { bytes }) => sum + bytes.length,
     headerSize,
@@ -142,16 +198,20 @@ export function buildCmapTable(
   view.setUint16(2, subtables.length);
   let offset = headerSize;
   encoded.forEach(({ spec, bytes }, index) => {
-    const recordOffset = 4 + index * 8;
+    const recordOffset =
+      CMAP_TABLE_HEADER_SIZE + index * CMAP_ENCODING_RECORD_SIZE;
     view.setUint16(recordOffset, spec.platformId);
     view.setUint16(recordOffset + 2, spec.encodingId);
-    view.setUint32(recordOffset + 4, offset);
+    view.setUint32(recordOffset + CMAP_ENCODING_RECORD_OFFSET_FIELD, offset);
     table.set(bytes, offset);
     offset += bytes.length;
   });
   return table;
 }
 
+// 'post' table version numbers (16.16 fixed-point, clause 5.2.9): version 2.0 names every glyph explicitly; version 3.0 carries no glyph names at all.
+const POST_VERSION_2_0 = 0x00020000;
+const POST_VERSION_3_0 = 0x00030000;
 const POST_HEADER_SIZE = 32;
 const POST_MAC_STANDARD_NAME_COUNT = 258;
 
@@ -168,7 +228,7 @@ export function buildPostV2Table(
     POST_HEADER_SIZE + 2 + glyphNames.length * 2 + stringBytes.length,
   );
   const view = new DataView(table.buffer);
-  view.setUint32(0, 0x00020000);
+  view.setUint32(0, POST_VERSION_2_0);
   view.setUint16(POST_HEADER_SIZE, glyphNames.length);
   let customIndex = 0;
   glyphNames.forEach((name, glyphId) => {
@@ -186,7 +246,7 @@ export function buildPostV2Table(
 // A version 3.0 'post' table: the header alone, declaring that the font carries no glyph names at all — what a subsetting tool emits when it strips them, and the case a reader must recover a glyph's identity some other way for.
 export function buildPostV3Table(): Uint8Array<ArrayBuffer> {
   const table = new Uint8Array(POST_HEADER_SIZE);
-  new DataView(table.buffer).setUint32(0, 0x00030000);
+  new DataView(table.buffer).setUint32(0, POST_VERSION_3_0);
   return table;
 }
 // ---- OpenType Layout common structures and the 'GSUB'/'GDEF' tables ----
@@ -233,15 +293,23 @@ function buildOffsetTableContainer(
   return container;
 }
 
+// Shared byte-layout shapes used across many GSUB/GDEF subtable formats below: a plain two-field header (format(2) + count(2), or equivalently any other pair of uint16 fields before an array starts), and a plain three-field header or record (three uint16 fields in a row, e.g. start/end/value).
+const U16_HEADER_SIZE = 4;
+const U16_TRIPLE_SIZE = 6;
+// The third field's own offset within a U16_TRIPLE_SIZE header/record (the first two fields occupy offsets 0 and 2).
+const U16_TRIPLE_THIRD_FIELD_OFFSET = 4;
+// Contextual / Chaining Contextual Substitution format 3's own format number.
+const CONTEXT_FORMAT_3 = 3;
+
 // Coverage format 1: an ascending glyph list.
 export function buildCoverageFormat1(
   glyphIds: readonly number[],
 ): Uint8Array<ArrayBuffer> {
   const sorted = [...glyphIds].sort((a, b) => a - b);
-  const table = new TableBuilder(4 + sorted.length * 2);
+  const table = new TableBuilder(U16_HEADER_SIZE + sorted.length * 2);
   table.setU16(0, 1).setU16(2, sorted.length);
   sorted.forEach((glyphId, index) => {
-    table.setU16(4 + index * 2, glyphId);
+    table.setU16(U16_HEADER_SIZE + index * 2, glyphId);
   });
   return table.bytes;
 }
@@ -250,14 +318,21 @@ export function buildCoverageFormat1(
 export function buildCoverageFormat2(
   ranges: readonly (readonly [number, number])[],
 ): Uint8Array<ArrayBuffer> {
-  const table = new TableBuilder(4 + ranges.length * 6);
+  const table = new TableBuilder(
+    U16_HEADER_SIZE + ranges.length * U16_TRIPLE_SIZE,
+  );
   table.setU16(0, 2).setU16(2, ranges.length);
   let coverageIndex = 0;
   ranges.forEach(([start, end], index) => {
     table
-      .setU16(4 + index * 6, start)
-      .setU16(4 + index * 6 + 2, end)
-      .setU16(4 + index * 6 + 4, coverageIndex);
+      .setU16(U16_HEADER_SIZE + index * U16_TRIPLE_SIZE, start)
+      .setU16(U16_HEADER_SIZE + index * U16_TRIPLE_SIZE + 2, end)
+      .setU16(
+        U16_HEADER_SIZE +
+          index * U16_TRIPLE_SIZE +
+          U16_TRIPLE_THIRD_FIELD_OFFSET,
+        coverageIndex,
+      );
     coverageIndex += end - start + 1;
   });
   return table.bytes;
@@ -268,10 +343,13 @@ export function buildClassDefFormat1(
   startGlyphId: number,
   classes: readonly number[],
 ): Uint8Array<ArrayBuffer> {
-  const table = new TableBuilder(6 + classes.length * 2);
-  table.setU16(0, 1).setU16(2, startGlyphId).setU16(4, classes.length);
+  const table = new TableBuilder(U16_TRIPLE_SIZE + classes.length * 2);
+  table
+    .setU16(0, 1)
+    .setU16(2, startGlyphId)
+    .setU16(U16_TRIPLE_THIRD_FIELD_OFFSET, classes.length);
   classes.forEach((klass, index) => {
-    table.setU16(6 + index * 2, klass);
+    table.setU16(U16_TRIPLE_SIZE + index * 2, klass);
   });
   return table.bytes;
 }
@@ -280,13 +358,20 @@ export function buildClassDefFormat1(
 export function buildClassDefFormat2(
   ranges: readonly (readonly [number, number, number])[],
 ): Uint8Array<ArrayBuffer> {
-  const table = new TableBuilder(4 + ranges.length * 6);
+  const table = new TableBuilder(
+    U16_HEADER_SIZE + ranges.length * U16_TRIPLE_SIZE,
+  );
   table.setU16(0, 2).setU16(2, ranges.length);
   ranges.forEach(([start, end, klass], index) => {
     table
-      .setU16(4 + index * 6, start)
-      .setU16(4 + index * 6 + 2, end)
-      .setU16(4 + index * 6 + 4, klass);
+      .setU16(U16_HEADER_SIZE + index * U16_TRIPLE_SIZE, start)
+      .setU16(U16_HEADER_SIZE + index * U16_TRIPLE_SIZE + 2, end)
+      .setU16(
+        U16_HEADER_SIZE +
+          index * U16_TRIPLE_SIZE +
+          U16_TRIPLE_THIRD_FIELD_OFFSET,
+        klass,
+      );
   });
   return table.bytes;
 }
@@ -297,11 +382,14 @@ export function buildSingleSubstFormat2(
 ): Uint8Array<ArrayBuffer> {
   const sorted = [...mappings].sort((a, b) => a[0] - b[0]);
   const coverage = buildCoverageFormat1(sorted.map(([from]) => from));
-  const substitutesAt = 6 + sorted.length * 2;
+  const substitutesAt = U16_TRIPLE_SIZE + sorted.length * 2;
   const table = new TableBuilder(substitutesAt + coverage.length);
-  table.setU16(0, 2).setU16(2, substitutesAt).setU16(4, sorted.length);
+  table
+    .setU16(0, 2)
+    .setU16(2, substitutesAt)
+    .setU16(U16_TRIPLE_THIRD_FIELD_OFFSET, sorted.length);
   sorted.forEach(([, to], index) => {
-    table.setU16(6 + index * 2, to);
+    table.setU16(U16_TRIPLE_SIZE + index * 2, to);
   });
   return table.put(substitutesAt, coverage).bytes;
 }
@@ -311,10 +399,10 @@ function buildLigatureRecord(
   ligatureGlyph: number,
   components: readonly number[],
 ): Uint8Array<ArrayBuffer> {
-  const table = new TableBuilder(4 + components.length * 2);
+  const table = new TableBuilder(U16_HEADER_SIZE + components.length * 2);
   table.setU16(0, ligatureGlyph).setU16(2, components.length + 1);
   components.forEach((component, index) => {
-    table.setU16(4 + index * 2, component);
+    table.setU16(U16_HEADER_SIZE + index * 2, component);
   });
   return table.bytes;
 }
@@ -340,7 +428,7 @@ export function buildLigatureSubstFormat1(
       ),
     ),
   );
-  const coverageAt = 6 + ligSets.length * 2;
+  const coverageAt = U16_TRIPLE_SIZE + ligSets.length * 2;
   let at = coverageAt + coverage.length;
   const setOffsets = ligSets.map((ligSet) => {
     const offset = at;
@@ -348,9 +436,12 @@ export function buildLigatureSubstFormat1(
     return offset;
   });
   const table = new TableBuilder(at);
-  table.setU16(0, 1).setU16(2, coverageAt).setU16(4, ligSets.length);
+  table
+    .setU16(0, 1)
+    .setU16(2, coverageAt)
+    .setU16(U16_TRIPLE_THIRD_FIELD_OFFSET, ligSets.length);
   setOffsets.forEach((offset, index) => {
-    table.setU16(6 + index * 2, offset);
+    table.setU16(U16_TRIPLE_SIZE + index * 2, offset);
   });
   table.put(coverageAt, coverage);
   ligSets.forEach((ligSet, index) => {
@@ -365,14 +456,17 @@ export interface GsubRecordSpec {
   readonly lookupIndex: number;
 }
 
+// A SubstLookupRecord is two uint16 fields (sequenceIndex, lookupIndex): the same two-field shape as U16_HEADER_SIZE, reused here as a per-record size.
+const SUBST_LOOKUP_RECORD_SIZE = 4;
+
 function buildRecords(
   records: readonly GsubRecordSpec[],
 ): Uint8Array<ArrayBuffer> {
-  const bytes = new Uint8Array(records.length * 4);
+  const bytes = new Uint8Array(records.length * SUBST_LOOKUP_RECORD_SIZE);
   const view = new DataView(bytes.buffer);
   records.forEach((record, index) => {
-    view.setUint16(index * 4, record.sequenceIndex);
-    view.setUint16(index * 4 + 2, record.lookupIndex);
+    view.setUint16(index * SUBST_LOOKUP_RECORD_SIZE, record.sequenceIndex);
+    view.setUint16(index * SUBST_LOOKUP_RECORD_SIZE + 2, record.lookupIndex);
   });
   return bytes;
 }
@@ -479,6 +573,14 @@ function assembleRuleSetSubtable(
   return table.bytes;
 }
 
+// Header sizes and field offsets for the four assembleRuleSetSubtable callers below (format N, then N-1 further uint16 offset/count fields, per each format's own layout).
+const CONTEXT_FORMAT2_HEADER_SIZE = 8;
+const CONTEXT_FORMAT2_COUNT_OFFSET = 6;
+const CHAIN_CONTEXT2_HEADER_SIZE = 12;
+const CHAIN_CONTEXT2_INPUT_OFFSET = 6;
+const CHAIN_CONTEXT2_LOOKAHEAD_OFFSET = 8;
+const CHAIN_CONTEXT2_COUNT_OFFSET = 10;
+
 // Contextual Substitution format 1: coverage over rule-set first glyphs; each rule lists input glyph ids (after the first) and records.
 export function buildContextFormat1(
   firstGlyphs: readonly number[],
@@ -488,9 +590,12 @@ export function buildContextFormat1(
   }[])[],
 ): Uint8Array<ArrayBuffer> {
   return assembleRuleSetSubtable(
-    6,
+    U16_TRIPLE_SIZE,
     (table, [coverageAt]) => {
-      table.setU16(0, 1).setU16(2, coverageAt!).setU16(4, ruleSets.length);
+      table
+        .setU16(0, 1)
+        .setU16(2, coverageAt!)
+        .setU16(U16_TRIPLE_THIRD_FIELD_OFFSET, ruleSets.length);
     },
     [buildCoverageFormat1(firstGlyphs)],
     ruleSets.map((rules) =>
@@ -511,13 +616,13 @@ export function buildContextFormat2(
   }[])[],
 ): Uint8Array<ArrayBuffer> {
   return assembleRuleSetSubtable(
-    8,
+    CONTEXT_FORMAT2_HEADER_SIZE,
     (table, [coverageAt, classDefAt]) => {
       table
         .setU16(0, 2)
         .setU16(2, coverageAt!)
-        .setU16(4, classDefAt!)
-        .setU16(6, ruleSetsByClass.length);
+        .setU16(U16_TRIPLE_THIRD_FIELD_OFFSET, classDefAt!)
+        .setU16(CONTEXT_FORMAT2_COUNT_OFFSET, ruleSetsByClass.length);
     },
     [buildCoverageFormat1(firstGlyphs), classDef],
     ruleSetsByClass.map((rules) =>
@@ -534,9 +639,12 @@ export function buildChainContextFormat1(
   ruleSets: readonly (readonly GsubContextRuleSpec[])[],
 ): Uint8Array<ArrayBuffer> {
   return assembleRuleSetSubtable(
-    6,
+    U16_TRIPLE_SIZE,
     (table, [coverageAt]) => {
-      table.setU16(0, 1).setU16(2, coverageAt!).setU16(4, ruleSets.length);
+      table
+        .setU16(0, 1)
+        .setU16(2, coverageAt!)
+        .setU16(U16_TRIPLE_THIRD_FIELD_OFFSET, ruleSets.length);
     },
     [buildCoverageFormat1(firstGlyphs)],
     ruleSets.map((rules) =>
@@ -556,15 +664,15 @@ export function buildChainContextFormat2(
   ruleSetsByClass: readonly (readonly GsubContextRuleSpec[])[],
 ): Uint8Array<ArrayBuffer> {
   return assembleRuleSetSubtable(
-    12,
+    CHAIN_CONTEXT2_HEADER_SIZE,
     (table, [coverageAt, backtrackAt, inputAt, lookaheadAt]) => {
       table
         .setU16(0, 2)
         .setU16(2, coverageAt!)
-        .setU16(4, backtrackAt!)
-        .setU16(6, inputAt!)
-        .setU16(8, lookaheadAt!)
-        .setU16(10, ruleSetsByClass.length);
+        .setU16(U16_TRIPLE_THIRD_FIELD_OFFSET, backtrackAt!)
+        .setU16(CHAIN_CONTEXT2_INPUT_OFFSET, inputAt!)
+        .setU16(CHAIN_CONTEXT2_LOOKAHEAD_OFFSET, lookaheadAt!)
+        .setU16(CHAIN_CONTEXT2_COUNT_OFFSET, ruleSetsByClass.length);
     },
     [
       buildCoverageFormat1(firstGlyphs),
@@ -606,7 +714,7 @@ export function buildFormat3Subtable(
   );
   let fixedAt = 2;
   let blobAt = fixedSize;
-  table.setU16(0, 3);
+  table.setU16(0, CONTEXT_FORMAT_3);
   const putCoverageArray = (coverages: readonly Uint8Array[]): void => {
     table.setU16(fixedAt, coverages.length);
     fixedAt += 2;
@@ -631,13 +739,19 @@ export function buildFormat3Subtable(
 }
 
 // Extension Substitution format 1 wrapping a subtable of another lookup type.
+// ExtensionSubstFormat1 header: format(2) + extensionLookupType(2) + extensionOffset(4, always pointing right past this fixed header) = 8 bytes.
+const EXTENSION_SUBST_HEADER_SIZE = 8;
+
 export function buildExtensionSubst(
   wrappedLookupType: number,
   wrapped: Uint8Array,
 ): Uint8Array<ArrayBuffer> {
-  const table = new TableBuilder(8 + wrapped.length);
-  table.setU16(0, 1).setU16(2, wrappedLookupType).setU32(4, 8);
-  return table.put(8, wrapped).bytes;
+  const table = new TableBuilder(EXTENSION_SUBST_HEADER_SIZE + wrapped.length);
+  table
+    .setU16(0, 1)
+    .setU16(2, wrappedLookupType)
+    .setU32(U16_TRIPLE_THIRD_FIELD_OFFSET, EXTENSION_SUBST_HEADER_SIZE);
+  return table.put(EXTENSION_SUBST_HEADER_SIZE, wrapped).bytes;
 }
 
 // One lookup: type, flag, an optional trailing markFilteringSet (written exactly when the flag selects one, per the Lookup table layout), and its subtables.
@@ -653,50 +767,88 @@ export interface GsubFeatureSpec {
   readonly lookupIndices: readonly number[];
 }
 
+// LangSys's own "no required feature" sentinel (spec: 0xFFFF means the script has no required feature).
+const LANG_SYS_NO_REQUIRED_FEATURE = 0xffff;
+// ScriptList header: scriptCount(2) + one ScriptRecord's tag(4) + offset(2) = 8 bytes, for the single 'latn' script this builder always emits.
+const SCRIPT_LIST_HEADER_SIZE = 8;
+const SCRIPT_RECORD_OFFSET_FIELD_POSITION = 6;
+// The 'latn' script tag's own two big-endian uint16 halves.
+const LATN_TAG_HIGH = 0x6c61; // 'la'
+const LATN_TAG_LOW = 0x746e; // 'tn'
+// A FeatureRecord is a 4-byte tag plus a 2-byte offset = 6 bytes; the offset field sits right after the tag.
+const FEATURE_RECORD_SIZE = 6;
+const FEATURE_RECORD_OFFSET_FIELD = 4;
+// Lookup Flag bit 4 (spec, LookupFlag enumeration): set when a trailing markFilteringSet index follows the subtable offset array.
+const LOOKUP_FLAG_USE_MARK_FILTERING_SET = 0x0010;
+// The GSUB table's own header: majorVersion(2) + minorVersion(2) + scriptListOffset(2) + featureListOffset(2) + lookupListOffset(2) = 10 bytes.
+const GSUB_HEADER_SIZE = 10;
+const GSUB_FEATURE_LIST_OFFSET_FIELD = 6;
+const GSUB_LOOKUP_LIST_OFFSET_FIELD = 8;
+
 // A whole 'GSUB' table: one 'latn' script whose default LangSys enables every feature, a feature list in the order given, and a lookup list.
 export function buildGsubTable(
   features: readonly GsubFeatureSpec[],
   lookups: readonly GsubLookupSpec[],
 ): Uint8Array<ArrayBuffer> {
-  const langSys = new TableBuilder(6 + features.length * 2);
-  langSys.setU16(0, 0).setU16(2, 0xffff).setU16(4, features.length);
+  const langSys = new TableBuilder(U16_TRIPLE_SIZE + features.length * 2);
+  langSys
+    .setU16(0, 0)
+    .setU16(2, LANG_SYS_NO_REQUIRED_FEATURE)
+    .setU16(U16_TRIPLE_THIRD_FIELD_OFFSET, features.length);
   features.forEach((_, index) => {
-    langSys.setU16(6 + index * 2, index);
+    langSys.setU16(U16_TRIPLE_SIZE + index * 2, index);
   });
-  const script = new TableBuilder(4 + langSys.bytes.length);
-  script.setU16(0, 4).setU16(2, 0).put(4, langSys.bytes);
-  const scriptList = new TableBuilder(8 + script.bytes.length);
+  const script = new TableBuilder(U16_HEADER_SIZE + langSys.bytes.length);
+  script
+    .setU16(0, U16_HEADER_SIZE)
+    .setU16(2, 0)
+    .put(U16_HEADER_SIZE, langSys.bytes);
+  const scriptList = new TableBuilder(
+    SCRIPT_LIST_HEADER_SIZE + script.bytes.length,
+  );
   scriptList
     .setU16(0, 1)
-    .setU16(2, 0x6c61) // 'la'
-    .setU16(4, 0x746e) // 'tn'
-    .setU16(6, 8)
-    .put(8, script.bytes);
+    .setU16(2, LATN_TAG_HIGH)
+    .setU16(U16_TRIPLE_THIRD_FIELD_OFFSET, LATN_TAG_LOW)
+    .setU16(SCRIPT_RECORD_OFFSET_FIELD_POSITION, SCRIPT_LIST_HEADER_SIZE)
+    .put(SCRIPT_LIST_HEADER_SIZE, script.bytes);
   const featureTables = features.map((feature) => {
-    const table = new TableBuilder(4 + feature.lookupIndices.length * 2);
+    const table = new TableBuilder(
+      U16_HEADER_SIZE + feature.lookupIndices.length * 2,
+    );
     table.setU16(0, 0).setU16(2, feature.lookupIndices.length);
     feature.lookupIndices.forEach((lookupIndex, index) => {
-      table.setU16(4 + index * 2, lookupIndex);
+      table.setU16(U16_HEADER_SIZE + index * 2, lookupIndex);
     });
     return table.bytes;
   });
   const featureListSize =
-    2 + features.length * 6 + featureTables.reduce((n, t) => n + t.length, 0);
+    2 +
+    features.length * FEATURE_RECORD_SIZE +
+    featureTables.reduce((n, t) => n + t.length, 0);
   const featureList = new TableBuilder(featureListSize);
   featureList.setU16(0, features.length);
-  let featureTableAt = 2 + features.length * 6;
+  let featureTableAt = 2 + features.length * FEATURE_RECORD_SIZE;
   features.forEach((feature, index) => {
-    featureList.bytes.set(new TextEncoder().encode(feature.tag), 2 + index * 6);
+    featureList.bytes.set(
+      new TextEncoder().encode(feature.tag),
+      2 + index * FEATURE_RECORD_SIZE,
+    );
     featureList
-      .setU16(2 + index * 6 + 4, featureTableAt)
+      .setU16(
+        2 + index * FEATURE_RECORD_SIZE + FEATURE_RECORD_OFFSET_FIELD,
+        featureTableAt,
+      )
       .put(featureTableAt, featureTables[index]!);
     featureTableAt += featureTables[index]!.length;
   });
   const lookupTables = lookups.map((lookup) => {
     // No separate "is flag even defined" check is needed: JS's bitwise `&` coerces `undefined` to 0 before operating, so `undefined & 0x0010` is already 0 — exactly the same as explicitly treating an absent flag as clearing every bit.
-    const markFilteringSetWidth = ((lookup.flag ?? 0) & 0x0010) !== 0 ? 2 : 0;
+    const markFilteringSetWidth =
+      ((lookup.flag ?? 0) & LOOKUP_FLAG_USE_MARK_FILTERING_SET) !== 0 ? 2 : 0;
     // The Lookup table's own layout: a 6-byte header, the subtable offset array, then — only when the flag selects one — the trailing markFilteringSet index the flag's set number refers to.
-    let at = 6 + lookup.subtables.length * 2 + markFilteringSetWidth;
+    let at =
+      U16_TRIPLE_SIZE + lookup.subtables.length * 2 + markFilteringSetWidth;
     const offsets = lookup.subtables.map((subtable) => {
       const offset = at;
       at += subtable.length;
@@ -706,34 +858,44 @@ export function buildGsubTable(
     table
       .setU16(0, lookup.type)
       .setU16(2, lookup.flag ?? 0)
-      .setU16(4, lookup.subtables.length);
+      .setU16(U16_TRIPLE_THIRD_FIELD_OFFSET, lookup.subtables.length);
     if (markFilteringSetWidth === 2) {
       table.setU16(
-        6 + lookup.subtables.length * 2,
+        U16_TRIPLE_SIZE + lookup.subtables.length * 2,
         lookup.markFilteringSet ?? 0,
       );
     }
     offsets.forEach((offset, index) => {
-      table.setU16(6 + index * 2, offset);
+      table.setU16(U16_TRIPLE_SIZE + index * 2, offset);
       table.put(offset, lookup.subtables[index]!);
     });
     return table.bytes;
   });
   const lookupList = buildOffsetTableContainer(lookupTables);
-  const scriptListAt = 10;
-  const featureListAt = scriptListAt + scriptList.bytes.length;
+
+  const featureListAt = GSUB_HEADER_SIZE + scriptList.bytes.length;
   const lookupListAt = featureListAt + featureList.bytes.length;
   const table = new TableBuilder(lookupListAt + lookupList.length);
   table.setU16(0, 1).setU16(2, 0);
   table
-    .setU16(4, scriptListAt)
-    .setU16(6, featureListAt)
-    .setU16(8, lookupListAt);
-  table.put(scriptListAt, scriptList.bytes);
+    .setU16(U16_TRIPLE_THIRD_FIELD_OFFSET, GSUB_HEADER_SIZE)
+    .setU16(GSUB_FEATURE_LIST_OFFSET_FIELD, featureListAt)
+    .setU16(GSUB_LOOKUP_LIST_OFFSET_FIELD, lookupListAt);
+  table.put(GSUB_HEADER_SIZE, scriptList.bytes);
   table.put(featureListAt, featureList.bytes);
   table.put(lookupListAt, lookupList);
   return table.bytes;
 }
+
+// A MarkGlyphSetsDef Coverage offset is a 4-byte (Offset32) entry.
+const MARK_GLYPH_SET_COVERAGE_OFFSET_SIZE = 4;
+// 'GDEF' header sizes: version 1.0 is majorVersion(2) + minorVersion(2) + glyphClassDefOffset(2) + attachListOffset(2) + ligCaretListOffset(2) + markAttachClassDefOffset(2) = 12 bytes; version 1.2 adds a trailing markGlyphSetsDefOffset(2) = 14 bytes.
+const GDEF_HEADER_SIZE_V1_0 = 12;
+const GDEF_HEADER_SIZE_V1_2 = 14;
+const GDEF_ATTACH_LIST_OFFSET_FIELD = 6;
+const GDEF_LIG_CARET_LIST_OFFSET_FIELD = 8;
+const GDEF_MARK_ATTACH_CLASS_DEF_OFFSET_FIELD = 10;
+const GDEF_MARK_GLYPH_SETS_DEF_OFFSET_FIELD = 12;
 
 // A 'GDEF' table: version 1.0 carrying the glyph-class and mark-attachment ClassDefs, or version 1.2 adding MarkGlyphSets (the coverage tables a useMarkFilteringSet flag selects between). AttachList and LigCaretList are always NULL — the reader under test ignores them.
 export function buildGdefTable(classes: {
@@ -744,15 +906,22 @@ export function buildGdefTable(classes: {
   const markGlyphSetsDef = classes.markGlyphSets
     ? ((sets: readonly Uint8Array[]) => {
         const defSize =
-          4 + sets.length * 4 + sets.reduce((n, s) => n + s.length, 0);
+          U16_HEADER_SIZE +
+          sets.length * MARK_GLYPH_SET_COVERAGE_OFFSET_SIZE +
+          sets.reduce((n, s) => n + s.length, 0);
         const def = new TableBuilder(defSize);
         def.setU16(0, 1).setU16(2, sets.length);
-        let at = 4 + sets.length * 4;
+        let at =
+          U16_HEADER_SIZE + sets.length * MARK_GLYPH_SET_COVERAGE_OFFSET_SIZE;
         sets.forEach((coverage, index) => {
-          def.setU32(4 + index * 4, at);
+          def.setU32(
+            U16_HEADER_SIZE + index * MARK_GLYPH_SET_COVERAGE_OFFSET_SIZE,
+            at,
+          );
           at += coverage.length;
         });
-        at = 4 + sets.length * 4;
+        at =
+          U16_HEADER_SIZE + sets.length * MARK_GLYPH_SET_COVERAGE_OFFSET_SIZE;
         sets.forEach((coverage) => {
           def.put(at, coverage);
           at += coverage.length;
@@ -760,7 +929,10 @@ export function buildGdefTable(classes: {
         return def.bytes;
       })(classes.markGlyphSets)
     : undefined;
-  const headerSize = markGlyphSetsDef === undefined ? 12 : 14;
+  const headerSize =
+    markGlyphSetsDef === undefined
+      ? GDEF_HEADER_SIZE_V1_0
+      : GDEF_HEADER_SIZE_V1_2;
   const blobs = [
     classes.glyphClassDef,
     classes.markAttachClassDef,
@@ -783,11 +955,17 @@ export function buildGdefTable(classes: {
     classes.markAttachClassDef === undefined
       ? 0
       : offsetOf(classes.markAttachClassDef);
-  table.setU16(4, glyphClassOffset).setU16(6, 0).setU16(8, 0);
-  table.setU16(10, markAttachOffset);
+  table
+    .setU16(U16_TRIPLE_THIRD_FIELD_OFFSET, glyphClassOffset)
+    .setU16(GDEF_ATTACH_LIST_OFFSET_FIELD, 0)
+    .setU16(GDEF_LIG_CARET_LIST_OFFSET_FIELD, 0);
+  table.setU16(GDEF_MARK_ATTACH_CLASS_DEF_OFFSET_FIELD, markAttachOffset);
   if (markGlyphSetsDef !== undefined) {
     // the MarkGlyphSetsDef offset slot arrives with minor version 2; its value was already placed by the blob walk above
-    table.setU16(12, offsetOf(markGlyphSetsDef));
+    table.setU16(
+      GDEF_MARK_GLYPH_SETS_DEF_OFFSET_FIELD,
+      offsetOf(markGlyphSetsDef),
+    );
   }
   return table.bytes;
 }
