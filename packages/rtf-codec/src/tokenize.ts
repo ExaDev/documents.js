@@ -31,6 +31,11 @@ export type RtfToken =
 const MAX_CONTROL_WORD_LETTERS = 32;
 const MAX_PARAMETER_DIGITS = 10;
 
+// \'hh: backslash, apostrophe, then the high and low hex digits — APOSTROPHE_LOW_DIGIT_OFFSET is the low digit's own byte offset from the backslash, HEX_ESCAPE_LENGTH the whole production's fixed byte length, HEX_RADIX the base the two digits are combined in.
+const APOSTROPHE_LOW_DIGIT_OFFSET = 3;
+const HEX_ESCAPE_LENGTH = 4;
+const HEX_RADIX = 16;
+
 const BACKSLASH = 0x5c;
 const OPEN_BRACE = 0x7b;
 const CLOSE_BRACE = 0x7d;
@@ -40,18 +45,34 @@ const SPACE = 0x20;
 const CARRIAGE_RETURN = 0x0d;
 const LINE_FEED = 0x0a;
 
+const ASCII_UPPER_A = 0x41;
+const ASCII_UPPER_Z = 0x5a;
+const ASCII_LOWER_A = 0x61;
+const ASCII_LOWER_Z = 0x7a;
+const ASCII_DIGIT_ZERO = 0x30;
+const ASCII_DIGIT_NINE = 0x39;
+const ASCII_LOWER_F = 0x66;
+const ASCII_UPPER_F = 0x46;
+// hexDigitValue's own 'a'-'f'/'A'-'F' branches: the digit value a lowercase or uppercase hex letter represents past '0'-'9', i.e. the value 'a'/'A' itself stands for.
+const HEX_LETTER_DIGIT_BASE = 10;
+
 function isAsciiLetter(byte: number): boolean {
-  return (byte >= 0x41 && byte <= 0x5a) || (byte >= 0x61 && byte <= 0x7a);
+  return (
+    (byte >= ASCII_UPPER_A && byte <= ASCII_UPPER_Z) ||
+    (byte >= ASCII_LOWER_A && byte <= ASCII_LOWER_Z)
+  );
 }
 
 function isAsciiDigit(byte: number): boolean {
-  return byte >= 0x30 && byte <= 0x39;
+  return byte >= ASCII_DIGIT_ZERO && byte <= ASCII_DIGIT_NINE;
 }
 
 function hexDigitValue(byte: number): number | undefined {
-  if (isAsciiDigit(byte)) return byte - 0x30;
-  if (byte >= 0x61 && byte <= 0x66) return byte - 0x61 + 10;
-  if (byte >= 0x41 && byte <= 0x46) return byte - 0x41 + 10;
+  if (isAsciiDigit(byte)) return byte - ASCII_DIGIT_ZERO;
+  if (byte >= ASCII_LOWER_A && byte <= ASCII_LOWER_F)
+    return byte - ASCII_LOWER_A + HEX_LETTER_DIGIT_BASE;
+  if (byte >= ASCII_UPPER_A && byte <= ASCII_UPPER_F)
+    return byte - ASCII_UPPER_A + HEX_LETTER_DIGIT_BASE;
   return undefined;
 }
 
@@ -166,11 +187,13 @@ export function tokenizeRtf(input: Uint8Array): RtfToken[] {
 
     if (after === APOSTROPHE) {
       const high = hexDigitValue(input[cursor + 2] ?? 0);
-      const low = hexDigitValue(input[cursor + 3] ?? 0);
+      const low = hexDigitValue(
+        input[cursor + APOSTROPHE_LOW_DIGIT_OFFSET] ?? 0,
+      );
       if (high !== undefined && low !== undefined) {
         flushText();
-        tokens.push({ kind: "hex", byte: high * 16 + low });
-        cursor += 4;
+        tokens.push({ kind: "hex", byte: high * HEX_RADIX + low });
+        cursor += HEX_ESCAPE_LENGTH;
         continue;
       }
       // Not followed by two hex digits, so it is not the \'hh production; fall through and lex it as the ordinary control symbol it textually is.
