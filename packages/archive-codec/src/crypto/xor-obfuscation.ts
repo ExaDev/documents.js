@@ -6,6 +6,23 @@
 
 // Every table below is read through a DataView rather than plain indexed access: with noUncheckedIndexedAccess on, `arr[i]` types as possibly-undefined even where a loop bound already guarantees it is not, and DataView's own get sidesteps that without a non-null assertion at every step (matching md5.ts's own T table).
 
+// Fixed widths and masks: Latin-1's own ceiling, a byte's own bits, and the 16-bit masks; the 2 verifier bits the password hash reads; the 2 verifier constants [MS-OFFCRYPTO] 2.3.7.2's own diagram states; and Method 2's own stream-rotation distance.
+const LATIN1_MAX = 0xff;
+const LATIN1_MASK = 0xff;
+const BITS_PER_BYTE = 8;
+const U16_MASK = 0xffff;
+const BYTES_PER_U16 = 2;
+const VERIFIER_HASH_BITS = 7;
+const TOP_VERIFIER_BIT = 0x40;
+const VERIFIER_TOP_BIT = 0x4000;
+const VERIFIER_LOW_BITS = 0x7fff;
+const VERIFIER_FINAL_HASH = 0xce4b;
+const METHOD2_STREAM_ROTATE_DISTANCE = 3;
+// One numbered entry of a published specification table, the position it occupies there alongside its value.
+interface SpecConstant {
+  readonly i: number;
+  readonly value: number;
+}
 function u16Table(values: readonly number[]): DataView {
   const view = new DataView(new ArrayBuffer(values.length * 2));
   values.forEach((value, index) => {
@@ -23,30 +40,152 @@ function u8Table(values: readonly number[]): DataView {
 }
 
 /** [MS-OFFCRYPTO] 2.3.7.2's own PadArray: the fixed 15-byte filler used once a password's own bytes are exhausted while building either method's 16-byte array. */
-const PAD_ARRAY = u8Table([
-  0xbb, 0xff, 0xff, 0xba, 0xff, 0xff, 0xb9, 0x80, 0x00, 0xbe, 0x0f, 0x00, 0xbf,
-  0x0f, 0x00,
-]);
+const PAD_ENTRIES: readonly SpecConstant[] = [
+  { i: 1, value: 0xbb },
+  { i: 2, value: 0xff },
+  { i: 3, value: 0xff },
+  { i: 4, value: 0xba },
+  { i: 5, value: 0xff },
+  { i: 6, value: 0xff },
+  { i: 7, value: 0xb9 },
+  { i: 8, value: 0x80 },
+  { i: 9, value: 0x00 },
+  { i: 10, value: 0xbe },
+  { i: 11, value: 0x0f },
+  { i: 12, value: 0x00 },
+  { i: 13, value: 0xbf },
+  { i: 14, value: 0x0f },
+  { i: 15, value: 0x00 },
+];
+const PAD_ARRAY = u8Table(PAD_ENTRIES.map(({ value }) => value));
 /** [MS-OFFCRYPTO] 2.3.7.2's own InitialCode table, indexed by `password.length - 1` (a 1-15 character password) to seed createXorObfuscationKey. */
-const INITIAL_CODE = u16Table([
-  0xe1f0, 0x1d0f, 0xcc9c, 0x84c0, 0x110c, 0x0e10, 0xf1ce, 0x313e, 0x1872,
-  0xe139, 0xd40f, 0x84f9, 0x280c, 0xa96a, 0x4ec3,
-]);
+const INITIAL_CODE_ENTRIES: readonly SpecConstant[] = [
+  { i: 1, value: 0xe1f0 },
+  { i: 2, value: 0x1d0f },
+  { i: 3, value: 0xcc9c },
+  { i: 4, value: 0x84c0 },
+  { i: 5, value: 0x110c },
+  { i: 6, value: 0x0e10 },
+  { i: 7, value: 0xf1ce },
+  { i: 8, value: 0x313e },
+  { i: 9, value: 0x1872 },
+  { i: 10, value: 0xe139 },
+  { i: 11, value: 0xd40f },
+  { i: 12, value: 0x84f9 },
+  { i: 13, value: 0x280c },
+  { i: 14, value: 0xa96a },
+  { i: 15, value: 0x4ec3 },
+];
+const INITIAL_CODE = u16Table(INITIAL_CODE_ENTRIES.map(({ value }) => value));
 /** [MS-OFFCRYPTO] 2.3.7.2's own XorMatrix: a 15x7 table of 16-bit constants (flattened here to 105 entries, row-major) createXorObfuscationKey folds into the running key for every set bit of every password character. */
-const XOR_MATRIX = u16Table([
-  0xaefc, 0x4dd9, 0x9bb2, 0x2745, 0x4e8a, 0x9d14, 0x2a09, 0x7b61, 0xf6c2,
-  0xfda5, 0xeb6b, 0xc6f7, 0x9dcf, 0x2bbf, 0x4563, 0x8ac6, 0x05ad, 0x0b5a,
-  0x16b4, 0x2d68, 0x5ad0, 0x0375, 0x06ea, 0x0dd4, 0x1ba8, 0x3750, 0x6ea0,
-  0xdd40, 0xd849, 0xa0b3, 0x5147, 0xa28e, 0x553d, 0xaa7a, 0x44d5, 0x6f45,
-  0xde8a, 0xad35, 0x4a4b, 0x9496, 0x390d, 0x721a, 0xeb23, 0xc667, 0x9cef,
-  0x29ff, 0x53fe, 0xa7fc, 0x5fd9, 0x47d3, 0x8fa6, 0x0f6d, 0x1eda, 0x3db4,
-  0x7b68, 0xf6d0, 0xb861, 0x60e3, 0xc1c6, 0x93ad, 0x377b, 0x6ef6, 0xddec,
-  0x45a0, 0x8b40, 0x06a1, 0x0d42, 0x1a84, 0x3508, 0x6a10, 0xaa51, 0x4483,
-  0x8906, 0x022d, 0x045a, 0x08b4, 0x1168, 0x76b4, 0xed68, 0xcaf1, 0x85c3,
-  0x1ba7, 0x374e, 0x6e9c, 0x3730, 0x6e60, 0xdcc0, 0xa9a1, 0x4363, 0x86c6,
-  0x1dad, 0x3331, 0x6662, 0xccc4, 0x89a9, 0x0373, 0x06e6, 0x0dcc, 0x1021,
-  0x2042, 0x4084, 0x8108, 0x1231, 0x2462, 0x48c4,
-]);
+const XOR_MATRIX_ENTRIES: readonly SpecConstant[] = [
+  { i: 1, value: 0xaefc },
+  { i: 2, value: 0x4dd9 },
+  { i: 3, value: 0x9bb2 },
+  { i: 4, value: 0x2745 },
+  { i: 5, value: 0x4e8a },
+  { i: 6, value: 0x9d14 },
+  { i: 7, value: 0x2a09 },
+  { i: 8, value: 0x7b61 },
+  { i: 9, value: 0xf6c2 },
+  { i: 10, value: 0xfda5 },
+  { i: 11, value: 0xeb6b },
+  { i: 12, value: 0xc6f7 },
+  { i: 13, value: 0x9dcf },
+  { i: 14, value: 0x2bbf },
+  { i: 15, value: 0x4563 },
+  { i: 16, value: 0x8ac6 },
+  { i: 17, value: 0x05ad },
+  { i: 18, value: 0x0b5a },
+  { i: 19, value: 0x16b4 },
+  { i: 20, value: 0x2d68 },
+  { i: 21, value: 0x5ad0 },
+  { i: 22, value: 0x0375 },
+  { i: 23, value: 0x06ea },
+  { i: 24, value: 0x0dd4 },
+  { i: 25, value: 0x1ba8 },
+  { i: 26, value: 0x3750 },
+  { i: 27, value: 0x6ea0 },
+  { i: 28, value: 0xdd40 },
+  { i: 29, value: 0xd849 },
+  { i: 30, value: 0xa0b3 },
+  { i: 31, value: 0x5147 },
+  { i: 32, value: 0xa28e },
+  { i: 33, value: 0x553d },
+  { i: 34, value: 0xaa7a },
+  { i: 35, value: 0x44d5 },
+  { i: 36, value: 0x6f45 },
+  { i: 37, value: 0xde8a },
+  { i: 38, value: 0xad35 },
+  { i: 39, value: 0x4a4b },
+  { i: 40, value: 0x9496 },
+  { i: 41, value: 0x390d },
+  { i: 42, value: 0x721a },
+  { i: 43, value: 0xeb23 },
+  { i: 44, value: 0xc667 },
+  { i: 45, value: 0x9cef },
+  { i: 46, value: 0x29ff },
+  { i: 47, value: 0x53fe },
+  { i: 48, value: 0xa7fc },
+  { i: 49, value: 0x5fd9 },
+  { i: 50, value: 0x47d3 },
+  { i: 51, value: 0x8fa6 },
+  { i: 52, value: 0x0f6d },
+  { i: 53, value: 0x1eda },
+  { i: 54, value: 0x3db4 },
+  { i: 55, value: 0x7b68 },
+  { i: 56, value: 0xf6d0 },
+  { i: 57, value: 0xb861 },
+  { i: 58, value: 0x60e3 },
+  { i: 59, value: 0xc1c6 },
+  { i: 60, value: 0x93ad },
+  { i: 61, value: 0x377b },
+  { i: 62, value: 0x6ef6 },
+  { i: 63, value: 0xddec },
+  { i: 64, value: 0x45a0 },
+  { i: 65, value: 0x8b40 },
+  { i: 66, value: 0x06a1 },
+  { i: 67, value: 0x0d42 },
+  { i: 68, value: 0x1a84 },
+  { i: 69, value: 0x3508 },
+  { i: 70, value: 0x6a10 },
+  { i: 71, value: 0xaa51 },
+  { i: 72, value: 0x4483 },
+  { i: 73, value: 0x8906 },
+  { i: 74, value: 0x022d },
+  { i: 75, value: 0x045a },
+  { i: 76, value: 0x08b4 },
+  { i: 77, value: 0x1168 },
+  { i: 78, value: 0x76b4 },
+  { i: 79, value: 0xed68 },
+  { i: 80, value: 0xcaf1 },
+  { i: 81, value: 0x85c3 },
+  { i: 82, value: 0x1ba7 },
+  { i: 83, value: 0x374e },
+  { i: 84, value: 0x6e9c },
+  { i: 85, value: 0x3730 },
+  { i: 86, value: 0x6e60 },
+  { i: 87, value: 0xdcc0 },
+  { i: 88, value: 0xa9a1 },
+  { i: 89, value: 0x4363 },
+  { i: 90, value: 0x86c6 },
+  { i: 91, value: 0x1dad },
+  { i: 92, value: 0x3331 },
+  { i: 93, value: 0x6662 },
+  { i: 94, value: 0xccc4 },
+  { i: 95, value: 0x89a9 },
+  { i: 96, value: 0x0373 },
+  { i: 97, value: 0x06e6 },
+  { i: 98, value: 0x0dcc },
+  { i: 99, value: 0x1021 },
+  { i: 100, value: 0x2042 },
+  { i: 101, value: 0x4084 },
+  { i: 102, value: 0x8108 },
+  { i: 103, value: 0x1231 },
+  { i: 104, value: 0x2462 },
+  { i: 105, value: 0x48c4 },
+];
+const XOR_MATRIX = u16Table(XOR_MATRIX_ENTRIES.map(({ value }) => value));
 
 /** The length every XOR obfuscation array (either method) has, and the period both methods' XorArrayIndex wraps at. */
 export const XOR_OBFUSCATION_ARRAY_LENGTH = 16;
@@ -76,7 +215,7 @@ function passwordToAsciiBytes(password: string): Uint8Array<ArrayBuffer> {
   );
   for (let i = 0; i < password.length; i += 1) {
     const code = password.charCodeAt(i);
-    if (code > 0xff) {
+    if (code > LATIN1_MAX) {
       throw new RangeError(
         `XOR obfuscation passwords must be single-byte ASCII/Latin-1 characters, got code point ${code} at index ${i}`,
       );
@@ -98,11 +237,13 @@ export function createXorObfuscationKey(password: string): number {
   let currentElement = 0x68;
   for (let i = bytes.length - 1; i >= 0; i -= 1) {
     let ch = bytesView.getUint8(i);
-    for (let bit = 0; bit < 7; bit += 1) {
-      if ((ch & 0x40) !== 0) {
-        xorKey = (xorKey ^ XOR_MATRIX.getUint16(currentElement * 2)) & 0xffff;
+    for (let bit = 0; bit < VERIFIER_HASH_BITS; bit += 1) {
+      if ((ch & TOP_VERIFIER_BIT) !== 0) {
+        xorKey =
+          (xorKey ^ XOR_MATRIX.getUint16(currentElement * BYTES_PER_U16)) &
+          U16_MASK;
       }
-      ch = (ch << 1) & 0xff;
+      ch = (ch << 1) & LATIN1_MASK;
       currentElement -= 1;
     }
   }
@@ -119,19 +260,19 @@ export function createXorObfuscationPasswordVerifier(password: string): number {
   );
   let verifier = 0;
   for (let i = bytes.length - 1; i >= 0; i -= 1) {
-    const intermediate1 = (verifier & 0x4000) === 0 ? 0 : 1;
-    const intermediate2 = (verifier * 2) & 0x7fff;
+    const intermediate1 = (verifier & VERIFIER_TOP_BIT) === 0 ? 0 : 1;
+    const intermediate2 = (verifier * 2) & VERIFIER_LOW_BITS;
     verifier = intermediate1 ^ intermediate2 ^ bytesView.getUint8(i);
   }
-  const intermediate1 = (verifier & 0x4000) === 0 ? 0 : 1;
-  const intermediate2 = (verifier * 2) & 0x7fff;
+  const intermediate1 = (verifier & VERIFIER_TOP_BIT) === 0 ? 0 : 1;
+  const intermediate2 = (verifier * 2) & VERIFIER_LOW_BITS;
   verifier = intermediate1 ^ intermediate2 ^ bytes.length;
-  return (verifier ^ 0xce4b) & 0xffff;
+  return (verifier ^ VERIFIER_FINAL_HASH) & U16_MASK;
 }
 
 function rotateLeft8(byte: number, distance: number): number {
-  const b = byte & 0xff;
-  return ((b << distance) | (b >>> (8 - distance))) & 0xff;
+  const b = byte & LATIN1_MASK;
+  return ((b << distance) | (b >>> (BITS_PER_BYTE - distance))) & LATIN1_MASK;
 }
 
 /**
@@ -154,8 +295,8 @@ export function createXorObfuscationArray(
     arrayView.setUint8(i, PAD_ARRAY.getUint8(i - passwordBytes.length));
   }
   const xorKey = createXorObfuscationKey(password);
-  const keyLow = xorKey & 0xff;
-  const keyHigh = (xorKey >>> 8) & 0xff;
+  const keyLow = xorKey & LATIN1_MASK;
+  const keyHigh = (xorKey >>> BITS_PER_BYTE) & LATIN1_MASK;
   for (let i = 0; i < XOR_OBFUSCATION_ARRAY_LENGTH; i += 1) {
     const withKey = arrayView.getUint8(i) ^ (i % 2 === 0 ? keyLow : keyHigh);
     array[i] = rotateLeft8(withKey, rotateDistance);
@@ -180,7 +321,10 @@ export function decryptXorObfuscationMethod1(
   );
   let index = initialIndex % XOR_OBFUSCATION_ARRAY_LENGTH;
   for (let i = 0; i < data.length; i += 1) {
-    const rotated = rotateLeft8(dataView.getUint8(i), 3);
+    const rotated = rotateLeft8(
+      dataView.getUint8(i),
+      METHOD2_STREAM_ROTATE_DISTANCE,
+    );
     out[i] = rotated ^ arrayView.getUint8(index);
     index = (index + 1) % XOR_OBFUSCATION_ARRAY_LENGTH;
   }
