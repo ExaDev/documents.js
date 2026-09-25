@@ -14,17 +14,24 @@ import { LEAD_BYTE_TABLE as LEAD_949 } from "./codepage-dbcs/cp949";
 import { LEAD_BYTE_TABLE as LEAD_950 } from "./codepage-dbcs/cp950";
 import { LEAD_BYTE_TABLE as LEAD_1361 } from "./codepage-dbcs/cp1361";
 
+// Named per-page RTF code page numbers, so the Map literals below key by name rather than by a bare numeric literal.
+const CODEPAGE_932_SHIFT_JIS = 932;
+const CODEPAGE_936_GBK = 936;
+const CODEPAGE_949_UHC = 949;
+const CODEPAGE_950_BIG5 = 950;
+const CODEPAGE_1361_JOHAB = 1361;
+
 export const DBCS_LEAD_BYTE_TABLES: ReadonlyMap<
   number,
   ReadonlyMap<number, string>
 > = new Map([
-  [932, LEAD_932],
-  [936, LEAD_936],
-  [949, LEAD_949],
-  [950, LEAD_950],
-  [1361, LEAD_1361],
+  [CODEPAGE_932_SHIFT_JIS, LEAD_932],
+  [CODEPAGE_936_GBK, LEAD_936],
+  [CODEPAGE_949_UHC, LEAD_949],
+  [CODEPAGE_950_BIG5, LEAD_950],
+  [CODEPAGE_1361_JOHAB, LEAD_1361],
 ]);
 
 export const DBCS_SINGLE_BYTE_EXTRAS: ReadonlyMap<number, string> = new Map([
-  [932, SINGLE_932],
+  [CODEPAGE_932_SHIFT_JIS, SINGLE_932],
 ]);
