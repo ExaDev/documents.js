@@ -5,6 +5,13 @@ import { FTAB_FIXED_ARITY, FTAB_IFTAB_BY_NAME } from "./ptg-functions";
 import { writeShortXLUnicodeString } from "./string-writer";
 import { BiffWriteError } from "./write-errors";
 
+// Little-endian word assembly, the double's own byte length, and the largest argument count a PtgFuncVar's own byte can carry.
+const BYTE_MASK = 0xff;
+const WORD_MASK = 0xffff;
+const BITS_PER_BYTE = 8;
+const DOUBLE_BYTES = 8;
+const MAX_ARGUMENT_COUNT = 0xff;
+
 // The write-side counterpart of biff/ptg.ts: same-sheet formula TEXT compiled back into a Formula record's own rgce token stream ([MS-XLS] 2.5.198). Scoped to exactly the subset of Excel's formula grammar that round-trips through this package's own reader: literal operands, same-sheet cell/range references, every arithmetic/comparison/unary/percent operator, explicit parentheses, and a function call resolved by name against ptg-functions.ts's own Ftab table — see this package's README for the writer's own scope table.
 //
 // Deliberately unsupported, each because writing bytes for it would either produce a formula this package's own reader cannot read back, or would need infrastructure this writer does not yet have: a 3D (cross-sheet or external-workbook) reference — resolving one to an ixti needs a SupBook/ExternSheet pair, which globals-writer.ts only ever writes today for the two built-in print-settings names, not for an arbitrary formula; an array-constant literal (`{1,2;3,4}`) or a CSE array formula — both need a PtgExtraArray/Array-record trailer this writer does not build; a defined name — document-schema.js's spreadsheet model has nowhere a user-defined name lives, so there is nothing to resolve one against; and a function name outside ptg-functions.ts's own Ftab vocabulary (Excel 2007+ added many worksheet functions BIFF8's own Ftab enumeration never named, resolved instead through a PtgNameX/add-in mechanism this writer does not implement). Every one of these throws BiffWriteError naming the construct rather than emitting a plausible-looking but unreadable token stream.
@@ -56,12 +63,12 @@ class RgceBuilder {
   }
 
   u16(value: number): this {
-    const bits = value & 0xffff;
-    return this.push(bits & 0xff, (bits >>> 8) & 0xff);
+    const bits = value & WORD_MASK;
+    return this.push(bits & BYTE_MASK, (bits >>> BITS_PER_BYTE) & BYTE_MASK);
   }
 
   f64(value: number): this {
-    const buffer = new ArrayBuffer(8);
+    const buffer = new ArrayBuffer(DOUBLE_BYTES);
     new DataView(buffer).setFloat64(0, value, true);
     return this.push(...new Uint8Array(buffer));
   }
@@ -637,7 +644,7 @@ function compileParent(builder: RgceBuilder, node: ParentNode): void {
       return;
     case "call":
       if (node.variable) {
-        if (node.args.length > 0xff) {
+        if (node.args.length > MAX_ARGUMENT_COUNT) {
           throw new BiffWriteError(
             `a function call with ${node.args.length} arguments cannot be written: PtgFuncVar's own cparams field ([MS-XLS] 2.5.198.25) is a single byte, so it cannot exceed 255`,
           );

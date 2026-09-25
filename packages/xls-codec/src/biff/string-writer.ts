@@ -1,6 +1,11 @@
 import { RecordBuilder } from "./builder";
 import { BiffWriteError } from "./write-errors";
 
+// An 8-bit string holds units up to 0xFF.
+const MAX_8_BIT = 0xff;
+// How much of a too-long string the error quotes back.
+const ELLIPSIS_PREVIEW_LENGTH = 40;
+
 // The write-side mirror of biff/strings.ts: BIFF8's three string shapes, encoded rather than decoded. Unlike the reader, this writer never has to handle a Continue boundary — every string this package writes fits inside one record's own 8224-byte data ceiling, checked by biff/record-writer.ts's writeRecord once the field is assembled, so there is no fHighByte-per-boundary case to get right here.
 //
 // cch counts UTF-16 code units, exactly as the reader documents: an astral character occupies two units, each written as its own 16-bit value in the uncompressed encoding. A string is written compressed (one byte per unit, fHighByte clear) when every unit fits in a low byte, and uncompressed (two bytes per unit, fHighByte set) otherwise — the same choice a real producer makes, and the smaller of the two whenever it is legal.
@@ -23,7 +28,7 @@ interface EncodedCharacters {
 function encodeCharacters(text: string): EncodedCharacters {
   const needsHighByte = Array.from({ length: text.length }, (_, index) =>
     text.charCodeAt(index),
-  ).some((unit) => unit > 0xff);
+  ).some((unit) => unit > MAX_8_BIT);
   const builder = new RecordBuilder();
   for (let index = 0; index < text.length; index += 1) {
     const unit = text.charCodeAt(index);
@@ -40,7 +45,7 @@ function encodeCharacters(text: string): EncodedCharacters {
 function checkedLength(text: string, max: number, shape: string): number {
   if (text.length > max) {
     throw new BiffWriteError(
-      `${shape} cannot hold ${text.length} UTF-16 code units, above its own ${max}-unit limit (text: ${JSON.stringify(`${text.slice(0, 40)}...`)})`,
+      `${shape} cannot hold ${text.length} UTF-16 code units, above its own ${max}-unit limit (text: ${JSON.stringify(`${text.slice(0, ELLIPSIS_PREVIEW_LENGTH)}...`)})`,
     );
   }
   return text.length;

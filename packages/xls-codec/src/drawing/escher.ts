@@ -1,5 +1,11 @@
 import { BiffFormatError } from "../biff/records";
 
+// Hex, for printing a record type the way [MS-ODRAW]'s own tables do; and the record header word's own layout: a 4-bit version, a 12-bit instance above it, and the 32-bit length at byte 4.
+const HEX_RADIX = 16;
+const RECORD_VERSION_MASK = 0xf;
+const RECORD_INSTANCE_SHIFT = 4;
+const RECORD_LENGTH_OFFSET = 4;
+
 // MS-ODRAW (Escher): the binary drawing format BIFF8 embeds via its own MsoDrawing/MsoDrawingGroup records ([MS-XLS] 2.4.180/2.4.179-adjacent), read directly against [MS-ODRAW]'s own record framing rather than from memory or another implementation's header file. Every structural claim below cites the specific [MS-ODRAW] page it comes from.
 //
 // [MS-ODRAW] 2.2.1 OfficeArtRecordHeader (https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-odraw/5dc1b9ed-818c-436f-8a4f-905a7ebb1ba9): an 8-byte header shared by every record — a little-endian WORD whose low nibble is `recVer` and whose remaining 12 bits are `recInstance`, then a little-endian `recType` WORD, then a little-endian `recLen` DWORD counting the bytes that follow the header (for a container, the total size of every nested record INCLUDING their own headers, not a separate wrapper size on top of them). `recVer === 0xF` is what marks a CONTAINER, whose own body is itself a sequence of child records read the same way; any other `recVer` marks an ATOM, whose body is `recLen` bytes of opaque record-specific data this module does not interpret further — see drawing/shapes.ts and drawing/blips.ts for the atoms this package actually reads.
@@ -54,15 +60,15 @@ function readOneRecord(
   }
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   const verInstance = view.getUint16(offset, true);
-  const recVer = verInstance & 0xf;
-  const recInstance = verInstance >> 4;
+  const recVer = verInstance & RECORD_VERSION_MASK;
+  const recInstance = verInstance >> RECORD_INSTANCE_SHIFT;
   const recType = view.getUint16(offset + 2, true);
-  const recLen = view.getUint32(offset + 4, true);
+  const recLen = view.getUint32(offset + RECORD_LENGTH_OFFSET, true);
   const bodyStart = offset + HEADER_SIZE;
   const bodyEnd = bodyStart + recLen;
   if (bodyEnd > bytes.length) {
     throw new BiffFormatError(
-      `Escher record 0x${recType.toString(16)} at offset ${offset} declares ${recLen} bytes of body, running past the end of the ${bytes.length}-byte stream`,
+      `Escher record 0x${recType.toString(HEX_RADIX)} at offset ${offset} declares ${recLen} bytes of body, running past the end of the ${bytes.length}-byte stream`,
     );
   }
   if (recVer === CONTAINER_REC_VER) {

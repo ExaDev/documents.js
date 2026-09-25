@@ -7,6 +7,10 @@ import {
 } from "./record-types";
 import { BiffFormatError, type BiffRecord } from "./records";
 
+// Hex, for printing a BIFF version the way the spec's own tables do.
+const HEX_RADIX = 16;
+const VERSION_HEX_DIGITS = 4;
+
 // The two structural passes between the flat record list and the substream readers.
 //
 // groupRecords joins each record to the Continue records ([MS-XLS] 2.4.58) that follow it, producing one entry per LOGICAL record with its blocks kept separate — separate because the boundary between them is meaningful to a string reader (see biff/strings.ts), so this is a grouping rather than a concatenation. A "future record type" (FRT) record — CondFmt12/CF12 among them — uses its own ContinueFrt12 ([MS-XLS] 2.4.62) instead of plain Continue when its data exceeds one record, and that record restates a 12-byte FrtRefHeader of its own before the genuine continuation bytes begin; this function strips that restated header so a ContinueFrt12's own block, like a plain Continue's, is exactly the bytes it is extending the base record with.
@@ -139,7 +143,7 @@ function readBofDocumentType(group: RecordGroup): number {
   if (version !== BIFF8_VERSION) {
     // [MS-XLS] 2.4.21 fixes vers at 0x0600 for BIFF8. An earlier BIFF names its records by the same numbers but lays several of them out differently (a BIFF5 Row, XF, and every string among them), so continuing here would misread fields rather than fail.
     throw new BiffFormatError(
-      `BOF declares BIFF version 0x${version.toString(16).padStart(4, "0")}; this reader implements BIFF8 (0x0600) only`,
+      `BOF declares BIFF version 0x${version.toString(HEX_RADIX).padStart(VERSION_HEX_DIGITS, "0")}; this reader implements BIFF8 (0x0600) only`,
     );
   }
   return view.getUint16(2, true);
