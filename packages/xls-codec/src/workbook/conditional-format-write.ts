@@ -26,6 +26,13 @@ export function assertNeverSheetRuleOperator(value: never): never {
 }
 
 // The CF record's own cp table ([MS-XLS] 2.5.16's own Cpt), the inverse of conditional-format.ts's OPERATOR_BY_CP — a real exhaustive switch over SheetRuleOperator's closed eight-member union rather than a Map, so the compiler itself proves every operator has a cp value and this never needs an "operator has no cp" fallback to guard a lookup that cannot miss.
+const CP_EQUAL = 0x3;
+const CP_NOT_EQUAL = 0x4;
+const CP_GREATER_THAN = 0x5;
+const CP_LESS_THAN = 0x6;
+const CP_GREATER_THAN_OR_EQUAL = 0x7;
+const CP_LESS_THAN_OR_EQUAL = 0x8;
+
 function cpOf(operator: SheetRuleOperator): number {
   switch (operator) {
     case "between":
@@ -33,26 +40,31 @@ function cpOf(operator: SheetRuleOperator): number {
     case "notBetween":
       return 0x2;
     case "equal":
-      return 0x3;
+      return CP_EQUAL;
     case "notEqual":
-      return 0x4;
+      return CP_NOT_EQUAL;
     case "greaterThan":
-      return 0x5;
+      return CP_GREATER_THAN;
     case "lessThan":
-      return 0x6;
+      return CP_LESS_THAN;
     case "greaterThanOrEqual":
-      return 0x7;
+      return CP_GREATER_THAN_OR_EQUAL;
     case "lessThanOrEqual":
-      return 0x8;
+      return CP_LESS_THAN_OR_EQUAL;
   }
   return assertNeverSheetRuleOperator(operator);
 }
 
 // DXFFNTD's own fixed length ([MS-XLS] 2.4.97), mirrored from parseDxfStyle's own constant: everything this writer states in the block is zero but icvFore.
 const DXFFNTD_LENGTH = 122;
-const DXFFNTD_ICV_FORE_OFFSET = 64 + 16;
+const DXFFNTD_ICV_FORE_OFFSET = 80; // 64 + 16 bytes into DXFFNTD ([MS-XLS] 2.4.97), icvFore's own field offset within the block
 
 // The DXFN structure ([MS-XLS] 2.4.97), the exact inverse of parseDxfStyle: the 4+2 flag words (bit 26 = a DXFFntD font block, bit 29 = a DXFPat fill block), then only the blocks the flags name, in the reader's own order (font, alignment, border, pattern — the middle two never set, since the schema's style carries no alignment or border). The font block states one fact and nothing else: the text colour, as icvFore. The pattern block states a solid fill whose visible colour is the foreground icv, the identical reading resolveFillBackground's own solid case makes on the way back in.
+const DXFN_FONT_BLOCK_BIT = 26;
+const DXFN_PATTERN_BLOCK_BIT = 29;
+const DXFPAT_FLS_SHIFT = 10; // past unused1's own 10 bits
+const DXFPAT_ICV_FOREGROUND_SHIFT = 16; // past unused1(10) + fls(6)
+
 function writeDxfn(
   style: ContentSheetConditionalFormatStyle | undefined,
   icvOf: (color: Readonly<Color>) => number,
@@ -65,10 +77,10 @@ function writeDxfn(
   const flags = new RecordBuilder();
   let flagsWord = 0;
   if (textColor !== undefined) {
-    flagsWord |= 0x1 << 26;
+    flagsWord |= 0x1 << DXFN_FONT_BLOCK_BIT;
   }
   if (background !== undefined) {
-    flagsWord |= 0x1 << 29;
+    flagsWord |= 0x1 << DXFN_PATTERN_BLOCK_BIT;
   }
   flags.u32(flagsWord);
   flags.u16(0); // fIfmtUser clear — no number-format override
@@ -84,7 +96,9 @@ function writeDxfn(
   }
   if (background !== undefined) {
     // DXFPat's packed word, the mirror of parseDxfStyle's own extraction: unused1(10) fls(6) icvForeground(7) icvBackground(7) unused2(2), LSB first. fls 1 is solid, whose visible colour is the foreground icv; the background icv is unread in the solid case, so 0 states nothing it overrides.
-    const patWord = (0x1 << 10) | (icvOf(background) << 16);
+    const patWord =
+      (0x1 << DXFPAT_FLS_SHIFT) |
+      (icvOf(background) << DXFPAT_ICV_FOREGROUND_SHIFT);
     flags.u32(patWord >>> 0);
   }
   return flags.build();
@@ -160,6 +174,13 @@ const ICF_TEMPLATE_BELOW_OR_EQUAL_AVERAGE = 0x001e;
 
 // CFExTemplateParams is a fixed 16-byte block CF12 always carries between cbTemplateParm and rgbCT; only its first bytes are meaningful, and which bytes those are depends on the template ([MS-XLS] 2.5.23-2.5.27).
 const TEMPLATE_PARAMS_SIZE = 16;
+// The reserved trailer each template variant pads its own leading fields out to TEMPLATE_PARAMS_SIZE with, derived from it rather than restated as a bare byte count: CFExFilterParams ([MS-XLS] 2.5.25) leads with a 1-byte flags field plus a 2-byte iParam; CFExAveragesTemplateParams/CFExDateTemplateParams/CFExTextTemplateParams (2.5.23/2.5.24/2.5.27) each lead with a single 2-byte field alone.
+const CFEX_FILTER_PARAMS_HEADER_BYTES = 3;
+const CFEX_FILTER_PARAMS_RESERVED_BYTES =
+  TEMPLATE_PARAMS_SIZE - CFEX_FILTER_PARAMS_HEADER_BYTES;
+const CFEX_SINGLE_U16_PARAMS_HEADER_BYTES = 2;
+const CFEX_SINGLE_U16_PARAMS_RESERVED_BYTES =
+  TEMPLATE_PARAMS_SIZE - CFEX_SINGLE_U16_PARAMS_HEADER_BYTES;
 
 // Reached only if ContentSheetConditionalFormatValue's own type ever gains a member cfvoTypeCodeOf's own switch does not match: every current member is covered there, so `value` narrows to `never` at the real call site, and adding an uncovered type makes that narrowing fail and this call stop compiling. That is the real safety net. Exported so conditional-format-write.test.ts can exercise the throw directly with a forced-invalid cast: it is otherwise unreachable, since every real type is already handled by a case in cfvoTypeCodeOf.
 export function assertNeverConditionalFormatValueType(value: never): never {
@@ -169,6 +190,11 @@ export function assertNeverConditionalFormatValueType(value: never): never {
 }
 
 // The CFVO type codes' inverse ([MS-XLS] 2.5.40's own cfvoType table), mirrored from conditional-format-12.ts's CFVO_TYPE_TO_VALUE_TYPE.
+const CFVO_TYPE_MAX = 0x03;
+const CFVO_TYPE_PERCENT = 0x04;
+const CFVO_TYPE_PERCENTILE = 0x05;
+const CFVO_TYPE_FORMULA = 0x07;
+
 function cfvoTypeCodeOf(
   value: Readonly<ContentSheetConditionalFormatValue>,
 ): number {
@@ -178,13 +204,13 @@ function cfvoTypeCodeOf(
     case "min":
       return 0x02;
     case "max":
-      return 0x03;
+      return CFVO_TYPE_MAX;
     case "percent":
-      return 0x04;
+      return CFVO_TYPE_PERCENT;
     case "percentile":
-      return 0x05;
+      return CFVO_TYPE_PERCENTILE;
     case "formula":
-      return 0x07;
+      return CFVO_TYPE_FORMULA;
   }
   return assertNeverConditionalFormatValueType(value.type);
 }
@@ -208,29 +234,39 @@ function writeCfvo(
 }
 
 // CFColor ([MS-XLS] 2.5.21), written only in its LongRGBA shape (xclrType 0x00000002): this writer holds a resolved RGB triple and no theme to reference, and XCLRTHEMED has no resolution without one. numTint is 0.0 — the schema's colour carries no tint of its own to state.
+const XCLR_RGB = 0x00000002;
+const RGB_BYTE_MAX = 255;
+
 function writeCfColor(color: Readonly<Color>): Uint8Array<ArrayBuffer> {
   return new RecordBuilder()
-    .u32(0x00000002) // XCLRRGB
-    .u8(Math.round(color.r * 255))
-    .u8(Math.round(color.g * 255))
-    .u8(Math.round(color.b * 255))
+    .u32(XCLR_RGB)
+    .u8(Math.round(color.r * RGB_BYTE_MAX))
+    .u8(Math.round(color.g * RGB_BYTE_MAX))
+    .u8(Math.round(color.b * RGB_BYTE_MAX))
     .u8(0) // alpha — ColorSchema has no alpha channel
     .f64(0) // numTint
     .build();
 }
 
 // CFGradient ([MS-XLS] 2.5.32) for a colour-scale rule's stops: two fixed counts (both the stop count, 2 or 3), then rgInterp (one CFGradientInterpItem per stop: its CFVO plus the fixed domain fraction [MS-XLS] 2.5.33 itself pins to 0.0/0.5/1.0), then rgCurve (one CFGradientItem per stop: the pinned range fraction, then the stop's CFColor). The flags byte sets fBackground (MUST be 1) and fClamp (SHOULD be 1).
+const THREE_STOP_GRADIENT_COUNT = 3;
+const GRADIENT_MIDPOINT_FRACTION = 0.5;
+const CF_CLAMP_AND_BACKGROUND_FLAGS = 0b11; // fClamp | fBackground
+
 function writeCfGradient(
   rule: Extract<ContentSheetConditionalFormat, { type: "colorScale" }>,
 ): Uint8Array<ArrayBuffer> {
   const count = rule.stops.length;
-  const interpFractions = count === 3 ? [0.0, 0.5, 1.0] : [0.0, 1.0];
+  const interpFractions =
+    count === THREE_STOP_GRADIENT_COUNT
+      ? [0.0, GRADIENT_MIDPOINT_FRACTION, 1.0]
+      : [0.0, 1.0];
   const out = new RecordBuilder()
     .u16(0) // unused
     .u8(0) // reserved1
     .u8(count) // cInterpCurve
     .u8(count) // cGradientCurve
-    .u8(0b11); // fClamp | fBackground
+    .u8(CF_CLAMP_AND_BACKGROUND_FLAGS);
   rule.stops.forEach((stop, index) => {
     out.bytes(writeCfvo(stop.value)).f64(interpFractions[index] ?? 1.0);
   });
@@ -241,15 +277,18 @@ function writeCfGradient(
 }
 
 // CFDatabar ([MS-XLS] 2.5.22): the flags byte states fShowValue only (fRightToLeft clear), the two bar-width percentages are written at their extremes — a minimum-value bar taking none of the cell and a maximum-value bar taking all of it, the display a data bar has when a file states no narrower band of its own — then the bar colour and the two threshold CFVOs.
+const DATABAR_SHOW_VALUE_FLAG = 0b10; // fShowValue on bit 1
+const DATABAR_MAX_PERCENT = 100;
+
 function writeCfDatabar(
   rule: Extract<ContentSheetConditionalFormat, { type: "dataBar" }>,
 ): Uint8Array<ArrayBuffer> {
   return new RecordBuilder()
     .u16(0) // unused
     .u8(0) // reserved1
-    .u8(rule.showValue === false ? 0 : 0b10) // fShowValue on bit 1
+    .u8(rule.showValue === false ? 0 : DATABAR_SHOW_VALUE_FLAG)
     .u8(0) // iPercentMin
-    .u8(100) // iPercentMax
+    .u8(DATABAR_MAX_PERCENT)
     .bytes(writeCfColor(rule.color))
     .bytes(writeCfvo(rule.min))
     .bytes(writeCfvo(rule.max))
@@ -257,14 +296,20 @@ function writeCfDatabar(
 }
 
 // CFMultistate's own cStates constraint ([MS-XLS] 2.5.36): the threshold count is not free — the named icon set fixes it at 3, 4, or 5 icons, so the schema's thresholds array must match the set before the rule can be written at all.
+const ICON_SET_3_CUTOFF = 0x07;
+const ICON_SET_4_CUTOFF = 0x0c;
+const ICON_SET_THRESHOLDS_3 = 3;
+const ICON_SET_THRESHOLDS_4 = 4;
+const ICON_SET_THRESHOLDS_5 = 5;
+
 function iconSetThresholdCount(iIconSet: number): number {
-  if (iIconSet <= 0x07) {
-    return 3;
+  if (iIconSet <= ICON_SET_3_CUTOFF) {
+    return ICON_SET_THRESHOLDS_3;
   }
-  if (iIconSet <= 0x0c) {
-    return 4;
+  if (iIconSet <= ICON_SET_4_CUTOFF) {
+    return ICON_SET_THRESHOLDS_4;
   }
-  return 5;
+  return ICON_SET_THRESHOLDS_5;
 }
 
 // CFMultistate ([MS-XLS] 2.5.36) for an icon-set rule's thresholds. The iIconSet byte names one of the seventeen built-in sets ([MS-XLS] 2.5.36's own table, in the identical order conditional-format-12.ts's ICON_SET_TYPE_NAMES reads it back through — including that table's own 0x04/0x05 ordering, which follows the two independent real implementations rather than the spec page's prose, per that reader constant's own comment); a set name outside those seventeen is a producer-extensible vocabulary member with no BIFF8 byte, refused by name rather than written as a set it is not.
@@ -288,6 +333,8 @@ const ICON_SET_TYPE_NAMES: readonly string[] = [
   "5Quarters",
 ];
 
+const ICON_SET_REVERSE_FLAG = 0b100;
+
 function writeCfMultistate(
   rule: Extract<ContentSheetConditionalFormat, { type: "iconSet" }>,
 ): Uint8Array<ArrayBuffer> {
@@ -310,7 +357,7 @@ function writeCfMultistate(
     .u8(iIconSet)
     .u8(
       (rule.showValue === false ? 0b1 : 0) | // A - fIconOnly: the cell's own value hidden
-        (rule.reverse === true ? 0b100 : 0), // C - fReverse
+        (rule.reverse === true ? ICON_SET_REVERSE_FLAG : 0), // C - fReverse
     );
   for (const threshold of rule.thresholds) {
     out.bytes(writeCfvo(threshold)).u8(0); // fEqual: values equal to the threshold do not pass it
@@ -320,9 +367,11 @@ function writeCfMultistate(
 }
 
 // CFFilter ([MS-XLS] 2.5.30), the rgbCT a ct 0x05 rule always carries: its own size in cbFilter (4, excluding cbFilter itself), then the same fTop/fPercent/iParam triple CFExFilterParams states for a top10 rule — flags and iParam are computed once by the "top10" case in writeCf12Record and passed straight through here, rather than recomputed from the rule a second time, so CFFilter's own copy can never silently diverge from the value CFExFilterParams actually carries (this package's own reader, conditional-format-12.ts, reads only the latter — see that file's own top comment — so a divergence here would be invisible to a self-written-and-read round trip, which is exactly the kind of unobservable duplication that must not exist as two separate computations). Every non-top10 filter rule calls this with flags 0 and iParam 0 — CFFilter is the top-N structure, and [MS-XLS] gives the other filter templates no rgbCT payload of their own.
+const CFFILTER_CB_FILTER = 4; // the bytes after this field
+
 function writeCfFilter(flags: number, iParam: number): Uint8Array<ArrayBuffer> {
   return new RecordBuilder()
-    .u16(4) // cbFilter: the bytes after this field
+    .u16(CFFILTER_CB_FILTER)
     .u8(0) // reserved1
     .u8(flags)
     .u16(iParam)
@@ -330,21 +379,33 @@ function writeCfFilter(flags: number, iParam: number): Uint8Array<ArrayBuffer> {
 }
 
 // The ten BIFF8 time-period icfTemplate values, the inverse of conditional-format-12.ts's ICF_TEMPLATE_TO_TIME_PERIOD. The schema's thisYear/lastYear/nextYear members are deliberately absent: they exist only as LibreOffice's own calcext:date-is extension values (document-schema.js's own comment on the enum cites the odf.js reading that introduced them), and no icfTemplate names them — an ODF-only member of the vocabulary with no BIFF8 spelling.
+// [MS-XLS] 2.4.43's own icfTemplate values for the ten time-period templates run contiguously from 0x000f, in this exact order, so the table below derives each one from its own position rather than restating all ten as separate literals.
+const TIME_PERIOD_ICF_TEMPLATE_BASE = 0x000f;
+const TIME_PERIOD_ORDER = [
+  "today",
+  "tomorrow",
+  "yesterday",
+  "last7Days",
+  "lastMonth",
+  "nextMonth",
+  "thisWeek",
+  "nextWeek",
+  "lastWeek",
+  "thisMonth",
+] as const satisfies readonly Extract<
+  ContentSheetConditionalFormat,
+  { type: "timePeriod" }
+>["timePeriod"][];
+
 const TIME_PERIOD_TO_ICF_TEMPLATE: ReadonlyMap<
   Extract<ContentSheetConditionalFormat, { type: "timePeriod" }>["timePeriod"],
   number
-> = new Map([
-  ["today", 0x000f],
-  ["tomorrow", 0x0010],
-  ["yesterday", 0x0011],
-  ["last7Days", 0x0012],
-  ["lastMonth", 0x0013],
-  ["nextMonth", 0x0014],
-  ["thisWeek", 0x0015],
-  ["nextWeek", 0x0016],
-  ["lastWeek", 0x0017],
-  ["thisMonth", 0x0018],
-]);
+> = new Map(
+  TIME_PERIOD_ORDER.map((timePeriod, index) => [
+    timePeriod,
+    TIME_PERIOD_ICF_TEMPLATE_BASE + index,
+  ]),
+);
 
 // Reached only if this operand-free rule-kind union ever gains a member simpleKindIcfTemplate's own switch does not match: every current member is covered there, so `value` narrows to `never` at the real call site, and adding an uncovered kind makes that narrowing fail and this call stop compiling. That is the real safety net. Exported so conditional-format-write.test.ts can exercise the throw directly with a forced-invalid cast: it is otherwise unreachable, since every real member is already handled by a case in simpleKindIcfTemplate.
 export function assertNeverSimpleConditionalFormatKind(value: never): never {
@@ -391,6 +452,8 @@ export function assertNeverTextConditionalFormatKind(value: never): never {
 }
 
 // ctp ([MS-XLS] 2.5.27's CFExTextTemplateParams table): which of the four text sub-types a containsText-family rule is, the inverse of conditional-format-12.ts's CTP_TO_TEXT_KIND. A real exhaustive switch rather than a Map, for the same reason simpleKindIcfTemplate above is.
+const CTP_ENDS_WITH = 0x0003;
+
 function ctpOf(
   type: Extract<
     ContentSheetConditionalFormat,
@@ -405,7 +468,7 @@ function ctpOf(
     case "beginsWith":
       return 0x0002;
     case "endsWith":
-      return 0x0003;
+      return CTP_ENDS_WITH;
   }
   return assertNeverTextConditionalFormatKind(type);
 }
@@ -435,17 +498,23 @@ export function textRuleFormula(
 }
 
 // A relative A1 reference (no $ markers) for the anchor a text rule's formula evaluates each cell against — relative, because Excel's own generated formulas spell it that way and the anchor names the range's first cell, not a fixed reference the rule means to keep.
+const CHAR_CODE_A = 0x41;
+const ALPHABET_SIZE = 26;
+
 export function relativeCellRef(row: number, column: number): string {
   let letters = "";
   let index = column;
   do {
-    letters = String.fromCharCode(0x41 + (index % 26)) + letters;
-    index = Math.floor(index / 26) - 1;
+    letters =
+      String.fromCharCode(CHAR_CODE_A + (index % ALPHABET_SIZE)) + letters;
+    index = Math.floor(index / ALPHABET_SIZE) - 1;
   } while (index >= 0);
   return `${letters}${row + 1}`;
 }
 
 // One CF12 record's full payload, dispatching on the rule's variant. The skeleton every variant shares — frtRefHeader, ct/cp, the two operand lengths, the DXFN12, the operands, the empty activity formula, flags, ipriority, the template block — is [MS-XLS] 2.4.43's own field order, the exact inverse of conditional-format-12.ts's readCf12 walk.
+const FRT_REF_HEADER_REF8_BYTES = 8;
+
 function writeCf12Record(
   rule: Exclude<ContentSheetConditionalFormat, { type: "cellIs" }>,
   ipriority: number,
@@ -492,7 +561,7 @@ function writeCf12Record(
         templateParams = new RecordBuilder()
           .u8(filterFlags)
           .u16(rule.rank)
-          .bytes(new Uint8Array(13))
+          .bytes(new Uint8Array(CFEX_FILTER_PARAMS_RESERVED_BYTES))
           .build();
         rgbCt = writeCfFilter(filterFlags, rule.rank);
       }
@@ -517,7 +586,7 @@ function writeCf12Record(
       }
       templateParams = new RecordBuilder()
         .u16(stdDev)
-        .bytes(new Uint8Array(14))
+        .bytes(new Uint8Array(CFEX_SINGLE_U16_PARAMS_RESERVED_BYTES))
         .build();
       rgbCt = writeCfFilter(0, 0);
       dxf = writeDxfn(rule.style, icvOf);
@@ -535,7 +604,7 @@ function writeCf12Record(
       // CFExDateTemplateParams ([MS-XLS] 2.5.24): dateOp restates icfTemplate, then 14 reserved bytes.
       templateParams = new RecordBuilder()
         .u16(template)
-        .bytes(new Uint8Array(14))
+        .bytes(new Uint8Array(CFEX_SINGLE_U16_PARAMS_RESERVED_BYTES))
         .build();
       rgbCt = writeCfFilter(0, 0);
       dxf = writeDxfn(rule.style, icvOf);
@@ -564,7 +633,7 @@ function writeCf12Record(
       const ctp = ctpOf(rule.type);
       templateParams = new RecordBuilder()
         .u16(ctp)
-        .bytes(new Uint8Array(14))
+        .bytes(new Uint8Array(CFEX_SINGLE_U16_PARAMS_RESERVED_BYTES))
         .build();
       // ct 0x02's condition is the formula itself; rgbCT MUST be omitted ([MS-XLS] 2.4.43's own ct table).
       rgce1 = compileFormulaText(textRuleFormula(rule, anchor));
@@ -576,7 +645,7 @@ function writeCf12Record(
   const writer = new RecordBuilder()
     .u16(RECORD_CF12) // frtRefHeader.rt
     .u16(0) // frtRefHeader.grbitFrt: fFrtRef clear
-    .bytes(new Uint8Array(8)) // frtRefHeader.ref8: MUST be zero
+    .bytes(new Uint8Array(FRT_REF_HEADER_REF8_BYTES)) // frtRefHeader.ref8: MUST be zero
     .u8(ct)
     .u8(0) // cp: meaningful only for a ct 0x01 comparison, which this writer routes to a base CF record instead
     .u16(rgce1?.length ?? 0) // cce1
@@ -669,6 +738,9 @@ function writeCondFmt12Record(
   return writeRecord(RECORD_CONDFMT12, header.build());
 }
 
+const MAX_BIFF8_ROW = 0xffff;
+const MAX_BIFF8_COLUMN = 0xff;
+
 /**
  * Validates every one of a rule's ranges against BIFF8's own grid, and returns them narrowed to a provably non-empty tuple — the schema requires at least one range but types `ranges` as a plain array, so without this the one caller that needs a rule's own first range (textRuleFormula, via its own anchor parameter) would index into a `ContentSheetRange | undefined` for a case that can only ever arise from calling it on a rule this function was never run against first.
  */
@@ -683,10 +755,10 @@ function validateRuleGrid(
   }
   for (const range of rule.ranges) {
     if (
-      range.startRow > 0xffff ||
-      range.endRow > 0xffff ||
-      range.startColumn > 0xff ||
-      range.endColumn > 0xff
+      range.startRow > MAX_BIFF8_ROW ||
+      range.endRow > MAX_BIFF8_ROW ||
+      range.startColumn > MAX_BIFF8_COLUMN ||
+      range.endColumn > MAX_BIFF8_COLUMN
     ) {
       throw new BiffWriteError(
         `a conditional-format range (rows ${range.startRow}-${range.endRow}, columns ${range.startColumn}-${range.endColumn}) is outside BIFF8's own grid; a .xls workbook cannot address it`,
@@ -713,8 +785,10 @@ function validateStopIfTrue(
 }
 
 // nID ([MS-XLS] 2.5.56's CondFmtStructure): the group's own identifier, unique per worksheet, minted as a rule's own 1-based position in the sheet's full rule list — base CondFmt and CondFmt12 groups draw from the one sequence, because a later CFEx record's own nID cross-references either kind. 15 bits is the field's whole width. A standalone function of the count alone, not inlined into writeSheetConditionalFormats' own body, so this one boundary is directly testable at its own exact edge (32767 accepted, 32768 refused) without constructing anywhere near that many real rule objects just to reach it.
+const MAX_15_BIT_NID = 0x7fff;
+
 export function validateRuleCount(count: number): void {
-  if (count > 0x7fff) {
+  if (count > MAX_15_BIT_NID) {
     throw new BiffWriteError(
       `this sheet's ${count} conditional-format rules exceed CondFmt's own 15-bit nID field`,
     );
