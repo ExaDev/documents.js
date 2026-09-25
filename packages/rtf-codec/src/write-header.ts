@@ -12,6 +12,17 @@ const LEVEL_NUMBER_FORMAT_ARABIC = 0;
 export const LIST_LEVEL_INDENT_TWIPS = 720;
 export const LIST_MARKER_HANG_TWIPS = 360;
 
+// \listhybrid requires "Present if the list has 9 levels": every \list this writer emits states this many \listlevel groups.
+const LISTHYBRID_LEVEL_COUNT = 9;
+
+// \listidN carries no meaning beyond linking a \list to its own \listoverride within this one document, and the spec places no constraint on its value. This offset just keeps a writer-generated id visually distinct from entry.index itself when reading a raw \listtable/\listoverridetable dump.
+const LIST_ID_BASE = 1000;
+
+// A colour table entry's own hex string is RRGGBB: three 2-digit channels, read out by writeColorTable below.
+const HEX_COLOR_GREEN_START = 2;
+const HEX_COLOR_BLUE_START = 4;
+const HEX_COLOR_HEX_LENGTH = 6;
+
 // The \leveltext/\levelnumbers payload for a bullet level: one character of level text, U+00B7 (the bullet Word writes for a Symbol-font level), and no number placeholders. Written as the spec's own #SDATA form, a length byte followed by the characters.
 const BULLET_LEVEL_TEXT = "\\'01\\u183 ?";
 // The same for an arabic level: two characters, the level-0 placeholder and a full stop, with \levelnumbers naming byte 1 as the placeholder position.
@@ -58,9 +69,15 @@ function writeColorTable(writer: Writer): void {
   raw(writer, "{\\colortbl;");
   // No sort needed: noteColor assigns each colour's own index as colors.size + 1 at first sight, so the Map's own insertion order already IS ascending-index order — see writeFontTable's identical reasoning.
   for (const [hex] of writer.tables.colors) {
-    const red = Number.parseInt(hex.slice(0, 2), 16);
-    const green = Number.parseInt(hex.slice(2, 4), 16);
-    const blue = Number.parseInt(hex.slice(4, 6), 16);
+    const red = Number.parseInt(hex.slice(0, HEX_COLOR_GREEN_START), 16);
+    const green = Number.parseInt(
+      hex.slice(HEX_COLOR_GREEN_START, HEX_COLOR_BLUE_START),
+      16,
+    );
+    const blue = Number.parseInt(
+      hex.slice(HEX_COLOR_BLUE_START, HEX_COLOR_HEX_LENGTH),
+      16,
+    );
     raw(
       writer,
       `\\red${String(red)}\\green${String(green)}\\blue${String(blue)};`,
@@ -102,7 +119,7 @@ function writeListTables(writer: Writer): void {
     const levelNumbers = bullet ? "" : "\\'01";
     raw(writer, `{\\list\\listtemplateid${String(entry.index)}\\listhybrid`);
     // Nine levels, as \listhybrid requires ("Present if the list has 9 levels"), each indented one step further than the last so a consumer's own rendering of a nested item matches the \ilvlN this writer emits for it.
-    for (let level = 0; level < 9; level += 1) {
+    for (let level = 0; level < LISTHYBRID_LEVEL_COUNT; level += 1) {
       const indent = LIST_LEVEL_INDENT_TWIPS * (level + 1);
       raw(
         writer,
@@ -112,13 +129,13 @@ function writeListTables(writer: Writer): void {
           `\\fi-${String(LIST_MARKER_HANG_TWIPS)}\\li${String(indent)}\\lin${String(indent)}}`,
       );
     }
-    raw(writer, `\\listid${String(1000 + entry.index)}}`);
+    raw(writer, `\\listid${String(LIST_ID_BASE + entry.index)}}`);
   }
   raw(writer, "}{\\*\\listoverridetable");
   for (const entry of entries) {
     raw(
       writer,
-      `{\\listoverride\\listid${String(1000 + entry.index)}\\listoverridecount0\\ls${String(entry.index)}}`,
+      `{\\listoverride\\listid${String(LIST_ID_BASE + entry.index)}\\listoverridecount0\\ls${String(entry.index)}}`,
     );
   }
   raw(writer, "}");
