@@ -1,6 +1,9 @@
 import { MAX_RECORD_DATA_SIZE, RECORD_CONTINUE } from "./record-types";
 import { BiffWriteError } from "./write-errors";
 
+// Hex, for printing a record type the way the spec's own tables do.
+const HEX_RADIX = 16;
+
 // The write-side mirror of biff/records.ts's readRecords: wraps one record's data in [MS-XLS] 2.1.4's three-component framing (a two-byte little-endian type, a two-byte little-endian size, then the data), and concatenates finished records into a stream.
 //
 // writeRecord itself still refuses an oversized single record outright rather than silently chaining it — most record families genuinely never need a Continue chain, and for those a thrown error is the honest signal that something is wrong (an unbounded string, a runaway table) rather than a symptom this layer should paper over. writeRecordChain below is the one place this package chains for real: a record whose data comes from bytes a real producer already expects to split this way (MsoDrawing/MsoDrawingGroup's own Escher streams, per [MS-XLS] 2.4.180/2.4.179 and the MSODRAWING/MSODRAWINGGROUP productions), where refusing would mean this writer could never emit an image past 8224 bytes at all — a limit no real spreadsheet respects.
@@ -14,7 +17,7 @@ export function writeRecord(
 ): Uint8Array<ArrayBuffer> {
   if (data.length > MAX_RECORD_DATA_SIZE) {
     throw new BiffWriteError(
-      `record 0x${type.toString(16)} would carry ${data.length} bytes of data, above the ${MAX_RECORD_DATA_SIZE}-byte maximum a single record can hold ([MS-XLS] 2.1.4); this writer does not split oversized records into Continue chains`,
+      `record 0x${type.toString(HEX_RADIX)} would carry ${data.length} bytes of data, above the ${MAX_RECORD_DATA_SIZE}-byte maximum a single record can hold ([MS-XLS] 2.1.4); this writer does not split oversized records into Continue chains`,
     );
   }
   const out = new Uint8Array(HEADER_SIZE + data.length);

@@ -9,6 +9,13 @@ import type { RecordGroup } from "./substreams";
 import { readShortXLUnicodeString } from "./strings";
 import { resolveIcvColor } from "./xf-colors";
 
+// Font record field bounds [MS-XLS]: the classification triple, the height twips range, and the name length range.
+const CLASSIFICATION_BYTES = 3;
+const MIN_HEIGHT_TWIPS = 20;
+const MAX_HEIGHT_TWIPS = 8191;
+const MIN_FONT_NAME_LENGTH = 1;
+const MAX_FONT_NAME_LENGTH = 31;
+
 // The Font record ([MS-XLS] 2.4.122, https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/291a910c-cb69-4799-875e-a201845d4fd1) — one entry of the workbook's font table, indexed by an XF record's own ifnt field and therefore the font every cell referencing that XF renders through. Read here into exactly the fields ContentSheetCell.font can express, and written back from the identical shape, so the two directions cannot disagree on what a given byte of the record means — the same one-module-per-layout discipline biff/print-setup.ts applies to the Setup record. What the record states that the schema has no member for (superscript/subscript script, outline/shadow/condense/extend effects, font family and character set) is read past and written as its spec-default value rather than half-modelled: a round trip of such a font keeps every property the shared model carries and loses exactly the ones it has no field for, the identical scope limit the border reader already applies to diagonal borders.
 
 /** dyHeight's own unit: a twentieth of a point, the same twip the docx side of this family measures character heights in. */
@@ -62,7 +69,7 @@ export function readFontRecord(record: RecordGroup): XfFontFields {
   const weight = cursor.u16();
   cursor.skip(2); // sss: superscript/subscript script, no ContentFont member
   const underline = cursor.u8();
-  cursor.skip(3); // bFamily, bCharSet, unused3 — classification metadata the schema does not model
+  cursor.skip(CLASSIFICATION_BYTES); // bFamily, bCharSet, unused3 — classification metadata the schema does not model
   return {
     name: readShortXLUnicodeString(cursor),
     heightTwips,
@@ -123,14 +130,18 @@ export function resolveFontColor(
 /** The write-side mirror of readFontRecord: the identical layout in the opposite direction, in the one place the read side already cites. dyHeight's own 20-8191 range and fontName's own 1-31 length are the record's stated MUSTs, so a ContentFont asking for something outside them is refused here rather than silently clipped into a spec-illegal byte sequence. */
 export function writeFontRecord(fields: XfFontFields): Uint8Array<ArrayBuffer> {
   if (
-    (fields.heightTwips < 20 || fields.heightTwips > 8191) &&
+    (fields.heightTwips < MIN_HEIGHT_TWIPS ||
+      fields.heightTwips > MAX_HEIGHT_TWIPS) &&
     fields.heightTwips !== 0
   ) {
     throw new BiffWriteError(
       `font height ${fields.heightTwips} twips is outside the 20-8191 range [MS-XLS] 2.4.122's own dyHeight field allows`,
     );
   }
-  if (fields.name.length < 1 || fields.name.length > 31) {
+  if (
+    fields.name.length < MIN_FONT_NAME_LENGTH ||
+    fields.name.length > MAX_FONT_NAME_LENGTH
+  ) {
     throw new BiffWriteError(
       `font name ${JSON.stringify(fields.name)} is ${fields.name.length} UTF-16 code units, outside the 1-31 fontName itself allows ([MS-XLS] 2.4.122: "String length MUST be greater than or equal to 1 and less than or equal to 31")`,
     );
