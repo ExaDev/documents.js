@@ -10,6 +10,9 @@ import {
   scalarText,
 } from "./parse";
 
+// An arbitrary number, standing in for "any primitive that is not the expected shape": its own value carries no meaning beyond not being one.
+const ARBITRARY_NUMBER = 42;
+
 describe("isRecord", () => {
   it("is true for a plain object", () => {
     expect(isRecord({})).toBe(true);
@@ -27,7 +30,7 @@ describe("isRecord", () => {
 
   it("is false for a primitive", () => {
     expect(isRecord("x")).toBe(false);
-    expect(isRecord(42)).toBe(false);
+    expect(isRecord(ARBITRARY_NUMBER)).toBe(false);
     expect(isRecord(undefined)).toBe(false);
   });
 });
@@ -51,7 +54,7 @@ describe("asString", () => {
   });
 
   it("throws naming the actual runtime type it received", () => {
-    expect(() => asString(42)).toThrow(
+    expect(() => asString(ARBITRARY_NUMBER)).toThrow(
       "expected string while parsing XML, got number",
     );
     expect(() => asString(undefined)).toThrow(

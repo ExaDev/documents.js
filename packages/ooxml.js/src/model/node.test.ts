@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { assertNeverXmlNodeType, isXmlNode } from "./node";
 
+// An arbitrary number, standing in for "any primitive that is not null/array/object": its own value carries no meaning beyond not being one of the excluded shapes.
+const ARBITRARY_NUMBER = 42;
+
 describe("isXmlNode: non-record inputs", () => {
   it("is false for null, even though typeof null === 'object'", () => {
     expect(isXmlNode(null)).toBe(false);
@@ -12,7 +15,7 @@ describe("isXmlNode: non-record inputs", () => {
   });
 
   it("is false for a primitive", () => {
-    expect(isXmlNode(42)).toBe(false);
+    expect(isXmlNode(ARBITRARY_NUMBER)).toBe(false);
     expect(isXmlNode("x")).toBe(false);
     expect(isXmlNode(undefined)).toBe(false);
   });

@@ -246,7 +246,9 @@ describe("XML construct fidelity", () => {
         "p",
       );
       const kids = p?.children ?? [];
-      expect(kids).toHaveLength(5);
+      // "hello ", <b>, " world ", <i>, " tail": three text runs and two elements, none coalesced.
+      const EXPECTED_CHILD_COUNT = 5;
+      expect(kids).toHaveLength(EXPECTED_CHILD_COUNT);
       expect(kids[0]).toEqual({ type: "text", value: "hello " });
       expect(kids[1]).toMatchObject({ type: "element", tag: "b" });
       expect(kids[2]).toEqual({ type: "text", value: " world " });
@@ -280,7 +282,9 @@ describe("XML construct fidelity", () => {
         documentXmlNodes(decodePackage(zipPackage(parts))),
         "e",
       );
-      expect(e?.attributes).toHaveLength(5);
+      // xmlns, a, b, c, d: the default-namespace attribute plus the four explicit ones, in source order.
+      const EXPECTED_ATTRIBUTE_COUNT = 5;
+      expect(e?.attributes).toHaveLength(EXPECTED_ATTRIBUTE_COUNT);
       expect(e?.attributes[0]).toEqual({
         name: "xmlns",
         value: "http://def.example",
