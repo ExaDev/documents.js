@@ -4,6 +4,11 @@ import { RECORD_NOTE, RECORD_OBJ, RECORD_TXO } from "../biff/record-types";
 import { readXLUnicodeString, readXLUnicodeStringNoCch } from "../biff/strings";
 import type { RecordGroup } from "../biff/substreams";
 
+// Note and TxO fixed fields: a Note's ft/cb header, TxO's grbit/rot pair, and the reserved-or-controlInfo block.
+const NOTE_HEADER_SIZE = 4;
+const TXO_FLAGS_SIZE = 4;
+const TXO_RESERVED_SIZE = 6;
+
 // BIFF8 splits a cell comment across three record kinds, unlike xlsx's own single self-contained <comment> element (ooxml.js/src/typed/xlsx/comments.ts) — a Note record ([MS-XLS] 2.4.179, wrapping a NoteSh structure) anchors the comment to a cell and names its author, but carries no text of its own; the text lives in a TxO record ([MS-XLS] 2.4.329, its characters and formatting runs trailing across Continue records already merged into one RecordGroup by groupRecords — see biff/substreams.ts); the two are joined through an Obj record ([MS-XLS] 2.4.181) whose FtCmo names an object id and type, the Note's own idObj field naming that same id, and a TxO always immediately following the Obj record whose shape it belongs to.
 //
 // This reads the worksheet substream's records in one independent pass, entirely separate from workbook/sheet.ts's own CELLTABLE walk: comments are not part of that grammar, and by the time a Note record's idObj can be resolved to real text, the TxO that carries it has not necessarily been reached yet relative to reading order within one linear pass — an Obj+TxO pair for a comment is not guaranteed to sit before or after the Note records naming it, only that both exist somewhere in the same substream. Building the id -> text map first, over the whole record list, and only then resolving every Note against it sidesteps that ordering question entirely.
@@ -46,7 +51,7 @@ export function readObjTypeAndId(group: RecordGroup): {
   readonly id: number;
 } {
   const cursor = new BlockCursor(group.blocks);
-  cursor.skip(4); // ft (2, reserved 0x15), cb (2, reserved 0x12)
+  cursor.skip(NOTE_HEADER_SIZE); // ft and cb
   const ot = cursor.u16();
   const id = cursor.u16();
   return { ot, id };
@@ -85,8 +90,8 @@ export function readObjPictFmlaStorageId(
 /** [MS-XLS] 2.4.329 TxO: the fixed fields up to and including ObjFmla are read in full (even the ones this reader discards) purely to advance the cursor correctly onto the Continue-carried text that follows — reserved4+reserved5 and controlInfo are mutually exclusive per cmo.ot but identical in total size (6 bytes), so which one applies never needs deciding here. Only the plain text is kept: rich per-character formatting runs (cbRuns bytes, TxORuns) are skipped rather than modelled, the same scope limit readRichExtendedString already applies to the SST's own rich strings, for the same reason — ContentSheetCellComment.text is a plain string with nowhere to carry them. */
 function readTxoText(group: RecordGroup): string {
   const cursor = new BlockCursor(group.blocks);
-  cursor.skip(4); // grbit (2), rot (2)
-  cursor.skip(6); // reserved4+reserved5 (2+4) or controlInfo (6) — same total size either way
+  cursor.skip(TXO_FLAGS_SIZE); // grbit and rot
+  cursor.skip(TXO_RESERVED_SIZE); // reserved4+reserved5 or controlInfo, the same total size either way
   const cchText = cursor.u16();
   const cbRuns = cursor.u16();
   cursor.skip(2); // ifntEmpty
