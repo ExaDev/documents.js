@@ -41,10 +41,8 @@ import { formatOdfLength } from "../shared/units";
 import { formatOdfColor } from "../shared/color";
 import { writeOdfMetadata } from "../shared/metadata";
 import { writeOdfPackageResidue } from "../shared/constructs";
-import {
-  writeOdfParagraph,
-  segmentOdfParagraphRuns,
-} from "../shared/paragraph";
+import { writeOdfParagraph } from "../shared/paragraph";
+import { segmentOdfParagraphRuns } from "../shared/paragraph-segmentation";
 import { buildOdfInlineNodes, segmentOdfText } from "../shared/text";
 import { cellReference } from "../shared/a1";
 import {

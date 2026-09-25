@@ -178,11 +178,12 @@ export type { OdfMetadataOverrides } from "./typed/shared/metadata";
 export {
   readOdfParagraph,
   writeOdfParagraph,
-  segmentOdfParagraphRuns,
   odfRunProperties,
   odfParagraphProperties,
 } from "./typed/shared/paragraph";
 export type { OdfParagraphWriteOptions } from "./typed/shared/paragraph";
+
+export { segmentOdfParagraphRuns } from "./typed/shared/paragraph-segmentation";
 
 export {
   mintOdfListNumId,

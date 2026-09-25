@@ -2,10 +2,8 @@ import { describe, expect, it } from "vitest";
 import type { Package } from "../../model/package";
 import type { XmlElement } from "../../model/node";
 import { el, txt } from "../../xml/fragment";
-import {
-  assertNeverOdfBookmarkMarkerSide,
-  readOdfParagraph,
-} from "./paragraph";
+import { readOdfParagraph } from "./paragraph";
+import { assertNeverOdfBookmarkMarkerSide } from "./paragraph-segmentation";
 import type { ContentParagraph, DefinitionEntry } from "document-schema.js";
 import type { OdfDefinitionsSink } from "./constructs";
 
