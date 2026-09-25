@@ -9,17 +9,30 @@ function asciiBytes(text: string): number[] {
   return Array.from(text, (c) => c.charCodeAt(0));
 }
 
+// Mirrors sniff.ts's own PNG signature derivation.
+const PNG_SIGNATURE_HIGH_BIT_MARKER = 0x89;
+const PNG_SIGNATURE = [
+  PNG_SIGNATURE_HIGH_BIT_MARKER,
+  ...Array.from("PNG\r\n\x1a\n", (char) => char.charCodeAt(0)),
+];
+const TRAILING_BYTE = 0xff;
+const JPEG_MARKER_PREFIX = 0xff;
+const JPEG_SOI = 0xd8;
+const JPEG_APP0 = 0xe0;
+
 describe("sniffImageFormat", () => {
   it("detects a PNG from its 8-byte magic signature", () => {
-    expect(
-      sniffImageFormat(
-        bytesOf([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0xff]),
-      ),
-    ).toBe("png");
+    expect(sniffImageFormat(bytesOf([...PNG_SIGNATURE, TRAILING_BYTE]))).toBe(
+      "png",
+    );
   });
 
   it("detects a JPEG from its 3-byte magic signature", () => {
-    expect(sniffImageFormat(bytesOf([0xff, 0xd8, 0xff, 0xe0]))).toBe("jpeg");
+    expect(
+      sniffImageFormat(
+        bytesOf([JPEG_MARKER_PREFIX, JPEG_SOI, JPEG_MARKER_PREFIX, JPEG_APP0]),
+      ),
+    ).toBe("jpeg");
   });
 
   it("detects a GIF87a header", () => {
@@ -35,7 +48,9 @@ describe("sniffImageFormat", () => {
   });
 
   it("returns undefined for bytes shorter than every signature it checks", () => {
-    expect(sniffImageFormat(bytesOf([0x89, 0x50]))).toBeUndefined();
+    expect(
+      sniffImageFormat(bytesOf(PNG_SIGNATURE.slice(0, 2))),
+    ).toBeUndefined();
   });
 
   it("returns undefined for an empty byte array", () => {
@@ -67,11 +82,13 @@ describe("sniffImageFormat", () => {
   it("never finds a root element hidden behind more leading whitespace than the sniff window covers", () => {
     // The sniff window is capped at a fixed size specifically so a caller can't be made to scan an unboundedly large file — a real SVG's root element always appears well within it (see sniff.ts's own comment), so padding past the window with plain spaces before the real tag is exactly the case the cap is meant to give up on, not a bug to work around.
     const paddingLength = 2000;
+    const asciiSpace = 0x20;
+    const sniffWindowBytes = 1024;
     const bytes = bytesOf([
-      ...Array<number>(paddingLength).fill(0x20),
+      ...Array<number>(paddingLength).fill(asciiSpace),
       ...asciiBytes("<?xml?>"),
     ]);
-    expect(bytes.length).toBeGreaterThan(1024);
+    expect(bytes.length).toBeGreaterThan(sniffWindowBytes);
     expect(sniffImageFormat(bytes)).toBeUndefined();
   });
 
