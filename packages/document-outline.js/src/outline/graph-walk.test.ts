@@ -312,7 +312,8 @@ describe("walkPropertyGraph (#660)", () => {
         (id) => id === visited.find((candidate) => candidate === id),
       ).length,
     ).toBeGreaterThanOrEqual(1);
-    expect(visited).toHaveLength(4); // root, section, then the shared leaf once per path
+    const expectedVisitedCount = 4; // root, section, then the shared leaf once per path
+    expect(visited).toHaveLength(expectedVisitedCount);
   });
 
   it("guards reference-kind edges by default: a hand-built cyclic graph terminates, and the cycle is reported rather than looping", () => {

@@ -171,11 +171,14 @@ describe("write API: reconcileChildren reproduces every requested children list 
   }
 
   it("2-id pool, sequences up to length 6, every genuine-subsequence pre-wiring", () => {
-    runExhaustive(2, 6);
+    const maxLength = 6;
+    runExhaustive(2, maxLength);
   });
 
   it("3-id pool, sequences up to length 5, every genuine-subsequence pre-wiring", () => {
-    runExhaustive(3, 5);
+    const poolSize = 3;
+    const maxLength = 5;
+    runExhaustive(poolSize, maxLength);
   });
 
   it("order-inconsistent pre-wiring never inflates multiplicity beyond max(existingCount, requestedCount) (#935 round 9's edge case)", () => {
@@ -220,7 +223,8 @@ describe("write API: reconcileChildren reproduces every requested children list 
       (edge) => edge.from === bOnlyId && edge.kind === "CONTAINS",
     );
     // A's two pre-wired, unmatched edges are left exactly as they were (multiplicity stays 2, neither dropped nor duplicated), and B — requested but never pre-wired — is inserted fresh at multiplicity 1.
-    expect(bOnlyContains).toHaveLength(3);
+    const expectedBOnlyContainsCount = 3;
+    expect(bOnlyContains).toHaveLength(expectedBOnlyContainsCount);
     expect(bOnlyContains.filter((edge) => edge.to === a)).toHaveLength(2);
     expect(bOnlyContains.filter((edge) => edge.to === b)).toHaveLength(1);
   });
@@ -316,11 +320,15 @@ describe("write API: reconcileChildren reproduces every requested children list 
   }
 
   it("agrees with an independently-modelled reference algorithm across arbitrary (not just genuinely-subsequence) existing wirings, over every combination of a 3-label pool", () => {
-    const { graph: baseGraph, pool } = mintLeafPool(3);
+    const poolSize = 3;
+    const { graph: baseGraph, pool } = mintLeafPool(poolSize);
     const byLabel = { a: pool[0]!, b: pool[1]!, c: pool[2]! };
-    // Length 4, not 3: the anti-inflation pass's own multi-occurrence reuse (a bucket holding MORE than one leftover index for the same id, and a pointer advancing past its first entry to a second) can only ever matter to the final output when existing carries at least two UNMATCHED occurrences of the same id that children also asks for again — and forcing even one existing occurrence of a repeated id to go unmatched by direct LCS already needs a THIRD, differently-labelled element interspersed to break the trivial full match a homogeneous run would otherwise get for free (see this suite's own comment on the exhaustive-subsequence sweep above about full-length matches masking wrong-choice bugs). Two such occurrences plus one interleaved break needs four existing slots (e.g. [a,a,x,a]), one more than a length-3 wiring can ever hold — confirmed directly: a bucket.push/leftover-pointer-advance mutation on this pass survived the length-3 sweep untouched, killed only once existingSeqs reached length 4.
-    const existingSeqs = allLabelSequences(4); // every arbitrary existing wiring up to length 4, subsequence or not
-    const childrenSeqs = allLabelSequences(4).filter((seq) => seq.length > 0);
+    // Length 4, not poolSize: the anti-inflation pass's own multi-occurrence reuse (a bucket holding MORE than one leftover index for the same id, and a pointer advancing past its first entry to a second) can only ever matter to the final output when existing carries at least two UNMATCHED occurrences of the same id that children also asks for again — and forcing even one existing occurrence of a repeated id to go unmatched by direct LCS already needs a THIRD, differently-labelled element interspersed to break the trivial full match a homogeneous run would otherwise get for free (see this suite's own comment on the exhaustive-subsequence sweep above about full-length matches masking wrong-choice bugs). Two such occurrences plus one interleaved break needs four existing slots (e.g. [a,a,x,a]), one more than a length-3 wiring can ever hold — confirmed directly: a bucket.push/leftover-pointer-advance mutation on this pass survived the length-3 sweep untouched, killed only once existingSeqs reached length 4.
+    const existingChildrenLength = 4; // every arbitrary existing wiring up to this length, subsequence or not
+    const existingSeqs = allLabelSequences(existingChildrenLength);
+    const childrenSeqs = allLabelSequences(existingChildrenLength).filter(
+      (seq) => seq.length > 0,
+    );
     let casesRun = 0;
     for (const existingSeq of existingSeqs) {
       for (const children of childrenSeqs) {

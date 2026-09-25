@@ -119,7 +119,8 @@ describe("definitions tables", () => {
     const entries = graph.nodes.filter(
       (node) => node.kind === "definitionEntry",
     );
-    expect(entries).toHaveLength(4); // all four exist whether or not anything references them
+    const expectedEntryCount = 4; // all four exist whether or not anything references them
+    expect(entries).toHaveLength(expectedEntryCount);
     expect(entries.map((node) => node.tenantKind).sort()).toEqual([
       "attachment",
       "destination",
@@ -492,8 +493,11 @@ describe("extraction policy", () => {
   });
 
   it("emits a DEFINED_BY edge discovered inside a policy-extracted record value nested in a table entry's own body", () => {
+    const metaPathDepth = 3;
     const extractMeta: ExtractionPolicy = (path, value) =>
-      path.length === 3 && path[0] === "definitions" && path[2] === "meta"
+      path.length === metaPathDepth &&
+      path[0] === "definitions" &&
+      path[2] === "meta"
         ? "extract"
         : defaultExtractionPolicy(path, value);
     const pkg = wordprocessingPackage([sectionGroup([paragraph("Body.")])], {
@@ -524,8 +528,11 @@ describe("extraction policy", () => {
 
   it("emits a DEFINED_BY edge discovered inside a policy-extracted ARRAY value's own elements", () => {
     // mintValueNode's non-record branch (isRecord(value) === false) also covers arrays — walk() recurses into each element and accumulates their own edges, unlike a genuine scalar which never carries any.
+    const metaPathDepth = 3;
     const extractMeta: ExtractionPolicy = (path, value) =>
-      path.length === 3 && path[0] === "definitions" && path[2] === "meta"
+      path.length === metaPathDepth &&
+      path[0] === "definitions" &&
+      path[2] === "meta"
         ? "extract"
         : defaultExtractionPolicy(path, value);
     const pkg = wordprocessingPackage([sectionGroup([paragraph("Body.")])], {

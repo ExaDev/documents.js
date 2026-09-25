@@ -134,7 +134,8 @@ describe("write API: insertNode's fresh-mint children-wiring reconciles pre-exis
     const contains = section.graph.edges.filter(
       (edge) => edge.from === sectionId && edge.kind === "CONTAINS",
     );
-    expect(contains).toHaveLength(3);
+    const expectedContainsCount = 3;
+    expect(contains).toHaveLength(expectedContainsCount);
     const orderKeysUsed = contains.map((edge) => edge.orderKey);
     // No two siblings share an orderKey — the degenerate shape boundedOrderKey/siblingInsertIndex refuse everywhere else in this module.
     expect(new Set(orderKeysUsed).size).toBe(orderKeysUsed.length);
@@ -172,7 +173,8 @@ describe("write API: insertNode's fresh-mint children-wiring reconciles pre-exis
       (edge) => edge.from === sectionId && edge.kind === "CONTAINS",
     );
     // Three edges total — both requested occurrences of leafA survive, not just the one that was already wired.
-    expect(contains).toHaveLength(3);
+    const expectedContainsCount = 3;
+    expect(contains).toHaveLength(expectedContainsCount);
     expect(contains.filter((edge) => edge.to === leafA.id)).toHaveLength(2);
     expect(contains.filter((edge) => edge.to === leafB.id)).toHaveLength(1);
     const ordered = [...contains]
@@ -468,7 +470,8 @@ describe("write API: insertNode handles a dedup hit's kind and children correctl
       )
       .sort((p, q) => (p.orderKey < q.orderKey ? -1 : 1));
     // Three edges total — both requested occurrences of a survive, not just one.
-    expect(ordered).toHaveLength(3);
+    const expectedOrderedCount = 3;
+    expect(ordered).toHaveLength(expectedOrderedCount);
     expect(ordered.filter((edge) => edge.to === a.id)).toHaveLength(2);
     expect(ordered.map((edge) => edge.to)).toEqual([a.id, b.id, a.id]);
   });
