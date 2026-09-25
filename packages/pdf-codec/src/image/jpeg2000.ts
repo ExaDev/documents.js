@@ -155,6 +155,11 @@ function tileDefaults(
   return main.cod;
 }
 
+// Table A.19 (SPcod/SPcoc code-block style), bit 2: the arithmetic coder is terminated after every coding pass rather than only at code-block boundaries, an organisation this decoder's tier-1 does not read.
+const CODE_BLOCK_STYLE_TERMINATE_ON_EACH_PASS_BIT = 0x04;
+// ISO/IEC 15444-1 Annex E's own sample-precision ceiling: a component's dequantized reconstructed value is a signed 32-bit integer, so a transmitted bit depth beyond this exceeds what that arithmetic can represent exactly.
+const MAX_SUPPORTED_COMPONENT_BIT_DEPTH = 31;
+
 // The one place the scope of this decoder is stated. Returns undefined when the codestream is decodable here, or the reason it is not.
 function undecodableReason(codestream: Jpeg2000Codestream): string | undefined {
   const main = codestream.main;
@@ -194,7 +199,10 @@ function undecodableReason(codestream: Jpeg2000Codestream): string | undefined {
       if ((style.codeBlockStyle & 0x01) !== 0) {
         return "the code-block style enables selective arithmetic coding bypass, which this decoder does not read";
       }
-      if ((style.codeBlockStyle & 0x04) !== 0) {
+      if (
+        (style.codeBlockStyle & CODE_BLOCK_STYLE_TERMINATE_ON_EACH_PASS_BIT) !==
+        0
+      ) {
         return "the code-block style terminates the arithmetic coder on every coding pass, which this decoder does not read";
       }
     }
@@ -239,7 +247,7 @@ function undecodableReason(codestream: Jpeg2000Codestream): string | undefined {
         return "the codestream mixes component bit depths or signedness, which this decoder does not combine into one image";
       }
     }
-    if (first.bitDepth > 31) {
+    if (first.bitDepth > MAX_SUPPORTED_COMPONENT_BIT_DEPTH) {
       return `a component bit depth of ${String(first.bitDepth)} exceeds what this decoder's own 32-bit sample arithmetic can hold`;
     }
   }
@@ -326,6 +334,9 @@ function halveTowardZero(value: number): number {
   return value < 0 ? -(-value >> 1) : value >> 1;
 }
 
+// E-3's own 11-bit fixed-point scale for the transmitted SPqcd/SPqcc mantissa field, so mantissa / MANTISSA_FIXED_POINT_SCALE recovers the fractional part of the step size.
+const MANTISSA_FIXED_POINT_SCALE = 2048;
+
 // E.1.1 equation E-3: the quantization step for one subband, from its transmitted exponent and mantissa against the subband's own nominal dynamic range (the component's bit depth plus the base-2 gain of that subband's synthesis, Table E.1). A codestream that transmits no mantissa at all leaves the fractional term at one, which is what a missing SPqcd mantissa field means rather than something to guess at.
 function quantizationStep(
   band: Jpeg2000Subband,
@@ -334,7 +345,7 @@ function quantizationStep(
   const nominalRange = componentBitDepth + subbandGainLog2(band.type);
   return (
     2 ** (nominalRange - band.stepSize.exponent) *
-    (1 + band.stepSize.mantissa / 2048)
+    (1 + band.stepSize.mantissa / MANTISSA_FIXED_POINT_SCALE)
   );
 }
 
@@ -502,6 +513,9 @@ function decodeIrreversibleTileComponent(
   return current;
 }
 
+// G.2's own divisor for recovering green from the luma-like Y plane, the inverse of the forward RCT's Y = floor((R + 2G + B) / 4).
+const RCT_GREEN_RECOVERY_DIVISOR = 4;
+
 // G.2: the inverse reversible component transform, undoing the encoder's Y/Cb/Cr-like decorrelation of the first three components. Reversible in exact integer arithmetic, which is what makes a lossless colour round trip possible at all.
 function inverseReversibleComponentTransform(
   planes: readonly Int32Array[],
@@ -513,7 +527,9 @@ function inverseReversibleComponentTransform(
     return;
   }
   for (let i = 0; i < y.length; i++) {
-    const green = (y[i] ?? 0) - Math.floor(((u[i] ?? 0) + (v[i] ?? 0)) / 4);
+    const green =
+      (y[i] ?? 0) -
+      Math.floor(((u[i] ?? 0) + (v[i] ?? 0)) / RCT_GREEN_RECOVERY_DIVISOR);
     const red = (v[i] ?? 0) + green;
     const blue = (u[i] ?? 0) + green;
     y[i] = red;
@@ -546,6 +562,9 @@ function inverseIrreversibleComponentTransform(
     cr[i] = luma + ICT_BLUE_FROM_CB * blueDiff;
   }
 }
+
+// G.2/G.3's multiple component transform decorrelates only the first three components (a Y/Cb/Cr-like triple), so it only applies when the codestream carries at least that many.
+const MULTIPLE_COMPONENT_TRANSFORM_MIN_COMPONENTS = 3;
 
 export function decodeJpeg2000(
   data: Uint8Array<ArrayBuffer>,
@@ -632,7 +651,10 @@ export function decodeJpeg2000(
       const reversible = Array.from({ length: componentCount }, (_, c) =>
         decodeReversibleTileComponent(geometry, c, tileData),
       );
-      if (defaults.multipleComponentTransform && componentCount >= 3) {
+      if (
+        defaults.multipleComponentTransform &&
+        componentCount >= MULTIPLE_COMPONENT_TRANSFORM_MIN_COMPONENTS
+      ) {
         inverseReversibleComponentTransform(reversible);
       }
       tilePlanes.push(...reversible);
@@ -640,7 +662,10 @@ export function decodeJpeg2000(
       const irreversible = Array.from({ length: componentCount }, (_, c) =>
         decodeIrreversibleTileComponent(geometry, c, first.bitDepth, tileData),
       );
-      if (defaults.multipleComponentTransform && componentCount >= 3) {
+      if (
+        defaults.multipleComponentTransform &&
+        componentCount >= MULTIPLE_COMPONENT_TRANSFORM_MIN_COMPONENTS
+      ) {
         inverseIrreversibleComponentTransform(irreversible);
       }
       tilePlanes.push(...irreversible);
