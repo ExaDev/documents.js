@@ -31,6 +31,11 @@ const REPLACEMENT_CHARACTER_CODE_UNIT = 0xfffd;
 
 /** The last byte value the Encoding Standard's own "ASCII byte" term covers (0x00 to 0x7F inclusive) in every one of these encodings: below this, and outside each encoding's own designated multi-byte lead range, a byte is its own code point unchanged. */
 const ASCII_BYTE_MAX = 0x7f;
+const HEX_RADIX = 16;
+/** The halfwidth-katakana byte range JIS X 0201 shares across Shift_JIS and EUC-JP's own single-byte katakana forms, and the Unicode block it maps onto directly (0xFF61 plus the byte's own offset from the range's first value). */
+const KATAKANA_BYTE_START = 0xa1;
+const KATAKANA_BYTE_END = 0xdf;
+const HALFWIDTH_KATAKANA_START = 0xff61;
 
 /**
  * The Unicode code point {@link JIS0208}, {@link JIS0212}, {@link BIG5}, {@link EUC_KR} or {@link GB18030} holds at `pointer` — the Encoding Standard's own "index code point" (https://encoding.spec.whatwg.org/#index-code-point) operation — or `undefined` when `pointer` lands on the table's own gap marker, needs disambiguating against `astral` and turns out to have no entry there either, or falls outside the table entirely.
@@ -62,18 +67,41 @@ function truncated(label: string): never {
 /**
  * Big5's own four hardcoded pointer exceptions where a single lead/trail byte pair decodes to *two* Unicode code points rather than one — combining-diacritic spellings of vowels HKSCS adds that Big5's own index, limited like every WHATWG index to single code points, cannot hold directly (https://encoding.spec.whatwg.org/#big5-decoder, the table immediately under "If there is a row in the table below whose first column is pointer"). Checked before the general {@link BIG5} lookup, exactly as the standard's own decoder algorithm does.
  */
+const BIG5_DOUBLE_POINTER_E_CIRCUMFLEX_MACRON = 1133;
+const BIG5_DOUBLE_POINTER_E_CIRCUMFLEX_CARON = 1135;
+const BIG5_DOUBLE_POINTER_E_CIRCUMFLEX_MACRON_LOWER = 1164;
+const BIG5_DOUBLE_POINTER_E_CIRCUMFLEX_CARON_LOWER = 1166;
+const LATIN_E_CIRCUMFLEX = 0x00ca;
+const LATIN_E_CIRCUMFLEX_LOWER = 0x00ea;
+const COMBINING_MACRON = 0x0304;
+const COMBINING_CARON = 0x030c;
+
 const BIG5_DOUBLE_CODE_POINT_POINTERS: ReadonlyMap<
   number,
   readonly [number, number]
 > = new Map([
-  [1133, [0x00ca, 0x0304]], // Ê̄
-  [1135, [0x00ca, 0x030c]], // Ê̌
-  [1164, [0x00ea, 0x0304]], // ê̄
-  [1166, [0x00ea, 0x030c]], // ê̌
+  [
+    BIG5_DOUBLE_POINTER_E_CIRCUMFLEX_MACRON,
+    [LATIN_E_CIRCUMFLEX, COMBINING_MACRON],
+  ], // Ê̄
+  [
+    BIG5_DOUBLE_POINTER_E_CIRCUMFLEX_CARON,
+    [LATIN_E_CIRCUMFLEX, COMBINING_CARON],
+  ], // Ê̌
+  [
+    BIG5_DOUBLE_POINTER_E_CIRCUMFLEX_MACRON_LOWER,
+    [LATIN_E_CIRCUMFLEX_LOWER, COMBINING_MACRON],
+  ], // ê̄
+  [
+    BIG5_DOUBLE_POINTER_E_CIRCUMFLEX_CARON_LOWER,
+    [LATIN_E_CIRCUMFLEX_LOWER, COMBINING_CARON],
+  ], // ê̌
 ]);
 
 /** The number of columns Shift_JIS, Big5 and gb18030 all give their shared low trailing-byte band, 0x40-0x7E — named so {@link twoByteTrailColumn}'s high-band column reads as "continuing on from the low band" rather than restating this same derived count as an unexplained literal. */
-const LOW_TRAIL_BYTE_COUNT = 0x7e - 0x40 + 1;
+const LOW_TRAIL_BYTE_START = 0x40;
+const LOW_TRAIL_BYTE_END = 0x7e;
+const LOW_TRAIL_BYTE_COUNT = LOW_TRAIL_BYTE_END - LOW_TRAIL_BYTE_START + 1;
 
 /**
  * The pointer column a trailing byte contributes for Shift_JIS, Big5 and gb18030's own two-byte forms, whose trailing-byte range always splits into the same low band (0x40-0x7E) plus an encoding-specific high band (`highBandStart` to `highBandEnd`) — or `undefined` when `byte` falls in neither. Shared here rather than reimplemented per decoder specifically so every boundary comparison is written against a byte value the range can actually reach (0x40, 0x7E, and each caller's own high-band ends), never a threshold sitting in a gap no valid byte ever lands in: a decoder written the Encoding Standard's own way, subtracting a byte-range-specific "offset" chosen so a boundary byte and its threshold happen to coincide, has no way to make a boundary comparison mutation observable when the coincidence itself is what the surrounding range check already guarantees — this instead keys every column directly off the low band's own reachable extremes, so a single off-by-one in any comparison here changes a real byte's result rather than only a value that string of range checks already ruled out beforehand.
@@ -87,8 +115,8 @@ function twoByteTrailColumn(
   highBandStart: number,
   highBandEnd: number,
 ): number | undefined {
-  if (byte >= 0x40 && byte <= 0x7e) {
-    return byte - 0x40;
+  if (byte >= LOW_TRAIL_BYTE_START && byte <= LOW_TRAIL_BYTE_END) {
+    return byte - LOW_TRAIL_BYTE_START;
   }
   if (byte >= highBandStart && byte <= highBandEnd) {
     return byte - highBandStart + LOW_TRAIL_BYTE_COUNT;
@@ -104,6 +132,21 @@ function twoByteTrailColumn(
  * @returns The decoded text.
  * @throws UndecodableTextError When the bytes contain a byte or byte pair Shift_JIS leaves undefined, or end with an incomplete two-byte sequence.
  */
+const SHIFT_JIS_LOW_LEAD_START = 0x81;
+const SHIFT_JIS_LOW_LEAD_END = 0x9f;
+// The high lead-byte band's own detection range (0xE0-0xFC) differs from the offset anchor (0xC1) subtracted in the pointer formula: the high band's column space continues on from where the low band's own count ends, so the arithmetic anchor is not the same byte as the band's own first real value.
+const SHIFT_JIS_HIGH_LEAD_DETECT_START = 0xe0;
+const SHIFT_JIS_HIGH_LEAD_OFFSET_ANCHOR = 0xc1;
+const SHIFT_JIS_TRAIL_HIGH_START = 0x80;
+const SHIFT_JIS_TRAIL_HIGH_END = 0xfc;
+const SHIFT_JIS_COLUMNS = 188;
+// A pointer in this range is Microsoft's own End User Defined Characters (EUDC) block, mapped onto the Unicode Private Use Area rather than through JIS0208 at all.
+const SHIFT_JIS_EUDC_POINTER_START = 8836;
+const SHIFT_JIS_EUDC_POINTER_END = 10715;
+const UNICODE_PUA_START = 0xe000;
+// The one single byte above ASCII that still passes through unchanged, per the Encoding Standard's own Shift_JIS decoder.
+const SHIFT_JIS_SINGLE_BYTE_EXTRA = 0x80;
+
 export function decodeShiftJis(bytes: Uint8Array): string {
   const sink: CodeUnitSink = { units: [] };
   let leading = 0;
@@ -111,14 +154,28 @@ export function decodeShiftJis(bytes: Uint8Array): string {
     if (leading !== 0) {
       const leadingByte = leading;
       leading = 0;
-      const leadingOffset = leadingByte <= 0x9f ? 0x81 : 0xc1;
-      const column = twoByteTrailColumn(byte, 0x80, 0xfc);
+      const leadingOffset =
+        leadingByte <= SHIFT_JIS_LOW_LEAD_END
+          ? SHIFT_JIS_LOW_LEAD_START
+          : SHIFT_JIS_HIGH_LEAD_OFFSET_ANCHOR;
+      const column = twoByteTrailColumn(
+        byte,
+        SHIFT_JIS_TRAIL_HIGH_START,
+        SHIFT_JIS_TRAIL_HIGH_END,
+      );
       const pointer =
         column === undefined
           ? undefined
-          : (leadingByte - leadingOffset) * 188 + column;
-      if (pointer !== undefined && pointer >= 8836 && pointer <= 10715) {
-        appendCodePoint(sink, 0xe000 - 8836 + pointer);
+          : (leadingByte - leadingOffset) * SHIFT_JIS_COLUMNS + column;
+      if (
+        pointer !== undefined &&
+        pointer >= SHIFT_JIS_EUDC_POINTER_START &&
+        pointer <= SHIFT_JIS_EUDC_POINTER_END
+      ) {
+        appendCodePoint(
+          sink,
+          UNICODE_PUA_START - SHIFT_JIS_EUDC_POINTER_START + pointer,
+        );
         continue;
       }
       const codePoint =
@@ -126,23 +183,30 @@ export function decodeShiftJis(bytes: Uint8Array): string {
       if (codePoint === undefined) {
         malformed(
           "Shift_JIS",
-          `has no character for lead byte 0x${leadingByte.toString(16)} trail byte 0x${byte.toString(16)}`,
+          `has no character for lead byte 0x${leadingByte.toString(HEX_RADIX)} trail byte 0x${byte.toString(HEX_RADIX)}`,
         );
       }
       appendCodePoint(sink, codePoint);
       continue;
     }
-    if (byte <= ASCII_BYTE_MAX || byte === 0x80) {
+    if (byte <= ASCII_BYTE_MAX || byte === SHIFT_JIS_SINGLE_BYTE_EXTRA) {
       sink.units.push(byte);
-    } else if (byte >= 0xa1 && byte <= 0xdf) {
-      appendCodePoint(sink, 0xff61 - 0xa1 + byte);
+    } else if (byte >= KATAKANA_BYTE_START && byte <= KATAKANA_BYTE_END) {
+      appendCodePoint(
+        sink,
+        HALFWIDTH_KATAKANA_START - KATAKANA_BYTE_START + byte,
+      );
       // byte reaching this point is already known to be 0x81 or above (everything below is consumed by the two branches above), so only each band's own upper bound needs checking.
-    } else if (byte <= 0x9f || (byte >= 0xe0 && byte <= 0xfc)) {
+    } else if (
+      byte <= SHIFT_JIS_LOW_LEAD_END ||
+      (byte >= SHIFT_JIS_HIGH_LEAD_DETECT_START &&
+        byte <= SHIFT_JIS_TRAIL_HIGH_END)
+    ) {
       leading = byte;
     } else {
       malformed(
         "Shift_JIS",
-        `has no character for byte 0x${byte.toString(16)}`,
+        `has no character for byte 0x${byte.toString(HEX_RADIX)}`,
       );
     }
   }
@@ -160,17 +224,34 @@ export function decodeShiftJis(bytes: Uint8Array): string {
  * @returns The decoded text.
  * @throws UndecodableTextError When the bytes contain a byte or byte pair EUC-JP leaves undefined, or end with an incomplete multi-byte sequence.
  */
+const EUC_JP_KATAKANA_LEAD = 0x8e;
+const EUC_JP_JIS0212_LEAD = 0x8f;
+const EUC_JP_INDEX_BYTE_MIN = 0xa1;
+const EUC_JP_INDEX_BYTE_MAX = 0xfe;
+const EUC_JIS_COLUMNS = 94;
+
 export function decodeEucJp(bytes: Uint8Array): string {
   const sink: CodeUnitSink = { units: [] };
   let leading = 0;
   let jis0212 = false;
   for (const byte of bytes) {
-    if (leading === 0x8e && byte >= 0xa1 && byte <= 0xdf) {
+    if (
+      leading === EUC_JP_KATAKANA_LEAD &&
+      byte >= KATAKANA_BYTE_START &&
+      byte <= KATAKANA_BYTE_END
+    ) {
       leading = 0;
-      appendCodePoint(sink, 0xff61 - 0xa1 + byte);
+      appendCodePoint(
+        sink,
+        HALFWIDTH_KATAKANA_START - KATAKANA_BYTE_START + byte,
+      );
       continue;
     }
-    if (leading === 0x8f && byte >= 0xa1 && byte <= 0xfe) {
+    if (
+      leading === EUC_JP_JIS0212_LEAD &&
+      byte >= EUC_JP_INDEX_BYTE_MIN &&
+      byte <= EUC_JP_INDEX_BYTE_MAX
+    ) {
       jis0212 = true;
       leading = byte;
       continue;
@@ -181,17 +262,20 @@ export function decodeEucJp(bytes: Uint8Array): string {
       const usedJis0212 = jis0212;
       jis0212 = false;
       // No separate "is leadingByte 0x8E or 0x8F" check: leadingByte reaching here is always 0x8E, 0x8F, or a byte the fallback dispatch below already constrained to 0xA1-0xFE, and for 0x8E/0x8F specifically, (leadingByte - 0xA1) * 94 always comes out deeply negative (both are only a little below 0xA1, but 94 is enough to push the product well past any byte-sized offset byte - 0xA1 could add back), so the pointer this computes for them is always negative and pointerCodePoint always resolves a negative pointer to undefined — exactly the malformed() call a dedicated check would otherwise reach, with an identical message either way, since that call names leadingByte and byte directly rather than why the pointer they produced turned out undefined.
-      const inRange = byte >= 0xa1 && byte <= 0xfe;
+      const inRange =
+        byte >= EUC_JP_INDEX_BYTE_MIN && byte <= EUC_JP_INDEX_BYTE_MAX;
       const codePoint = inRange
         ? pointerCodePoint(
             usedJis0212 ? JIS0212 : JIS0208,
-            (leadingByte - 0xa1) * 94 + byte - 0xa1,
+            (leadingByte - EUC_JP_INDEX_BYTE_MIN) * EUC_JIS_COLUMNS +
+              byte -
+              EUC_JP_INDEX_BYTE_MIN,
           )
         : undefined;
       if (codePoint === undefined) {
         malformed(
           "EUC-JP",
-          `has no character for lead byte 0x${leadingByte.toString(16)} trail byte 0x${byte.toString(16)}`,
+          `has no character for lead byte 0x${leadingByte.toString(HEX_RADIX)} trail byte 0x${byte.toString(HEX_RADIX)}`,
         );
       }
       appendCodePoint(sink, codePoint);
@@ -200,13 +284,16 @@ export function decodeEucJp(bytes: Uint8Array): string {
     if (byte <= ASCII_BYTE_MAX) {
       sink.units.push(byte);
     } else if (
-      byte === 0x8e ||
-      byte === 0x8f ||
-      (byte >= 0xa1 && byte <= 0xfe)
+      byte === EUC_JP_KATAKANA_LEAD ||
+      byte === EUC_JP_JIS0212_LEAD ||
+      (byte >= EUC_JP_INDEX_BYTE_MIN && byte <= EUC_JP_INDEX_BYTE_MAX)
     ) {
       leading = byte;
     } else {
-      malformed("EUC-JP", `has no character for byte 0x${byte.toString(16)}`);
+      malformed(
+        "EUC-JP",
+        `has no character for byte 0x${byte.toString(HEX_RADIX)}`,
+      );
     }
   }
   if (leading !== 0) {
@@ -223,6 +310,12 @@ export function decodeEucJp(bytes: Uint8Array): string {
  * @returns The decoded text.
  * @throws UndecodableTextError When the bytes contain a byte or byte pair EUC-KR leaves undefined, or end with an incomplete two-byte sequence.
  */
+const EUC_KR_LEAD_START = 0x81;
+const EUC_KR_LEAD_END = 0xfe;
+const EUC_KR_TRAIL_START = 0x41;
+const EUC_KR_TRAIL_END = 0xfe;
+const EUC_KR_COLUMNS = 190;
+
 export function decodeEucKr(bytes: Uint8Array): string {
   const sink: CodeUnitSink = { units: [] };
   let leading = 0;
@@ -231,13 +324,18 @@ export function decodeEucKr(bytes: Uint8Array): string {
       const leadingByte = leading;
       leading = 0;
       const codePoint =
-        byte >= 0x41 && byte <= 0xfe
-          ? pointerCodePoint(EUC_KR, (leadingByte - 0x81) * 190 + byte - 0x41)
+        byte >= EUC_KR_TRAIL_START && byte <= EUC_KR_TRAIL_END
+          ? pointerCodePoint(
+              EUC_KR,
+              (leadingByte - EUC_KR_LEAD_START) * EUC_KR_COLUMNS +
+                byte -
+                EUC_KR_TRAIL_START,
+            )
           : undefined;
       if (codePoint === undefined) {
         malformed(
           "EUC-KR",
-          `has no character for lead byte 0x${leadingByte.toString(16)} trail byte 0x${byte.toString(16)}`,
+          `has no character for lead byte 0x${leadingByte.toString(HEX_RADIX)} trail byte 0x${byte.toString(HEX_RADIX)}`,
         );
       }
       appendCodePoint(sink, codePoint);
@@ -245,10 +343,13 @@ export function decodeEucKr(bytes: Uint8Array): string {
     }
     if (byte <= ASCII_BYTE_MAX) {
       sink.units.push(byte);
-    } else if (byte >= 0x81 && byte <= 0xfe) {
+    } else if (byte >= EUC_KR_LEAD_START && byte <= EUC_KR_LEAD_END) {
       leading = byte;
     } else {
-      malformed("EUC-KR", `has no character for byte 0x${byte.toString(16)}`);
+      malformed(
+        "EUC-KR",
+        `has no character for byte 0x${byte.toString(HEX_RADIX)}`,
+      );
     }
   }
   if (leading !== 0) {
@@ -265,6 +366,12 @@ export function decodeEucKr(bytes: Uint8Array): string {
  * @returns The decoded text.
  * @throws UndecodableTextError When the bytes contain a byte or byte pair Big5 leaves undefined, or end with an incomplete two-byte sequence.
  */
+const BIG5_LEAD_START = 0x81;
+const BIG5_LEAD_END = 0xfe;
+const BIG5_TRAIL_HIGH_START = 0xa1;
+const BIG5_TRAIL_HIGH_END = 0xfe;
+const BIG5_COLUMNS = 157;
+
 export function decodeBig5(bytes: Uint8Array): string {
   const sink: CodeUnitSink = { units: [] };
   let leading = 0;
@@ -272,9 +379,15 @@ export function decodeBig5(bytes: Uint8Array): string {
     if (leading !== 0) {
       const leadingByte = leading;
       leading = 0;
-      const column = twoByteTrailColumn(byte, 0xa1, 0xfe);
+      const column = twoByteTrailColumn(
+        byte,
+        BIG5_TRAIL_HIGH_START,
+        BIG5_TRAIL_HIGH_END,
+      );
       const pointer =
-        column === undefined ? undefined : (leadingByte - 0x81) * 157 + column;
+        column === undefined
+          ? undefined
+          : (leadingByte - BIG5_LEAD_START) * BIG5_COLUMNS + column;
       const doubled =
         pointer === undefined
           ? undefined
@@ -289,7 +402,7 @@ export function decodeBig5(bytes: Uint8Array): string {
       if (codePoint === undefined) {
         malformed(
           "Big5",
-          `has no character for lead byte 0x${leadingByte.toString(16)} trail byte 0x${byte.toString(16)}`,
+          `has no character for lead byte 0x${leadingByte.toString(HEX_RADIX)} trail byte 0x${byte.toString(HEX_RADIX)}`,
         );
       }
       appendCodePoint(sink, codePoint);
@@ -297,10 +410,13 @@ export function decodeBig5(bytes: Uint8Array): string {
     }
     if (byte <= ASCII_BYTE_MAX) {
       sink.units.push(byte);
-    } else if (byte >= 0x81 && byte <= 0xfe) {
+    } else if (byte >= BIG5_LEAD_START && byte <= BIG5_LEAD_END) {
       leading = byte;
     } else {
-      malformed("Big5", `has no character for byte 0x${byte.toString(16)}`);
+      malformed(
+        "Big5",
+        `has no character for byte 0x${byte.toString(HEX_RADIX)}`,
+      );
     }
   }
   if (leading !== 0) {
@@ -314,6 +430,23 @@ export function decodeBig5(bytes: Uint8Array): string {
  */
 const GB18030_SECOND_FOURTH_BYTE_COUNT = 10;
 const GB18030_THIRD_BYTE_COUNT = 126;
+
+/** gb18030's own lead-byte band for both its two-byte and four-byte forms: a first byte outside 0x00-0x7F ASCII starts a multi-byte sequence only when it falls in 0x81-0xFE (0x80 alone is the fixed Euro-sign exception below). Also the third byte's own valid range in a four-byte sequence. */
+const GB18030_LEAD_START = 0x81;
+const GB18030_LEAD_END = 0xfe;
+
+/** The digit-only byte band (ASCII '0'-'9') gb18030 requires of its own second and fourth bytes in a four-byte sequence, and the band that tells the decoder a two-byte lead's second byte is starting a four-byte form rather than a two-byte trail. */
+const GB18030_DIGIT_BYTE_MIN = 0x30;
+const GB18030_DIGIT_BYTE_MAX = 0x39;
+
+/** The trailing-byte band gb18030's own two-byte form shares with Big5 and Shift_JIS (see {@link twoByteTrailColumn}), and the column count that band spans: 190 distinct trail values per lead byte. */
+const GB18030_TRAIL_HIGH_START = 0x80;
+const GB18030_TRAIL_HIGH_END = 0xfe;
+const GB18030_TWO_BYTE_COLUMNS = 190;
+
+/** The one single-byte value gb18030 decodes outside plain ASCII: byte 0x80 alone is the Euro sign, U+20AC, a fixed exception the Encoding Standard states directly rather than deriving from any table. */
+const GB18030_SINGLE_BYTE_EURO = 0x80;
+const EURO_SIGN_CODE_POINT = 0x20ac;
 
 /**
  * The Unicode code point gb18030's own algorithmic four-byte form holds at `pointer` (https://encoding.spec.whatwg.org/#index-gb18030-ranges-code-point), computed from {@link GB18030_RANGES} rather than looked up directly: that table holds only the code point at the *start* of each contiguous range, so the result is that start plus how far `pointer` sits past it.
@@ -361,21 +494,21 @@ export function decodeGb18030(bytes: Uint8Array): string {
   let third = 0;
   for (const byte of bytes) {
     if (third !== 0) {
-      if (byte < 0x30 || byte > 0x39) {
+      if (byte < GB18030_DIGIT_BYTE_MIN || byte > GB18030_DIGIT_BYTE_MAX) {
         malformed(
           "gb18030",
-          `has no character for four-byte sequence 0x${first.toString(16)} 0x${second.toString(16)} 0x${third.toString(16)} 0x${byte.toString(16)}: fourth byte is not 0x30-0x39`,
+          `has no character for four-byte sequence 0x${first.toString(HEX_RADIX)} 0x${second.toString(HEX_RADIX)} 0x${third.toString(HEX_RADIX)} 0x${byte.toString(HEX_RADIX)}: fourth byte is not 0x30-0x39`,
         );
       }
       const pointer =
-        (first - 0x81) *
+        (first - GB18030_LEAD_START) *
           (GB18030_SECOND_FOURTH_BYTE_COUNT *
             GB18030_THIRD_BYTE_COUNT *
             GB18030_SECOND_FOURTH_BYTE_COUNT) +
-        (second - 0x30) *
+        (second - GB18030_DIGIT_BYTE_MIN) *
           (GB18030_SECOND_FOURTH_BYTE_COUNT * GB18030_THIRD_BYTE_COUNT) +
-        (third - 0x81) * GB18030_SECOND_FOURTH_BYTE_COUNT +
-        (byte - 0x30);
+        (third - GB18030_LEAD_START) * GB18030_SECOND_FOURTH_BYTE_COUNT +
+        (byte - GB18030_DIGIT_BYTE_MIN);
       const codePoint = gb18030RangesCodePoint(pointer);
       const failedFirst = first;
       const failedSecond = second;
@@ -386,38 +519,45 @@ export function decodeGb18030(bytes: Uint8Array): string {
       if (codePoint === undefined) {
         malformed(
           "gb18030",
-          `has no character for four-byte sequence 0x${failedFirst.toString(16)} 0x${failedSecond.toString(16)} 0x${failedThird.toString(16)} 0x${byte.toString(16)}`,
+          `has no character for four-byte sequence 0x${failedFirst.toString(HEX_RADIX)} 0x${failedSecond.toString(HEX_RADIX)} 0x${failedThird.toString(HEX_RADIX)} 0x${byte.toString(HEX_RADIX)}`,
         );
       }
       appendCodePoint(sink, codePoint);
       continue;
     }
     if (second !== 0) {
-      if (byte >= 0x81 && byte <= 0xfe) {
+      if (byte >= GB18030_LEAD_START && byte <= GB18030_LEAD_END) {
         third = byte;
         continue;
       }
       malformed(
         "gb18030",
-        `has no character for byte sequence 0x${first.toString(16)} 0x${second.toString(16)} 0x${byte.toString(16)}: third byte is not 0x81-0xFE`,
+        `has no character for byte sequence 0x${first.toString(HEX_RADIX)} 0x${second.toString(HEX_RADIX)} 0x${byte.toString(HEX_RADIX)}: third byte is not 0x81-0xFE`,
       );
     }
     if (first !== 0) {
-      if (byte >= 0x30 && byte <= 0x39) {
+      if (byte >= GB18030_DIGIT_BYTE_MIN && byte <= GB18030_DIGIT_BYTE_MAX) {
         second = byte;
         continue;
       }
       const leadingByte = first;
       first = 0;
-      const column = twoByteTrailColumn(byte, 0x80, 0xfe);
+      const column = twoByteTrailColumn(
+        byte,
+        GB18030_TRAIL_HIGH_START,
+        GB18030_TRAIL_HIGH_END,
+      );
       const pointer =
-        column === undefined ? undefined : (leadingByte - 0x81) * 190 + column;
+        column === undefined
+          ? undefined
+          : (leadingByte - GB18030_LEAD_START) * GB18030_TWO_BYTE_COLUMNS +
+            column;
       const codePoint =
         pointer === undefined ? undefined : pointerCodePoint(GB18030, pointer);
       if (codePoint === undefined) {
         malformed(
           "gb18030",
-          `has no character for lead byte 0x${leadingByte.toString(16)} trail byte 0x${byte.toString(16)}`,
+          `has no character for lead byte 0x${leadingByte.toString(HEX_RADIX)} trail byte 0x${byte.toString(HEX_RADIX)}`,
         );
       }
       appendCodePoint(sink, codePoint);
@@ -425,13 +565,16 @@ export function decodeGb18030(bytes: Uint8Array): string {
     }
     if (byte <= ASCII_BYTE_MAX) {
       sink.units.push(byte);
-    } else if (byte === 0x80) {
-      sink.units.push(0x20ac);
+    } else if (byte === GB18030_SINGLE_BYTE_EURO) {
+      sink.units.push(EURO_SIGN_CODE_POINT);
       // byte reaching this point is already known to be 0x81 or above (everything below is consumed by the two branches above), so only this band's own upper bound needs checking.
-    } else if (byte <= 0xfe) {
+    } else if (byte <= GB18030_LEAD_END) {
       first = byte;
     } else {
-      malformed("gb18030", `has no character for byte 0x${byte.toString(16)}`);
+      malformed(
+        "gb18030",
+        `has no character for byte 0x${byte.toString(HEX_RADIX)}`,
+      );
     }
   }
   // second and third are never assigned outside the `first !== 0` branch above, and every path that resets any one of the three resets all three together, so first !== 0 alone already covers every state this loop can end in with a pending byte still unconsumed — checking second and third here too would only ever repeat a condition first !== 0 has already proven.
