@@ -2,6 +2,16 @@ import { passwordToUtf16LeBytes } from "./office-rc4";
 import { rc4 } from "./rc4";
 import { sha1 } from "./sha1";
 
+// RC4 CryptoAPI's own quantities: a 4-byte block number in little-endian bytes, the legacy 40-bit key [MS-OFFCRYPTO] pads out to the full 16-byte key with zeros after its own 5 bytes, and a key's byte length is its bit size over 8.
+const U8_MASK = 0xff;
+const BITS_PER_BYTE = 8;
+const BLOCK_NUMBER_BYTES = 4;
+const BYTE_3_MULTIPLIER = 3;
+const BYTE_3_SHIFT = BYTE_3_MULTIPLIER * BITS_PER_BYTE;
+const LEGACY_KEY_SIZE_BITS = 40;
+const LEGACY_KEY_BYTES = 5;
+const FULL_KEY_BYTES = 16;
+
 // The RC4 key derivation PowerPoint binary documents (.ppt) use for their own password-to-open encryption ([MS-OFFCRYPTO] 2.3.5.2 "RC4 CryptoAPI Encryption Key Generation") — a different scheme from office-rc4.ts's own 2.3.6.2 derivation despite both ending in an RC4 keystream: SHA-1 rather than MD5, no intermediate 336-byte buffer, and (per 2.3.5.2's own prose) explicitly NOT iterated — one SHA-1 of the salt+password, one more SHA-1 folding in the block number, done. .doc/.xls never use this scheme; .ppt never uses the other one. Cross-checked against Apache POI's `EncryptionInfo`/`StandardEncryptionHeader`/`CryptoAPIEncryptionHeader` (which parses the on-disk header this module's caller, ppt-codec, reads out of a DocumentEncryptionAtom) and nolze/msoffcrypto-tool's `method/rc4_cryptoapi.py`, whose `_makekey`/`verifypw` this module's own derivation and verification mirror.
 //
 // Unlike office-rc4.ts's per-1024-or-512-byte re-keying within one continuous stream, RC4 CryptoAPI re-keys per *persist object*: [MS-PPT] hands each top-level record its own persist identifier, and that identifier — not a running byte offset — is the "block number" this module's key derivation takes. A whole persist object (header and data together, whatever its length) is decrypted under the one key its own persist ID derives; there is no block-boundary splitting to do here, so this module has no decrypt-with-rekeying entry point the way office-rc4.ts's `decryptOfficeRc4` does — a caller derives the one key it needs and applies this package's own `rc4` directly.
@@ -40,23 +50,23 @@ export function deriveRc4CryptoApiBlockKey(
   saltAndPassword.set(passwordBytes, salt.length);
   const h0 = sha1(saltAndPassword);
 
-  const blockBytes = new Uint8Array(4);
-  blockBytes[0] = block & 0xff;
-  blockBytes[1] = (block >>> 8) & 0xff;
-  blockBytes[2] = (block >>> 16) & 0xff;
-  blockBytes[3] = (block >>> 24) & 0xff;
+  const blockBytes = new Uint8Array(BLOCK_NUMBER_BYTES);
+  blockBytes[0] = block & U8_MASK;
+  blockBytes[1] = (block >>> BITS_PER_BYTE) & U8_MASK;
+  blockBytes[2] = (block >>> (2 * BITS_PER_BYTE)) & U8_MASK;
+  blockBytes[3] = (block >>> BYTE_3_SHIFT) & U8_MASK;
   const h0AndBlock = new Uint8Array(h0.length + blockBytes.length);
   h0AndBlock.set(h0, 0);
   h0AndBlock.set(blockBytes, h0.length);
   const hfinal = sha1(h0AndBlock);
 
   const effectiveKeySizeBits = keySizeBitsOf(keySizeBits);
-  if (effectiveKeySizeBits === 40) {
-    const key = new Uint8Array(16);
-    key.set(hfinal.subarray(0, 5), 0);
+  if (effectiveKeySizeBits === LEGACY_KEY_SIZE_BITS) {
+    const key = new Uint8Array(FULL_KEY_BYTES);
+    key.set(hfinal.subarray(0, LEGACY_KEY_BYTES), 0);
     return key;
   }
-  return hfinal.subarray(0, effectiveKeySizeBits / 8);
+  return hfinal.subarray(0, effectiveKeySizeBits / BITS_PER_BYTE);
 }
 
 /** Verifies a candidate password against a DocumentEncryptionAtom's own EncryptionVerifier fields ([MS-OFFCRYPTO] 2.3.4.9): the block-0 key decrypts `encryptedVerifier` immediately followed by `encryptedVerifierHash` as ONE continuous 36-byte RC4 keystream application — not two independent decryptions, each of which would wrongly restart the keystream at its own start — and the password is correct exactly when SHA1 of the decrypted 16-byte verifier equals the decrypted hash's own first 20 bytes. */

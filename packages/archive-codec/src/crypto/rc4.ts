@@ -4,6 +4,8 @@
 //
 // Every byte read below goes through a DataView rather than plain indexed access: with noUncheckedIndexedAccess on, `arr[i]` types as possibly-undefined even where a loop bound already guarantees it is not, and DataView's own get/setUint8 sidestep that without a non-null assertion on every single swap.
 
+// RC4's own 8-bit state wrap.
+const U8_MASK = 0xff;
 const STATE_SIZE = 256;
 
 export function rc4(
@@ -21,7 +23,7 @@ export function rc4(
   }
   let j = 0;
   for (let i = 0; i < STATE_SIZE; i++) {
-    j = (j + state.getUint8(i) + keyView.getUint8(i % key.length)) & 0xff;
+    j = (j + state.getUint8(i) + keyView.getUint8(i % key.length)) & U8_MASK;
     const swap = state.getUint8(i);
     state.setUint8(i, state.getUint8(j));
     state.setUint8(j, swap);
@@ -32,14 +34,14 @@ export function rc4(
   let x = 0;
   let y = 0;
   for (let n = 0; n < data.length; n++) {
-    x = (x + 1) & 0xff;
-    y = (y + state.getUint8(x)) & 0xff;
+    x = (x + 1) & U8_MASK;
+    y = (y + state.getUint8(x)) & U8_MASK;
     const swap = state.getUint8(x);
     state.setUint8(x, state.getUint8(y));
     state.setUint8(y, swap);
     out[n] =
       dataView.getUint8(n) ^
-      state.getUint8((state.getUint8(x) + state.getUint8(y)) & 0xff);
+      state.getUint8((state.getUint8(x) + state.getUint8(y)) & U8_MASK);
   }
   return out;
 }
