@@ -242,6 +242,9 @@ function readAbsoluteSpacingPt(
   return val === undefined ? undefined : drawingMlFontSizeToPt(Number(val));
 }
 
+// DrawingML's own ST_Percentage/ST_TextSpacingPercent scale: a val of 100000 means 100.000%, so dividing by this converts the raw thousandths-of-a-percent integer to a plain fraction.
+const DRAWINGML_PERCENT_SCALE = 100_000;
+
 // a:lnSpc's overwhelmingly common form in real content is a:spcPct (a percentage multiplier of single line spacing); the absolute a:spcPts form is not modelled as a multiplier here.
 function readLineSpacingMultiplier(
   pPr: XmlElement | undefined,
@@ -251,7 +254,7 @@ function readLineSpacingMultiplier(
   const pct =
     lnSpc === undefined ? undefined : childrenWithTag(lnSpc, "a:spcPct")[0];
   const val = pct === undefined ? undefined : attr(pct, "val");
-  return val === undefined ? undefined : Number(val) / 100_000;
+  return val === undefined ? undefined : Number(val) / DRAWINGML_PERCENT_SCALE;
 }
 
 // a:pPr/@lvl (ST_TextIndentLevelType, 0-8) parsed once for both of its consumers: the a:lvl1pPr..a:lvl9pPr style lookup in resolveDefaultRunProperties, and ContentParagraph.list below. Malformed spellings (non-numeric, fractional, negative) degrade to undefined the way this repo's other numeric attribute readers do (parseChildIndex in xlsx/styles.ts), never to a fabricated or schema-invalid level. An absent @lvl needs no guard of its own: Number(undefined) is NaN, which Number.isInteger already rejects below, so raw only needs an explicit check for the empty string, whose Number() coercion is 0 rather than NaN.
@@ -422,11 +425,13 @@ function readShapeTextExtras(txBody: XmlElement | undefined): ShapeTextExtras {
       bIns === undefined ? DEFAULT_INSET_TOP_BOTTOM_EMU : Number(bIns),
     ),
     fontScale:
-      fontScale === undefined ? undefined : Number(fontScale) / 100_000,
+      fontScale === undefined
+        ? undefined
+        : Number(fontScale) / DRAWINGML_PERCENT_SCALE,
     lineSpacingReduction:
       lnSpcReduction === undefined
         ? undefined
-        : Number(lnSpcReduction) / 100_000,
+        : Number(lnSpcReduction) / DRAWINGML_PERCENT_SCALE,
   };
 }
 
