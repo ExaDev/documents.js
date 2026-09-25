@@ -217,7 +217,8 @@ export function frameGeometryAttrs(
       "svg:height": formatOdfLength(frame.heightPt),
     };
   }
-  const angleRad = (-rotationDeg * Math.PI) / 180;
+  const degreesPerHalfTurn = 180;
+  const angleRad = (-rotationDeg * Math.PI) / degreesPerHalfTurn;
   const cos = Math.cos(angleRad);
   const sin = Math.sin(angleRad);
   const halfWidthPt = frame.widthPt / 2;
