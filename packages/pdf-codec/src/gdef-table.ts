@@ -29,6 +29,13 @@ const GDEF_HEADER_SIZE_1_0 = 12; // uint16 majorVersion + uint16 minorVersion + 
 const GDEF_HEADER_SIZE_1_2 = GDEF_HEADER_SIZE_1_0 + 2; // + Offset16 markGlyphSetsDef, which minor version 2 added
 const MARK_GLYPH_SETS_HEADER_SIZE = 4; // uint16 format + uint16 markGlyphSetCount, before the Offset32 coverage array
 
+// Byte offset of the version 1.0 header's glyphClassDefOffset field: an Offset16 following the fixed uint16 majorVersion (0) and uint16 minorVersion (2) fields.
+const GDEF_GLYPH_CLASS_DEF_OFFSET = 4;
+// Byte offset of the version 1.0 header's markAttachClassDefOffset field: the fourth Offset16 in the header, after glyphClassDefOffset (4), attachListOffset (6), and ligCaretListOffset (8).
+const GDEF_MARK_ATTACH_CLASS_DEF_OFFSET = 10;
+// Size in bytes of one MarkGlyphSets coverage array entry: an Offset32, wider than the Offset16s used elsewhere in GDEF because a mark filtering set can be a whole large Coverage table.
+const MARK_GLYPH_SETS_ENTRY_SIZE_BYTES = 4;
+
 export function parseGdefTable(font: SfntFont): GdefTable | undefined {
   const bytes = sfntTableBytes(font, "GDEF");
   if (
@@ -40,12 +47,15 @@ export function parseGdefTable(font: SfntFont): GdefTable | undefined {
   }
   const minorVersion = u16(bytes, 2);
   // GlyphClassDef and MarkAttachClassDef sit in the version 1.0 header every GSUB-era GDEF carries; an offset of 0 is the spec's own "this subtable is absent".
-  const glyphClassDefOffset = u16(bytes, 4);
+  const glyphClassDefOffset = u16(bytes, GDEF_GLYPH_CLASS_DEF_OFFSET);
   const glyphClassDef =
     glyphClassDefOffset === 0
       ? undefined
       : parseClassDef(bytes, glyphClassDefOffset);
-  const markAttachClassDefOffset = u16(bytes, 10);
+  const markAttachClassDefOffset = u16(
+    bytes,
+    GDEF_MARK_ATTACH_CLASS_DEF_OFFSET,
+  );
   const markAttachClassDef =
     markAttachClassDefOffset === 0
       ? undefined
@@ -61,14 +71,23 @@ export function parseGdefTable(font: SfntFont): GdefTable | undefined {
       const setCount = u16(bytes, markGlyphSetsDefOffset + 2);
       const coverageOffsetsOffset =
         markGlyphSetsDefOffset + MARK_GLYPH_SETS_HEADER_SIZE;
-      if (hasBytes(bytes, coverageOffsetsOffset, setCount * 4)) {
+      if (
+        hasBytes(
+          bytes,
+          coverageOffsetsOffset,
+          setCount * MARK_GLYPH_SETS_ENTRY_SIZE_BYTES,
+        )
+      ) {
         for (let i = 0; i < setCount; i++) {
           // MarkGlyphSets is the one GDEF structure that offsets its entries by 32 bits — a mark set is a whole Coverage table, and a font with many large sets can push past an Offset16's reach.
           markGlyphSets.push(
             parseCoverage(
               bytes,
               markGlyphSetsDefOffset +
-                u32(bytes, coverageOffsetsOffset + i * 4),
+                u32(
+                  bytes,
+                  coverageOffsetsOffset + i * MARK_GLYPH_SETS_ENTRY_SIZE_BYTES,
+                ),
             ),
           );
         }
