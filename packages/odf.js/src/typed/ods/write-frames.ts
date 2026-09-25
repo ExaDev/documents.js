@@ -9,7 +9,8 @@ import { el, txt } from "../../xml/fragment";
 import { encodeXmlText } from "../../xml/entities";
 import { formatOdfLength } from "../shared/units";
 import { writeEmbeddedObject } from "../draw/embedded-write";
-import { coverageKey, PICTURES_DIRECTORY } from "./write";
+import { PICTURES_DIRECTORY } from "./write";
+import { coverageKey } from "./write-canonical";
 
 // The image and embedded-object frame writers split from write.ts: the position grouping and draw:frame emission for everything a sheet anchors in a cell.
 
