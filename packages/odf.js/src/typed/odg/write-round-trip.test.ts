@@ -488,6 +488,8 @@ describe("writeOdgContent: refusals", () => {
 // ContentDrawPage keeps shapes and vectors in two arrays with no field connecting them, but readDrawPageContent stamps both from ONE monotonic counter and sorts each array by the result — so a page's true relative paint order is recoverable across the two, and this writer has to preserve it. See normaliseOdgContent's own note for the emit order this arithmetic is the counterpart of.
 describe("writeOdgContent: paint order across both arrays", () => {
   it("round-trips explicit paint orders that interleave shapes and vectors", () => {
+    const ellipsePaintOrder = 3;
+    const secondShapePaintOrder = 2;
     const document = documentOf([
       page(
         [
@@ -499,13 +501,13 @@ describe("writeOdgContent: paint order across both arrays", () => {
           {
             kind: "ellipse",
             frame: { xPt: 60, yPt: 0, widthPt: 40, heightPt: 40 },
-            paintOrder: 3,
+            paintOrder: ellipsePaintOrder,
           },
         ],
         [
           shape({ paintOrder: 0 }),
           shape({
-            paintOrder: 2,
+            paintOrder: secondShapePaintOrder,
             frame: { xPt: 300, yPt: 0, widthPt: 100, heightPt: 40 },
           }),
         ],
@@ -513,10 +515,12 @@ describe("writeOdgContent: paint order across both arrays", () => {
     ]);
     const written = roundTrip(document);
     expect(written.pages[0]!.shapes.map((item) => item.paintOrder)).toEqual([
-      0, 2,
+      0,
+      secondShapePaintOrder,
     ]);
     expect(written.pages[0]!.vectors.map((item) => item.paintOrder)).toEqual([
-      1, 3,
+      1,
+      ellipsePaintOrder,
     ]);
     expectRoundTrip(document);
   });
@@ -541,39 +545,45 @@ describe("writeOdgContent: paint order across both arrays", () => {
       ),
     ]);
     const written = roundTrip(document);
+    // Shapes are read before vectors, so the monotonic encounter counter numbers the two rects 0/1, then continues into the two shapes at 2/3.
+    const secondVectorPaintOrder = 3;
     expect(written.pages[0]!.shapes.map((item) => item.paintOrder)).toEqual([
       0, 1,
     ]);
     expect(written.pages[0]!.vectors.map((item) => item.paintOrder)).toEqual([
-      2, 3,
+      2,
+      secondVectorPaintOrder,
     ]);
     expectRoundTrip(document);
   });
 
   it("sorts both arrays by paint order on the way back, even when the input arrays disagree with it", () => {
+    const firstRectPaintOrder = 7;
+    const secondRectXPt = 20;
     const document = documentOf([
       page([
         {
           kind: "rect",
           frame: { xPt: 0, yPt: 0, widthPt: 10, heightPt: 10 },
-          paintOrder: 7,
+          paintOrder: firstRectPaintOrder,
         },
         {
           kind: "rect",
-          frame: { xPt: 20, yPt: 0, widthPt: 10, heightPt: 10 },
+          frame: { xPt: secondRectXPt, yPt: 0, widthPt: 10, heightPt: 10 },
           paintOrder: 2,
         },
       ]),
     ]);
     const written = roundTrip(document);
     expect(written.pages[0]!.vectors.map((item) => item.paintOrder)).toEqual([
-      2, 7,
+      2,
+      firstRectPaintOrder,
     ]);
     expect(
       written.pages[0]!.vectors.map((item) =>
         item.kind === "rect" ? item.frame.xPt : undefined,
       ),
-    ).toEqual([20, 0]);
+    ).toEqual([secondRectXPt, 0]);
     expectRoundTrip(document);
   });
 
@@ -632,24 +642,44 @@ describe("writeOdg: fidelity constructs in shape text (#969)", () => {
 });
 
 describe("writeOdgContent: rotated vector geometry, within floating-point tolerance", () => {
-  it.each([30, 90, 180, -45, 12.5])(
-    "round-trips a %i-degree rotation on a rect",
-    (rotationDeg) => {
-      const frame = { xPt: 50, yPt: 60, widthPt: 200, heightPt: 80 };
-      const written = roundTrip(
-        documentOf([page([{ kind: "rect", frame, rotationDeg, fill: BLUE }])]),
-      );
-      const vector = written.pages[0]!.vectors[0]!;
-      if (vector.kind !== "rect") {
-        throw new Error("expected a rect back");
-      }
-      expect(vector.rotationDeg).toBeCloseTo(rotationDeg, 9);
-      expect(vector.frame.xPt).toBeCloseTo(frame.xPt, 6);
-      expect(vector.frame.yPt).toBeCloseTo(frame.yPt, 6);
-      expect(vector.frame.widthPt).toBeCloseTo(frame.widthPt, 6);
-      expect(vector.frame.heightPt).toBeCloseTo(frame.heightPt, 6);
-    },
-  );
+  const rotationPrecisionDigits = 9;
+  const framePrecisionDigits = 6;
+  const acuteRotationDeg = 30;
+  const rightAngleRotationDeg = 90;
+  const halfTurnRotationDeg = 180;
+  const negativeRotationDeg = -45;
+  const fractionalRotationDeg = 12.5;
+
+  it.each([
+    acuteRotationDeg,
+    rightAngleRotationDeg,
+    halfTurnRotationDeg,
+    negativeRotationDeg,
+    fractionalRotationDeg,
+  ])("round-trips a %i-degree rotation on a rect", (rotationDeg) => {
+    const frame = { xPt: 50, yPt: 60, widthPt: 200, heightPt: 80 };
+    const written = roundTrip(
+      documentOf([page([{ kind: "rect", frame, rotationDeg, fill: BLUE }])]),
+    );
+    const vector = written.pages[0]!.vectors[0]!;
+    if (vector.kind !== "rect") {
+      throw new Error("expected a rect back");
+    }
+    expect(vector.rotationDeg).toBeCloseTo(
+      rotationDeg,
+      rotationPrecisionDigits,
+    );
+    expect(vector.frame.xPt).toBeCloseTo(frame.xPt, framePrecisionDigits);
+    expect(vector.frame.yPt).toBeCloseTo(frame.yPt, framePrecisionDigits);
+    expect(vector.frame.widthPt).toBeCloseTo(
+      frame.widthPt,
+      framePrecisionDigits,
+    );
+    expect(vector.frame.heightPt).toBeCloseTo(
+      frame.heightPt,
+      framePrecisionDigits,
+    );
+  });
 
   it("collapses a literal 0-degree rotation to no rotation at all on the way back", () => {
     const written = roundTrip(
@@ -672,8 +702,38 @@ describe("writeOdgContent: rotated vector geometry, within floating-point tolera
 
 // The regression sweep for the one class of length a plain number-to-string spells in EXPONENT notation, which the ODF `length` datatype has no form for (typed/shared/units.ts's LENGTH_PATTERN and formatOdfLength note). The failure it pins is silent and total rather than approximate: parseOdfTransform drops a translate() whose components don't parse, so a rotated vector lands at its own pivot; parseBox returns undefined for an unrotated one whose svg:x/svg:y don't parse, so readDrawRectVector returns undefined and the vector VANISHES from the page entirely. The same sweep the odp writer's own suite runs, over vectors rather than frames — the values that reach that magnitude are ordinary, since frameGeometryAttrs's translate() components are trig-derived and a frame centred at or near the page origin cancels to 1e-15-ish rounding dust at most angles.
 describe("writeOdgContent: rotated vector geometry near the page origin", () => {
+  // Each value is a fraction of a full turn (or its negative), except EXPONENT_NOTATION_EPSILON_DEG: the one value small enough that JS's own number-to-string spells it in exponent notation, which is the specific case the file-level comment above explains this sweep exists to pin.
+  const NEGATIVE_THREE_QUARTER_TURN_DEG = -270;
+  const NEGATIVE_HALF_TURN_DEG = -180;
+  const NEGATIVE_THREE_EIGHTHS_TURN_DEG = -135;
+  const NEGATIVE_QUARTER_TURN_DEG = -90;
+  const NEGATIVE_EIGHTH_TURN_DEG = -45;
+  const NEGATIVE_TWELFTH_TURN_DEG = -30;
+  const TINY_NEGATIVE_DEG = -1;
+  const EXPONENT_NOTATION_EPSILON_DEG = 0.0001;
+  const TINY_POSITIVE_DEG = 1;
+  const TWELFTH_TURN_DEG = 30;
+  const EIGHTH_TURN_DEG = 45;
+  const QUARTER_TURN_DEG = 90;
+  const THREE_EIGHTHS_TURN_DEG = 135;
+  const HALF_TURN_DEG = 180;
+  const THREE_QUARTER_TURN_DEG = 270;
   const ANGLES_DEG = [
-    -270, -180, -135, -90, -45, -30, -1, 0.0001, 1, 30, 45, 90, 135, 180, 270,
+    NEGATIVE_THREE_QUARTER_TURN_DEG,
+    NEGATIVE_HALF_TURN_DEG,
+    NEGATIVE_THREE_EIGHTHS_TURN_DEG,
+    NEGATIVE_QUARTER_TURN_DEG,
+    NEGATIVE_EIGHTH_TURN_DEG,
+    NEGATIVE_TWELFTH_TURN_DEG,
+    TINY_NEGATIVE_DEG,
+    EXPONENT_NOTATION_EPSILON_DEG,
+    TINY_POSITIVE_DEG,
+    TWELFTH_TURN_DEG,
+    EIGHTH_TURN_DEG,
+    QUARTER_TURN_DEG,
+    THREE_EIGHTHS_TURN_DEG,
+    HALF_TURN_DEG,
+    THREE_QUARTER_TURN_DEG,
   ];
   const FRAMES = [
     { xPt: 0, yPt: 0, widthPt: 100, heightPt: 100 }, // centre at (50,50) — the classic cancelling case at 90/180/270.
@@ -701,6 +761,8 @@ describe("writeOdgContent: rotated vector geometry near the page origin", () => 
         ]),
       );
       const vectors = written.pages[0]!.vectors;
+      const framePrecisionDigits = 6;
+      const rotationPrecisionDigits = 9;
       // The whole-vector loss first: an unparseable svg:x/svg:y or transform drops the element from the read entirely, so a length mismatch IS the bug, not a symptom of one.
       expect(vectors).toHaveLength(FRAMES.length);
       FRAMES.forEach((frame, index) => {
@@ -708,11 +770,20 @@ describe("writeOdgContent: rotated vector geometry near the page origin", () => 
         if (vector.kind !== "rect") {
           throw new Error("expected a rect back");
         }
-        expect(vector.frame.xPt).toBeCloseTo(frame.xPt, 6);
-        expect(vector.frame.yPt).toBeCloseTo(frame.yPt, 6);
-        expect(vector.frame.widthPt).toBeCloseTo(frame.widthPt, 6);
-        expect(vector.frame.heightPt).toBeCloseTo(frame.heightPt, 6);
-        expect(vector.rotationDeg ?? 0).toBeCloseTo(rotationDeg, 9);
+        expect(vector.frame.xPt).toBeCloseTo(frame.xPt, framePrecisionDigits);
+        expect(vector.frame.yPt).toBeCloseTo(frame.yPt, framePrecisionDigits);
+        expect(vector.frame.widthPt).toBeCloseTo(
+          frame.widthPt,
+          framePrecisionDigits,
+        );
+        expect(vector.frame.heightPt).toBeCloseTo(
+          frame.heightPt,
+          framePrecisionDigits,
+        );
+        expect(vector.rotationDeg ?? 0).toBeCloseTo(
+          rotationDeg,
+          rotationPrecisionDigits,
+        );
       });
     },
   );
