@@ -6,6 +6,15 @@
 //
 // Encoding 3 — RLE compression, ANOTHER genuine correction this reader's own construction caught only by testing against a real generated fixture (a real LibreOffice 26.2 Firebird-embedded .odb backs up with att_backup_compress present — gbak's own compression default, not a special option this fixture happened to opt into). When present, att_data_data's own bytes are NOT the XDR buffer directly — backup.epp's put_data RLE-compresses the ALREADY-XDR-ENCODED buffer before writing it (`if (tdgbl->gbl_sw_compress) compress(p, record_length);`, where `p`/`record_length` at that point are the XDR output, not the raw record). The scheme itself (backup.epp's compress/restore.epp's decompress) is a classic signed-run-length ("PackBits"-style) codec: a signed control byte `count`; count>0 means "copy the next `count` bytes literally"; count<0 means "read one more byte and repeat it `-count` times"; the decompressed length is already known ahead of time from att_xdr_length, so decoding stops once that many output bytes have been produced, however many COMPRESSED input bytes that took. This is readCompressedPayload below — unlike readRawPayload, its own input byte count is not known until decoding finishes, so it reads directly from the underlying tag/attribute stream rather than being handed a pre-sliced byte range.
 
+// A 32-bit integer is always 4 bytes, whichever byte order encodes it (VAX/little-endian for FirebirdBackupReader's own attribute values, big-endian XDR for XdrReader's own row-data payload). BYTE_1_SHIFT/BYTE_2_SHIFT/BYTE_3_SHIFT are the bit shifts for the second, third, and fourth byte of such a word once reassembled.
+const INT32_BYTE_LENGTH = 4;
+const BYTE_1_SHIFT = 8;
+const BYTE_2_SHIFT = 16;
+const BYTE_3_SHIFT = 24;
+// A byte at or above its own sign bit (0x80) is negative in the RLE control-byte encoding readSignedByte decodes; subtracting the 8-bit wrap value (0x100) converts its unsigned reading to the equivalent negative number.
+const SIGNED_BYTE_SIGN_BIT = 0x80;
+const SIGNED_BYTE_WRAP = 0x100;
+
 export class FirebirdBackupParseError extends Error {
   readonly offset: number;
 
@@ -84,7 +93,7 @@ export class FirebirdBackupReader {
   // A length-prefixed little-endian ("VAX order") signed 32-bit attribute value — get_int32's own wire shape (put_int32: `isc_vax_integer`, low byte first). Used for every att_*_length/att_*_type/att_*_scale/att_*_sub_type/etc. integer attribute.
   readInt32Attribute(): number {
     const bytes = this.readAttributeBytes();
-    if (bytes.length !== 4) {
+    if (bytes.length !== INT32_BYTE_LENGTH) {
       throw new FirebirdBackupParseError(
         `expected a 4-byte int32 attribute, found ${bytes.length} byte(s)`,
         this.position,
@@ -92,9 +101,9 @@ export class FirebirdBackupReader {
     }
     return (
       (bytes[0] ?? 0) |
-      ((bytes[1] ?? 0) << 8) |
-      ((bytes[2] ?? 0) << 16) |
-      ((bytes[3] ?? 0) << 24)
+      ((bytes[1] ?? 0) << BYTE_1_SHIFT) |
+      ((bytes[2] ?? 0) << BYTE_2_SHIFT) |
+      ((bytes[3] ?? 0) << BYTE_3_SHIFT)
     );
   }
 
@@ -129,7 +138,7 @@ export class FirebirdBackupReader {
   readBlobSegmentLength(): number {
     const low = this.readLengthByte();
     const high = this.readLengthByte();
-    return low | (high << 8);
+    return low | (high << BYTE_1_SHIFT);
   }
 
   private readSignedByte(): number {
@@ -141,7 +150,7 @@ export class FirebirdBackupReader {
       );
     }
     this.position++;
-    return byte >= 0x80 ? byte - 0x100 : byte;
+    return byte >= SIGNED_BYTE_SIGN_BIT ? byte - SIGNED_BYTE_WRAP : byte;
   }
 
   // restore.epp's own decompress() algorithm (a classic signed-run-length/"PackBits"-style codec), reading directly from this reader's own underlying stream — see this module's own top-of-file Encoding 3 note for the full derivation. Reads however many COMPRESSED bytes it takes to produce exactly `decompressedLength` bytes of OUTPUT (the count att_xdr_length already gave the caller), so the caller never needs to know the compressed byte count up front.
@@ -168,6 +177,12 @@ export class FirebirdBackupReader {
   }
 }
 
+const THIRD_BYTE_OFFSET = 3;
+const INT16_SIGN_EXTEND_SHIFT = 16;
+const INT32_BITS_BIGINT = 32n;
+const UINT32_MASK_BIGINT = 0xffffffffn;
+const DOUBLE_BYTE_LENGTH = 8;
+
 // Standard XDR (RFC 1832) reader over a rec_data record's own att_data_data payload bytes — big-endian, 4-byte-aligned throughout, confirmed against Firebird's own src/common/xdr.cpp (GETLONG uses ntohl unconditionally since BurpXdr never sets x_local) and src/burp/canonical.cpp's CAN_encode_decode (the exact per-SQL-type XDR shape gbak uses for a row's own field values). A completely different byte order and framing from FirebirdBackupReader above — the two must never be mixed mid-stream.
 export class XdrReader {
   private readonly bytes: Uint8Array<ArrayBuffer>;
@@ -190,7 +205,7 @@ export class XdrReader {
 
   // A big-endian 32-bit signed integer — the wire shape underlying xdr_long AND xdr_short (xdr_short widens its 16-bit value to a full XDR long on the wire; see readInt16 below).
   readInt32(): number {
-    if (this.position + 4 > this.end) {
+    if (this.position + INT32_BYTE_LENGTH > this.end) {
       throw new FirebirdBackupParseError(
         "unexpected end of XDR data reading a 4-byte integer",
         this.position,
@@ -199,55 +214,63 @@ export class XdrReader {
     const b0 = this.bytes[this.position] ?? 0;
     const b1 = this.bytes[this.position + 1] ?? 0;
     const b2 = this.bytes[this.position + 2] ?? 0;
-    const b3 = this.bytes[this.position + 3] ?? 0;
-    this.position += 4;
+    const b3 = this.bytes[this.position + THIRD_BYTE_OFFSET] ?? 0;
+    this.position += INT32_BYTE_LENGTH;
     // Signed 32-bit big-endian reassembly via a >>> 0 unsigned round-trip through `| 0` — (b0<<24) alone can already overflow into unsigned-looking territory in JS bitwise ops, so build unsigned first, then reinterpret as signed with `| 0`.
-    return (b0 << 24) | (b1 << 16) | (b2 << 8) | b3 | 0;
+    return (
+      (b0 << BYTE_3_SHIFT) |
+      (b1 << BYTE_2_SHIFT) |
+      (b2 << BYTE_1_SHIFT) |
+      b3 |
+      0
+    );
   }
 
   // xdr_short's own wire shape: NOT a 2-byte value — Firebird's XDR has no native 16-bit type, so a "short" is sign-extended to a full 4-byte XDR long on encode (xdr.cpp: `temp = *ip; PUTLONG(xdrs, &temp);`) and truncated back to 16 bits with sign preserved on decode (`*ip = (SSHORT) temp;`).
   readInt16(): number {
     const value = this.readInt32();
-    return (value << 16) >> 16;
+    return (value << INT16_SIGN_EXTEND_SHIFT) >> INT16_SIGN_EXTEND_SHIFT;
   }
 
   // A big-endian 64-bit signed integer via xdr_hyper's own two-32-bit-word shape. A real bug this reader's own construction caught only against a real fixture (a DECIMAL(10,2) column's own int64-backed value decoded to garbage on the first pass): xdr_hyper's `temp_long` is a native-memory-layout copy of the int64 (`memcpy(temp_long, pi64, sizeof temp_long)`), so on every little-endian host real gbak actually runs on, `temp_long[0]` holds the LOW 32 bits and `temp_long[1]` the HIGH 32 bits purely as an artifact of memory layout — but xdr.cpp's own `#ifndef WORDS_BIGENDIAN` encode branch then writes `temp_long[1]` (HIGH) FIRST, `temp_long[0]` (LOW) SECOND. The wire order is therefore HIGH-word-first, LOW-word-second — the opposite of what "low-order half transmitted first" (this comment's own first-draft assumption) would suggest.
   readInt64(): bigint {
     const high = this.readInt32();
     const low = this.readInt32();
-    return (BigInt(high) << 32n) | (BigInt(low) & 0xffffffffn);
+    return (
+      (BigInt(high) << INT32_BITS_BIGINT) | (BigInt(low) & UINT32_MASK_BIGINT)
+    );
   }
 
   // IEEE-754 double via xdr_double's own two-32-bit-word shape (`FB_LONG_DOUBLE_FIRST`/`FB_LONG_DOUBLE_SECOND` select which 32-bit half of the in-memory double is PUTLONG'd first — the constant itself lives in a platform header this reader's own source research did not track down). Read here as the high-order word first, i.e. a standard big-endian IEEE-754 double with no further word-swap — cross-checked against a real Firebird-embedded fixture's own DOUBLE PRECISION column value (see src/firebird/backup.test.ts) and confirmed to decode correctly on the little-endian (x86/ARM) hosts every real gbak build this reader was tested against actually runs on.
   readDouble(): number {
-    if (this.position + 8 > this.end) {
+    if (this.position + DOUBLE_BYTE_LENGTH > this.end) {
       throw new FirebirdBackupParseError(
         "unexpected end of XDR data reading an 8-byte double",
         this.position,
       );
     }
-    const buffer = new ArrayBuffer(8);
+    const buffer = new ArrayBuffer(DOUBLE_BYTE_LENGTH);
     const view = new DataView(buffer);
-    for (let i = 0; i < 8; i++) {
+    for (let i = 0; i < DOUBLE_BYTE_LENGTH; i++) {
       view.setUint8(i, this.bytes[this.position + i] ?? 0);
     }
-    this.position += 8;
+    this.position += DOUBLE_BYTE_LENGTH;
     return view.getFloat64(0, false);
   }
 
   readFloat(): number {
-    if (this.position + 4 > this.end) {
+    if (this.position + INT32_BYTE_LENGTH > this.end) {
       throw new FirebirdBackupParseError(
         "unexpected end of XDR data reading a 4-byte float",
         this.position,
       );
     }
-    const buffer = new ArrayBuffer(4);
+    const buffer = new ArrayBuffer(INT32_BYTE_LENGTH);
     const view = new DataView(buffer);
-    for (let i = 0; i < 4; i++) {
+    for (let i = 0; i < INT32_BYTE_LENGTH; i++) {
       view.setUint8(i, this.bytes[this.position + i] ?? 0);
     }
-    this.position += 4;
+    this.position += INT32_BYTE_LENGTH;
     return view.getFloat32(0, false);
   }
 
@@ -261,7 +284,8 @@ export class XdrReader {
     }
     const slice = this.bytes.subarray(this.position, this.position + len);
     this.position += len;
-    const padding = (4 - (len % 4)) % 4;
+    const padding =
+      (INT32_BYTE_LENGTH - (len % INT32_BYTE_LENGTH)) % INT32_BYTE_LENGTH;
     this.position += padding;
     return slice;
   }
