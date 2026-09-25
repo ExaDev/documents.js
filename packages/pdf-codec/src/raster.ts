@@ -157,9 +157,18 @@ export interface RenderPdfPageOptions {
   readonly signal?: AbortSignal;
 }
 
+// Absorbs float fuzz in regionPixels below (an exact 100pt at scale 2 computing 200.00000000000003 must be 200, not 201).
+const PIXEL_ROUNDING_EPSILON = 1e-9;
+
+// A PDF point is defined as 1/72 inch (ISO 32000-1 8.3), the conversion between the dpi option and the scale factor it names.
+const POINTS_PER_INCH = 72;
+
+// Below this, a text run's raw device-space advance is treated as zero rather than divided by, guarding drawTextRun's own glyph-spacing correction against a near-zero-but-nonzero float result.
+const EXTENT_ZERO_EPSILON = 1e-9;
+
 // Canvas dimensions round UP, so the region's whole point extent always covers its last pixel row/column (a round-half rule could drop a right-edge sliver), and a hairline-but-valid clip that scales below one pixel still yields a one-pixel canvas rather than a zero-sized PNG no encoder accepts. The epsilon absorbs float fuzz (an exact 100pt at scale 2 computing 200.00000000000003 must be 200, not 201).
 function regionPixels(extentPt: number, scale: number): number {
-  return Math.max(1, Math.ceil(extentPt * scale - 1e-9));
+  return Math.max(1, Math.ceil(extentPt * scale - PIXEL_ROUNDING_EPSILON));
 }
 
 export function renderPdfPage(
@@ -174,7 +183,8 @@ export function renderPdfPage(
       "renderPdfPage accepts at most one of scale and dpi; they name the same factor in different units (dpi = 72 x scale)",
     );
   }
-  const scale = options.dpi !== undefined ? options.dpi / 72 : options.scale;
+  const scale =
+    options.dpi !== undefined ? options.dpi / POINTS_PER_INCH : options.scale;
   if (scale !== undefined && !(scale > 0)) {
     throw new Error(
       `renderPdfPage requires a positive scale factor (received scale ${options.scale}, dpi ${options.dpi})`,
@@ -430,6 +440,9 @@ function drawRect(
   }
 }
 
+// An ellipse is approximated by four cubic Bezier segments, one per quadrant, the same construction BEZIER_KAPPA is defined for.
+const ELLIPSE_QUADRANT_COUNT = 4;
+
 // A recovered ellipse, rebuilt as the same four-cubic kappa construction every ellipse-as-Beziers writer emits (BEZIER_KAPPA, shared with content-write.ts's writer and interpret.ts's detector): quarter arcs from the bounding box's cardinal points. Cubic segments transform point-wise under an affine matrix, so the control points transform individually and the curve remains exact.
 function drawEllipse(
   item: ExtractedEllipse,
@@ -463,8 +476,8 @@ function drawEllipse(
     applyMatrix(matrix, { x: point[0], y: point[1] });
   const start = transformed(cardinalPoints[0]!);
   const segments: RasterPathSegment[] = [];
-  for (let i = 0; i < 4; i++) {
-    const end = transformed(cardinalPoints[(i + 1) % 4]!);
+  for (let i = 0; i < ELLIPSE_QUADRANT_COUNT; i++) {
+    const end = transformed(cardinalPoints[(i + 1) % ELLIPSE_QUADRANT_COUNT]!);
     const c1 = transformed(controls[i * 2]!);
     const c2 = transformed(controls[i * 2 + 1]!);
     segments.push({
@@ -669,6 +682,9 @@ function drawImage(
   });
 }
 
+// content-write.ts's own dash-length convention: both the dash and the gap are this many multiples of the stroke width.
+const DASHED_STROKE_WIDTH_MULTIPLE = 3;
+
 // The port's stroke spec, mapping the recovered dash-style hint to a dash array with the same stroke-width multiples content-write.ts emits (dashed = [3w, 3w]), so a rendered dashed rule and a written one share one convention. `double` needs no case of its own: interpret.ts recovers it as the two genuinely separate offset strokes it was drawn as, never as a style on one stroke.
 function strokeSpec(
   stroke: { readonly color: LayoutColor; readonly widthPt: number },
@@ -680,7 +696,10 @@ function strokeSpec(
     return {
       color: stroke.color,
       widthPx,
-      dashPx: [widthPx * 3, widthPx * 3],
+      dashPx: [
+        widthPx * DASHED_STROKE_WIDTH_MULTIPLE,
+        widthPx * DASHED_STROKE_WIDTH_MULTIPLE,
+      ],
     };
   }
   return { color: stroke.color, widthPx };
@@ -781,6 +800,9 @@ type EmbeddedProgram =
   | { readonly kind: "cff" }
   | { readonly kind: "absent" };
 
+// A bare CFF program's own header size field (ISO 32000-1's /Type1C spelling: major 1, minor 0, hdrSize 4).
+const CFF_HEADER_SIZE = 0x04;
+
 // Pulls the /FontDescriptor's embedded program from whichever key it lives under (FontFile2, or FontFile3 — an /OpenType-wrapped sfnt is a legal container for either outline flavour, and the bytes themselves, not the key, say which flavour: the same sniffing rule font-read.ts's readFontProgram applies) and classifies it. A bare CFF program (0x01 0x00 0x04 header) or an 'OTTO' sfnt carrying a 'CFF ' table is CFF; anything parseable as an sfnt with a readable glyf/head/maxp trio is fillable; anything else (no descriptor, no stream, an unparseable or table-less program) is absent.
 function openEmbeddedProgram(
   descriptorOwner: PdfDict,
@@ -803,7 +825,11 @@ function openEmbeddedProgram(
       NOOP_DIAGNOSTIC_SINK,
     ).bytes;
     // No separate bytes.length >= 3 guard: with noUncheckedIndexedAccess, an out-of-bounds index already reads as undefined, which can never strictly equal any of these three literals — a short stream already fails the chain on its own without a length check duplicating that fact.
-    if (bytes[0] === 0x01 && bytes[1] === 0x00 && bytes[2] === 0x04) {
+    if (
+      bytes[0] === 0x01 &&
+      bytes[1] === 0x00 &&
+      bytes[2] === CFF_HEADER_SIZE
+    ) {
       return { kind: "cff" }; // a bare CFF program: header major 1, minor 0, hdrSize 4 (ISO 32000-1's /Type1C spelling)
     }
     const sfnt = parseSfnt(bytes);
@@ -865,6 +891,9 @@ function resolveTextOutlineFace(
   outlineFaces.set(fontDict, face);
   return face;
 }
+
+// Bit width of one byte, the shift needed to combine a big-endian two-byte value's high byte with its low byte.
+const BITS_PER_BYTE = 8;
 
 function buildTextOutlineFace(
   fontDict: PdfDict,
@@ -953,14 +982,16 @@ function buildTextOutlineFace(
       ).bytes;
       const entries: number[] = [];
       for (let i = 0; i + 1 < decodedBytes.length; i += 2) {
-        entries.push((decodedBytes[i]! << 8) | decodedBytes[i + 1]!);
+        entries.push(
+          (decodedBytes[i]! << BITS_PER_BYTE) | decodedBytes[i + 1]!,
+        );
       }
       return {
         glyf: program.face.glyf,
         unitsPerEm: program.face.unitsPerEm,
         glyphIdOf: (codes, offset) => {
           // No separate cid < entries.length guard: cid is always a non-negative index (built from two unsigned byte shifts), and a plain array already reads out of bounds as undefined — entries[cid] alone is exactly the ": undefined" branch for every cid past the map's own last entry.
-          const cid = (codes[offset]! << 8) | codes[offset + 1]!;
+          const cid = (codes[offset]! << BITS_PER_BYTE) | codes[offset + 1]!;
           return entries[cid];
         },
       };
@@ -969,7 +1000,8 @@ function buildTextOutlineFace(
     return {
       glyf: program.face.glyf,
       unitsPerEm: program.face.unitsPerEm,
-      glyphIdOf: (codes, offset) => (codes[offset]! << 8) | codes[offset + 1]!,
+      glyphIdOf: (codes, offset) =>
+        (codes[offset]! << BITS_PER_BYTE) | codes[offset + 1]!,
     };
   }
 
@@ -1019,6 +1051,9 @@ function buildTextOutlineFace(
   );
 }
 
+// The glyphAdvance port's own convention (matching the "Per1000" field names): widths, displacements and vertical positions are expressed per 1000 units of text space.
+const METRICS_PER_1000_SCALE = 1000;
+
 // The per-run glyph walk: re-walks the run's codes through the same glyphAdvance port the interpreter advanced the text matrix with, placing each glyph at its accumulated advance through the run's own start matrix, then draws each glyph's decoded outline as one filled path.
 function drawTextRun(
   item: ExtractedTextRun,
@@ -1062,12 +1097,15 @@ function drawTextRun(
     placements.push({
       glyphId: face.glyphIdOf(item.codes, offset),
       advance: cumulative,
-      positionX: (advance.vertical?.positionXPer1000 ?? 0) / 1000,
-      positionY: (advance.vertical?.positionYPer1000 ?? 0) / 1000,
+      positionX:
+        (advance.vertical?.positionXPer1000 ?? 0) / METRICS_PER_1000_SCALE,
+      positionY:
+        (advance.vertical?.positionYPer1000 ?? 0) / METRICS_PER_1000_SCALE,
     });
     // The same user-space displacement the interpreter accumulates (interpret.ts's own two displacement formulas without the Tc/Tw/Tz terms this walk cannot see, which the end-matrix correction below absorbs). Pre-composing a translation onto startMatrix is associatively identical to pre-composing onto the text matrix it was built from, so glyph k's matrix here is glyph k's Trm there. A vertically set run advances by the glyph's own w1y instead of its width, and downward, so the accumulated figure is negative and is measured along y below rather than x.
     cumulative +=
-      ((advance.vertical?.displacementPer1000 ?? advance.widthPer1000) / 1000) *
+      ((advance.vertical?.displacementPer1000 ?? advance.widthPer1000) /
+        METRICS_PER_1000_SCALE) *
       item.sizePt;
     offset += byteLength;
   }
@@ -1097,7 +1135,8 @@ function drawTextRun(
     endPoint.y - startPoint.y,
   );
   // No separate zero-advance guard beside the extent one: rawEndPoint is startMatrix applied to the accumulated advance, so an advance of zero puts it exactly on startPoint and rawExtent is zero already. Testing the advance's own sign as well would only wrongly disable the correction for a vertically set run, whose accumulated advance is negative by construction.
-  const correction = rawExtent > 1e-9 ? actualExtent / rawExtent : 1;
+  const correction =
+    rawExtent > EXTENT_ZERO_EPSILON ? actualExtent / rawExtent : 1;
 
   const firstPlacement = placements[0];
   const glyphScale = scaleMatrix(1 / face.unitsPerEm, 1 / face.unitsPerEm);
@@ -1151,13 +1190,23 @@ export function drawGlyphOutline(
 }
 
 // TrueType contours to port subpaths: each contour's on/off-curve points walked into line and quadratic segments, each quadratic elevated to the exactly equivalent cubic (control points at 2/3 of the way from the on-curve ends toward the off-curve control — the standard exact quadratic-to-cubic elevation, no approximation), then every point transformed as a point. A run of consecutive off-curve points implies an on-curve point at each neighbouring pair's midpoint, per the TrueType glyph specification's own contour convention. Exported solely so this suite can drive it directly with hand-built contours: a real embedded font's own glyphs (this module's only other route in) never reliably exercise every branch on demand — no vendored face happens to start a contour off-curve, or carries a contour with no on-curve point at all, the way a hand-built GlyphOutline can.
+// The fewest points a contour can bound any area with; fewer is a stray point or pair that paints nothing.
+const MIN_CONTOUR_POINTS = 3;
+
+// The exact quadratic-to-cubic elevation: each cubic control point sits this fraction of the way from its on-curve end toward the quadratic's own off-curve control point.
+const QUADRATIC_TO_CUBIC_FRACTION_NUMERATOR = 2;
+const QUADRATIC_TO_CUBIC_FRACTION_DENOMINATOR = 3;
+const QUADRATIC_TO_CUBIC_CONTROL_FRACTION =
+  QUADRATIC_TO_CUBIC_FRACTION_NUMERATOR /
+  QUADRATIC_TO_CUBIC_FRACTION_DENOMINATOR;
+
 export function glyphOutlineSubpaths(
   outline: GlyphOutline,
   matrix: Matrix,
 ): readonly RasterSubpath[] {
   const subpaths: RasterSubpath[] = [];
   for (const contour of outline.contours) {
-    if (contour.length < 3) {
+    if (contour.length < MIN_CONTOUR_POINTS) {
       continue; // a degenerate contour (a stray point or pair) bounds no area and paints nothing
     }
     // Rotate so the walk starts on a real on-curve point where one exists; a contour with none at all (a pure-quad circle, say) starts at the implied midpoint of its last and first points. Both branches below share one hoisted condition rather than repeating `firstOn >= 0`: at firstOn === 0 the two `ordered` branches already coincide (rotating by zero is a no-op), so a lone, un-shared copy of the condition guarding `ordered` alone has no boundary input left where mutating it changes anything observable — sharing it with `current`'s own branch (which genuinely does differ at that boundary) is what keeps the condition itself meaningful to test.
@@ -1195,10 +1244,10 @@ export function glyphOutlineSubpaths(
       const p1 = applyMatrix(matrix, to);
       segments.push({
         kind: "cubic",
-        c1xPx: p0.x + (2 / 3) * (q.x - p0.x),
-        c1yPx: p0.y + (2 / 3) * (q.y - p0.y),
-        c2xPx: p1.x + (2 / 3) * (q.x - p1.x),
-        c2yPx: p1.y + (2 / 3) * (q.y - p1.y),
+        c1xPx: p0.x + QUADRATIC_TO_CUBIC_CONTROL_FRACTION * (q.x - p0.x),
+        c1yPx: p0.y + QUADRATIC_TO_CUBIC_CONTROL_FRACTION * (q.y - p0.y),
+        c2xPx: p1.x + QUADRATIC_TO_CUBIC_CONTROL_FRACTION * (q.x - p1.x),
+        c2yPx: p1.y + QUADRATIC_TO_CUBIC_CONTROL_FRACTION * (q.y - p1.y),
         xPx: p1.x,
         yPx: p1.y,
       });
@@ -1321,6 +1370,9 @@ function rotatedRectBounds(
   };
 }
 
+// ASCII line feed, the separator inserted between concatenated /Contents array streams.
+const NEWLINE_BYTE = 0x0a;
+
 // A page's decoded content bytes: its /Contents stream, or the concatenation of the /Contents array's streams separated by a newline (the same separator read.ts uses, so an operator split across array entries parses identically in both walks).
 function readPageContentBytes(
   page: PdfDict,
@@ -1338,7 +1390,7 @@ function readPageContentBytes(
       if (streamObj?.kind === "stream") {
         chunks.push(
           decodeStream(streamObj.raw, streamObj.dict, sink).bytes,
-          new Uint8Array([0x0a]),
+          new Uint8Array([NEWLINE_BYTE]),
         );
       }
     }
