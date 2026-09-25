@@ -1,4 +1,9 @@
-import { parseGdefTable } from "./gdef-table";
+import {
+  GLYPH_CLASS_BASE,
+  GLYPH_CLASS_LIGATURE,
+  GLYPH_CLASS_MARK,
+  parseGdefTable,
+} from "./gdef-table";
 import type { GdefTable } from "./gdef-table";
 import type { ClassDefTable, CoverageTable } from "./ot-layout-common";
 import { parseClassDef, parseCoverage } from "./ot-layout-common";
@@ -35,11 +40,23 @@ export interface GsubShaperOptions {
 }
 
 const GSUB_HEADER_SIZE = 10; // uint16 majorVersion + uint16 minorVersion + three Offset16s (ScriptList, FeatureList, LookupList) — the identical layout GPOS's own header carries
+// The three Offset16 fields within the GSUB header, following its 4-byte majorVersion + minorVersion.
+const GSUB_HEADER_SCRIPT_LIST_OFFSET = 4;
+const GSUB_HEADER_FEATURE_LIST_OFFSET = 6;
+const GSUB_HEADER_LOOKUP_LIST_OFFSET = 8;
 const SCRIPT_RECORD_SIZE = 6; // Tag scriptTag + Offset16 scriptOffset
+// The scriptOffset field within one ScriptRecord, following its 4-byte Tag.
+const SCRIPT_RECORD_OFFSET_FIELD_OFFSET = 4;
 const FEATURE_RECORD_SIZE = 6; // Tag featureTag + Offset16 featureOffset
+// The featureOffset field within one FeatureRecord, following its 4-byte Tag.
+const FEATURE_RECORD_OFFSET_FIELD_OFFSET = 4;
 const LANG_SYS_HEADER_SIZE = 6; // Offset16 lookupOrderOffset (reserved, always NULL) + uint16 requiredFeatureIndex + uint16 featureIndexCount
+// The featureIndexCount field within a LangSys record, following its 2-byte lookupOrderOffset and 2-byte requiredFeatureIndex.
+const LANG_SYS_FEATURE_INDEX_COUNT_OFFSET = 4;
 const FEATURE_HEADER_SIZE = 4; // Offset16 featureParamsOffset + uint16 lookupIndexCount
 const LOOKUP_HEADER_SIZE = 6; // uint16 lookupType + uint16 lookupFlag + uint16 subTableCount
+// The subTableCount field within the Lookup Table header, following its 2-byte lookupType and 2-byte lookupFlag.
+const LOOKUP_HEADER_SUBTABLE_COUNT_OFFSET = 4;
 
 // GSUB lookup types this module reads (the spec's own numbering): 1 Single Substitution, 4 Ligature Substitution, 5 Contextual Substitution, 6 Chaining Contextual Substitution, 7 Extension Substitution.
 const LOOKUP_TYPE_SINGLE_SUBST = 1;
@@ -49,6 +66,15 @@ const LOOKUP_TYPE_CHAIN_CONTEXT_SUBST = 6;
 const LOOKUP_TYPE_EXTENSION_SUBST = 7;
 
 const EXTENSION_SUBST_HEADER_SIZE = 8; // uint16 substFormat + uint16 extensionLookupType + Offset32 extensionOffset
+// The extensionOffset field within an Extension Substitution subtable (right after its 4-byte substFormat + extensionLookupType prefix).
+const EXTENSION_SUBST_OFFSET_FIELD_OFFSET = 4;
+
+// Bits in one byte, and the byte mask/shift readTag and glyphSkipper below use to split a uint16 tag/flag byte apart.
+const BITS_PER_BYTE = 8;
+const BYTE_MASK = 0xff;
+
+// Nearly every subtable format below opens with the same 4-byte prefix, uint16 substFormat + Offset16 coverageOffset (SINGLE_SUBST_FORMAT_1_SIZE, SINGLE_SUBST_FORMAT_2_HEADER_SIZE, LIGATURE_SUBST_FORMAT_1_HEADER_SIZE, and the contextual format 1/2 headers below all state this explicitly), so the field immediately following it always starts here.
+const SUBST_FORMAT_AND_COVERAGE_SIZE = 4;
 
 // The lookupFlag bits that name glyph classes to skip while matching (OpenType spec, "Lookup Table"): the three ignore bits, the mark-filtering-set selector, and the high byte carrying a mark attachment class. The rightToLeft bit (0x0001) concerns GPOS cursive attachment only and is deliberately not read.
 const LOOKUP_FLAG_IGNORE_BASE_GLYPHS = 0x0002;
@@ -64,10 +90,10 @@ const PREFERRED_SCRIPT_TAGS = ["latn", "DFLT"] as const;
 
 function readTag(bytes: Uint8Array<ArrayBuffer>, offset: number): string {
   return String.fromCharCode(
-    u16(bytes, offset) >> 8,
-    u16(bytes, offset) & 0xff,
-    u16(bytes, offset + 2) >> 8,
-    u16(bytes, offset + 2) & 0xff,
+    u16(bytes, offset) >> BITS_PER_BYTE,
+    u16(bytes, offset) & BYTE_MASK,
+    u16(bytes, offset + 2) >> BITS_PER_BYTE,
+    u16(bytes, offset + 2) & BYTE_MASK,
   );
 }
 
@@ -124,18 +150,18 @@ function glyphSkipper(
   const ignoreMarks = (lookupFlag & LOOKUP_FLAG_IGNORE_MARKS) !== 0;
   // The high byte names the ONE mark attachment class that stays visible; every other mark is skipped. A zero high byte means no class filter at all.
   const markAttachmentType =
-    (lookupFlag & LOOKUP_FLAG_MARK_ATTACHMENT_TYPE) >> 8;
+    (lookupFlag & LOOKUP_FLAG_MARK_ATTACHMENT_TYPE) >> BITS_PER_BYTE;
   const useMarkFilteringSet =
     (lookupFlag & LOOKUP_FLAG_USE_MARK_FILTERING_SET) !== 0;
   return (glyphId: number): boolean => {
     const glyphClass = gdef.glyphClass(glyphId);
-    if (ignoreBase && glyphClass === 1) {
+    if (ignoreBase && glyphClass === GLYPH_CLASS_BASE) {
       return true;
     }
-    if (ignoreLigatures && glyphClass === 2) {
+    if (ignoreLigatures && glyphClass === GLYPH_CLASS_LIGATURE) {
       return true;
     }
-    if (glyphClass !== 3) {
+    if (glyphClass !== GLYPH_CLASS_MARK) {
       return false; // the mark filters below quantify over marks only; every other class decision has been made
     }
     if (ignoreMarks) {
@@ -199,7 +225,7 @@ function parseSingleSubstFormat1(
   if (coverage === undefined) {
     return undefined;
   }
-  const delta = i16(bytes, subtableOffset + 4);
+  const delta = i16(bytes, subtableOffset + SUBST_FORMAT_AND_COVERAGE_SIZE);
   return (slots, index): SlotApplication | undefined => {
     const slot = slots[index]!;
     if (skip(slot.glyphId)) {
@@ -232,7 +258,10 @@ function parseSingleSubstFormat2(
   if (coverage === undefined) {
     return undefined;
   }
-  const glyphCount = u16(bytes, subtableOffset + 4);
+  const glyphCount = u16(
+    bytes,
+    subtableOffset + SUBST_FORMAT_AND_COVERAGE_SIZE,
+  );
   const substitutesOffset = subtableOffset + SINGLE_SUBST_FORMAT_2_HEADER_SIZE;
   if (!hasBytes(bytes, substitutesOffset, glyphCount * 2)) {
     return undefined;
@@ -278,7 +307,10 @@ function parseLigatureSubstFormat1(
   if (coverage === undefined) {
     return undefined;
   }
-  const ligSetCount = u16(bytes, subtableOffset + 4);
+  const ligSetCount = u16(
+    bytes,
+    subtableOffset + SUBST_FORMAT_AND_COVERAGE_SIZE,
+  );
   const ligSetOffsetsOffset =
     subtableOffset + LIGATURE_SUBST_FORMAT_1_HEADER_SIZE;
   if (!hasBytes(bytes, ligSetOffsetsOffset, ligSetCount * 2)) {
@@ -782,7 +814,8 @@ function parseSubtable(
     return parseSubtable(
       bytes,
       extensionLookupType,
-      subtableOffset + u32(bytes, subtableOffset + 4),
+      subtableOffset +
+        u32(bytes, subtableOffset + EXTENSION_SUBST_OFFSET_FIELD_OFFSET),
       skip,
       lookupOf,
     );
@@ -836,7 +869,9 @@ function parseContextualSubtable(
     return undefined;
   }
   const substFormat = u16(bytes, subtableOffset);
-  if (substFormat === 3) {
+  // The third contextual rule format (spec: a single coverage-array rule, no rule sets); formats 1 and 2 are matched as bare literals below since 1 is exempt from this rule as structurally self-evident.
+  const CONTEXTUAL_FORMAT_3 = 3;
+  if (substFormat === CONTEXTUAL_FORMAT_3) {
     const rule = parseFormat3Rule(bytes, subtableOffset, chained);
     return rule === undefined
       ? undefined
@@ -855,7 +890,10 @@ function parseContextualSubtable(
     if (coverage === undefined) {
       return undefined;
     }
-    const setCount = u16(bytes, subtableOffset + 4);
+    const setCount = u16(
+      bytes,
+      subtableOffset + SUBST_FORMAT_AND_COVERAGE_SIZE,
+    );
     const setOffsetsOffset = subtableOffset + prefixSize;
     if (!hasBytes(bytes, setOffsetsOffset, setCount * 2)) {
       return undefined;
@@ -881,7 +919,12 @@ function parseContextualSubtable(
   }
   if (substFormat === 2) {
     // Chaining format 2 carries three ClassDefs (backtrack, input, lookahead); plain format 2 carries the input one only, which is why the chain header is two bytes wider per extra ClassDef. A zero ClassDef offset is the spec's NULL — every glyph then falls to the catch-all class 0 — but a nonzero offset to an unreadable table makes the whole subtable unreadable rather than silently reclassifying its glyphs.
-    const prefixSize = chained ? 12 : 8; // uint16 substFormat + Offset16 coverageOffset + [Offset16 backtrackClassDefOffset + Offset16 inputClassDefOffset + Offset16 lookaheadClassDefOffset | Offset16 classDefOffset] + uint16 setCount
+    // uint16 substFormat + Offset16 coverageOffset + [Offset16 backtrackClassDefOffset + Offset16 inputClassDefOffset + Offset16 lookaheadClassDefOffset | Offset16 classDefOffset] + uint16 setCount
+    const CHAINED_FORMAT_2_PREFIX_SIZE = 12;
+    const FORMAT_2_PREFIX_SIZE = 8;
+    const prefixSize = chained
+      ? CHAINED_FORMAT_2_PREFIX_SIZE
+      : FORMAT_2_PREFIX_SIZE;
     if (!hasBytes(bytes, subtableOffset, prefixSize)) {
       return undefined;
     }
@@ -892,9 +935,11 @@ function parseContextualSubtable(
     if (coverage === undefined) {
       return undefined;
     }
+    // Within the chained layout, inputClassDefOffset follows backtrackClassDefOffset (at SUBST_FORMAT_AND_COVERAGE_SIZE); within the plain layout, classDefOffset (read into inputClassDef below) sits at SUBST_FORMAT_AND_COVERAGE_SIZE directly.
+    const CHAINED_FORMAT_2_INPUT_CLASS_DEF_OFFSET = 6;
     const inputClassDefOffset = chained
-      ? u16(bytes, subtableOffset + 6)
-      : u16(bytes, subtableOffset + 4);
+      ? u16(bytes, subtableOffset + CHAINED_FORMAT_2_INPUT_CLASS_DEF_OFFSET)
+      : u16(bytes, subtableOffset + SUBST_FORMAT_AND_COVERAGE_SIZE);
     const inputClassDef =
       inputClassDefOffset === 0
         ? constantZeroClassDef
@@ -904,10 +949,18 @@ function parseContextualSubtable(
         ? constantZeroClassDef
         : parseClassDef(bytes, subtableOffset + offset);
     const backtrackClassDef = chained
-      ? readAuxClassDef(u16(bytes, subtableOffset + 4))
+      ? readAuxClassDef(
+          u16(bytes, subtableOffset + SUBST_FORMAT_AND_COVERAGE_SIZE),
+        )
       : constantZeroClassDef;
+    const CHAINED_FORMAT_2_LOOKAHEAD_CLASS_DEF_OFFSET = 8;
     const lookaheadClassDef = chained
-      ? readAuxClassDef(u16(bytes, subtableOffset + 8))
+      ? readAuxClassDef(
+          u16(
+            bytes,
+            subtableOffset + CHAINED_FORMAT_2_LOOKAHEAD_CLASS_DEF_OFFSET,
+          ),
+        )
       : constantZeroClassDef;
     if (
       inputClassDef === undefined ||
@@ -964,11 +1017,17 @@ function findScriptOffset(
     for (let i = 0; i < scriptCount; i++) {
       const recordOffset = recordsOffset + i * SCRIPT_RECORD_SIZE;
       if (readTag(bytes, recordOffset) === wanted) {
-        return scriptListOffset + u16(bytes, recordOffset + 4);
+        return (
+          scriptListOffset +
+          u16(bytes, recordOffset + SCRIPT_RECORD_OFFSET_FIELD_OFFSET)
+        );
       }
     }
   }
-  return scriptListOffset + u16(bytes, recordsOffset + 4);
+  return (
+    scriptListOffset +
+    u16(bytes, recordsOffset + SCRIPT_RECORD_OFFSET_FIELD_OFFSET)
+  );
 }
 
 function parseDefaultLangSysFeatureIndices(
@@ -986,7 +1045,10 @@ function parseDefaultLangSysFeatureIndices(
   if (!hasBytes(bytes, langSysOffset, LANG_SYS_HEADER_SIZE)) {
     return [];
   }
-  const featureIndexCount = u16(bytes, langSysOffset + 4);
+  const featureIndexCount = u16(
+    bytes,
+    langSysOffset + LANG_SYS_FEATURE_INDEX_COUNT_OFFSET,
+  );
   const indicesOffset = langSysOffset + LANG_SYS_HEADER_SIZE;
   if (!hasBytes(bytes, indicesOffset, featureIndexCount * 2)) {
     return [];
@@ -1023,7 +1085,9 @@ function collectLookupIndices(
     if (!featureTags.includes(readTag(bytes, recordOffset))) {
       continue;
     }
-    const featureOffset = featureListOffset + u16(bytes, recordOffset + 4);
+    const featureOffset =
+      featureListOffset +
+      u16(bytes, recordOffset + FEATURE_RECORD_OFFSET_FIELD_OFFSET);
     if (!hasBytes(bytes, featureOffset, FEATURE_HEADER_SIZE)) {
       continue;
     }
@@ -1056,7 +1120,10 @@ export function buildGsubShaper(
   ) {
     return undefined;
   }
-  const scriptOffset = findScriptOffset(bytes, u16(bytes, 4));
+  const scriptOffset = findScriptOffset(
+    bytes,
+    u16(bytes, GSUB_HEADER_SCRIPT_LIST_OFFSET),
+  );
   if (scriptOffset === undefined) {
     return undefined;
   }
@@ -1066,7 +1133,7 @@ export function buildGsubShaper(
   ];
   const lookupIndices = collectLookupIndices(
     bytes,
-    u16(bytes, 6),
+    u16(bytes, GSUB_HEADER_FEATURE_LIST_OFFSET),
     parseDefaultLangSysFeatureIndices(bytes, scriptOffset),
     featureTags,
   );
@@ -1074,7 +1141,7 @@ export function buildGsubShaper(
     return undefined;
   }
 
-  const lookupListOffset = u16(bytes, 8);
+  const lookupListOffset = u16(bytes, GSUB_HEADER_LOOKUP_LIST_OFFSET);
   if (!hasBytes(bytes, lookupListOffset, 2)) {
     return undefined;
   }
@@ -1098,7 +1165,10 @@ export function buildGsubShaper(
     }
     const lookupFlag = u16(bytes, lookupOffset + 2);
     const lookupType = u16(bytes, lookupOffset);
-    const subTableCount = u16(bytes, lookupOffset + 4);
+    const subTableCount = u16(
+      bytes,
+      lookupOffset + LOOKUP_HEADER_SUBTABLE_COUNT_OFFSET,
+    );
     const subtableOffsetsOffset = lookupOffset + LOOKUP_HEADER_SIZE;
     // When the flag selects a mark filtering set, a trailing uint16 naming it follows the subtable offset array (OpenType spec, "Lookup Table").
     const markFilteringSetWidth =
