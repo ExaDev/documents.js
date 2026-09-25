@@ -21,6 +21,9 @@ import {
   type SectionState,
 } from "./read-state";
 
+// \picscalexN/\picscaleyN are integer percentages; this module's own scale fields are the 0-1 fraction pixelsToPoints/twipsToPoints's callers expect.
+const FULL_PERCENT = 100;
+
 export function sectionGeometry(section: Readonly<SectionState>): {
   pageSize: PageSize;
   margins: Margins;
@@ -99,8 +102,8 @@ export function buildPicture(
     });
     return undefined;
   }
-  const scaleX = picture.scaleXPercent / 100;
-  const scaleY = picture.scaleYPercent / 100;
+  const scaleX = picture.scaleXPercent / FULL_PERCENT;
+  const scaleY = picture.scaleYPercent / FULL_PERCENT;
   const widthPt =
     picture.widthGoalTwips === undefined
       ? picture.widthPixels === undefined

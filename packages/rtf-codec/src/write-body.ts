@@ -12,6 +12,7 @@ import { dttmFromIso, isBookmarkAnchor } from "./constructs";
 import { RtfDiagnosticCodes } from "./diagnostics";
 import {
   DEFAULT_FONT_SIZE_HALF_POINTS,
+  LINE_SPACING_UNITS_PER_LINE,
   pointsToHalfPoints,
   pointsToTwips,
 } from "./units";
@@ -299,7 +300,7 @@ function paragraphProperties(
   }
   if (paragraph.lineSpacing !== undefined) {
     // RTF states a line-spacing multiple in 240ths of a line, paired with \slmult1 — the inverse of the reader's own conversion.
-    out += `\\sl${String(Math.round(paragraph.lineSpacing * 240))}\\slmult1`;
+    out += `\\sl${String(Math.round(paragraph.lineSpacing * LINE_SPACING_UNITS_PER_LINE))}\\slmult1`;
   }
   if (paragraph.pageBreakBefore === true) {
     out += "\\pagebb";

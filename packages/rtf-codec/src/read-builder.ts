@@ -35,7 +35,7 @@ import { RtfDiagnosticCodes, type RtfDiagnosticSink } from "./diagnostics";
 import type { RtfHeader } from "./header";
 import { LEVEL_NUMBER_FORMAT_BULLET, mintRtfListNumId } from "./list-id";
 import { buildRunFields, sectionGeometry } from "./read-build";
-import { twipsToPoints } from "./units";
+import { LINE_SPACING_UNITS_PER_LINE, twipsToPoints } from "./units";
 import {
   closingBookmarkExtent,
   freshAccumulatorState,
@@ -345,7 +345,7 @@ export class ContentBuilder {
     if (value === undefined || !para.lineSpacingIsMultiple) {
       return {};
     }
-    const multiple = Math.abs(value) / 240;
+    const multiple = Math.abs(value) / LINE_SPACING_UNITS_PER_LINE;
     return multiple > 0 ? { lineSpacing: multiple } : {};
   }
 
