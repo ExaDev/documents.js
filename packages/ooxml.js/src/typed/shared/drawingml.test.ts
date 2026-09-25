@@ -19,6 +19,17 @@ import {
 
 // Ported verbatim from documents.js's src/ooxml/drawingml.test.ts.
 
+// A single hex colour byte's own maximum value (0xff), the divisor that turns an 8-bit channel into ColorSchema's own 0..1 range. Matches document-schema.js's own (private) HEX_BYTE_MAX.
+const HEX_BYTE_MAX = 255;
+
+// toBeCloseTo's precision argument for the group-transform geometry tests below: 9 decimal digits is tight enough to catch a wrong rotation/mirror/offset term while tolerating ordinary floating-point rounding from the sin/cos arithmetic.
+const GEOMETRY_CLOSE_TO_PRECISION = 9;
+
+// accent1's theme colour, "4472C4", used by more than one describe block below.
+const ACCENT1_RED_BYTE = 0x44;
+const ACCENT1_GREEN_BYTE = 0x72;
+const ACCENT1_BLUE_BYTE = 0xc4;
+
 describe("readXfrm", () => {
   it("reads position, size, rotation, and flip flags, converting EMU to points", () => {
     const xfrm = el("a:xfrm", { rot: "2700000", flipH: "1", flipV: "1" }, [
@@ -127,14 +138,18 @@ describe("readTheme", () => {
     expect(theme.colorScheme.get("dk1")).toEqual({ r: 0, g: 0, b: 0 });
     expect(theme.colorScheme.get("lt1")).toEqual({ r: 1, g: 1, b: 1 });
     expect(theme.colorScheme.get("accent1")).toEqual({
-      r: 0x44 / 255,
-      g: 0x72 / 255,
-      b: 0xc4 / 255,
+      r: ACCENT1_RED_BYTE / HEX_BYTE_MAX,
+      g: ACCENT1_GREEN_BYTE / HEX_BYTE_MAX,
+      b: ACCENT1_BLUE_BYTE / HEX_BYTE_MAX,
     });
+    // hlink's theme colour, "0563C1".
+    const HLINK_RED_BYTE = 0x05;
+    const HLINK_GREEN_BYTE = 0x63;
+    const HLINK_BLUE_BYTE = 0xc1;
     expect(theme.colorScheme.get("hlink")).toEqual({
-      r: 0x05 / 255,
-      g: 0x63 / 255,
-      b: 0xc1 / 255,
+      r: HLINK_RED_BYTE / HEX_BYTE_MAX,
+      g: HLINK_GREEN_BYTE / HEX_BYTE_MAX,
+      b: HLINK_BLUE_BYTE / HEX_BYTE_MAX,
     });
   });
 
@@ -177,10 +192,14 @@ describe("readTheme", () => {
       ]),
     ]);
     const theme = readTheme(root);
+    // The fixture's own lastClr="123456".
+    const LAST_CLR_RED_BYTE = 0x12;
+    const LAST_CLR_GREEN_BYTE = 0x34;
+    const LAST_CLR_BLUE_BYTE = 0x56;
     expect(theme.colorScheme.get("lt1")).toEqual({
-      r: 0x12 / 255,
-      g: 0x34 / 255,
-      b: 0x56 / 255,
+      r: LAST_CLR_RED_BYTE / HEX_BYTE_MAX,
+      g: LAST_CLR_GREEN_BYTE / HEX_BYTE_MAX,
+      b: LAST_CLR_BLUE_BYTE / HEX_BYTE_MAX,
     });
   });
 
@@ -205,10 +224,14 @@ describe("readTheme", () => {
       ]),
     ]);
     const theme = readTheme(root);
+    // The fixture's own a:srgbClr val="44546A".
+    const DK1_RED_BYTE = 0x44;
+    const DK1_GREEN_BYTE = 0x54;
+    const DK1_BLUE_BYTE = 0x6a;
     expect(theme.colorScheme.get("dk1")).toEqual({
-      r: 0x44 / 255,
-      g: 0x54 / 255,
-      b: 0x6a / 255,
+      r: DK1_RED_BYTE / HEX_BYTE_MAX,
+      g: DK1_GREEN_BYTE / HEX_BYTE_MAX,
+      b: DK1_BLUE_BYTE / HEX_BYTE_MAX,
     });
   });
 });
@@ -318,7 +341,13 @@ describe("readSrgbColor", () => {
     const withShade = readSrgbColor(
       el("a:srgbClr", { val: "FFFFFF" }, [el("a:shade", { val: "50000" })]),
     );
-    expect(withShade?.r).toBeCloseTo(0.7353569830524495, 12);
+    // The result of a 50% shade applied through the linear-space transform (see color.ts), not the naive 0.5 a direct multiply on the gamma-encoded value would give.
+    const SHADE_50_PERCENT_LINEAR_RESULT = 0.7353569830524495;
+    const CLOSE_TO_DECIMAL_PRECISION = 12;
+    expect(withShade?.r).toBeCloseTo(
+      SHADE_50_PERCENT_LINEAR_RESULT,
+      CLOSE_TO_DECIMAL_PRECISION,
+    );
   });
 
   it("returns undefined when val is missing", () => {
@@ -334,9 +363,9 @@ describe("readSolidFillColor", () => {
       el("a:schemeClr", { val: "accent1" }),
     ]);
     expect(readSolidFillColor(solidFill, colorMap, theme)).toEqual({
-      r: 0x44 / 255,
-      g: 0x72 / 255,
-      b: 0xc4 / 255,
+      r: ACCENT1_RED_BYTE / HEX_BYTE_MAX,
+      g: ACCENT1_GREEN_BYTE / HEX_BYTE_MAX,
+      b: ACCENT1_BLUE_BYTE / HEX_BYTE_MAX,
     });
   });
 
@@ -532,10 +561,14 @@ describe("applyGroupTransform", () => {
     };
     const child = { xPt: 150, yPt: 50, widthPt: 20, heightPt: 20 };
     const result = applyGroupTransform(group, child);
-    expect(result.xPt).toBeCloseTo(230, 9);
-    expect(result.yPt).toBeCloseTo(250, 9);
-    expect(result.widthPt).toBe(20);
-    expect(result.heightPt).toBe(20);
+    // Final centre (240,260), top-left (230,250), per the comment above; size is unchanged by rotation about a point.
+    const EXPECTED_X_PT = 230;
+    const EXPECTED_Y_PT = 250;
+    const UNCHANGED_SIZE_PT = 20;
+    expect(result.xPt).toBeCloseTo(EXPECTED_X_PT, GEOMETRY_CLOSE_TO_PRECISION);
+    expect(result.yPt).toBeCloseTo(EXPECTED_Y_PT, GEOMETRY_CLOSE_TO_PRECISION);
+    expect(result.widthPt).toBe(UNCHANGED_SIZE_PT);
+    expect(result.heightPt).toBe(UNCHANGED_SIZE_PT);
   });
 
   it("mirrors the box centre across the vertical axis before rotating when the group is composite-mirrored", () => {
@@ -554,8 +587,11 @@ describe("applyGroupTransform", () => {
     };
     const child = { xPt: 150, yPt: 50, widthPt: 20, heightPt: 20 };
     const result = applyGroupTransform(group, child);
-    expect(result.xPt).toBeCloseTo(230, 9);
-    expect(result.yPt).toBeCloseTo(130, 9);
+    // Final centre (240,140), top-left (230,130), per the comment above.
+    const EXPECTED_X_PT = 230;
+    const EXPECTED_Y_PT = 130;
+    expect(result.xPt).toBeCloseTo(EXPECTED_X_PT, GEOMETRY_CLOSE_TO_PRECISION);
+    expect(result.yPt).toBeCloseTo(EXPECTED_Y_PT, GEOMETRY_CLOSE_TO_PRECISION);
   });
 
   it("subtracts, rather than adds, the group's own child-space offset when mapping into the parent space", () => {
@@ -596,8 +632,11 @@ describe("applyGroupTransform", () => {
     // Group centre (100,50); child box centre (60,50) is 40 to the left of it — mirroring flips that to 40 to the right, i.e. a final box centre of (140,50), top-left (120,40).
     const child = { xPt: 40, yPt: 40, widthPt: 40, heightPt: 20 };
     const result = applyGroupTransform(group, child);
-    expect(result.xPt).toBeCloseTo(120, 9);
-    expect(result.yPt).toBeCloseTo(40, 9);
+    // Final centre (140,50), top-left (120,40), per the comment above.
+    const EXPECTED_X_PT = 120;
+    const EXPECTED_Y_PT = 40;
+    expect(result.xPt).toBeCloseTo(EXPECTED_X_PT, GEOMETRY_CLOSE_TO_PRECISION);
+    expect(result.yPt).toBeCloseTo(EXPECTED_Y_PT, GEOMETRY_CLOSE_TO_PRECISION);
   });
 });
 
@@ -617,7 +656,11 @@ describe("composeGroupTransform", () => {
       flipV: false,
     };
     const composed = composeGroupTransform(own, undefined);
-    expect(composed?.compositeRotationDeg).toBe(90);
+    // Carried straight through from own.rotationDeg with no parent to compose against.
+    const EXPECTED_COMPOSITE_ROTATION_DEG = 90;
+    expect(composed?.compositeRotationDeg).toBe(
+      EXPECTED_COMPOSITE_ROTATION_DEG,
+    );
     expect(composed?.compositeMirrored).toBe(true);
   });
 
@@ -648,7 +691,11 @@ describe("composeGroupTransform", () => {
       flipV: false,
     };
     const composed = composeGroupTransform(own, parent);
-    expect(composed?.compositeRotationDeg).toBe(180);
+    // parent's own 90deg plus this group's own 90deg, added because the parent is unmirrored.
+    const EXPECTED_COMPOSITE_ROTATION_DEG = 180;
+    expect(composed?.compositeRotationDeg).toBe(
+      EXPECTED_COMPOSITE_ROTATION_DEG,
+    );
     expect(composed?.compositeMirrored).toBe(false);
   });
 
@@ -679,7 +726,11 @@ describe("composeGroupTransform", () => {
       flipV: false,
     };
     const composed = composeGroupTransform(own, parent);
-    expect(composed?.compositeRotationDeg).toBe(60);
+    // parent's own 90deg minus this group's own 30deg, subtracted because the parent is already composite-mirrored.
+    const EXPECTED_COMPOSITE_ROTATION_DEG = 60;
+    expect(composed?.compositeRotationDeg).toBe(
+      EXPECTED_COMPOSITE_ROTATION_DEG,
+    );
     expect(composed?.compositeMirrored).toBe(true);
   });
 
@@ -711,7 +762,11 @@ describe("composeGroupTransform", () => {
       flipV: false,
     };
     const composed = composeGroupTransform(own, parent);
-    expect(composed?.compositeRotationDeg).toBe(300);
+    // parent's own 30deg minus this group's own 90deg is -60deg, wrapped forward into [0, 360) by adding a full turn.
+    const EXPECTED_COMPOSITE_ROTATION_DEG = 300;
+    expect(composed?.compositeRotationDeg).toBe(
+      EXPECTED_COMPOSITE_ROTATION_DEG,
+    );
   });
 
   it("returns undefined when own is undefined", () => {
@@ -733,7 +788,11 @@ describe("composeGroupTransform", () => {
       flipV: true,
     };
     const composed = composeGroupTransform(own, undefined);
-    expect(composed?.compositeRotationDeg).toBe(210);
+    // rotationDeg 30 plus a 180deg shift, since flipH and flipV together cancel into a pure rotation rather than a mirror.
+    const EXPECTED_COMPOSITE_ROTATION_DEG = 210;
+    expect(composed?.compositeRotationDeg).toBe(
+      EXPECTED_COMPOSITE_ROTATION_DEG,
+    );
     expect(composed?.compositeMirrored).toBe(false);
   });
 
@@ -752,14 +811,21 @@ describe("composeGroupTransform", () => {
       flipV: true,
     };
     const composed = composeGroupTransform(own, undefined);
-    expect(composed?.compositeRotationDeg).toBe(210);
+    // rotationDeg 30 plus a 180deg shift, restating flipV alone as a mirror about the canonical flipH axis.
+    const EXPECTED_COMPOSITE_ROTATION_DEG = 210;
+    expect(composed?.compositeRotationDeg).toBe(
+      EXPECTED_COMPOSITE_ROTATION_DEG,
+    );
     expect(composed?.compositeMirrored).toBe(true);
   });
 });
 
 describe("composeShapeRotationDeg", () => {
   it("returns the shape's own rotation unchanged when there is no enclosing group", () => {
-    expect(composeShapeRotationDeg(undefined, 45)).toBe(45);
+    const SHAPE_ROTATION_DEG = 45;
+    expect(composeShapeRotationDeg(undefined, SHAPE_ROTATION_DEG)).toBe(
+      SHAPE_ROTATION_DEG,
+    );
   });
 
   it("adds the shape's own rotation to an unmirrored enclosing composite", () => {
@@ -775,7 +841,12 @@ describe("composeShapeRotationDeg", () => {
       compositeRotationDeg: 90,
       compositeMirrored: false,
     };
-    expect(composeShapeRotationDeg(parent, 30)).toBe(120);
+    // The shape's own 30deg added to the unmirrored parent composite's 90deg.
+    const SHAPE_ROTATION_DEG = 30;
+    const EXPECTED_ROTATION_DEG = 120;
+    expect(composeShapeRotationDeg(parent, SHAPE_ROTATION_DEG)).toBe(
+      EXPECTED_ROTATION_DEG,
+    );
   });
 
   it("subtracts the shape's own rotation from a mirrored enclosing composite — the flip negates the sense of the shape's own rotation", () => {
@@ -791,6 +862,11 @@ describe("composeShapeRotationDeg", () => {
       compositeRotationDeg: 90,
       compositeMirrored: true,
     };
-    expect(composeShapeRotationDeg(parent, 30)).toBe(60);
+    // The mirrored parent composite's 90deg minus the shape's own 30deg, negated because the parent is mirrored.
+    const SHAPE_ROTATION_DEG = 30;
+    const EXPECTED_ROTATION_DEG = 60;
+    expect(composeShapeRotationDeg(parent, SHAPE_ROTATION_DEG)).toBe(
+      EXPECTED_ROTATION_DEG,
+    );
   });
 });
