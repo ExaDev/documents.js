@@ -252,7 +252,9 @@ describe("readDocxContent expanded constructs", () => {
     );
 
     const blocks = result.sections[0]?.blocks ?? [];
-    expect(blocks).toHaveLength(3);
+    // The construct's own constructStart marker, the wrapped paragraph, and its constructEnd marker.
+    const CONSTRUCT_WRAPPED_PARAGRAPH_BLOCK_COUNT = 3;
+    expect(blocks).toHaveLength(CONSTRUCT_WRAPPED_PARAGRAPH_BLOCK_COUNT);
     expect(
       blocks[0]?.kind === "constructStart" ? blocks[0].descriptor : undefined,
     ).toEqual({ kind: "contentControl", controlType: "richText" });
