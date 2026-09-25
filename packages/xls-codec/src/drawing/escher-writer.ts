@@ -17,6 +17,23 @@ import {
 } from "./escher-constants";
 import type { ShapeAnchor } from "./shapes";
 
+// The record header word: a 4-bit version at bit 0, a 12-bit instance at bit 4; a container's version is the fixed 0xF.
+const RECORD_VERSION_MASK = 0xf;
+const RECORD_INSTANCE_MASK = 0xfff;
+const RECORD_INSTANCE_SHIFT = 4;
+const CONTAINER_VERSION = 0x000f;
+// OfficeArt's own sentinels: 0xFF tags external-file data, and BSE's tag word must be 0xFF for external files.
+const OFFICE_ART_TAG = 0xff;
+const BSE_TAG_EXTERNAL = 0x00ff;
+
+// Escher record type numbers this writer emits, and its other fixed values: a property-list atom's version, a client anchor's fMove|fSize word, the PictureFrame shape type, and the four-corner rectangle an Spgr declares (four 32-bit coordinates).
+const ESCHER_DGG_ATOM = 0xf006;
+const ESCHER_FDG = 0xf008;
+const ATOM_VERSION_FOPT = 0x3;
+const CLIENT_ANCHOR_FMOVE_FSIZE = 0x0003;
+const MSOSPT_PICTURE_FRAME = 0x004b;
+const RECTANGLE_BYTES = 16;
+
 // The write side of drawing/escher.ts: [MS-ODRAW]'s own OfficeArtRecordHeader/container framing in reverse, plus the two container trees this writer actually builds — the workbook-wide DggContainer (its FDGGBlock and its Blip Store) and one per-sheet DgContainer (its FDG and shape tree). Every structural claim cites the [MS-ODRAW] page it comes from, mirroring the reader's own convention.
 //
 // [MS-ODRAW] 2.2.1 OfficeArtRecordHeader (https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-odraw/5dc1b9ed-818c-436f-8a4f-905a7ebb1ba9): a little-endian WORD whose low nibble is recVer and whose remaining 12 bits are recInstance, then a little-endian recType WORD, then a little-endian recLen DWORD counting the bytes that follow the header — for a container, the total size of every nested record INCLUDING their own headers, which is what assembling a container from its children's own finished bytes gives for free.
@@ -29,7 +46,10 @@ function escherAtom(
   data: Uint8Array<ArrayBuffer>,
 ): Uint8Array<ArrayBuffer> {
   return new RecordBuilder()
-    .u16((recVer & 0xf) | ((recInstance & 0xfff) << 4))
+    .u16(
+      (recVer & RECORD_VERSION_MASK) |
+        ((recInstance & RECORD_INSTANCE_MASK) << RECORD_INSTANCE_SHIFT),
+    )
     .u16(recType)
     .u32(data.length)
     .bytes(data)
@@ -44,7 +64,10 @@ function escherContainer(
 ): Uint8Array<ArrayBuffer> {
   const body = children.reduce<number>((sum, child) => sum + child.length, 0);
   const builder = new RecordBuilder()
-    .u16(0x000f | ((recInstance & 0xfff) << 4))
+    .u16(
+      CONTAINER_VERSION |
+        ((recInstance & RECORD_INSTANCE_MASK) << RECORD_INSTANCE_SHIFT),
+    )
     .u16(recType)
     .u32(body);
   for (const child of children) {
@@ -96,7 +119,11 @@ function writeBlipRecord(
     0x0,
     fields.recInstance,
     fields.recType,
-    new RecordBuilder().bytes(uidBytes).u8(0xff).bytes(fileBytes).build(),
+    new RecordBuilder()
+      .bytes(uidBytes)
+      .u8(OFFICE_ART_TAG)
+      .bytes(fileBytes)
+      .build(),
   );
 }
 
@@ -121,7 +148,7 @@ function writeBseRecord(blip: StoredBlip): Uint8Array<ArrayBuffer> {
     .u8(fields.msoBlip) // btWin32
     .u8(fields.msoBlip) // btMacOS — both platforms name the same format, the one case [MS-ODRAW]'s own MUST-match rules describe
     .bytes(uidBytes)
-    .u16(0x00ff) // tag — "MUST be 0xFF for external files", the value real producers write for an embedded blip too
+    .u16(BSE_TAG_EXTERNAL) // tag, "MUST be 0xFF for external files", the value real producers emit
     .u32(embedded.length) // size: the BLIP's own size in the stream
     .u32(blip.referenceCount) // cRef
     .u32(0) // foDelay: no delay stream; the embeddedBlip below makes this ignored
@@ -175,7 +202,7 @@ export function writeDrawingGroupBytes(
   for (const drawing of drawings) {
     fdgg.u32(drawing.drawingId).u32(drawing.lastSpid);
   }
-  const fdggBlock = escherAtom(0x0, 0x0000, 0xf006, fdgg.build());
+  const fdggBlock = escherAtom(0x0, 0x0000, ESCHER_DGG_ATOM, fdgg.build());
 
   const children: Uint8Array<ArrayBuffer>[] = [fdggBlock];
   if (blips.length > 0) {
@@ -193,11 +220,16 @@ export function writeDrawingGroupBytes(
 // --- One worksheet's own drawing ([MS-ODRAW] OfficeArtDgContainer, https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-odraw/68976475-fcfd-4483-8fc4-75adc635130d) ---
 
 // OfficeArtFSP's own flag bits ([MS-ODRAW] 2.2.40's A-L table, LSB first): only the four a shape this writer states ever sets.
-const FSP_FLAG_GROUP = 0x1 << 0;
-const FSP_FLAG_PATRIARCH = 0x1 << 2;
-const FSP_FLAG_OLE_SHAPE = 0x1 << 4;
-const FSP_FLAG_HAVE_ANCHOR = 0x1 << 9;
-const FSP_FLAG_HAVE_SPT = 0x1 << 11;
+const FSP_FLAG_GROUP_SHIFT = 0;
+const FSP_FLAG_GROUP = 0x1 << FSP_FLAG_GROUP_SHIFT;
+const FSP_FLAG_PATRIARCH_SHIFT = 2;
+const FSP_FLAG_PATRIARCH = 0x1 << FSP_FLAG_PATRIARCH_SHIFT;
+const FSP_FLAG_OLE_SHAPE_SHIFT = 4;
+const FSP_FLAG_OLE_SHAPE = 0x1 << FSP_FLAG_OLE_SHAPE_SHIFT;
+const FSP_FLAG_HAVE_ANCHOR_SHIFT = 9;
+const FSP_FLAG_HAVE_ANCHOR = 0x1 << FSP_FLAG_HAVE_ANCHOR_SHIFT;
+const FSP_FLAG_HAVE_SPT_SHIFT = 11;
+const FSP_FLAG_HAVE_SPT = 0x1 << FSP_FLAG_HAVE_SPT_SHIFT;
 
 /** One real (non-patriarch) shape this writer places on a sheet: its anchor, its 1-based Blip Store reference when it is a picture, and whether it hosts an embedded OLE object (which sets FSP's own fOleShape and takes no pib). */
 export interface SheetShapeEntry {
@@ -226,7 +258,7 @@ function writeFspRecord(
 /** OfficeArtFOPT ([MS-ODRAW] 2.2.9): recVer 0x3, recInstance carrying the property count, then that many 6-byte FOPTE entries (opid, op). The one property this writer states is `pib` — the picture's own 1-based Blip Store index, opid 0x0104 with fComplex clear. */
 function writePibOptRecord(blipIndex: number): Uint8Array<ArrayBuffer> {
   return escherAtom(
-    0x3,
+    ATOM_VERSION_FOPT,
     0x0001, // one property
     ESCHER_OPT,
     new RecordBuilder().u16(FOPT_OPID_PIB).u32(blipIndex).build(),
@@ -240,7 +272,7 @@ function writeClientAnchorRecord(anchor: ShapeAnchor): Uint8Array<ArrayBuffer> {
     0x0000,
     ESCHER_CLIENT_ANCHOR,
     new RecordBuilder()
-      .u16(0x0003) // fMove | fSize
+      .u16(CLIENT_ANCHOR_FMOVE_FSIZE) // fMove | fSize
       .u16(anchor.colL)
       .u16(anchor.dxL)
       .u16(anchor.rwT)
@@ -268,7 +300,7 @@ function writeShapeContainer(
     FSP_FLAG_HAVE_ANCHOR |
     FSP_FLAG_HAVE_SPT;
   const children: Uint8Array<ArrayBuffer>[] = [
-    writeFspRecord(spid, flags, 0x004b), // MSOSPT PictureFrame
+    writeFspRecord(spid, flags, MSOSPT_PICTURE_FRAME),
   ];
   if (entry.blipIndex !== undefined) {
     children.push(writePibOptRecord(entry.blipIndex));
@@ -291,7 +323,7 @@ export function writeSheetDrawingBytes(
   const fdg = escherAtom(
     0x0,
     drawingId,
-    0xf008, // OfficeArtFDG ([MS-ODRAW] 2.2.17): recInstance = the drawing identifier
+    ESCHER_FDG, // OfficeArtFDG ([MS-ODRAW] 2.2.17): recInstance = the drawing identifier
     new RecordBuilder()
       .u32(entries.length + 1)
       .u32(lastSpid)
@@ -302,7 +334,7 @@ export function writeSheetDrawingBytes(
       0x0,
       0x0000,
       ESCHER_FSPGR,
-      new Uint8Array(16), // all-zero rectangle
+      new Uint8Array(RECTANGLE_BYTES), // all-zero rectangle
     ),
     writeFspRecord(
       spidBase,
