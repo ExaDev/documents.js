@@ -5,6 +5,15 @@ const SENTINEL_VALUE = 0x7fffffff;
 
 // The two bit-level primitives a JPEG 2000 packet header is built from: the stuffed-bit reader of ISO/IEC 15444-1 B.10.1 and the tag tree of B.10.2. Both are pure bitstream mechanics with no knowledge of what the values mean, which is why they sit below jpeg2000-t2.ts rather than inside it.
 
+// The byte value that triggers bit stuffing per B.10.1: any byte immediately following a 0xFF byte has its most significant bit forced to zero, so no 0xFF followed by a marker-range byte can appear inside a packet header.
+const STUFFING_TRIGGER_BYTE = 0xff;
+// Mask for a byte's most significant bit, used to check the stuffed zero B.10.1 requires after STUFFING_TRIGGER_BYTE.
+const MOST_SIGNIFICANT_BIT_MASK = 0x80;
+// Usable bits in a byte that immediately follows STUFFING_TRIGGER_BYTE: its top bit is the stuffed zero, not real data.
+const STUFFED_BYTE_BIT_COUNT = 7;
+// Usable bits in an ordinary, non-stuffed byte.
+const BYTE_BIT_COUNT = 8;
+
 // B.10.1: packet header bits are read most-significant first, and a byte that follows a 0xFF byte carries only seven bits — its most significant bit is a stuffed zero, there so no 0xFF 0x90-or-above marker sequence can ever appear inside a packet header.
 export class PacketBitReader {
   private position: number;
@@ -37,16 +46,16 @@ export class PacketBitReader {
 
   readBit(): number {
     if (this.available === 0) {
-      const stuffed = this.previousByte === 0xff;
+      const stuffed = this.previousByte === STUFFING_TRIGGER_BYTE;
       const byte = this.nextByte();
-      if (stuffed && (byte & 0x80) !== 0) {
+      if (stuffed && (byte & MOST_SIGNIFICANT_BIT_MASK) !== 0) {
         throw new Jpeg2000ParseError(
           "a packet header byte following 0xFF has its stuffed bit set, which ISO/IEC 15444-1 B.10.1 forbids",
         );
       }
       this.buffer = byte;
       this.previousByte = byte;
-      this.available = stuffed ? 7 : 8;
+      this.available = stuffed ? STUFFED_BYTE_BIT_COUNT : BYTE_BIT_COUNT;
     }
     this.available--;
     return (this.buffer >> this.available) & 1;
@@ -62,7 +71,7 @@ export class PacketBitReader {
 
   // B.10.1: at the end of a packet header the reader discards the remaining bits of the current byte, and one further byte when the last byte consumed was 0xFF (that byte's stuffed successor belongs to the header, not to the body).
   alignToByte(): void {
-    if (this.previousByte === 0xff) {
+    if (this.previousByte === STUFFING_TRIGGER_BYTE) {
       this.nextByte();
     }
     this.available = 0;
