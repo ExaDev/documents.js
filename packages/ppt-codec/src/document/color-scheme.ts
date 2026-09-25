@@ -11,18 +11,20 @@ import { COLOR_SCHEME_SLOT_COUNT, type RgbColor } from "../text/style";
 const SLIDE_SCHEME_REC_INSTANCE = 0x001;
 // Four bytes (red, green, blue, unused) per scheme slot.
 const COLOR_STRUCT_SIZE = 4;
+// The hexadecimal radix every record-type/instance diagnostic below formats its own field through.
+const HEX_RADIX = 16;
 
 export function readSlideSchemeColorSchemeAtom(
   record: PptRecord,
 ): readonly RgbColor[] {
   if (record.header.recType !== RT_ColorSchemeAtom) {
     throw new PptFormatError(
-      `expected RT_ColorSchemeAtom (0x${RT_ColorSchemeAtom.toString(16)}) at offset ${record.offset}, found record type 0x${record.header.recType.toString(16)}`,
+      `expected RT_ColorSchemeAtom (0x${RT_ColorSchemeAtom.toString(HEX_RADIX)}) at offset ${record.offset}, found record type 0x${record.header.recType.toString(HEX_RADIX)}`,
     );
   }
   if (record.header.recInstance !== SLIDE_SCHEME_REC_INSTANCE) {
     throw new PptFormatError(
-      `ColorSchemeAtom at offset ${record.offset} declares recInstance 0x${record.header.recInstance.toString(16)}, not the SlideSchemeColorSchemeAtom's own 0x${SLIDE_SCHEME_REC_INSTANCE.toString(16)}`,
+      `ColorSchemeAtom at offset ${record.offset} declares recInstance 0x${record.header.recInstance.toString(HEX_RADIX)}, not the SlideSchemeColorSchemeAtom's own 0x${SLIDE_SCHEME_REC_INSTANCE.toString(HEX_RADIX)}`,
     );
   }
   const expectedLength = COLOR_SCHEME_SLOT_COUNT * COLOR_STRUCT_SIZE;

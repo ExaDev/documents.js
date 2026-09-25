@@ -12,6 +12,11 @@ import { readTextHeaderAtom } from "../text/atoms";
 // [MS-PPT] 2.4.14.5: "rh.recLen MUST be 0x00000014."
 const SLIDE_PERSIST_ATOM_LEN = 0x00000014;
 
+// The hexadecimal radix every record-type diagnostic below formats its own field through.
+const HEX_RADIX = 16;
+// SlidePersistAtom's own slideId field byte offset: after persistIdRef (4 bytes) and the fShouldCollapse/fNonOutlineData flags word plus cTexts (4 bytes each).
+const SLIDE_PERSIST_ATOM_SLIDE_ID_OFFSET = 12;
+
 // One text body from the list: its TextHeaderAtom's type, plus every record the grammar attaches to that header — the text atom itself, its StyleTextPropAtom, and the metacharacter/bookmark/special-info records following them.
 export interface OutlineText {
   readonly textType: number;
@@ -37,7 +42,7 @@ export function readSlideListWithText(
 ): SlidePersist[] {
   if (listContainer.header.recType !== RT_SlideListWithText) {
     throw new PptFormatError(
-      `expected RT_SlideListWithText (0x${RT_SlideListWithText.toString(16)}), found record type 0x${listContainer.header.recType.toString(16)}`,
+      `expected RT_SlideListWithText (0x${RT_SlideListWithText.toString(HEX_RADIX)}), found record type 0x${listContainer.header.recType.toString(HEX_RADIX)}`,
     );
   }
   const slides: MutableSlidePersist[] = [];
@@ -48,7 +53,7 @@ export function readSlideListWithText(
     if (record.header.recType === RT_SlidePersistAtom) {
       if (record.data.length < SLIDE_PERSIST_ATOM_LEN) {
         throw new PptFormatError(
-          `SlidePersistAtom at offset ${record.offset} carries ${record.data.length} bytes, fewer than the mandated 0x${SLIDE_PERSIST_ATOM_LEN.toString(16)}`,
+          `SlidePersistAtom at offset ${record.offset} carries ${record.data.length} bytes, fewer than the mandated 0x${SLIDE_PERSIST_ATOM_LEN.toString(HEX_RADIX)}`,
         );
       }
       const view = new DataView(
@@ -59,7 +64,7 @@ export function readSlideListWithText(
       currentSlide = {
         persistIdRef: view.getUint32(0, true),
         // Bytes 4-7 are the fShouldCollapse/fNonOutlineData flags word, and bytes 8-11 cTexts, whose value the text list below reproduces by construction.
-        slideId: view.getUint32(12, true),
+        slideId: view.getUint32(SLIDE_PERSIST_ATOM_SLIDE_ID_OFFSET, true),
         texts: [],
       };
       currentText = undefined;

@@ -41,10 +41,15 @@ function mapAlignmentToPpt(
 }
 
 /** document-schema.js's lineSpacing is always a positive multiple of single line height (the schema's own z.number().positive()), so this always writes ParaSpacing's percentage form — there is no master-units case to choose between, unlike the read side's two-way branch. */
+// ParaSpacing's own percentage form scales a line-height multiple by 100 (value/100 = percent), the inverse of content.ts's own paraSpacingToLineSpacing.
+const PARA_SPACING_PERCENT_SCALE = 100;
+
 function lineSpacingToParaSpacing(
   multiple: number | undefined,
 ): number | undefined {
-  return multiple === undefined ? undefined : Math.round(multiple * 100);
+  return multiple === undefined
+    ? undefined
+    : Math.round(multiple * PARA_SPACING_PERCENT_SCALE);
 }
 
 /** document-schema.js's spacingBeforePt/spacingAfterPt are always plain points, so this always writes ParaSpacing's negative (absolute master-units) form — the percentage-of-line-height form has no point value to derive it from. */

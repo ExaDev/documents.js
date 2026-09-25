@@ -28,6 +28,11 @@ export interface ExternalOleEmbed {
 
 // ExOleObjAtom's own 24-byte data (past its 8-byte rh): drawAspect(4) type(4) exObjId(4) subType(4) persistIdRef(4) unused(4), each a plain little-endian field — [MS-PPT] 2.10.12's own field table, quoted in this module's own top comment.
 const EX_OLE_OBJ_ATOM_LEN = 24;
+// drawAspect and type each take 4 bytes ahead of exObjId; type, exObjId and subType each take 4 bytes ahead of persistIdRef.
+const EX_OLE_OBJ_ATOM_EX_OBJ_ID_OFFSET = 8;
+const EX_OLE_OBJ_ATOM_PERSIST_ID_REF_OFFSET = 16;
+// ExObjRefAtom's own fixed size: a single 4-byte exObjIdRef field.
+const EX_OBJ_REF_ATOM_LEN = 4;
 
 function readExOleObjAtom(
   record: PptRecord,
@@ -43,8 +48,8 @@ function readExOleObjAtom(
     record.data.byteLength,
   );
   return {
-    exObjId: view.getUint32(8, true),
-    persistIdRef: view.getUint32(16, true),
+    exObjId: view.getUint32(EX_OLE_OBJ_ATOM_EX_OBJ_ID_OFFSET, true),
+    persistIdRef: view.getUint32(EX_OLE_OBJ_ATOM_PERSIST_ID_REF_OFFSET, true),
   };
 }
 
@@ -96,7 +101,7 @@ export function readExternalOleEmbeds(
 // A shape's own OfficeArtClientData carries an ExObjRefAtom naming which external object (by exObjId) it displays, when it displays one at all — most client data is a PlaceholderAtom or nothing, so this returns undefined for every shape but the ones this module cares about. [MS-PPT] 2.7.7 ExObjRefAtom: https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-ppt/d6e17fee-7d53-453f-962b-b671a4f8869f
 export function readExObjIdRef(clientData: PptRecord): number | undefined {
   const record = findChild(childRecords(clientData), RT_ExternalObjectRefAtom);
-  if (record === undefined || record.data.length < 4) {
+  if (record === undefined || record.data.length < EX_OBJ_REF_ATOM_LEN) {
     return undefined;
   }
   const view = new DataView(
@@ -134,7 +139,7 @@ export function resolveOleObjectStorage(
   }
   // No separate length guard ahead of the subarray: a decompressedSize prefix shorter than 4 bytes leaves subarray(4) with fewer bytes (or none) for inflate to work with, and inflate() can never succeed on a payload too short to be a valid zlib stream regardless of exactly how short — the catch below already turns that failure into the same undefined this guard would have returned directly.
   try {
-    return inflate(record.data.subarray(4));
+    return inflate(record.data.subarray(EX_OBJ_REF_ATOM_LEN));
   } catch {
     return undefined;
   }

@@ -5,6 +5,9 @@ import { pointsToMasterUnits } from "../units";
 
 // The write-side mirror of readDocumentAtom: [MS-PPT] 2.4.2's 40-byte DocumentAtom, recVer 0x1. https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-ppt/121f2728-3497-4a0a-829e-6f416fee2ee6
 
+// The four trailing bool1 flags (fSaveWithFonts/fOmitTitlePlace/fRightToLeft/fShowComments), all false: one byte each.
+const DOCUMENT_ATOM_BOOL_FLAGS_BYTES = 4;
+
 export function writeDocumentAtom(
   size: Readonly<PageSize>,
 ): Uint8Array<ArrayBuffer> {
@@ -23,7 +26,7 @@ export function writeDocumentAtom(
       u32le(0), // handoutMasterPersistIdRef — likewise
       u16le(1), // firstSlideNumber
       u16le(0), // slideSizeType: 0 = on-screen show, [MS-PPT] 2.13.28 SlideSizeTypeEnum
-      new Uint8Array(4), // fSaveWithFonts/fOmitTitlePlace/fRightToLeft/fShowComments bool1 flags, all false
+      new Uint8Array(DOCUMENT_ATOM_BOOL_FLAGS_BYTES), // fSaveWithFonts/fOmitTitlePlace/fRightToLeft/fShowComments bool1 flags, all false
     ),
     { recVer: 0x1 },
   );
