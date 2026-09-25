@@ -21,6 +21,9 @@ import { useState } from "react";
 import { flexColumn, previewFrame } from "./previewPanel.css";
 import * as styles from "./SheetPreview.css";
 
+// The document model carries each colour channel as a 0..1 fraction; CSS rgb() wants the 8-bit value.
+const COLOR_CHANNEL_MAX = 255;
+
 export interface SheetPreviewProps {
   label: string;
   format: string;
@@ -185,7 +188,7 @@ function cellBackgroundStyle(cell: ContentSheetCell | undefined) {
   return assignInlineVars({
     [styles.cellBackgroundVar]:
       color !== undefined
-        ? `rgb(${color.r * 255} ${color.g * 255} ${color.b * 255})`
+        ? `rgb(${color.r * COLOR_CHANNEL_MAX} ${color.g * COLOR_CHANNEL_MAX} ${color.b * COLOR_CHANNEL_MAX})`
         : undefined,
   });
 }

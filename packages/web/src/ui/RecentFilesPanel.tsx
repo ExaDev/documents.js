@@ -9,11 +9,17 @@ import { relativeTime } from "../shared/relativeTime";
 import { notifyError } from "./notify";
 import { iconFlexShrink, minWidthZero } from "./layout.css";
 
+// Binary multiples, matching the KB/MB the surrounding labels claim, which is what a file manager on this platform shows for the same file.
+const BYTES_PER_KB = 1024;
+const BYTES_PER_MB = BYTES_PER_KB * BYTES_PER_KB;
+const SIZE_DECIMAL_PLACES = 1;
+
 // Exported so a test can pin the exact KB/MB boundary directly, rather than only through rendered text.
 export function formatBytes(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+  if (bytes < BYTES_PER_KB) return `${bytes} B`;
+  if (bytes < BYTES_PER_MB)
+    return `${(bytes / BYTES_PER_KB).toFixed(SIZE_DECIMAL_PLACES)} KB`;
+  return `${(bytes / BYTES_PER_MB).toFixed(SIZE_DECIMAL_PLACES)} MB`;
 }
 
 // Factored out for the identical reason __root.tsx's colorSchemeTooltipLabel is: Mantine's Tooltip only mounts its floating label content once genuinely open (hover/focus), which a render-only test cannot drive, so this pure lookup is what a test can actually assert against.

@@ -2,6 +2,9 @@ import { notifications } from "@mantine/notifications";
 
 import type { Diagnostic } from "../shared/diagnostics";
 
+// A result with nothing to review dismisses itself; one carrying warnings stays until the reader closes it, so this only ever applies to the clean case.
+const CLEAN_RESULT_AUTO_CLOSE_MS = 4000;
+
 // Diagnostics are a normal, expected part of a successful conversion, not just an error signal — a font substitution or a dropped feature is something the user may need to act on before trusting the output. A toast alone risks auto-dismissing that; the DiagnosticsPanel (rendered inline by the caller) is where the detail lives permanently. This toast is only the ambient "something happened" acknowledgement, so it auto-dismisses unless there's a warning-severity diagnostic to flag.
 export function notifySuccess(
   message: string,
@@ -16,7 +19,7 @@ export function notifySuccess(
     title:
       warningCount > 0 ? `${message} — ${warningCount} to review` : message,
     message: warningCount > 0 ? "See the details below for what changed." : "",
-    autoClose: warningCount > 0 ? false : 4000,
+    autoClose: warningCount > 0 ? false : CLEAN_RESULT_AUTO_CLOSE_MS,
   });
 }
 
