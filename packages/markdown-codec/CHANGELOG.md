@@ -1,3 +1,18 @@
+## [11.1.14](https://github.com/ExaDev/documents.js/compare/markdown-codec%4011.1.13...markdown-codec%4011.1.14) (2026-09-25)
+
+### Code Refactoring
+
+* **markdown-codec:** split the BlockParser class out of block.ts ([c61968d](https://github.com/ExaDev/documents.js/commit/c61968d0db463512efdb6c0e05ba79a94bb6be24))
+* **markdown-codec:** split the entity table by entry count ([d104cfb](https://github.com/ExaDev/documents.js/commit/d104cfb2759cd0f695cc2675244b53aa69045eb0))
+* **markdown-codec:** split the list rendering out of emit ([aa2c60f](https://github.com/ExaDev/documents.js/commit/aa2c60f0a9ad4121797ed9c10f8f9125bc4840ef))
+* **markdown-codec:** split the setext safety analysis out of emit ([3eafb46](https://github.com/ExaDev/documents.js/commit/3eafb466a04a630f37b605901cdd895ad3159804))
+
+### Tests
+
+* **markdown-codec:** finish the max-lines split ([420e69e](https://github.com/ExaDev/documents.js/commit/420e69e2e6b08f33c3f9e85c8cb1d45b3d5233ec))
+* **markdown-codec:** split the emit suite by construct family ([c1fbe36](https://github.com/ExaDev/documents.js/commit/c1fbe36865bc5787e569c89c046d43196c0390eb))
+* **markdown-codec:** split the lower gaps and footnote write suites ([08af3d4](https://github.com/ExaDev/documents.js/commit/08af3d49a43d5cbc6456f13c7758d4d2f29c2fe7))
+
 ## [11.1.13](https://github.com/ExaDev/documents.js/compare/markdown-codec%4011.1.12...markdown-codec%4011.1.13) (2026-09-25)
 
 
