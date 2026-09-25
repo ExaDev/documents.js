@@ -248,6 +248,10 @@ export interface EmbeddedFaceSubstitution {
 
 // Every character an Identity-H composite font shows is a 2-byte big-endian CID, which for every font program this package embeds is the glyph ID itself (/CIDToGIDMap /Identity over a GID-preserving subset). Named rather than repeated as a literal because `codes` is indexed in both glyph units and byte units below and in content-write.ts, and the two only stay in step while one constant relates them.
 const CID_BYTE_LENGTH = 2;
+// The bit width of one byte, used to split a 16-bit glyph ID into its high and low bytes for the two-byte CID encoding above.
+const BITS_PER_BYTE = 8;
+// Isolates the low 8 bits of a value, i.e. its low byte.
+const BYTE_MASK = 0xff;
 
 // One pair-kerning adjustment inside a shown run: the font's own answer for the two glyphs either side of `codeOffset`.
 export interface EmbeddedKern {
@@ -306,8 +310,8 @@ export function encodeForShowEmbedded(
   }
   const codes = new Uint8Array(shownGlyphIds.length * CID_BYTE_LENGTH);
   shownGlyphIds.forEach((glyphId, index) => {
-    codes[index * CID_BYTE_LENGTH] = (glyphId >> 8) & 0xff;
-    codes[index * CID_BYTE_LENGTH + 1] = glyphId & 0xff;
+    codes[index * CID_BYTE_LENGTH] = (glyphId >> BITS_PER_BYTE) & BYTE_MASK;
+    codes[index * CID_BYTE_LENGTH + 1] = glyphId & BYTE_MASK;
   });
   return { codes, width1000, substitutions, kerns };
 }
