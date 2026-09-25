@@ -1,3 +1,13 @@
+## [4.16.2](https://github.com/ExaDev/documents.js/compare/xls-codec%404.16.1...xls-codec%404.16.2) (2026-09-25)
+
+### Tests
+
+* **xls-codec:** finish the suite splits by family ([0783077](https://github.com/ExaDev/documents.js/commit/078307778e15667578586c8286d23485777f271e))
+* **xls-codec:** split every remaining oversized suite under the line limit ([e7c2ed5](https://github.com/ExaDev/documents.js/commit/e7c2ed50405f5cf14707816c83a092fc16c78be9))
+* **xls-codec:** split the globals suite at a case boundary ([6d6633e](https://github.com/ExaDev/documents.js/commit/6d6633e6bb356595361246347380e5950ee44dad))
+* **xls-codec:** split the sheet, CF12 and remaining write suites ([56670aa](https://github.com/ExaDev/documents.js/commit/56670aa14732d029f9654ed2b1cbdb8a4b4b0abb))
+* **xls-codec:** split the write and content suites by family ([6a31f17](https://github.com/ExaDev/documents.js/commit/6a31f171a7992006f6430f56e40bab5ae124e5eb))
+
 ## [4.16.1](https://github.com/ExaDev/documents.js/compare/xls-codec%404.16.0...xls-codec%404.16.1) (2026-09-25)
 
 
