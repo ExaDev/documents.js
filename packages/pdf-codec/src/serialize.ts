@@ -4,7 +4,9 @@ import { pdfNum } from "./objects";
 
 // PDF numbers must never use exponential notation — Number.prototype.toString() can produce '1e-7', which is not valid PDF syntax, and this is a genuine bug class, not a hypothetical one. Rounds to 4 decimal places (0.0001pt is far below any real output device's resolution), strips trailing zeros and a bare trailing '.', and normalises '-0' to '0'.
 const NUMBER_DECIMAL_PLACES = 4;
-const NUMBER_EPSILON = 10 ** -NUMBER_DECIMAL_PLACES;
+// Base of the decimal system NUMBER_DECIMAL_PLACES counts digits in.
+const DECIMAL_BASE = 10;
+const NUMBER_EPSILON = DECIMAL_BASE ** -NUMBER_DECIMAL_PLACES;
 
 export function formatNumber(n: number): string {
   // Every magnitude that would ever round to "-0" at NUMBER_DECIMAL_PLACES (including -0 itself) already satisfies `abs(n) < NUMBER_EPSILON` above and returns "0" there, since NUMBER_EPSILON is exactly one unit in the last of those decimal places — there is no reachable n for which toFixed still needs a separate "-0" normalisation below.
@@ -17,13 +19,25 @@ export function formatNumber(n: number): string {
 
 // PDF names encode any character outside the safe printable-ASCII set (or one of the delimiter/ special characters) with a #XX hex escape. Every name this writer emits is a plain ASCII identifier we chose ourselves (Type, Catalog, F1, Im3, ...), so this is a defensive general implementation rather than one tuned to a specific known-safe input set.
 //
+// PDF name escaping's own safe range (ISO 32000-1 7.3.5): printable ASCII from '!' (0x21) through '~' (0x7e), excluding whitespace and the delimiter characters checked separately below.
+const NAME_SAFE_RANGE_START = 0x21;
+const NAME_SAFE_RANGE_END = 0x7e;
+// Radix for the #XX hex escape PDF names use, and for the hex-string bytes below.
+const HEX_RADIX = 16;
+// Every #XX / byte-pair hex escape is exactly two digits, zero-padded.
+const HEX_DIGIT_WIDTH = 2;
+
 // No upfront "is this name already safe" regex test to short-circuit the loop below: for any name where that test would say yes, every character already satisfies the per-character check's own negation, so the loop would rebuild the identical string one character at a time — the two branches always agree, and a whole-name pattern test here would just be a slower way to reach the same per-character loop this function already needs to run anyway to handle the escaped case.
 function escapeName(name: string): string {
   let out = "";
   for (const ch of name) {
     const code = ch.codePointAt(0)!;
-    if (code < 0x21 || code > 0x7e || "#()<>[]{}/%".includes(ch)) {
-      out += `#${code.toString(16).padStart(2, "0")}`;
+    if (
+      code < NAME_SAFE_RANGE_START ||
+      code > NAME_SAFE_RANGE_END ||
+      "#()<>[]{}/%".includes(ch)
+    ) {
+      out += `#${code.toString(HEX_RADIX).padStart(HEX_DIGIT_WIDTH, "0")}`;
     } else {
       out += ch;
     }
@@ -34,7 +48,7 @@ function escapeName(name: string): string {
 function bytesToHex(bytes: Uint8Array<ArrayBuffer>): string {
   let out = "";
   for (const byte of bytes) {
-    out += byte.toString(16).padStart(2, "0");
+    out += byte.toString(HEX_RADIX).padStart(HEX_DIGIT_WIDTH, "0");
   }
   return out;
 }
