@@ -105,11 +105,16 @@ function insetProperties(
 const FSP_GROUP = 1 << 0;
 const FSP_CHILD = 1 << 1;
 // [MS-ODRAW] 2.2.40 bit 9: "this shape has an anchor to the parent" — real producers set it on every anchored shape, the table group's own shape included.
-const FSP_HAVE_ANCHOR = 1 << 9;
+const FSP_BIT_HAVE_ANCHOR = 9;
+const FSP_HAVE_ANCHOR = 1 << FSP_BIT_HAVE_ANCHOR;
 const FSP_PATRIARCH = 1 << 2;
 // The patriarch's own shape id is always 1 ([MS-ODRAW] does not mandate this, but every real producer's outermost group shape is spid 1, and nothing in this reader's own drawing/shapes.ts inspects spid values at all — see PptShape.spid's read-side comment); content shapes are numbered from 2, uniquely per slide, which is all readDrawingShapes/collectShape ever need of an spid.
 const PATRIARCH_SPID = 1;
+// OfficeArtFSPGR's own fixed size (4 int32 coordinates), all zero for the patriarch since its coordinate system is never read.
+const FSPGR_PATRIARCH_BYTES = 16;
 const FIRST_CONTENT_SPID = 2;
+// tableRowProperties_complex is one 4-byte signed integer per row, its own minimum height in master units.
+const ROW_HEIGHT_ELEMENT_BYTES = 4;
 
 function writeFsp(spid: number, flags: number): Uint8Array<ArrayBuffer> {
   return writeAtom(OfficeArtFSP, concatBytes(u32le(spid), u32le(flags)), {
@@ -210,7 +215,9 @@ function writeShape(
 // The outermost group every real drawing carries: an OfficeArtSpContainer holding only an OfficeArtFSPGR (a degenerate coordinate system, never read for the patriarch — groupTransform returns the parent transform unchanged whenever FSP_PATRIARCH is set) and an FSP with fGroup|fPatriarch set. [MS-ODRAW] 2.2.16: "the first child of a group container is always the OfficeArtSpContainer holding that group's own shape information" — collectGroup relies on this exact position.
 function writePatriarch(): Uint8Array<ArrayBuffer> {
   return writeContainer(OfficeArtSpContainer, [
-    writeAtom(OfficeArtFSPGR, new Uint8Array(16), { recVer: 0x1 }),
+    writeAtom(OfficeArtFSPGR, new Uint8Array(FSPGR_PATRIARCH_BYTES), {
+      recVer: 0x1,
+    }),
     writeFsp(PATRIARCH_SPID, FSP_GROUP | FSP_PATRIARCH),
   ]);
 }
@@ -423,7 +430,10 @@ function writeTableGroup(
     rowEdge += height;
   }
   rowBoundaries.push(rowEdge);
-  const rowHeightsPayload = writeIMsoArray(rowHeights, 4);
+  const rowHeightsPayload = writeIMsoArray(
+    rowHeights,
+    ROW_HEIGHT_ELEMENT_BYTES,
+  );
   // The FSPGR states the table's own slide-coordinate rectangle, and the client anchor states the same rectangle — the identity mapping real PowerPoint writes, so the cells' child anchors are their slide positions.
   const tableLeft = pointsToMasterUnits(frame.xPt);
   const tableTop = pointsToMasterUnits(frame.yPt);

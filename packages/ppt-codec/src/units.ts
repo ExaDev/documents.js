@@ -13,7 +13,8 @@ export function pointsToMasterUnits(points: number): number {
 }
 
 // An EMU (English Metric Unit) is 1/914400 inch — [MS-ODRAW]'s own unit for the shape properties expressed in it (dxTextLeft and its three siblings among them), distinct from the master units the rest of this package's geometry uses. 914400 / 72 points-per-inch is exact, so the two directions are exact inverses at integral point values.
-export const EMU_PER_POINT = 914400 / POINTS_PER_INCH;
+const EMU_PER_INCH = 914400;
+export const EMU_PER_POINT = EMU_PER_INCH / POINTS_PER_INCH;
 
 export function emuToPoints(emu: number): number {
   return emu / EMU_PER_POINT;

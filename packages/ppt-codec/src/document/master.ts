@@ -144,16 +144,20 @@ export interface SlideAtomInfo {
 }
 
 // [MS-PPT] 2.5.2's 0x18-byte SlideAtom — the read-side mirror of master-write.ts's own writeSlideAtom. Only the two persist-identifier fields this module needs are surfaced; geom/placeholderTypes/slideFlags are this package's own writer's concern; the read side's shapes come from the slide's own OfficeArtSpContainer tree regardless of what SlideAtom's own placeholder-type array claims.
+// The hexadecimal radix the record-type diagnostic below formats its own field through.
+const HEX_RADIX = 16;
+
 export function readSlideAtom(record: PptRecord): SlideAtomInfo {
   if (record.header.recType !== RT_SlideAtom) {
     throw new PptFormatError(
-      `expected RT_SlideAtom (0x${RT_SlideAtom.toString(16)}) at offset ${record.offset}, found record type 0x${record.header.recType.toString(16)}`,
+      `expected RT_SlideAtom (0x${RT_SlideAtom.toString(HEX_RADIX)}) at offset ${record.offset}, found record type 0x${record.header.recType.toString(HEX_RADIX)}`,
     );
   }
   // geom(4) + placeholderTypes(8) + masterIdRef(4) + notesIdRef(4) = 20 bytes before slideFlags/unused, which this module never reads.
   const MASTER_ID_REF_OFFSET = 12;
   const NOTES_ID_REF_OFFSET = 16;
-  if (record.data.length < NOTES_ID_REF_OFFSET + 4) {
+  const UINT32_BYTES = 4;
+  if (record.data.length < NOTES_ID_REF_OFFSET + UINT32_BYTES) {
     throw new PptFormatError(
       `SlideAtom at offset ${record.offset} carries ${record.data.length} bytes, too few for its masterIdRef/notesIdRef fields`,
     );

@@ -7,6 +7,11 @@ import { RT_SlideListWithText, RT_SlidePersistAtom } from "../record/types";
 // [MS-PPT] 2.4.14.7: "rh.recLen MUST be 0x00000014."
 const NOTES_PERSIST_ATOM_LEN = 0x00000014;
 
+// The hexadecimal radix every record-type diagnostic below formats its own field through.
+const HEX_RADIX = 16;
+// NotesPersistAtom's own notesId field byte offset: after persistIdRef (4 bytes) and the reserved1/fNonOutlineData/reserved2 flags word plus reserved3 (4 bytes each).
+const NOTES_PERSIST_ATOM_NOTES_ID_OFFSET = 12;
+
 export interface NotesPersist {
   // The persist object directory entry naming this notes slide's own NotesContainer.
   readonly persistIdRef: number;
@@ -20,7 +25,7 @@ export function readNotesListWithText(
 ): NotesPersist[] {
   if (listContainer.header.recType !== RT_SlideListWithText) {
     throw new PptFormatError(
-      `expected RT_SlideListWithText (0x${RT_SlideListWithText.toString(16)}), found record type 0x${listContainer.header.recType.toString(16)}`,
+      `expected RT_SlideListWithText (0x${RT_SlideListWithText.toString(HEX_RADIX)}), found record type 0x${listContainer.header.recType.toString(HEX_RADIX)}`,
     );
   }
   const persists: NotesPersist[] = [];
@@ -30,7 +35,7 @@ export function readNotesListWithText(
     }
     if (record.data.length < NOTES_PERSIST_ATOM_LEN) {
       throw new PptFormatError(
-        `NotesPersistAtom at offset ${record.offset} carries ${record.data.length} bytes, fewer than the mandated 0x${NOTES_PERSIST_ATOM_LEN.toString(16)}`,
+        `NotesPersistAtom at offset ${record.offset} carries ${record.data.length} bytes, fewer than the mandated 0x${NOTES_PERSIST_ATOM_LEN.toString(HEX_RADIX)}`,
       );
     }
     const view = new DataView(
@@ -41,7 +46,7 @@ export function readNotesListWithText(
     persists.push({
       persistIdRef: view.getUint32(0, true),
       // Bytes 4-7 are the reserved1/fNonOutlineData/reserved2 flags word and bytes 8-11 reserved3, both of which the spec requires to be ignored.
-      notesId: view.getUint32(12, true),
+      notesId: view.getUint32(NOTES_PERSIST_ATOM_NOTES_ID_OFFSET, true),
     });
   }
   return persists;

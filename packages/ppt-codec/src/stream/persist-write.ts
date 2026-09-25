@@ -3,6 +3,12 @@ import { RT_PersistDirectoryAtom, RT_UserEditAtom } from "../record/types";
 
 // The write-side mirror of stream/persist.ts: a single-edit persist layer, since this writer never appends an incremental edit — every persist object it writes is stated once, by one UserEditAtom pointing at one PersistDirectoryAtom that covers the whole document in its first (and only) edit. [MS-PPT] 2.3.3 UserEditAtom: https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-ppt/3ffb3fab-95de-4873-98aa-d508fbbac981 [MS-PPT] 2.3.4 PersistDirectoryAtom: https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-ppt/d10a093d-860f-409c-b065-aeb24b830505 [MS-PPT] 2.3.5 PersistDirectoryEntry: https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-ppt/6214b5a6-7ca2-4a86-8a0e-5fd3d3eff1c9
 
+// PersistDirectoryEntry's own packed header word ([MS-PPT] 2.3.5): persistId in the low 20 bits, cPersist in the high 12 — this writer always states cPersist 1, so only the shift the single entry's own count occupies is needed, not a mask for it.
+const PERSIST_ID_MASK = 0xfffff;
+const CPERSIST_SHIFT = 20;
+// [MS-PPT] 2.3.3 UserEditAtom's own majorVersion field: the PowerPoint-97-2003 value this package's own synthetic-presentation fixtures already use.
+const USER_EDIT_MAJOR_VERSION = 0x03;
+
 export interface PersistDirectoryEntryToWrite {
   readonly persistId: number;
   readonly offset: number;
@@ -16,7 +22,7 @@ export function writePersistDirectoryAtom(
     ...entries.map((entry) =>
       concatBytes(
         // persistId occupies bits 0-19, cPersist bits 20-31 of one little-endian word — see stream/persist.ts's own readPersistDirectoryAtom comment on the shift-and-mask split this mirrors.
-        u32le((entry.persistId & 0xfffff) | (1 << 20)),
+        u32le((entry.persistId & PERSIST_ID_MASK) | (1 << CPERSIST_SHIFT)),
         u32le(entry.offset),
       ),
     ),
@@ -42,7 +48,7 @@ export function writeUserEditAtom(
       u32le(fields.lastSlideIdRef),
       u16le(0), // version
       u8(0x00), // minorVersion
-      u8(0x03), // majorVersion
+      u8(USER_EDIT_MAJOR_VERSION),
       u32le(fields.offsetLastEdit),
       u32le(fields.offsetPersistDirectory),
       u32le(fields.docPersistIdRef),

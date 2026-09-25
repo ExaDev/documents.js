@@ -14,6 +14,8 @@ import {
 
 // [MS-PPT] FontEntityAtom's fixed 64-byte lfFaceName field — matches fonts.ts's own FACE_NAME_BYTES. A name longer than the field can hold (31 UTF-16 code units plus a terminating null) is truncated to fit, the same lossy edge the reader's own 64-byte read already imposes on the way back.
 const FACE_NAME_FIELD_BYTES = 64;
+// The 4 bytes following lfFaceName (panose/clipPrecision/quality/pitchAndFamily in a real producer's own FontEntityAtom), left zero since readFaceName never reads past the name field.
+const FONT_ENTITY_TRAILING_BYTES = 4;
 
 function writeFontEntityAtom(faceName: string): Uint8Array<ArrayBuffer> {
   const nameField = new Uint8Array(FACE_NAME_FIELD_BYTES);
@@ -22,7 +24,7 @@ function writeFontEntityAtom(faceName: string): Uint8Array<ArrayBuffer> {
   // The 4 bytes following lfFaceName (panose/clipPrecision/quality/pitchAndFamily in a real producer's own FontEntityAtom) are left zero: readFaceName never reads past the name field, so nothing here depends on their value.
   return writeAtom(
     RT_FontEntityAtom,
-    concatBytes(nameField, new Uint8Array(4)),
+    concatBytes(nameField, new Uint8Array(FONT_ENTITY_TRAILING_BYTES)),
   );
 }
 
