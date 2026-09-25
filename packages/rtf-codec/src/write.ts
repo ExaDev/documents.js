@@ -21,12 +21,15 @@ import { writeSection } from "./write-body";
 import { raw, type Writer } from "./write-state";
 import { flattenTree } from "document-schema.js";
 
+// Strips a character down to the 7-bit ASCII range encodeAscii below produces.
+const ASCII_7BIT_MASK = 0x7f;
+
 // The return type is the narrower Uint8Array<ArrayBuffer>, not the default Uint8Array<ArrayBufferLike>, matching document-schema.js's own ProvidedFont.bytes and documents.js's package codecs: a SharedArrayBuffer-backed view is not something this writer can produce, and z.instanceof(Uint8Array)'s own inferred output type is the narrow one, so widening here would make the z.codec() pair in src/codec.ts fail to typecheck.
 function encodeAscii(text: string): Uint8Array<ArrayBuffer> {
   // Uint8Array.from's own array-like traversal (length + per-index mapfn), not a hand-written index < text.length loop: a preallocated Uint8Array silently ignores an out-of-bounds index assignment rather than throwing or growing, so an off-by-one loop bound here is unobservable through `out` regardless of the comparison used — Array.from removes the comparison as an AST node entirely rather than leaving an equivalent one standing.
   return Uint8Array.from(
     { length: text.length },
-    (_, index) => text.charCodeAt(index) & 0x7f,
+    (_, index) => text.charCodeAt(index) & ASCII_7BIT_MASK,
   );
 }
 
