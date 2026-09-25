@@ -1,3 +1,23 @@
+## [8.1.20](https://github.com/ExaDev/documents.js/compare/rtf-codec%408.1.19...rtf-codec%408.1.20) (2026-09-25)
+
+### Bug Fixes
+
+* **rtf-codec:** derive PERCENT_STEPS from percentN type names, not literals ([94432ca](https://github.com/ExaDev/documents.js/commit/94432cab021bb091883417eeff4526e0e33900c6))
+* **rtf-codec:** derive RTF_MAGIC from its own string, not a byte array ([8c3ab0d](https://github.com/ExaDev/documents.js/commit/8c3ab0d200533778cacac2d1d9de2ac4450bb8dc))
+* **rtf-codec:** key DBCS lead-byte tables by computed position, not literal ([b8582fd](https://github.com/ExaDev/documents.js/commit/b8582fd450be80061cf29929d6a7818380919800))
+* **rtf-codec:** name base64.ts's bit-shift and mask constants ([4443d0c](https://github.com/ExaDev/documents.js/commit/4443d0c1b65433a8724b1f9e88fb96e6695274f5))
+* **rtf-codec:** name bytes.ts, options.ts and write.ts's remaining literals ([1725642](https://github.com/ExaDev/documents.js/commit/17256422e58b7469c1bc79e7f7bc01f41e6c27a0))
+* **rtf-codec:** name embedded-object.ts's DWORD offsets and RGBQuad bytes ([75c03a6](https://github.com/ExaDev/documents.js/commit/75c03a6816fa4b65ef0cd596d9e110ad4efa22c3))
+* **rtf-codec:** name every codepage.ts code page and fcharset number ([250a5e6](https://github.com/ExaDev/documents.js/commit/250a5e6a9ddfc5202d9c189cb5930b68764d5e63))
+* **rtf-codec:** name the last magic-numbers sites across read/write/units ([4469b3e](https://github.com/ExaDev/documents.js/commit/4469b3ecfa777e720b0be0dc2ef2bfa2271a666a)), references [#SDATA](https://github.com/ExaDev/documents.js/issues/SDATA)
+* **rtf-codec:** name tokenize.ts's ASCII ranges and \'hh escape geometry ([61c3202](https://github.com/ExaDev/documents.js/commit/61c3202daf4c4c47c063b39949dd49139d0513a5))
+* **rtf-codec:** name write-header.ts's list and colour-table constants ([42d28ba](https://github.com/ExaDev/documents.js/commit/42d28baeae794d20df0748f3d1a772bc7cc13aaf))
+* **rtf-codec:** name write-text.ts's ASCII and 16-bit escape boundaries ([61413ce](https://github.com/ExaDev/documents.js/commit/61413cec09d828f9392ecacc8e03f8c226ba6a40))
+
+### Miscellaneous Chores
+
+* **rtf-codec:** enable no-magic-numbers for production code ([43273ce](https://github.com/ExaDev/documents.js/commit/43273ce2a713532ff0285b87022a1a45632975d9))
+
 ## [8.1.19](https://github.com/ExaDev/documents.js/compare/rtf-codec%408.1.18...rtf-codec%408.1.19) (2026-09-25)
 
 
