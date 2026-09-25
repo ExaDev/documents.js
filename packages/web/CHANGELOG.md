@@ -1,3 +1,17 @@
+## [2.16.10](https://github.com/ExaDev/documents.js/compare/web%402.16.9...web%402.16.10) (2026-09-25)
+
+### Miscellaneous Chores
+
+* **lint:** scope no-magic-numbers to production code and enforce it in three packages ([22f5525](https://github.com/ExaDev/documents.js/commit/22f55250b2824c0f31e53dfb19a4b28cd041dbc9))
+* **web:** name the numbers behind the rendering and formatting rules ([9a54333](https://github.com/ExaDev/documents.js/commit/9a5433309d75334f22033db2241abb8d6598b943))
+* **web:** name the seconds-to-milliseconds factor in the build config ([576acb8](https://github.com/ExaDev/documents.js/commit/576acb8a59f1cafaefeb137e7ea2e11aec005fde))
+
+
+### Dependencies
+
+- Updated markdown-codec to 11.1.12
+- Updated documents.js to 14.4.44
+
 ## [2.16.9](https://github.com/ExaDev/documents.js/compare/web%402.16.8...web%402.16.9) (2026-09-25)
 
 
