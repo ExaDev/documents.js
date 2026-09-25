@@ -11,6 +11,12 @@ import type { WpdFileHeader } from "./header";
 
 // Both the index header and every index entry occupy fourteen bytes: the header is <flags> <reserved> [count] <reserved x 10>, and an entry is <flags> <packet type> [use count] [hidden count] {size} {pointer}. The generic-header example pins the figure — five slots fill 512 through 582, where its first packet's own pointer says the packet data begins.
 export const WPD_INDEX_RECORD_SIZE = 14;
+// An index record's own field layout: flags (1 byte, offset 0), packet type (1 byte), use count (2 bytes), hidden count (2 bytes), size (4 bytes), offset (4 bytes).
+const INDEX_RECORD_TYPE_OFFSET = 1;
+const INDEX_RECORD_USE_COUNT_OFFSET = 2;
+const INDEX_RECORD_HIDDEN_COUNT_OFFSET = 4;
+const INDEX_RECORD_SIZE_OFFSET = 6;
+const INDEX_RECORD_OFFSET_OFFSET = 10;
 
 // "<flags> = 2" on the index header, the one documented value that distinguishes it from an entry.
 const INDEX_HEADER_FLAGS = 2;
@@ -59,11 +65,17 @@ export function readPrefixPackets(
   for (let entry = 1; entry < indexCount; entry += 1) {
     const recordOffset = indexAreaOffset + entry * WPD_INDEX_RECORD_SIZE;
     const flags = byteAt(bytes, recordOffset);
-    const packetType = byteAt(bytes, recordOffset + 1);
-    const useCount = uint16At(bytes, recordOffset + 2);
-    const hiddenCount = uint16At(bytes, recordOffset + 4);
-    const size = uint32At(bytes, recordOffset + 6);
-    const offset = uint32At(bytes, recordOffset + 10);
+    const packetType = byteAt(bytes, recordOffset + INDEX_RECORD_TYPE_OFFSET);
+    const useCount = uint16At(
+      bytes,
+      recordOffset + INDEX_RECORD_USE_COUNT_OFFSET,
+    );
+    const hiddenCount = uint16At(
+      bytes,
+      recordOffset + INDEX_RECORD_HIDDEN_COUNT_OFFSET,
+    );
+    const size = uint32At(bytes, recordOffset + INDEX_RECORD_SIZE_OFFSET);
+    const offset = uint32At(bytes, recordOffset + INDEX_RECORD_OFFSET_OFFSET);
 
     // Packet Type 0 is "Index Entry Is Available or Was Deleted" — a live slot holding nothing, whose size and pointer fields mean nothing either. It still consumes a prefix ID, so it is recorded rather than skipped: dropping it would renumber every packet after it and silently misresolve every PID the document area names.
     if (packetType === 0) {
@@ -115,19 +127,28 @@ const TYPEFACE_NAME_OFFSET = 24;
 // This is the packet a header, footer, footnote, endnote, or box caption's own text lives in — and, per WPFF_DF-BOX.htm's own PID list, the packet a box's TEXT or EQUATION content resolves to as well, once the box function's own override names which prefix ID holds it (stream/box.ts).
 export const PACKET_TYPE_GENERAL_WP_TEXT = 0x08;
 
+// [number of text blocks] (2 bytes) then {relative offset of first text block} (2 bytes), so the block-size array starts right after both.
+const TEXT_BLOCK_FIRST_OFFSET_FIELD = 2;
+const TEXT_BLOCK_SIZE_FIELD_SIZE = 2;
+const TEXT_BLOCK_SIZES_OFFSET =
+  TEXT_BLOCK_FIRST_OFFSET_FIELD + TEXT_BLOCK_SIZE_FIELD_SIZE;
+
 export function readGeneralWpTextBlocks(
   bytes: Uint8Array,
 ): Uint8Array | undefined {
   // uint16At throws (via byteAt) rather than returning undefined for a read that runs past bytes' own end, caught below — so neither the block count, the first block offset, nor any one size word in the loop below needs a separate room check ahead of reading it. A dedicated sizesEnd > bytes.length guard used to sit ahead of the loop, checking room for every size word the loop is about to read in one go — but unlike the text-block header guard style.ts's readStyleBeginBlock still needs (which checks room for a field the loop never reads), this guard's own threshold (4 + blockCount * 2) is exactly the byte offset the loop's own last iteration already requires, so a bytes.length short of it makes that same iteration throw in precisely the place the guard would have rejected it — no input can tell the removed guard from the throw it deferred to.
   try {
     const blockCount = uint16At(bytes, 0);
-    const firstBlockOffset = uint16At(bytes, 2);
+    const firstBlockOffset = uint16At(bytes, TEXT_BLOCK_FIRST_OFFSET_FIELD);
     if (blockCount === 0) {
       return undefined;
     }
     let totalSize = 0;
     for (let index = 0; index < blockCount; index += 1) {
-      totalSize += uint16At(bytes, 4 + index * 2);
+      totalSize += uint16At(
+        bytes,
+        TEXT_BLOCK_SIZES_OFFSET + index * TEXT_BLOCK_SIZE_FIELD_SIZE,
+      );
     }
     const end = firstBlockOffset + totalSize;
     // No separate firstBlockOffset < 0 guard is needed: uint16At only ever answers an unsigned 16-bit value, so firstBlockOffset can never be negative in the first place.
