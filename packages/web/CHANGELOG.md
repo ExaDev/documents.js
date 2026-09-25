@@ -1,3 +1,10 @@
+## [2.16.17](https://github.com/ExaDev/documents.js/compare/web%402.16.16...web%402.16.17) (2026-09-25)
+
+
+### Dependencies
+
+- Updated documents.js to 14.4.51
+
 ## [2.16.16](https://github.com/ExaDev/documents.js/compare/web%402.16.15...web%402.16.16) (2026-09-25)
 
 ### Miscellaneous Chores
