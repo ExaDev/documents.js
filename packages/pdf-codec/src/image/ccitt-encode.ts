@@ -32,19 +32,28 @@ const BLACK_RUN_CODES = buildRunCodes(BLACK_TERMINATING_AND_MAKEUP);
 // T.4 4.2.1.3.1's two-dimensional mode codes (reused unchanged by T.6): pass, horizontal, and vertical at each signed offset -3..3. Vertical is by far the common case — "1" alone codes a1 exactly under b1 — which is why G4 compresses line-art-like bilevel content far past what Flate achieves on the same pixels.
 const PASS_MODE = "0001";
 const HORIZONTAL_MODE = "001";
+// The +/-2 and +/-3 offsets fall outside this rule's own ignored range (-1..2); named to keep every VERTICAL_MODES key visibly one of T.4 4.2.1.3.1's own signed vertical-mode offsets.
+const VERTICAL_OFFSET_MINUS_2 = -2;
+const VERTICAL_OFFSET_3 = 3;
+const VERTICAL_OFFSET_MINUS_3 = -3;
 const VERTICAL_MODES: ReadonlyMap<number, string> = new Map([
   [0, "1"],
   [1, "011"],
   [-1, "010"],
   [2, "000011"],
-  [-2, "000010"],
-  [3, "0000011"],
-  [-3, "0000010"],
+  [VERTICAL_OFFSET_MINUS_2, "000010"],
+  [VERTICAL_OFFSET_3, "0000011"],
+  [VERTICAL_OFFSET_MINUS_3, "0000010"],
 ]);
 
 // The largest run length any make-up code names (T.4 Table 4 tops out at 2560); a longer run is coded as several make-ups then the terminating remainder.
 const LARGEST_MAKEUP_RUN = 2560;
 const MAKEUP_GRANULARITY = 64;
+
+// Bit-packing constants for the 1-bit-per-pixel, MSB-first byte layout the decoder (ccitt.ts) produces and this encoder consumes: 8 bits fill one byte, ">> 3" converts a bit/pixel index to its containing byte index (division by 8 via its base-2 log), and "& 7" masks a bit/pixel index down to its position within that byte.
+const BITS_PER_BYTE = 8;
+const BYTE_INDEX_SHIFT = 3;
+const BYTE_BIT_MASK = 7;
 
 class BitWriter {
   private readonly bytes: number[] = [];
@@ -59,7 +68,7 @@ class BitWriter {
     for (const char of bits) {
       this.current = (this.current << 1) | (char === "1" ? 1 : 0);
       this.used++;
-      if (this.used === 8) {
+      if (this.used === BITS_PER_BYTE) {
         this.bytes.push(this.current);
         this.current = 0;
         this.used = 0;
@@ -70,7 +79,7 @@ class BitWriter {
   finish(): Uint8Array<ArrayBuffer> {
     if (this.used > 0) {
       // Zero-padding the final partial byte is what every real G4 producer does, and T.6 permits it: the decoder stops at the requested row count regardless.
-      this.bytes.push(this.current << (8 - this.used));
+      this.bytes.push(this.current << (BITS_PER_BYTE - this.used));
     }
     return new Uint8Array(this.bytes);
   }
@@ -99,8 +108,8 @@ function changingElements(
   const changes: number[] = [];
   let previous = 1; // the imaginary white pixel before the row
   for (let x = 0; x < columns; x++) {
-    const byte = bitmap[rowByteOffset + (x >> 3)] ?? 0;
-    const pixel = (byte >> (7 - (x & 7))) & 1;
+    const byte = bitmap[rowByteOffset + (x >> BYTE_INDEX_SHIFT)] ?? 0;
+    const pixel = (byte >> (BYTE_BIT_MASK - (x & BYTE_BIT_MASK))) & 1;
     if (pixel !== previous) {
       changes.push(x);
       previous = pixel;
@@ -125,7 +134,7 @@ export function encodeCcittFax(
   if (columns <= 0 || rows <= 0) {
     return new Uint8Array(0);
   }
-  const rowBytes = (columns + 7) >> 3;
+  const rowBytes = (columns + BYTE_BIT_MASK) >> BYTE_INDEX_SHIFT;
   const writer = new BitWriter();
   // The reference line above the first row is T.6's imaginary all-white line: it has no changing element this side of the right edge, which the sentinel reads below spell as "columns".
   let reference: number[] = [];
@@ -180,8 +189,8 @@ export function encodeCcittFax(
       }
       // The colour at the new a0 comes from the bitmap itself: index parity cannot state it once sentinel positions (a0 = columns, or an a2 past the last real change) enter, and recomputing from the pixels is the one rule that is right for all three modes.
       if (a0 < columns) {
-        const byte = bitmap[offset + (a0 >> 3)] ?? 0;
-        white = ((byte >> (7 - (a0 & 7))) & 1) === 1;
+        const byte = bitmap[offset + (a0 >> BYTE_INDEX_SHIFT)] ?? 0;
+        white = ((byte >> (BYTE_BIT_MASK - (a0 & BYTE_BIT_MASK))) & 1) === 1;
       }
     }
     reference = current;
