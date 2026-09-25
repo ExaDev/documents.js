@@ -4,6 +4,9 @@ import { RT_StyleTextPropAtom, RT_TextMasterStyleAtom } from "../record/types";
 
 // StyleTextPropAtom: the paragraph-level and character-level formatting for one text body, expressed as two run arrays measured in characters rather than as properties attached to the text. A run's own length is what says where it ends, so the whole atom is only parseable against the character count of the text body it accompanies — which is why every function here takes that count rather than deriving it. [MS-PPT] 2.9.x StyleTextPropAtom: https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-ppt/a9a5fa71-238d-491e-acc7-fa1fffd5f100 [MS-PPT] TextPFRun: https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-ppt/4e95a4f9-a9af-42b5-b81a-f8f991cb1418 [MS-PPT] TextCFRun: https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-ppt/426f313a-a4f3-4ffb-a041-9a74ccf23f17 [MS-PPT] TextPFException: https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-ppt/c15a13b3-db2c-4b50-a7e6-08045581a663 [MS-PPT] TextCFException: https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-ppt/c75024a2-14cb-4d7d-9964-bdab2fcd9d93
 
+// The hexadecimal radix every record-type/index diagnostic below formats its own field through.
+const HEX_RADIX = 16;
+
 // TextAlignmentEnum ([MS-PPT] 2.13.x): https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-ppt/5fe09a4e-204e-41dd-a1e6-83ea729e0f25
 export const ALIGN_LEFT = 0x0000;
 export const ALIGN_CENTER = 0x0001;
@@ -14,51 +17,84 @@ export const ALIGN_THAI_DISTRIBUTED = 0x0005;
 export const ALIGN_JUSTIFY_LOW = 0x0006;
 
 // PFMasks bit positions, in the spec's own A-to-Z order. Each bit says whether its field is present in the TextPFException that follows — never what the field's value is. Exported (rather than kept private to this module) because style-write.ts's writeTextPFException sets the identical bits when serialising a property back to bytes — one definition read and written by both directions rather than a second copy that could drift from this one.
+//
+// Each flag's own bit position is named separately from the flag itself (rather than written inline as `1 << 3`) because @typescript-eslint/no-magic-numbers only exempts a literal that is directly a const's own initializer; a literal nested inside that initializer's expression, such as the shift amount here, is still checked on its own. Bit 9 is absent from both the PFMasks and CFMasks tables below: [MS-PPT] leaves it unused, so no flag ever claims it.
+const PF_BIT_BULLET_HAS_SIZE = 3;
+const PF_BIT_BULLET_FONT = 4;
+const PF_BIT_BULLET_COLOR = 5;
+const PF_BIT_BULLET_SIZE = 6;
+const PF_BIT_BULLET_CHAR = 7;
+const PF_BIT_LEFT_MARGIN = 8;
+const PF_BIT_INDENT = 10;
+const PF_BIT_ALIGN = 11;
+const PF_BIT_LINE_SPACING = 12;
+const PF_BIT_SPACE_BEFORE = 13;
+const PF_BIT_SPACE_AFTER = 14;
+const PF_BIT_DEFAULT_TAB_SIZE = 15;
+const PF_BIT_FONT_ALIGN = 16;
+const PF_BIT_CHAR_WRAP = 17;
+const PF_BIT_WORD_WRAP = 18;
+const PF_BIT_OVERFLOW = 19;
+const PF_BIT_TAB_STOPS = 20;
+const PF_BIT_TEXT_DIRECTION = 21;
 export const PF_HAS_BULLET = 1 << 0;
 export const PF_BULLET_HAS_FONT = 1 << 1;
 export const PF_BULLET_HAS_COLOR = 1 << 2;
-export const PF_BULLET_HAS_SIZE = 1 << 3;
-export const PF_BULLET_FONT = 1 << 4;
-export const PF_BULLET_COLOR = 1 << 5;
-export const PF_BULLET_SIZE = 1 << 6;
-export const PF_BULLET_CHAR = 1 << 7;
-export const PF_LEFT_MARGIN = 1 << 8;
-export const PF_INDENT = 1 << 10;
-export const PF_ALIGN = 1 << 11;
-export const PF_LINE_SPACING = 1 << 12;
-export const PF_SPACE_BEFORE = 1 << 13;
-export const PF_SPACE_AFTER = 1 << 14;
-export const PF_DEFAULT_TAB_SIZE = 1 << 15;
-export const PF_FONT_ALIGN = 1 << 16;
-export const PF_CHAR_WRAP = 1 << 17;
-export const PF_WORD_WRAP = 1 << 18;
-export const PF_OVERFLOW = 1 << 19;
-export const PF_TAB_STOPS = 1 << 20;
-export const PF_TEXT_DIRECTION = 1 << 21;
+export const PF_BULLET_HAS_SIZE = 1 << PF_BIT_BULLET_HAS_SIZE;
+export const PF_BULLET_FONT = 1 << PF_BIT_BULLET_FONT;
+export const PF_BULLET_COLOR = 1 << PF_BIT_BULLET_COLOR;
+export const PF_BULLET_SIZE = 1 << PF_BIT_BULLET_SIZE;
+export const PF_BULLET_CHAR = 1 << PF_BIT_BULLET_CHAR;
+export const PF_LEFT_MARGIN = 1 << PF_BIT_LEFT_MARGIN;
+export const PF_INDENT = 1 << PF_BIT_INDENT;
+export const PF_ALIGN = 1 << PF_BIT_ALIGN;
+export const PF_LINE_SPACING = 1 << PF_BIT_LINE_SPACING;
+export const PF_SPACE_BEFORE = 1 << PF_BIT_SPACE_BEFORE;
+export const PF_SPACE_AFTER = 1 << PF_BIT_SPACE_AFTER;
+export const PF_DEFAULT_TAB_SIZE = 1 << PF_BIT_DEFAULT_TAB_SIZE;
+export const PF_FONT_ALIGN = 1 << PF_BIT_FONT_ALIGN;
+export const PF_CHAR_WRAP = 1 << PF_BIT_CHAR_WRAP;
+export const PF_WORD_WRAP = 1 << PF_BIT_WORD_WRAP;
+export const PF_OVERFLOW = 1 << PF_BIT_OVERFLOW;
+export const PF_TAB_STOPS = 1 << PF_BIT_TAB_STOPS;
+export const PF_TEXT_DIRECTION = 1 << PF_BIT_TEXT_DIRECTION;
 
 // CFMasks bit positions, in the spec's own A-to-Z order. fHasStyle occupies bits 10-13 and unused4 bits 14-15, which is why the typeface group starts at bit 16 rather than 14. Exported for the same reason the PFMasks bits above are: style-write.ts's writeTextCFException is the write-side mirror of readTextCFException and sets these identical bits.
+const CF_BIT_SHADOW = 4;
+const CF_BIT_FEHINT = 5;
+const CF_BIT_KUMI = 7;
+const CF_BIT_EMBOSS = 9;
+const CF_BIT_HAS_STYLE = 10;
+const CF_HAS_STYLE_WIDTH_BITS = 0xf;
+const CF_BIT_TYPEFACE = 16;
+const CF_BIT_SIZE = 17;
+const CF_BIT_COLOR = 18;
+const CF_BIT_POSITION = 19;
+const CF_BIT_OLD_EA_TYPEFACE = 21;
+const CF_BIT_ANSI_TYPEFACE = 22;
+const CF_BIT_SYMBOL_TYPEFACE = 23;
 export const CF_BOLD = 1 << 0;
 export const CF_ITALIC = 1 << 1;
 export const CF_UNDERLINE = 1 << 2;
-export const CF_SHADOW = 1 << 4;
-export const CF_FEHINT = 1 << 5;
-export const CF_KUMI = 1 << 7;
-export const CF_EMBOSS = 1 << 9;
-export const CF_HAS_STYLE = 0xf << 10;
-export const CF_TYPEFACE = 1 << 16;
-export const CF_SIZE = 1 << 17;
-export const CF_COLOR = 1 << 18;
-export const CF_POSITION = 1 << 19;
-export const CF_OLD_EA_TYPEFACE = 1 << 21;
-export const CF_ANSI_TYPEFACE = 1 << 22;
-export const CF_SYMBOL_TYPEFACE = 1 << 23;
+export const CF_SHADOW = 1 << CF_BIT_SHADOW;
+export const CF_FEHINT = 1 << CF_BIT_FEHINT;
+export const CF_KUMI = 1 << CF_BIT_KUMI;
+export const CF_EMBOSS = 1 << CF_BIT_EMBOSS;
+export const CF_HAS_STYLE = CF_HAS_STYLE_WIDTH_BITS << CF_BIT_HAS_STYLE;
+export const CF_TYPEFACE = 1 << CF_BIT_TYPEFACE;
+export const CF_SIZE = 1 << CF_BIT_SIZE;
+export const CF_COLOR = 1 << CF_BIT_COLOR;
+export const CF_POSITION = 1 << CF_BIT_POSITION;
+export const CF_OLD_EA_TYPEFACE = 1 << CF_BIT_OLD_EA_TYPEFACE;
+export const CF_ANSI_TYPEFACE = 1 << CF_BIT_ANSI_TYPEFACE;
+export const CF_SYMBOL_TYPEFACE = 1 << CF_BIT_SYMBOL_TYPEFACE;
 
-// CFStyle value bits, which share the low ten positions of CFMasks by construction — the mask says a property is stated, the style says what it is. Exported for the same reason the mask bits above are.
+// CFStyle value bits, which share the low ten positions of CFMasks by construction — the mask says a property is stated, the style says what it is. Exported for the same reason the mask bits above are. Reuses CFMasks' own CF_BIT_SHADOW/CF_BIT_EMBOSS positions above rather than restating the same bit numbers under new names, since the two really are the same position by construction.
 export const STYLE_BOLD = 1 << 0;
 export const STYLE_ITALIC = 1 << 1;
 export const STYLE_UNDERLINE = 1 << 2;
-export const STYLE_SHADOW = 1 << 4;
-export const STYLE_EMBOSS = 1 << 9;
+export const STYLE_SHADOW = 1 << CF_BIT_SHADOW;
+export const STYLE_EMBOSS = 1 << CF_BIT_EMBOSS;
 
 // ColorIndexStruct.index ([MS-PPT] 2.12.2): 0x00-0x07 name one of the slide's own colour scheme slots (background, text, shadow, title text, fill, then Accent 1/2/3 — see document/color-scheme.ts), 0xFE means the struct's own red/green/blue bytes are a literal colour, and 0xFF means the colour is genuinely unstated. Exported so style-write.ts's writeColorIndexStruct writes the identical sentinel readColorIndexStruct below checks for.
 export const COLOR_INDEX_SRGB = 0xfe;
@@ -111,6 +147,7 @@ export interface StyleTextProps {
 }
 
 // A cursor over one record's data, so the two exception readers can consume optional fields in declaration order without each re-deriving its position.
+const FIELD_CURSOR_U32_BYTES = 4;
 class FieldCursor {
   private at: number;
   private readonly view: DataView;
@@ -148,7 +185,7 @@ class FieldCursor {
   }
 
   u32(): number {
-    return this.view.getUint32(this.require(4), true);
+    return this.view.getUint32(this.require(FIELD_CURSOR_U32_BYTES), true);
   }
 
   u8(): number {
@@ -159,6 +196,9 @@ class FieldCursor {
     this.require(size);
   }
 }
+
+// ColorIndexStruct's own fixed size: red, green, blue, then the index byte readColorIndexStruct switches on below.
+const COLOR_INDEX_STRUCT_BYTES = 4;
 
 function readColorIndexStruct(cursor: FieldCursor): RunColor | undefined {
   // Four direct byte reads rather than a `bytes(4)` array destructured into named fields: cursor.require() already throws if fewer than 4 bytes remain, so a destructured array's own possibly-undefined elements would be an unreachable case with no real input that could ever trigger it.
@@ -176,11 +216,14 @@ function readColorIndexStruct(cursor: FieldCursor): RunColor | undefined {
     return { kind: "scheme", schemeIndex: index };
   }
   throw new PptFormatError(
-    `ColorIndexStruct index 0x${index.toString(16)} is none of a colour-scheme slot (0x00-0x07), the literal-colour sentinel (0x${COLOR_INDEX_SRGB.toString(16)}), or the undefined-colour sentinel (0x${COLOR_INDEX_UNDEFINED.toString(16)})`,
+    `ColorIndexStruct index 0x${index.toString(HEX_RADIX)} is none of a colour-scheme slot (0x00-0x07), the literal-colour sentinel (0x${COLOR_INDEX_SRGB.toString(HEX_RADIX)}), or the undefined-colour sentinel (0x${COLOR_INDEX_UNDEFINED.toString(HEX_RADIX)})`,
   );
 }
 
 // A TextPFException's optional fields, read strictly in the spec's declared field order. That order is not the mask-bit order — bulletChar (bit 7) is emitted before bulletFontRef (bit 4), and textAlignment (bit 11) before leftMargin (bit 8) — so iterating the mask bits in numeric order would misalign every field after the first divergence.
+// TabStops entries ([MS-PPT] 2.9.x): a 2-byte position followed by a 2-byte alignment, 4 bytes per entry.
+const TAB_STOP_ENTRY_BYTES = 4;
+
 function readTextPFException(
   cursor: FieldCursor,
   indentLevel: number,
@@ -206,7 +249,7 @@ function readTextPFException(
     cursor.skip(2);
   }
   if ((masks & PF_BULLET_COLOR) !== 0) {
-    cursor.skip(4);
+    cursor.skip(COLOR_INDEX_STRUCT_BYTES); // ColorIndexStruct: red, green, blue, index
   }
   const alignment = (masks & PF_ALIGN) !== 0 ? cursor.u16() : undefined;
   const lineSpacing =
@@ -221,7 +264,7 @@ function readTextPFException(
   }
   if ((masks & PF_TAB_STOPS) !== 0) {
     // TabStops is a 2-byte count followed by count * 4 bytes ([MS-PPT] 2.9.x), the one variable-length field in the structure and so the only one whose mis-sizing desynchronises every following run.
-    cursor.skip(cursor.u16() * 4);
+    cursor.skip(cursor.u16() * TAB_STOP_ENTRY_BYTES);
   }
   if ((masks & PF_FONT_ALIGN) !== 0) {
     cursor.skip(2);
@@ -327,7 +370,7 @@ export function readStyleTextPropAtom(
 ): StyleTextProps {
   if (record.header.recType !== RT_StyleTextPropAtom) {
     throw new PptFormatError(
-      `expected RT_StyleTextPropAtom (0x${RT_StyleTextPropAtom.toString(16)}), found record type 0x${record.header.recType.toString(16)}`,
+      `expected RT_StyleTextPropAtom (0x${RT_StyleTextPropAtom.toString(HEX_RADIX)}), found record type 0x${record.header.recType.toString(HEX_RADIX)}`,
     );
   }
   const cursor = new FieldCursor(record.data, 0, "StyleTextPropAtom");
@@ -373,7 +416,7 @@ export function readTextMasterStyleAtom(
 ): MasterTextStyleAtom {
   if (record.header.recType !== RT_TextMasterStyleAtom) {
     throw new PptFormatError(
-      `expected RT_TextMasterStyleAtom (0x${RT_TextMasterStyleAtom.toString(16)}) at offset ${record.offset}, found record type 0x${record.header.recType.toString(16)}`,
+      `expected RT_TextMasterStyleAtom (0x${RT_TextMasterStyleAtom.toString(HEX_RADIX)}) at offset ${record.offset}, found record type 0x${record.header.recType.toString(HEX_RADIX)}`,
     );
   }
   const textType = record.header.recInstance;

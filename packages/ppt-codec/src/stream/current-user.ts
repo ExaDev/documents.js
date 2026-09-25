@@ -11,8 +11,18 @@ export const CURRENT_USER_HEADER_TOKEN_ENCRYPTED = 0xf3d1c4df;
 
 // [MS-PPT] 2.3.2 size: "It MUST be 0x00000014." — the 20 bytes from size through unused, the portion preceding the variable-length ansiUserName.
 export const CURRENT_USER_FIXED_SIZE = 0x00000014;
+// The base ESLint core exposes for Number.prototype.toString/parseInt throughout this reader's own error messages, named so those calls read as "format this as hexadecimal" rather than as an unexplained 16.
+const HEX_RADIX = 16;
+// CurrentUserAtom's own fixed-portion field byte offsets ([MS-PPT] 2.3.2): size at 0 (ignored below; 0 is in the rule's own ignore list), headerToken, offsetToCurrentEdit, lenUserName, docFileVersion, and relVersion's own 4-byte width, reused below for the offset past ansiUserName.
+const CURRENT_USER_HEADER_TOKEN_OFFSET = 4;
+const CURRENT_USER_OFFSET_TO_CURRENT_EDIT_OFFSET = 8;
+const CURRENT_USER_LEN_USER_NAME_OFFSET = 12;
+const CURRENT_USER_DOC_FILE_VERSION_OFFSET = 14;
+const CURRENT_USER_REL_VERSION_BYTES = 4;
 // [MS-PPT] 2.3.2 docFileVersion: "It MUST be 0x03F4." Exported so stream/current-user-write.ts's writeCurrentUserAtom stamps the identical mandated value this reader checks for, rather than a second copy of the same constant.
 export const CURRENT_USER_DOC_FILE_VERSION = 0x03f4;
+// [MS-PPT] 2.3.2 release: fixed at 3 by every producer this package has observed (this package's own writer, and real files this reader has been tested against); the spec states no fixed value here, unlike headerToken/size/docFileVersion above, so this is an observed convention rather than a MUST. Exported for the same reason as CURRENT_USER_DOC_FILE_VERSION: one constant, not a second copy of the same value in every writer.
+export const CURRENT_USER_RELEASE = 0x03;
 
 export interface CurrentUser {
   readonly offsetToCurrentEdit: number;
@@ -45,7 +55,7 @@ export function readCurrentUserAtom(
   const record = readRecordAt(streamBytes, 0);
   if (record.header.recType !== RT_CurrentUserAtom) {
     throw new PptFormatError(
-      `Current User stream begins with record type 0x${record.header.recType.toString(16)}, not RT_CurrentUserAtom (0x${RT_CurrentUserAtom.toString(16)})`,
+      `Current User stream begins with record type 0x${record.header.recType.toString(HEX_RADIX)}, not RT_CurrentUserAtom (0x${RT_CurrentUserAtom.toString(HEX_RADIX)})`,
     );
   }
   const { data } = record;
@@ -59,24 +69,30 @@ export function readCurrentUserAtom(
   const size = view.getUint32(0, true);
   if (size !== CURRENT_USER_FIXED_SIZE) {
     throw new PptFormatError(
-      `CurrentUserAtom size field is 0x${size.toString(16)}, not the mandated 0x${CURRENT_USER_FIXED_SIZE.toString(16)}`,
+      `CurrentUserAtom size field is 0x${size.toString(HEX_RADIX)}, not the mandated 0x${CURRENT_USER_FIXED_SIZE.toString(HEX_RADIX)}`,
     );
   }
-  const headerToken = view.getUint32(4, true);
+  const headerToken = view.getUint32(CURRENT_USER_HEADER_TOKEN_OFFSET, true);
   if (
     headerToken !== CURRENT_USER_HEADER_TOKEN_PLAIN &&
     headerToken !== CURRENT_USER_HEADER_TOKEN_ENCRYPTED
   ) {
     throw new PptFormatError(
-      `CurrentUserAtom headerToken is 0x${headerToken.toString(16)}, neither the plaintext 0x${CURRENT_USER_HEADER_TOKEN_PLAIN.toString(16)} nor the encrypted 0x${CURRENT_USER_HEADER_TOKEN_ENCRYPTED.toString(16)}`,
+      `CurrentUserAtom headerToken is 0x${headerToken.toString(HEX_RADIX)}, neither the plaintext 0x${CURRENT_USER_HEADER_TOKEN_PLAIN.toString(HEX_RADIX)} nor the encrypted 0x${CURRENT_USER_HEADER_TOKEN_ENCRYPTED.toString(HEX_RADIX)}`,
     );
   }
-  const offsetToCurrentEdit = view.getUint32(8, true);
-  const lenUserName = view.getUint16(12, true);
-  const docFileVersion = view.getUint16(14, true);
+  const offsetToCurrentEdit = view.getUint32(
+    CURRENT_USER_OFFSET_TO_CURRENT_EDIT_OFFSET,
+    true,
+  );
+  const lenUserName = view.getUint16(CURRENT_USER_LEN_USER_NAME_OFFSET, true);
+  const docFileVersion = view.getUint16(
+    CURRENT_USER_DOC_FILE_VERSION_OFFSET,
+    true,
+  );
   if (docFileVersion !== CURRENT_USER_DOC_FILE_VERSION) {
     throw new PptFormatError(
-      `CurrentUserAtom docFileVersion is 0x${docFileVersion.toString(16)}, not the mandated 0x${CURRENT_USER_DOC_FILE_VERSION.toString(16)}`,
+      `CurrentUserAtom docFileVersion is 0x${docFileVersion.toString(HEX_RADIX)}, not the mandated 0x${CURRENT_USER_DOC_FILE_VERSION.toString(HEX_RADIX)}`,
     );
   }
 
@@ -88,7 +104,7 @@ export function readCurrentUserAtom(
       `CurrentUserAtom declares a ${lenUserName}-byte ansiUserName that runs past the record's ${data.length} bytes`,
     );
   }
-  const unicodeStart = ansiEnd + 4;
+  const unicodeStart = ansiEnd + CURRENT_USER_REL_VERSION_BYTES;
   const unicodeEnd = unicodeStart + lenUserName * 2;
   // No separate `lenUserName > 0` guard: when lenUserName is 0, unicodeEnd equals unicodeStart, so decodeUtf16Le would decode the identical empty slice decodeAnsi's own empty ansiUserName slice already does — the two branches are indistinguishable for a zero-length name, so gating on the name's length as well as the buffer's would only add a comparison that can never change the result.
   const userName =
