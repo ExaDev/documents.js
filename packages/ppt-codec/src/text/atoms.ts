@@ -24,15 +24,20 @@ export const PARAGRAPH_SEPARATOR = "\r";
 // A soft line break: a break within one paragraph rather than between two. The spec's own Outline Text page lists '\v' among the escapes it uses when rendering non-printable text content, but publishes no table stating which codepoint means what, so treating U+000B this way is an inference from that listing and from what real producers emit — not a rule quoted from the specification. It is deliberately not treated as a paragraph separator: doing so would split one paragraph's formatting runs across two paragraphs, which is the visible failure.
 export const LINE_BREAK = "\u000B";
 
+// The hexadecimal radix the record-type diagnostic below formats its own field through.
+const HEX_RADIX = 16;
+// TextHeaderAtom's own fixed size: a single 4-byte textType field.
+const TEXT_HEADER_ATOM_LEN = 4;
+
 export function readTextHeaderAtom(record: PptRecord): number {
   if (record.header.recType !== RT_TextHeaderAtom) {
     throw new PptFormatError(
-      `expected RT_TextHeaderAtom (0x${RT_TextHeaderAtom.toString(16)}), found record type 0x${record.header.recType.toString(16)}`,
+      `expected RT_TextHeaderAtom (0x${RT_TextHeaderAtom.toString(HEX_RADIX)}), found record type 0x${record.header.recType.toString(HEX_RADIX)}`,
     );
   }
-  if (record.data.length < 4) {
+  if (record.data.length < TEXT_HEADER_ATOM_LEN) {
     throw new PptFormatError(
-      `TextHeaderAtom carries ${record.data.length} bytes, fewer than the 4 its textType field needs`,
+      `TextHeaderAtom carries ${record.data.length} bytes, fewer than the ${TEXT_HEADER_ATOM_LEN} its textType field needs`,
     );
   }
   const view = new DataView(

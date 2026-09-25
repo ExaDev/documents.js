@@ -46,11 +46,14 @@ function mapAlignment(alignment: number | undefined): Alignment | undefined {
 }
 
 /** ParaSpacing's own percentage form (0-13200, value/100 = percent of line height) is the only one document-schema.js's lineSpacing (a plain multiple of single line height) can express — the negative, absolute-master-units form has no multiplier to convert to without knowing the paragraph's actual rendered line height, so it maps to nothing rather than a guess. */
+// ParaSpacing's own percentage form (value/100 = percent), the inverse of content-write.ts's own lineSpacingToParaSpacing.
+const PARA_SPACING_PERCENT_SCALE = 100;
+
 function paraSpacingToLineSpacing(raw: number | undefined): number | undefined {
   if (raw === undefined || raw < 0) {
     return undefined;
   }
-  return raw / 100;
+  return raw / PARA_SPACING_PERCENT_SCALE;
 }
 
 /** ParaSpacing's own negative (absolute master-units) form is the only one document-schema.js's spacingBeforePt/spacingAfterPt (plain points) can express — the positive percentage-of-line-height form has no point value to convert to without knowing the actual rendered line height, so it maps to nothing rather than a guess. */

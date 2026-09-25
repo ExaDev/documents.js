@@ -7,6 +7,12 @@ export const RECORD_HEADER_SIZE = 8;
 // [MS-PPT] 2.3.1: "A value of 0xF specifies that the record is a container record." Every other recVer value marks an atom, and its meaning is the record type's own business (DocumentAtom requires 0x1, most atoms require 0x0).
 export const CONTAINER_REC_VER = 0xf;
 
+// The version/instance word's own field split: recVer in the low 4 bits, recInstance in the next 12 — and the byte offsets, relative to a record header's own start, of recType and recLen.
+const RECVER_MASK = 0xf;
+const RECINSTANCE_SHIFT = 4;
+const RECINSTANCE_MASK = 0xfff;
+const RECLEN_OFFSET = 4;
+
 export interface RecordHeader {
   readonly recVer: number;
   readonly recInstance: number;
@@ -33,10 +39,10 @@ export function readRecordHeader(
   // The version/instance word is one little-endian uint16 with recVer in bits 0-3 and recInstance in bits 4-15 — the spec's packet diagram numbers bits big-endian while the value itself is little-endian ([MS-PPT] 1.3.1 Byte Ordering), so the split is by shift on the assembled value, never by reading the two bytes separately.
   const versionAndInstance = view.getUint16(offset, true);
   return {
-    recVer: versionAndInstance & 0xf,
-    recInstance: (versionAndInstance >> 4) & 0xfff,
+    recVer: versionAndInstance & RECVER_MASK,
+    recInstance: (versionAndInstance >> RECINSTANCE_SHIFT) & RECINSTANCE_MASK,
     recType: view.getUint16(offset + 2, true),
-    recLen: view.getUint32(offset + 4, true),
+    recLen: view.getUint32(offset + RECLEN_OFFSET, true),
   };
 }
 

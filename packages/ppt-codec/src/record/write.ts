@@ -1,5 +1,14 @@
 import { CONTAINER_REC_VER, RECORD_HEADER_SIZE } from "./header";
 
+// A single byte's own value range: u8's low-byte mask, and the fixed width every 32-bit little-endian writer below allocates.
+const BYTE_MASK = 0xff;
+const UINT32_BYTES = 4;
+// [MS-PPT] 2.3.1 RecordHeader's own packed first word: recVer in the low 4 bits, recInstance in the next 12, then recType as its own separate word, then recLen.
+const RECVER_MASK = 0xf;
+const RECINSTANCE_MASK = 0xfff;
+const RECINSTANCE_SHIFT = 4;
+const RECORD_HEADER_RECLEN_OFFSET = 4;
+
 // The write-side mirror of record/header.ts and record/tree.ts: byte primitives and the atom/container builders every writer module in this package composes records from. [MS-PPT] 2.3.1 RecordHeader: https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-ppt/df201194-0cd0-4dfb-bf10-eea353d8eabc
 //
 // Every test fixture in this package used to hand-build its own copy of these builders under src/test-support/records.ts; that module is gone now and every test imports writeAtom/writeContainer (aliased to the shorter atom/container names it always used) directly from here instead, so a fixture and a genuinely written file are assembled by identical code with no second copy to drift.
@@ -18,7 +27,7 @@ export function concatBytes(
 }
 
 export function u8(value: number): Uint8Array<ArrayBuffer> {
-  return new Uint8Array([value & 0xff]);
+  return new Uint8Array([value & BYTE_MASK]);
 }
 
 export function u16le(value: number): Uint8Array<ArrayBuffer> {
@@ -34,13 +43,13 @@ export function i16le(value: number): Uint8Array<ArrayBuffer> {
 }
 
 export function u32le(value: number): Uint8Array<ArrayBuffer> {
-  const bytes = new Uint8Array(4);
+  const bytes = new Uint8Array(UINT32_BYTES);
   new DataView(bytes.buffer).setUint32(0, value, true);
   return bytes;
 }
 
 export function i32le(value: number): Uint8Array<ArrayBuffer> {
-  const bytes = new Uint8Array(4);
+  const bytes = new Uint8Array(UINT32_BYTES);
   new DataView(bytes.buffer).setInt32(0, value, true);
   return bytes;
 }
@@ -74,9 +83,14 @@ function recordHeaderBytes(
 ): Uint8Array<ArrayBuffer> {
   const bytes = new Uint8Array(RECORD_HEADER_SIZE);
   const view = new DataView(bytes.buffer);
-  view.setUint16(0, (recVer & 0xf) | ((recInstance & 0xfff) << 4), true);
+  view.setUint16(
+    0,
+    (recVer & RECVER_MASK) |
+      ((recInstance & RECINSTANCE_MASK) << RECINSTANCE_SHIFT),
+    true,
+  );
   view.setUint16(2, recType, true);
-  view.setUint32(4, recLen, true);
+  view.setUint32(RECORD_HEADER_RECLEN_OFFSET, recLen, true);
   return bytes;
 }
 

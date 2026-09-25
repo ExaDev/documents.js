@@ -9,6 +9,11 @@ import { readTextBody, splitParagraphs } from "../text/atoms";
 // [MS-PPT] 2.5.7: "rh.recLen MUST be 0x00000008."
 const NOTES_ATOM_LEN = 0x00000008;
 
+// The hexadecimal radix every record-type diagnostic below formats its own field through.
+const HEX_RADIX = 16;
+// NotesAtom's own slideFlags field byte offset: after the 4-byte slideIdRef.
+const NOTES_ATOM_SLIDE_FLAGS_OFFSET = 4;
+
 // The slideIdRef value reserved for a notes MASTER slide. [MS-PPT] 2.5.7: slideIdRef "MUST be 0x00000000 if the NotesContainer record that contains this NotesAtom record represents the notes master slide", and MUST NOT be for a notes slide — so the same record type carries both, and only this field tells them apart.
 export const NOTES_MASTER_SLIDE_ID_REF = 0x00000000;
 
@@ -22,12 +27,12 @@ export interface NotesAtom {
 export function readNotesAtom(record: PptRecord): NotesAtom {
   if (record.header.recType !== RT_NotesAtom) {
     throw new PptFormatError(
-      `expected RT_NotesAtom (0x${RT_NotesAtom.toString(16)}), found record type 0x${record.header.recType.toString(16)}`,
+      `expected RT_NotesAtom (0x${RT_NotesAtom.toString(HEX_RADIX)}), found record type 0x${record.header.recType.toString(HEX_RADIX)}`,
     );
   }
   if (record.data.length < NOTES_ATOM_LEN) {
     throw new PptFormatError(
-      `NotesAtom carries ${record.data.length} bytes, fewer than the mandated 0x${NOTES_ATOM_LEN.toString(16)}`,
+      `NotesAtom carries ${record.data.length} bytes, fewer than the mandated 0x${NOTES_ATOM_LEN.toString(HEX_RADIX)}`,
     );
   }
   const view = new DataView(
@@ -37,7 +42,7 @@ export function readNotesAtom(record: PptRecord): NotesAtom {
   );
   return {
     slideIdRef: view.getUint32(0, true),
-    slideFlags: view.getUint16(4, true),
+    slideFlags: view.getUint16(NOTES_ATOM_SLIDE_FLAGS_OFFSET, true),
     // Bytes 6-7 are the atom's own trailing unused field, which the spec requires to be ignored.
   };
 }
@@ -46,7 +51,7 @@ export function readNotesAtom(record: PptRecord): NotesAtom {
 export function readNotesContainerAtom(notesContainer: PptRecord): NotesAtom {
   if (notesContainer.header.recType !== RT_Notes) {
     throw new PptFormatError(
-      `expected RT_Notes (0x${RT_Notes.toString(16)}), found record type 0x${notesContainer.header.recType.toString(16)}`,
+      `expected RT_Notes (0x${RT_Notes.toString(HEX_RADIX)}), found record type 0x${notesContainer.header.recType.toString(HEX_RADIX)}`,
     );
   }
   const atom = findChild(childRecords(notesContainer), RT_NotesAtom);
