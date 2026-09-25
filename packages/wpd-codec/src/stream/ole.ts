@@ -27,7 +27,11 @@ const MARKER_SIZE = 44;
 
 // The descriptor's fixed head after the marker, per the SDK's size notation: {version} (4 bytes, "3 for WordPerfect 7"), [extra data] (2, boolean "True if data follows"), [reserved] (2), [link options] (2, 0-3 Always/OnSave/OnCall/OnClose), [reserved] (2), {pfxFlags} (4, bit flags none/empty/icon/link-broken), {Object Number} (4, zero-based). Only the marker and the object number are read past: none of the other fields changes where the payload is, and an OLE 1 object — which names no stream — needs the object number for its fallback name.
 const DESCRIPTOR_VERSION_FIELD = 4;
-const DESCRIPTOR_WORD_FIELDS = 2 * 4;
+// [extra data], [reserved], [link options], [reserved]: four 2-byte fields in a row.
+const DESCRIPTOR_WORD_FIELD_SIZE = 2;
+const DESCRIPTOR_WORD_FIELD_COUNT = 4;
+const DESCRIPTOR_WORD_FIELDS =
+  DESCRIPTOR_WORD_FIELD_SIZE * DESCRIPTOR_WORD_FIELD_COUNT;
 const DESCRIPTOR_PFX_FLAGS_FIELD = 4;
 const DESCRIPTOR_OBJECT_NUMBER_FIELD = 4;
 const DESCRIPTOR_FIXED_HEAD_SIZE =
