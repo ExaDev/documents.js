@@ -15,32 +15,36 @@ import { el, txt } from "../../xml/fragment";
 import {
   addOdfPackageResidue,
   canonicalOdfConstructDescriptor,
-  collectOdfDataStyleDefinitions,
-  collectOdfFieldMasterDefinitions,
-  collectOdfFontFaceDefinitions,
-  collectOdfNamedExpressions,
   collectOdfNonContentPartResidue,
   collectOdfProvenanceRegions,
-  insertOdfConstructMarkers,
   isEmbeddedObjectPart,
   odfDivisionDescriptor,
   odfIndexControlDescriptor,
   odfIndexWrapperTag,
-  odfMarkerHalfEventIndex,
   odfRunConstructWriteKind,
-  pairOdfMarkerHalves,
   parseOdfFieldInstruction,
-  resolveOdfMarkerEvents,
   writeOdfAnnotationHalf,
   writeOdfChangePoint,
   writeOdfDivision,
   writeOdfIndexWrapper,
   writeOdfPackageResidue,
   writeOdfTrackedChanges,
+} from "./constructs";
+import {
+  insertOdfConstructMarkers,
+  odfMarkerHalfEventIndex,
+  pairOdfMarkerHalves,
+  resolveOdfMarkerEvents,
   type OdfConstructExtent,
   type OdfMarkerEvent,
   type OdfMarkerHalf,
-} from "./constructs";
+} from "./constructs-markers";
+import {
+  collectOdfDataStyleDefinitions,
+  collectOdfFieldMasterDefinitions,
+  collectOdfFontFaceDefinitions,
+  collectOdfNamedExpressions,
+} from "./constructs-definitions";
 
 // Every fixture here is a programmatic package/element built with el/txt, matching the sibling odt/constructs.test.ts's own fixture-gate convention.
 
