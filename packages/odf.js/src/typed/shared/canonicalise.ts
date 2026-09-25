@@ -14,7 +14,7 @@ import {
   rgbHexToColor,
   walkTableGrid,
 } from "document-schema.js";
-import { segmentOdfParagraphRunsMapped } from "./paragraph";
+import { segmentOdfParagraphRunsMapped } from "./paragraph-segmentation";
 import { canonicalOdfConstructDescriptor } from "./constructs";
 import { closeListPlan, planListMembership, type ListPlanState } from "./list";
 import { assertTableObeysGridRule } from "./table-grid";
