@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
-import type { ContentParagraph, ContentRun } from "./content";
+import type { ContentParagraph } from "./content";
+import type { ContentRun } from "./content-vocabulary";
+
 import {
   applyParagraphStyleProperties,
   applyRunStyleProperties,

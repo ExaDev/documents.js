@@ -2,19 +2,21 @@ import { describe, expect, it } from "vitest";
 import { canonicalise } from "./canonicalise";
 import type { ConstructDescriptor } from "./construct";
 import {
-  type ContentOrigin,
   ContentDocumentSchema,
   type ContentBlock,
   type ContentDocument,
   type ContentEmbeddedObject,
+} from "./content";
+import { type ContentOrigin } from "./content-vocabulary";
+import {
   type ContentSheetCell,
   type ContentSheetConditionalFormat,
   type ContentSheetDataValidation,
   type ContentSheetImage,
   type ContentSheetPrintSettings,
-  type ContentShape,
-  type ContentVector,
-} from "./content";
+} from "./content-sheet";
+import { type ContentShape, type ContentVector } from "./content-drawing";
+
 import { assembleTree, factorStyles } from "./factor-styles";
 import { flattenTree } from "./flatten";
 import type { PageSize } from "./geometry";

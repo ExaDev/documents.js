@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { ContentTable, ContentTableCell } from "./content";
+
 import {
   assertNeverTableGridFaultKind,
   denseTableRows,

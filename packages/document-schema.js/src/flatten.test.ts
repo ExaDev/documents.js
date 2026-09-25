@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { ContentParagraph, ContentSection } from "./content";
+
 import { decomposeSection } from "./decompose";
 import { assertNeverDocumentTreeKind, flattenTree } from "./flatten";
 import type { StylesTable } from "./definitions";

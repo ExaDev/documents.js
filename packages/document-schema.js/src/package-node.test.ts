@@ -3,8 +3,9 @@ import type {
   ContentDocument,
   ContentEmbeddedObject,
   ContentFormula,
-  ContentRun,
 } from "./content";
+import type { ContentRun } from "./content-vocabulary";
+
 import {
   DrawPageGroupSchema,
   HeadingGroupSchema,

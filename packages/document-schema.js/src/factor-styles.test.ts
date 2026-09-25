@@ -5,9 +5,10 @@ import {
   type ContentBlock,
   type ContentDocument,
   type ContentParagraph,
-  type ContentRun,
-  type ContentVector,
 } from "./content";
+import { type ContentRun } from "./content-vocabulary";
+import { type ContentVector } from "./content-drawing";
+
 import { assembleTree, factorStyles, mint } from "./factor-styles";
 import { flattenTree } from "./flatten";
 import { DocumentTreeSchema, type DocumentTree } from "./package";
