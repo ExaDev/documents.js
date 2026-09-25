@@ -43,10 +43,15 @@ export interface FontReadContext {
   readonly sink: PdfDiagnosticSink;
 }
 
-// ISO 32000-1 Table 123 (font descriptor /Flags): bit position n has value 2^(n-1). Bit 3 = Symbolic, bit 7 = Italic, bit 19 = ForceBold.
-const SYMBOLIC_FLAG_BIT = 1 << 2;
-const ITALIC_FLAG_BIT = 1 << 6;
-const FORCE_BOLD_FLAG_BIT = 1 << 18;
+const BITS_PER_BYTE = 8; // For combining two big-endian bytes into one two-byte CID/code.
+
+// ISO 32000-1 Table 123 (font descriptor /Flags): bit position n has value 2^(n-1).
+const SYMBOLIC_BIT_POSITION = 3;
+const ITALIC_BIT_POSITION = 7;
+const FORCE_BOLD_BIT_POSITION = 19;
+const SYMBOLIC_FLAG_BIT = 1 << (SYMBOLIC_BIT_POSITION - 1);
+const ITALIC_FLAG_BIT = 1 << (ITALIC_BIT_POSITION - 1);
+const FORCE_BOLD_FLAG_BIT = 1 << (FORCE_BOLD_BIT_POSITION - 1);
 const REPLACEMENT_CHARACTER = "�";
 
 function styleFlagsFromDescriptor(descriptor: PdfDict | undefined): {
@@ -288,6 +293,8 @@ function buildSimpleFont(fontDict: PdfDict, context: FontReadContext): PdfFont {
 }
 
 // CID widths (ISO 32000-1 9.7.4.3): each run is either "c [w1 w2 ... wn]" (individual widths for consecutive CIDs starting at c) or "cFirst cLast w" (one width applied to the whole range).
+const W_RANGE_ENTRY_COUNT = 3; // The "cFirst cLast w" form consumes exactly three array entries per range.
+
 function readCidWidths(
   w: readonly PdfObject[] | undefined,
 ): Map<number, number> {
@@ -319,7 +326,7 @@ function readCidWidths(
           map.set(cid, width);
         }
       }
-      i += 3;
+      i += W_RANGE_ENTRY_COUNT;
     }
   }
   return map;
@@ -335,6 +342,11 @@ const DW2_ENTRY_COUNT = 2;
 const W2_TRIPLET_LENGTH = 3;
 // ISO 32000-1 9.7.5.1: writing mode 1 is vertical, 0 horizontal.
 const VERTICAL_WRITING_MODE = 1;
+// Offsets of w1y/vx/vy within one "cFirst cLast w1y vx vy" /W2 range entry, and the total entries the range form consumes (cFirst, cLast, w1y, vx, vy).
+const W2_RANGE_W1Y_OFFSET = 2;
+const W2_RANGE_VX_OFFSET = 3;
+const W2_RANGE_VY_OFFSET = 4;
+const W2_RANGE_ENTRY_COUNT = 5;
 
 // Per-CID vertical metrics from /W2. positionX is optional because only /W2 ever states one: a glyph falling back to /DW2 takes half its own horizontal width instead, which /DW2 cannot express since it carries no per-glyph width.
 interface CidVerticalEntry {
@@ -375,16 +387,16 @@ function readCidVerticalMetrics(
     }
     const last = asNumber(next);
     const entry = verticalEntryFrom(
-      asNumber(w2[i + 2]),
-      asNumber(w2[i + 3]),
-      asNumber(w2[i + 4]),
+      asNumber(w2[i + W2_RANGE_W1Y_OFFSET]),
+      asNumber(w2[i + W2_RANGE_VX_OFFSET]),
+      asNumber(w2[i + W2_RANGE_VY_OFFSET]),
     );
     if (last !== undefined && entry !== undefined) {
       for (let cid = first; cid <= last; cid++) {
         map.set(cid, entry);
       }
     }
-    i += 5;
+    i += W2_RANGE_ENTRY_COUNT;
   }
   return map;
 }
@@ -511,7 +523,7 @@ function buildCompositeFont(
     let unmapped = 0;
     for (let i = 0; i + 1 < codes.length; i += 2) {
       glyphCount++;
-      const cid = ((codes[i] ?? 0) << 8) | (codes[i + 1] ?? 0);
+      const cid = ((codes[i] ?? 0) << BITS_PER_BYTE) | (codes[i + 1] ?? 0);
       const mapped = toUnicode?.lookup(cid);
       if (mapped !== undefined) {
         out += mapped;
@@ -590,7 +602,8 @@ export function createFontResolver(
       }
       const byteLengthConsumed = font.composite ? 2 : 1;
       const code = font.composite
-        ? ((codes[byteOffset] ?? 0) << 8) | (codes[byteOffset + 1] ?? 0)
+        ? ((codes[byteOffset] ?? 0) << BITS_PER_BYTE) |
+          (codes[byteOffset + 1] ?? 0)
         : (codes[byteOffset] ?? 0);
       const vertical = font.verticalMetricsOf?.(code);
       return {
