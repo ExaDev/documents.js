@@ -83,8 +83,25 @@ export interface PdfEncryptor {
 
 const RC4_128_KEY_BYTES = 16;
 const R6_PASSWORD_MAX_BYTES = 127; // ISO 32000-2 7.6.4.3.1: a revision-6 password's UTF-8 form is truncated to 127 bytes.
-const RESERVED_BIT_7_AND_8 = (1 << 6) | (1 << 7);
-const DEPRECATED_ALWAYS_ONE_BIT_10 = 1 << 9;
+const BITS_PER_BYTE = 8;
+
+// ISO 32000-2 7.6.4.2, Table 22: the shift amount each permission bit needs is its own 1-indexed bit number minus one (bit 1 is `1 << 0`); named per the bit's own spec number, matching the "// bit N" comments already on each flag check below.
+const PERMISSION_BIT_SHIFT_MODIFY_CONTENTS = 3; // bit 4
+const PERMISSION_BIT_SHIFT_COPY = 4; // bit 5
+const PERMISSION_BIT_SHIFT_ANNOTATE = 5; // bit 6
+const PERMISSION_BIT_SHIFT_RESERVED_7 = 6; // bit 7 (reserved, always 1)
+const PERMISSION_BIT_SHIFT_RESERVED_8 = 7; // bit 8 (reserved, always 1)
+const PERMISSION_BIT_SHIFT_FILL_FORMS = 8; // bit 9
+const PERMISSION_BIT_SHIFT_DEPRECATED_BIT_10 = 9; // bit 10 (deprecated, always 1)
+const PERMISSION_BIT_SHIFT_ASSEMBLE = 10; // bit 11
+const PERMISSION_BIT_SHIFT_PRINT_HIGH_RES = 11; // bit 12
+const MAX_PERMISSION_BITS = 32; // /P is a 32-bit signed integer; bits 13-32 are reserved and must be 1
+
+const RESERVED_BIT_7_AND_8 =
+  (1 << PERMISSION_BIT_SHIFT_RESERVED_7) |
+  (1 << PERMISSION_BIT_SHIFT_RESERVED_8);
+const DEPRECATED_ALWAYS_ONE_BIT_10 =
+  1 << PERMISSION_BIT_SHIFT_DEPRECATED_BIT_10;
 
 interface SchemeSpec {
   readonly v: number;
@@ -101,11 +118,13 @@ const SCHEME_SPECS: Record<PdfEncryptionScheme, SchemeSpec> = {
 };
 
 // ISO 32000-2 7.6.4.3.2 step (a): a legacy (revision <=4) password is PDFDocEncoding bytes. PDFDocEncoding agrees with plain ASCII byte-for-byte across the printable-ASCII range (0x00-0x7F) and diverges only above it (a handful of remapped punctuation/typographic glyphs in 0x80-0x9F, and several substituted characters above 0xA0) — rather than transcribe that whole encoding for a boundary the overwhelming majority of real passwords never reach, a password outside plain ASCII is rejected loudly here. Silently reinterpreting it as Latin-1 (a tempting shortcut, since Latin-1 and PDFDocEncoding agree over most of the upper range too) would risk the one thing worse than an unsupported password: a password that LOOKS like it was accepted but produces a file the same password, correctly PDFDocEncoded by another reader, cannot open.
+const MAX_PRINTABLE_ASCII = 0x7f;
+
 function legacyPasswordBytes(password: string): Uint8Array<ArrayBuffer> {
   const bytes = new Uint8Array(password.length);
   for (let i = 0; i < password.length; i++) {
     const code = password.charCodeAt(i);
-    if (code > 0x7f) {
+    if (code > MAX_PRINTABLE_ASCII) {
       throw new PdfEncryptionError(
         `password contains character code ${String(code)}, outside the printable-ASCII range this writer supports for the rc4-40/rc4-128/aes-128 schemes; use a plain-ASCII password, or the aes-256 scheme, whose revision-6 passwords are Unicode`,
       );
@@ -130,32 +149,35 @@ function permissionsToP(
     p |= 1 << 2; // bit 3
   }
   if (permissions?.modifyContents ?? true) {
-    p |= 1 << 3; // bit 4
+    p |= 1 << PERMISSION_BIT_SHIFT_MODIFY_CONTENTS; // bit 4
   }
   if (permissions?.copy ?? true) {
-    p |= 1 << 4; // bit 5
+    p |= 1 << PERMISSION_BIT_SHIFT_COPY; // bit 5
   }
   if (permissions?.annotate ?? true) {
-    p |= 1 << 5; // bit 6
+    p |= 1 << PERMISSION_BIT_SHIFT_ANNOTATE; // bit 6
   }
   p |= RESERVED_BIT_7_AND_8;
   if (permissions?.fillForms ?? true) {
-    p |= 1 << 8; // bit 9
+    p |= 1 << PERMISSION_BIT_SHIFT_FILL_FORMS; // bit 9
   }
   p |= DEPRECATED_ALWAYS_ONE_BIT_10;
   if (permissions?.assemble ?? true) {
-    p |= 1 << 10; // bit 11
+    p |= 1 << PERMISSION_BIT_SHIFT_ASSEMBLE; // bit 11
   }
   if (permissions?.printHighRes ?? true) {
-    p |= 1 << 11; // bit 12
+    p |= 1 << PERMISSION_BIT_SHIFT_PRINT_HIGH_RES; // bit 12
   }
-  for (let bit = 13; bit <= 32; bit++) {
+  for (let bit = 13; bit <= MAX_PERMISSION_BITS; bit++) {
     p |= 1 << (bit - 1); // bits 13-32: reserved, must be 1
   }
   return p;
 }
 
 // ISO 32000-2 7.6.4.4.2, Algorithm 3: computing the encryption dictionary's O value (revision 4 and earlier). Step (a)'s "if there is no owner password, use the user password instead" is handled by the caller (createStandardEncryptor defaults ownerPassword to userPassword), not here — by the time this runs, both passwords are already the real bytes to use.
+// ISO 32000-2 7.6.4.4.2, Algorithm 3: revision 3 and later iterate the MD5 hash LEGACY_KEY_ITERATIONS times and apply RC4_OBFUSCATION_ROUNDS of RC4 obfuscation to the owner value; revision 2 (rc4-40) does neither.
+const ITERATED_REVISION_MIN = 3;
+
 function computeLegacyOwnerValue(
   ownerPassword: Uint8Array<ArrayBuffer>,
   userPassword: Uint8Array<ArrayBuffer>,
@@ -163,14 +185,14 @@ function computeLegacyOwnerValue(
   keyBytes: number,
 ): Uint8Array<ArrayBuffer> {
   let digest = md5(padOrTruncatePassword(ownerPassword));
-  if (revision >= 3) {
+  if (revision >= ITERATED_REVISION_MIN) {
     for (let i = 0; i < LEGACY_KEY_ITERATIONS; i++) {
       digest = md5(digest);
     }
   }
   const ownerKey = digest.subarray(0, keyBytes);
   let value = rc4(ownerKey, padOrTruncatePassword(userPassword));
-  if (revision >= 3) {
+  if (revision >= ITERATED_REVISION_MIN) {
     for (let i = 1; i <= RC4_OBFUSCATION_ROUNDS; i++) {
       const roundKey = Uint8Array.from(ownerKey, (byte) => byte ^ i);
       value = rc4(roundKey, value);
@@ -298,9 +320,9 @@ function buildLegacyEncryptor(
     ["O", pdfHexString(owner)],
     ["U", pdfHexString(user)],
     ["P", pdfNum(p)],
-    ["Length", pdfNum(spec.keyBytes * 8)],
+    ["Length", pdfNum(spec.keyBytes * BITS_PER_BYTE)],
   ]);
-  if (spec.v === 4) {
+  if (spec.v === SCHEME_SPECS["aes-128"].v) {
     // /V 4's crypt-filter machinery: one StdCF filter, named by both /StmF and /StrF, carrying the AESV2 method. /CF's own /Length is in bytes, matching real-world producers and this codec's own reader (which ignores it for AESV2 regardless — see encrypt.ts's cryptFilterKeyBytes).
     entries.set(
       "CF",
@@ -371,12 +393,26 @@ function buildAes256Encryptor(
   const oe = aesCbcEncrypt(ownerIntermediateKey, ZERO_IV, fileKey);
 
   // Algorithm 10: a 16-byte block carrying P sign-extended to 64 bits (upper 32 bits forced to all-1s regardless of P's own sign, per step (a)), the /EncryptMetadata flag as an ASCII 'T'/'F', the fixed ASCII marker "adb", and 4 ignored random bytes — encrypted as a single AES-256 block under the file key with a zero IV (CBC over exactly one block with a zero IV is the same transform ECB would give that one block, so aesCbcEncrypt is reused rather than adding a distinct ECB primitive for this one caller).
-  const permsBlock = new Uint8Array(16);
+  const PERMS_P_BYTES = 4; // permissionsBytes(p) always returns exactly this many bytes; also the count of sign-extension bytes below, since one all-1s byte per byte of P sign-extends it from 32 to 64 bits
+  const SIGN_EXTENSION_BYTE = 0xff; // each of the sign-extended P's upper 32 bits, always all-1s per step (a)
+  const PERMS_SIGN_EXTENSION_BYTES = new Uint8Array(PERMS_P_BYTES).fill(
+    SIGN_EXTENSION_BYTE,
+  );
+  const PERMS_METADATA_FLAG_OFFSET = PERMS_P_BYTES + PERMS_P_BYTES;
+  const ENCRYPT_METADATA_TRUE_ASCII = 0x54; // 'T'
+  const ENCRYPT_METADATA_FALSE_ASCII = 0x46; // 'F'
+  const ADB_MARKER_OFFSET = PERMS_METADATA_FLAG_OFFSET + 1; // right after the single metadata-flag byte
+  const ADB_MARKER_BYTES = Uint8Array.from("adb", (c) => c.charCodeAt(0));
+  const PERMS_RANDOM_BYTES = 4; // ignored by every reader; just fills the block to AES_BLOCK_BYTES
+  const PERMS_RANDOM_OFFSET = ADB_MARKER_OFFSET + ADB_MARKER_BYTES.length;
+  const permsBlock = new Uint8Array(AES_BLOCK_BYTES);
   permsBlock.set(permissionsBytes(p), 0);
-  permsBlock.set([0xff, 0xff, 0xff, 0xff], 4);
-  permsBlock[8] = encryptMetadata ? 0x54 : 0x46; // 'T' / 'F'
-  permsBlock.set([0x61, 0x64, 0x62], 9); // "adb"
-  permsBlock.set(randomBytes(4), 12);
+  permsBlock.set(PERMS_SIGN_EXTENSION_BYTES, PERMS_P_BYTES);
+  permsBlock[PERMS_METADATA_FLAG_OFFSET] = encryptMetadata
+    ? ENCRYPT_METADATA_TRUE_ASCII
+    : ENCRYPT_METADATA_FALSE_ASCII;
+  permsBlock.set(ADB_MARKER_BYTES, ADB_MARKER_OFFSET);
+  permsBlock.set(randomBytes(PERMS_RANDOM_BYTES), PERMS_RANDOM_OFFSET);
   const perms = aesCbcEncrypt(fileKey, ZERO_IV, permsBlock);
 
   const entries = new Map<string, PdfObject>([
@@ -389,7 +425,7 @@ function buildAes256Encryptor(
     ["UE", pdfHexString(ue)],
     ["P", pdfNum(p)],
     ["Perms", pdfHexString(perms)],
-    ["Length", pdfNum(spec.keyBytes * 8)],
+    ["Length", pdfNum(spec.keyBytes * BITS_PER_BYTE)],
     [
       "CF",
       pdfDict({
@@ -421,7 +457,7 @@ export function createStandardEncryptor(
 ): PdfEncryptor {
   const scheme = options.scheme ?? "aes-256";
   const spec = SCHEME_SPECS[scheme];
-  return spec.v === 5
+  return spec.v === SCHEME_SPECS["aes-256"].v
     ? buildAes256Encryptor(spec, options)
     : buildLegacyEncryptor(spec, options, fileId);
 }
