@@ -4,6 +4,21 @@
 
 import { BiffWriteError } from "./biff/write-errors";
 
+// ISO shapes: four year digits, two each for month and day, a 10-character date, and an 8-character time.
+const YEAR_DIGITS = 4;
+const MONTH_DAY_DIGITS = 2;
+const ISO_DATE_LENGTH = 10;
+const ISO_TIME_LENGTH = 8;
+
+// The day-count origins as UTC calendar parts: December 1899 (month 11) at day 31 for the true 1900 origin and day 30 for the one-day-earlier origin above the phantom leap day, and January (month 0) 1st 1904 for the 1904 system.
+const ORIGIN_1900_YEAR = 1899;
+const ORIGIN_1900_BELOW_MONTH = 11;
+const ORIGIN_1900_BELOW_DAY = 31;
+const ORIGIN_1900_ABOVE_DAY = 30;
+const ORIGIN_1904_YEAR = 1904;
+const ORIGIN_1904_MONTH = 0;
+const ORIGIN_1904_DAY = 1;
+
 const MS_PER_DAY = 86_400_000;
 const MS_PER_HOUR = 3_600_000;
 const MS_PER_MINUTE = 60_000;
@@ -13,9 +28,21 @@ const MS_PER_SECOND = 1000;
 const PHANTOM_LEAP_DAY_SERIAL = 60;
 
 /** The three day-count origins, named once so a serial and its parts can never be counted from different days. Below the phantom leap day the 1900 system is a true offset from 1899-12-31 (serial 1 = 1900-01-01); at and above it every serial is one too high, expressed by moving the origin back a day rather than by subtracting from the count. The 1904 system is a plain day count from its own epoch, with serial 0 being 1904-01-01 — no phantom day, since 1904 genuinely was a leap year and the count starts after February. */
-const ORIGIN_1900_BELOW_PHANTOM_UTC_MS = Date.UTC(1899, 11, 31);
-const ORIGIN_1900_ABOVE_PHANTOM_UTC_MS = Date.UTC(1899, 11, 30);
-const ORIGIN_1904_UTC_MS = Date.UTC(1904, 0, 1);
+const ORIGIN_1900_BELOW_PHANTOM_UTC_MS = Date.UTC(
+  ORIGIN_1900_YEAR,
+  ORIGIN_1900_BELOW_MONTH,
+  ORIGIN_1900_BELOW_DAY,
+);
+const ORIGIN_1900_ABOVE_PHANTOM_UTC_MS = Date.UTC(
+  ORIGIN_1900_YEAR,
+  ORIGIN_1900_BELOW_MONTH,
+  ORIGIN_1900_ABOVE_DAY,
+);
+const ORIGIN_1904_UTC_MS = Date.UTC(
+  ORIGIN_1904_YEAR,
+  ORIGIN_1904_MONTH,
+  ORIGIN_1904_DAY,
+);
 
 interface SplitSerial {
   days: number;
@@ -38,7 +65,7 @@ function pad(value: number, length: number): string {
 /** Every calculation is done in UTC deliberately: a serial carries no timezone, and local-time Date methods would shift a date across a day boundary for any host west of Greenwich. */
 function isoDateOfUtcMs(ms: number): string {
   const date = new Date(ms);
-  return `${pad(date.getUTCFullYear(), 4)}-${pad(date.getUTCMonth() + 1, 2)}-${pad(date.getUTCDate(), 2)}`;
+  return `${pad(date.getUTCFullYear(), YEAR_DIGITS)}-${pad(date.getUTCMonth() + 1, MONTH_DAY_DIGITS)}-${pad(date.getUTCDate(), MONTH_DAY_DIGITS)}`;
 }
 
 /** The day-count half of a serial, as a calendar date — undefined when the serial names no real date, which the caller degrades to a plain number rather than emitting an invalid one. Two cases produce that: a negative serial (no date exists before either epoch), and serial 60 in the 1900 system (the phantom leap day). */
@@ -167,7 +194,7 @@ export function isoDateTimeToSerial(
   date1904: boolean,
 ): number {
   const separatorIndex = isoDateTime.indexOf("T");
-  if (separatorIndex !== 10) {
+  if (separatorIndex !== ISO_DATE_LENGTH) {
     throw new BiffWriteError(
       `dateTime value ${JSON.stringify(isoDateTime)} is not an ISO 8601 combined date and time (YYYY-MM-DDTHH:MM:SS), which is the only spelling document-schema.js's 'dateTime' cell value permits`,
     );
@@ -175,6 +202,6 @@ export function isoDateTimeToSerial(
   const datePart = isoDateTime.slice(0, separatorIndex);
   const timeRemainder = isoDateTime.slice(separatorIndex + 1);
   // Drop a trailing offset ('Z', or '+HH:MM'/'-HH:MM' after the time-of-day digits) and any fractional-seconds part, keeping only the HH:MM:SS the ISO_TIME_PATTERN above expects.
-  const timePart = timeRemainder.slice(0, 8);
+  const timePart = timeRemainder.slice(0, ISO_TIME_LENGTH);
   return isoDateToDayCount(datePart, date1904) + isoTimeToDayFraction(timePart);
 }
