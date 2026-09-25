@@ -8,7 +8,11 @@ import { createFileAccess } from "../adapters/fileAccess/createFileAccess";
 import { recordRecentFile } from "../hooks/useRecentFiles";
 import type { OpenedFile } from "../ports/fileAccess";
 import { inferFormatFromFilename } from "../shared/extensionToFormat";
-import { closeButton, dropzoneContent } from "./FileUpload.css";
+import {
+  closeButton,
+  dropzoneContent,
+  settledDropzone,
+} from "./FileUpload.css";
 import { iconFlexShrink, minWidthZero } from "./layout.css";
 
 export interface FileUploadProps {
@@ -92,6 +96,7 @@ export function FileUpload({
       multiple={false}
       loading={loading}
       disabled={disabled}
+      className={file !== undefined ? settledDropzone : undefined}
     >
       {file !== undefined ? (
         <Group

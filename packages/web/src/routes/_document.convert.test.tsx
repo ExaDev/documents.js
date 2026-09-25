@@ -33,6 +33,7 @@ interface CapturedSelect {
   onChange: (value: string | null) => void;
   disabled?: boolean;
   description?: string;
+  inputWrapperOrder?: readonly string[];
 }
 let latestSelects: Record<string, CapturedSelect> = {};
 vi.mock("@mantine/core", async (importOriginal) => {
@@ -349,6 +350,12 @@ describe("ConvertLayout", () => {
       expect(mounted.container.textContent).not.toContain("Could not detect");
       expect(latestSelects.To?.disabled).toBe(false);
       expect(latestSelects.From?.description).toBe("Detected from file");
+      // Under the input, not between label and input. The description is conditional, so in Mantine's default order From's control would sit lower than To's whenever it showed and jump back up when the source was picked by hand.
+      expect(latestSelects.From?.inputWrapperOrder).toEqual([
+        "label",
+        "input",
+        "description",
+      ]);
 
       act(() => {
         latestSelects.To?.onChange(target);

@@ -269,7 +269,8 @@ function ConvertPanel({
                 </Alert>
               )}
 
-              <Group grow>
+              {/* Top-aligned, not the default centre: From carries a conditional description under its input, so a centred row would lift its control above To's whenever that description appears. */}
+              <Group grow align="flex-start">
                 <Select
                   label="From"
                   placeholder="Source format"
@@ -280,6 +281,8 @@ function ConvertPanel({
                   description={
                     detectedFormat === source ? "Detected from file" : undefined
                   }
+                  // Below the input rather than between label and input, which is Mantine's default. This description is conditional, so in the default order the From control sits lower than To whenever it shows and jumps back up when the source is changed by hand. Under the input, both controls in the row stay aligned and the note still reads against the value it describes.
+                  inputWrapperOrder={["label", "input", "description"]}
                 />
                 <Select
                   label="To"
