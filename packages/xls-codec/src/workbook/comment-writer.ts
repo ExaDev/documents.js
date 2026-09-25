@@ -14,6 +14,12 @@ import {
 } from "../biff/string-writer";
 import { BiffWriteError } from "../biff/write-errors";
 
+// TxO's own layout: the rgbUid is 16 bytes, a non-empty text carries one 16-byte TxORun, and the grbit word packs halign at bit 1 and valign at bit 4.
+const UID_BYTE_LENGTH = 16;
+const TXORUN_SIZE = 16;
+const TXO_HALIGN_SHIFT = 1;
+const TXO_VALIGN_SHIFT = 4;
+
 // The write-side counterpart of workbook/comments.ts: a cell's own ContentSheetCellComment written back out as the same Note/Obj/TxO triple BIFF8 splits a legacy comment across ([MS-XLS] 2.4.179/2.4.181/2.4.329) — see that module's own top comment for the full citation of how the three join. Legacy BIFF8 comments carry no threading and no per-comment timestamp at all, so ContentSheetCellComment.replies and .createdAt have nowhere to land here: only .text and .author round-trip through an .xls, exactly the read side's own documented scope.
 //
 // Written as two groups, matching how a real producer (and this reader's own ordering-tolerant pass) lays a worksheet's comments out: every Note record first, then, for each comment in the same order, its own Obj record immediately followed by a TxO record and the one Continue record carrying that TxO's own text and minimal formatting-run trailer.
@@ -42,7 +48,7 @@ function writeFtCmo(objId: number): Uint8Array<ArrayBuffer> {
 
 /** A pseudo-random 16-byte GUID for FtNts's own comment identifier — [MS-XLS] requires the field to be present and does not require it to be globally unique across files, only present, so a fresh random value per comment (rather than a fixed or zero one) is what a real producer's own GUID allocation looks like without this package needing a GUID-formatting dependency. Worker-isomorphic: globalThis.crypto is available in both Node and a Cloudflare Workers isolate, unlike Node's own node:crypto module. */
 function randomGuidBytes(): Uint8Array<ArrayBuffer> {
-  const bytes = new Uint8Array(16);
+  const bytes = new Uint8Array(UID_BYTE_LENGTH);
   globalThis.crypto.getRandomValues(bytes);
   return bytes;
 }
@@ -87,8 +93,10 @@ const TXO_VALIGN_TOP = 1;
 /** TxO ([MS-XLS] 2.4.329) plus the one Continue record carrying its text and formatting-run trailer — see this module's own top comment for why both text and runs can share a single Continue rather than needing one each. cchText is 0 for an empty comment, in which case [MS-XLS] itself requires cbRuns to be 0 too and no Continue record follows at all. */
 function writeTxoRecords(text: string): Uint8Array<ArrayBuffer>[] {
   const cchText = text.length;
-  const cbRuns = cchText === 0 ? 0 : 16;
-  const grbit = (TXO_HALIGN_LEFT << 1) | (TXO_VALIGN_TOP << 4);
+  const cbRuns = cchText === 0 ? 0 : TXORUN_SIZE;
+  const grbit =
+    (TXO_HALIGN_LEFT << TXO_HALIGN_SHIFT) |
+    (TXO_VALIGN_TOP << TXO_VALIGN_SHIFT);
   const txoData = new RecordBuilder()
     .u16(grbit)
     .u16(0) // rot: no rotation

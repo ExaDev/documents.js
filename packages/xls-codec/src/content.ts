@@ -82,6 +82,9 @@ import type {
 } from "./workbook/conditional-format-12";
 import { inchesToPoints } from "./units";
 
+// The page margins a written workbook assumes when none are stated: 0.75in top and bottom, 0.7in left and right, the values a fresh Excel workbook opens with.
+const DEFAULT_MARGIN_INCHES = { wide: 0.75, narrow: 0.7 } as const;
+
 // The join between the BIFF8 record readers and document-schema.js's own spreadsheet vocabulary.
 //
 // The target shape is deliberately the one ooxml.js's readXlsxContent produces, field for field: a ContentDocument of kind 'spreadsheet' holding one ContentSheet per sheet, each with a SPARSE, zero-based cell array (a cell with nothing to show is simply absent, never materialised as an empty one), displayText on every cell, and a numeric cell's real kind resolved through its number format rather than left as a bare number. A caller converting .xls and .xlsx therefore holds the same type with the same conventions, which is the entire point of the shared schema.
@@ -111,10 +114,10 @@ const SHEET_TYPE_WORKSHEET = 0x00;
 const DEFAULT_PRINT_SETTINGS: ContentSheetPrintSettings = {
   pageSize: PAGE_SIZE_LETTER,
   margins: {
-    topPt: inchesToPoints(0.75),
-    rightPt: inchesToPoints(0.7),
-    bottomPt: inchesToPoints(0.75),
-    leftPt: inchesToPoints(0.7),
+    topPt: inchesToPoints(DEFAULT_MARGIN_INCHES.wide),
+    rightPt: inchesToPoints(DEFAULT_MARGIN_INCHES.narrow),
+    bottomPt: inchesToPoints(DEFAULT_MARGIN_INCHES.wide),
+    leftPt: inchesToPoints(DEFAULT_MARGIN_INCHES.narrow),
   },
   gridlines: false,
   headers: false,
