@@ -26,12 +26,14 @@ function loadFixture(name: string): Package {
 
 // A full, real-shape .odp fixture assembled from XML shapes verified against genuine LibreOffice 26.2 output (soffice --headless --convert-to odp on hand-built .fodp source, and an odp -> odp round trip to confirm LibreOffice's OWN writer's exact serialization — see this repository's own commit history for the verification method): multiple draw:page elements in native document order, a rotated text frame, a grouped pair of shapes, an image, a table, and speaker notes, matching this package's other typed-reader tests' established convention of building packages programmatically from ground-truth-verified shapes rather than loading a committed binary fixture (mirroring ooxml.js's own src/typed/pptx/read.test.ts). The residue-row suite below additionally loads one genuine committed Impress fixture (fixtures/transitions.odp, built through the same UNO properties the Impress slide-transition sidebar writes) — the placement facts it pins (transitions on the slide's own drawing-page style) are exactly the kind a programmatic fixture got wrong before it, so real producer output holds them.
 
+// The real 8-byte PNG signature (ISO/IEC 15948 5.2), derived from its own ASCII/control-character reading rather than restated as opaque hex.
+const PNG_SIGNATURE_BYTES: readonly number[] = Array.from(
+  "\x89PNG\r\n\x1a\n",
+  (c) => c.charCodeAt(0),
+);
+
 function tinyPngBase64(): string {
-  return bytesToBase64(
-    new Uint8Array([
-      0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0,
-    ]),
-  );
+  return bytesToBase64(new Uint8Array([...PNG_SIGNATURE_BYTES, 0, 0, 0, 0]));
 }
 
 function stylesXml(): Package["parts"][string] {
@@ -322,7 +324,10 @@ describe("readOdpContent: text:list content inside slide text frames", () => {
     const firstListId = body[1]?.list?.numId;
     const siblingListId = body[6]?.list?.numId;
     const asideListId = aside[0]?.list?.numId;
-    expect(new Set([firstListId, siblingListId, asideListId]).size).toBe(3);
+    const expectedDistinctListIds = 3;
+    expect(new Set([firstListId, siblingListId, asideListId]).size).toBe(
+      expectedDistinctListIds,
+    );
   });
 
   it("leaves list undefined on paragraphs outside any text:list, including one sharing a text box with a list", () => {
@@ -399,7 +404,12 @@ describe("readOdpContent", () => {
       kind: "paragraph",
       runs: [{ text: "Slide One Title" }],
     });
-    expect(title?.rotationDeg).toBeCloseTo(-30, 6);
+    const expectedRotationDeg = -30;
+    const precisionDigits = 6;
+    expect(title?.rotationDeg).toBeCloseTo(
+      expectedRotationDeg,
+      precisionDigits,
+    );
   });
 
   it("flattens a grouped pair of shapes into the slide's own flat shape list, in document order", () => {
@@ -653,7 +663,8 @@ describe("readOdpContent: residue rows", () => {
 
   it("quarantines the REAL transitions.odp fixture's Impress-written smil transitions on their own slides", () => {
     const { slides } = readOdpContent(loadFixture("transitions.odp"));
-    expect(slides).toHaveLength(8);
+    const expectedTransitionSlideCount = 8;
+    expect(slides).toHaveLength(expectedTransitionSlideCount);
     // Genuine Impress output: the transition rides the slide's own drawing-page style as smil:type (with smil:direction where the transition has one, and the legacy presentation:transition-speed alongside), while the style's page-decoration attributes stay out of the residue.
     expect(slides[0]?.source?.format).toBe("odp");
     expect(slides[0]?.source?.xml).toContain(
