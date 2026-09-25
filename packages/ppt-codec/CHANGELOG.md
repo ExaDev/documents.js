@@ -1,3 +1,17 @@
+## [2.2.20](https://github.com/ExaDev/documents.js/compare/ppt-codec%402.2.19...ppt-codec%402.2.20) (2026-09-25)
+
+### Bug Fixes
+
+* **ppt-codec:** name magic numbers across record, document and unit conversion modules ([cc3875c](https://github.com/ExaDev/documents.js/commit/cc3875c04036520921999972f63cd15e6729f60c))
+* **ppt-codec:** name magic numbers in persist, drawing, encryption and read ([356c2f5](https://github.com/ExaDev/documents.js/commit/356c2f5f273df8dbfa4ed4136c9e39157fa9c084))
+* **ppt-codec:** name magic numbers in style.ts, compound-file.ts, current-user.ts and record/tree.ts ([5ce19cd](https://github.com/ExaDev/documents.js/commit/5ce19cd7632fbc73bbac9850c1b03ab4b7846c8f))
+* **ppt-codec:** name magic numbers in test-support/presentation.ts and split it under maxLines ([7999600](https://github.com/ExaDev/documents.js/commit/7999600e5c75d768845e9ff00984a8fdd03b0512))
+
+
+### Dependencies
+
+- Updated byte-codec to 2.0.2
+
 ## [2.2.19](https://github.com/ExaDev/documents.js/compare/ppt-codec%402.2.18...ppt-codec%402.2.19) (2026-09-25)
 
 

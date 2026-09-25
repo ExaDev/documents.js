@@ -1,3 +1,10 @@
+## [8.1.21](https://github.com/ExaDev/documents.js/compare/rtf-codec%408.1.20...rtf-codec%408.1.21) (2026-09-25)
+
+
+### Dependencies
+
+- Updated byte-codec to 2.0.2
+
 ## [8.1.20](https://github.com/ExaDev/documents.js/compare/rtf-codec%408.1.19...rtf-codec%408.1.20) (2026-09-25)
 
 ### Bug Fixes

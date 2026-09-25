@@ -1,3 +1,27 @@
+## [5.1.19](https://github.com/ExaDev/documents.js/compare/wpd-codec%405.1.18...wpd-codec%405.1.19) (2026-09-25)
+
+### Code Refactoring
+
+* **wpd-codec:** derive generic-header fixture row offsets from row size and index ([188a846](https://github.com/ExaDev/documents.js/commit/188a846e6d67ad20dd7f03cbb5d6d3b268593f23))
+* **wpd-codec:** derive the formula code tables from spec order ([e0b1f20](https://github.com/ExaDev/documents.js/commit/e0b1f20491706d51e0d391a3e0b5fee94c026a6c))
+* **wpd-codec:** name magic numbers in box overrides and encryption ([645b298](https://github.com/ExaDev/documents.js/commit/645b298d69c9d8ff44f56bb23f1fc868f9a06c64))
+* **wpd-codec:** name magic numbers in byte view and codec signature ([081f7d9](https://github.com/ExaDev/documents.js/commit/081f7d98d0300c1bd90004c0a82d06669cb518d0))
+* **wpd-codec:** name magic numbers in character-set map and wpg primitives ([afe87ed](https://github.com/ExaDev/documents.js/commit/afe87ed6c1657055491a0a0e5317e6045c5a07a6))
+* **wpd-codec:** name magic numbers in ole, errors, style and structure-fixtures ([70c0090](https://github.com/ExaDev/documents.js/commit/70c0090737696f7aee6d192693b78c73c491b5c7))
+* **wpd-codec:** name magic numbers in prefix index and document summary ([32ca15d](https://github.com/ExaDev/documents.js/commit/32ca15d398dea68ed032c02177b4538cf4ed750e))
+* **wpd-codec:** name magic numbers in the file header ([66ea952](https://github.com/ExaDev/documents.js/commit/66ea95292e307e5bb2dc09f210f15da743bdad7a))
+* **wpd-codec:** name magic numbers in wpg fixture helpers ([a3a2472](https://github.com/ExaDev/documents.js/commit/a3a247200cf50ac4f43595e2d0ed95893bff5bd2))
+* **wpd-codec:** name the last WPG record-field offsets ([85c6f9d](https://github.com/ExaDev/documents.js/commit/85c6f9d03e3a37574ec3cdc083c2c816cb70528a))
+
+### Miscellaneous Chores
+
+* **wpd-codec:** enable no-magic-numbers, scoped off for cited character-set tables ([fb32293](https://github.com/ExaDev/documents.js/commit/fb32293302fdb16a68d0b47ae4ec94baad0e874f))
+
+
+### Dependencies
+
+- Updated byte-codec to 2.0.2
+
 ## [5.1.18](https://github.com/ExaDev/documents.js/compare/wpd-codec%405.1.17...wpd-codec%405.1.18) (2026-09-25)
 
 ### Tests
