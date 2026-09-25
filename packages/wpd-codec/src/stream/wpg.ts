@@ -10,6 +10,48 @@ import type {
 import { byteAt, int16At, uint16At, uint32At } from "../bytes/view";
 import { readPrimitiveVector } from "./wpg-primitives";
 
+// Offsets inside the 26-byte WPG prefix header, past the 4-byte file ID: the record-start long, the product type and file type bytes, the major version, and the encryption flag word.
+const PREFIX_RECORD_START_OFFSET = 4;
+const PREFIX_PRODUCT_TYPE_OFFSET = 8;
+const PREFIX_FILE_TYPE_OFFSET = 9;
+const PREFIX_MAJOR_VERSION_OFFSET = 10;
+const PREFIX_ENCRYPTION_FLAG_OFFSET = 12;
+
+// A Start WPG record needs its two units-per-inch words, the precision byte, and the four viewport coordinates before the extent is even reachable; the extent sits after those five bytes, and its own four coordinates (left, bottom, right, top) follow, with the extent's first coordinate three viewport steps past its start.
+const START_WPG_MIN_SIZE = 13;
+const START_WPG_PRECISION_OFFSET = 4;
+const RGBA_ALPHA_OFFSET = 3;
+const WPG_FILE_ID_LAST = 3;
+const START_WPG_EXTENT_OFFSET = 5;
+const VIEWPORT_COORDINATE_COUNT = 4;
+const EXTENT_FIRST_COORDINATE = 3;
+const RGBA_ALPHA_16_OFFSET = 6;
+const HEX_RADIX = 16;
+
+// The WPG integer encoding's own bounds: a value up to 0xfe is itself, a following short is a 16-bit value, and a short with its top bit set escapes to a 30-bit long spread across both halves.
+const WPG_INTEGER_DIRECT_MAX = 0xfe;
+const WPG_SHORT_INTEGER_SIZE = 3;
+const WPG_LONG_INTEGER_SIZE = 5;
+const WPG_LONG_ESCAPE_MASK = 0x8000;
+const WPG_LONG_VALUE_MASK = 0x7fff;
+const USHORT_BITS = 16;
+const USHORT_FIELD_SIZE = 2;
+const ULONG_FIELD_SIZE = 4;
+const EDIT_LOCK_FIELD_SIZE = 4;
+
+// Double-precision coordinates are 16.16 fixed point.
+const FIXED_POINT_ONE = 0x10000;
+
+// Colour channels as the document model wants them: a 0..1 fraction of the type's own maximum.
+const RGBA_COMPONENT_COUNT = 4;
+const RGBA16_BYTE_LENGTH = 8;
+const USHORT_BYTES = 2;
+const UINT8_MAX = 255;
+const UINT16_MAX = 65535;
+
+// The WPG file ID, spelled as the four bytes it is compared against.
+const WPG_FILE_ID = Array.from("\u00ffWPC", (char) => char.charCodeAt(0));
+
 // — WPG (WordPerfect Graphic) vector graphics, per the SDK's "WordPerfect Graphic File Format" pages --
 //
 // A WPG file opens with the same 26-byte prefix family a WordPerfect document does (file ID FF 57 50 43, a long pointer to the data, product/file-type/version bytes), distinguished from a document by its file-type byte 22 (0x16). From the pointer onwards it is an ordered sequence of drawing records: a header of Class (1 byte), Type (1 byte), Extension (a count field, 1/3/5 bytes), and Length (the same count-field coding), then exactly Length bytes of data. The Extension count groups physical records into logical ones — a record whose count is N is followed by N more records belonging to it, and a grouped logical record counts as one record to the next outermost group's count. A Group record's children are independent objects each with their own attributes; every other grouped record's children belong to their opener (a Text Block's Text Data, a Bitmap's palette and data, a Compound Polygon's paths), so when this reader skips a grouped record it skips the whole group and walks on only after that group's members have passed. The one opener whose member still walks after a successful decode is the Text Block: its Text Data extension is the payload itself, folded through the injected WP fold rather than skipped with it.
@@ -37,75 +79,132 @@ const RECORD_BRUSH_FORE_COLOR = 0x31;
 const RECORD_DP_BRUSH_FORE_COLOR = 0x32;
 
 // The record names reported for skipped records, keyed by type number so the diagnostic can name exactly what a given file carried. Only the types the specification names are listed; an unknown type number reports its number. The types this decoder otherwise gives a meaning to appear here too, because each has a spelling that refuses it (a Start WPG too short to carry an extent, a Text Data with no Text Block before it, a Polyline or Rectangle carrying a transformation, a partial Arc) and a refusal that names its record is the contract the caller's diagnostic reports.
+// The WPG spec's own function numbers, one constant per record type, keyed here so a skipped-record diagnostic names what the file carried.
+const WPG_START_WPG = 0x01;
+const WPG_FORM_SETTINGS = 0x03;
+const WPG_RULER_SETTINGS = 0x04;
+const WPG_GRID_SETTINGS = 0x05;
+const WPG_LAYER = 0x06;
+const WPG_OBJECTLINK = 0x07;
+const WPG_PEN_STYLE_DEFINITION = 0x08;
+const WPG_PATTERN_DEFINITION = 0x09;
+const WPG_COMMENT = 0x0a;
+const WPG_COLOR_TRANSFER = 0x0b;
+const WPG_COLOR_PALETTE = 0x0c;
+const WPG_DP_COLOR_PALETTE = 0x0d;
+const WPG_BITMAP_DATA = 0x0e;
+const WPG_TEXT_DATA = 0x0f;
+const WPG_CHART_STYLE = 0x10;
+const WPG_CHART_DATA = 0x11;
+const WPG_OBJECT_IMAGE = 0x12;
+const WPG_POLYLINE = 0x15;
+const WPG_POLYSPLINE = 0x16;
+const WPG_POLYCURVE = 0x17;
+const WPG_RECTANGLE = 0x18;
+const WPG_ARC = 0x19;
+const WPG_COMPOUND_POLYGON = 0x1a;
+const WPG_BITMAP = 0x1b;
+const WPG_TEXT_LINE = 0x1c;
+const WPG_TEXT_BLOCK = 0x1d;
+const WPG_TEXT_PATH = 0x1e;
+const WPG_CHART = 0x1f;
+const WPG_OBJECT_CAPSULE = 0x21;
+const WPG_FONT_SETTINGS = 0x22;
+const WPG_PEN_BACK_COLOR = 0x27;
+const WPG_DP_PEN_BACK_COLOR = 0x28;
+const WPG_PEN_STYLE = 0x29;
+const WPG_PEN_PATTERN = 0x2a;
+const WPG_LINE_CAP = 0x2d;
+const WPG_LINE_JOIN = 0x2e;
+const WPG_BRUSH_GRADIENT = 0x2f;
+const WPG_DP_BRUSH_GRADIENT = 0x30;
+const WPG_BRUSH_BACK_COLOR = 0x33;
+const WPG_DP_BRUSH_BACK_COLOR = 0x34;
+const WPG_BRUSH_PATTERN = 0x35;
+const WPG_HORIZONTAL_LINE = 0x36;
+const WPG_VERTICAL_LINE = 0x37;
+const WPG_POSTER_SETTINGS = 0x38;
+const WPG_IMAGE_STATE = 0x39;
+const WPG_ENVELOPE_DEFINITION = 0x3a;
+const WPG_ENVELOPE = 0x3b;
+const WPG_TEXTURE_DEFINITION = 0x3c;
+const WPG_BRUSH_TEXTURE = 0x3d;
+const WPG_TEXTURE_ALIGNMENT = 0x3e;
+const WPG_PEN_TEXTURE = 0x3f;
+
 const RECORD_NAMES: ReadonlyMap<number, string> = new Map([
-  [0x01, "Start WPG"],
-  [0x03, "Form Settings"],
-  [0x04, "Ruler Settings"],
-  [0x05, "Grid Settings"],
-  [0x06, "Layer"],
-  [0x07, "ObjectLink"],
-  [0x08, "Pen Style Definition"],
-  [0x09, "Pattern Definition"],
-  [0x0a, "Comment"],
-  [0x0b, "Color Transfer"],
-  [0x0c, "Color Palette"],
-  [0x0d, "DP Color Palette"],
-  [0x0e, "Bitmap Data"],
-  [0x0f, "Text Data"],
-  [0x10, "Chart Style"],
-  [0x11, "Chart Data"],
-  [0x12, "Object Image"],
-  [0x15, "Polyline"],
-  [0x16, "Polyspline"],
-  [0x17, "Polycurve"],
-  [0x18, "Rectangle"],
-  [0x19, "Arc"],
-  [0x1a, "Compound Polygon"],
-  [0x1b, "Bitmap"],
-  [0x1c, "Text Line"],
-  [0x1d, "Text Block"],
-  [0x1e, "Text Path"],
-  [0x1f, "Chart"],
-  [0x21, "Object Capsule"],
-  [0x22, "Font Settings"],
-  [0x27, "Pen Back Color"],
-  [0x28, "DP Pen Back Color"],
-  [0x29, "Pen Style"],
-  [0x2a, "Pen Pattern"],
-  [0x2d, "Line Cap"],
-  [0x2e, "Line Join"],
-  [0x2f, "Brush Gradient"],
-  [0x30, "DP Brush Gradient"],
-  [0x33, "Brush Back Color"],
-  [0x34, "DP Brush Back Color"],
-  [0x35, "Brush Pattern"],
-  [0x36, "Horizontal Line"],
-  [0x37, "Vertical Line"],
-  [0x38, "Poster Settings"],
-  [0x39, "Image State"],
-  [0x3a, "Envelope Definition"],
-  [0x3b, "Envelope"],
-  [0x3c, "Texture Definition"],
-  [0x3d, "Brush Texture"],
-  [0x3e, "Texture Alignment"],
-  [0x3f, "Pen Texture"],
+  [WPG_START_WPG, "Start WPG"],
+  [WPG_FORM_SETTINGS, "Form Settings"],
+  [WPG_RULER_SETTINGS, "Ruler Settings"],
+  [WPG_GRID_SETTINGS, "Grid Settings"],
+  [WPG_LAYER, "Layer"],
+  [WPG_OBJECTLINK, "ObjectLink"],
+  [WPG_PEN_STYLE_DEFINITION, "Pen Style Definition"],
+  [WPG_PATTERN_DEFINITION, "Pattern Definition"],
+  [WPG_COMMENT, "Comment"],
+  [WPG_COLOR_TRANSFER, "Color Transfer"],
+  [WPG_COLOR_PALETTE, "Color Palette"],
+  [WPG_DP_COLOR_PALETTE, "DP Color Palette"],
+  [WPG_BITMAP_DATA, "Bitmap Data"],
+  [WPG_TEXT_DATA, "Text Data"],
+  [WPG_CHART_STYLE, "Chart Style"],
+  [WPG_CHART_DATA, "Chart Data"],
+  [WPG_OBJECT_IMAGE, "Object Image"],
+  [WPG_POLYLINE, "Polyline"],
+  [WPG_POLYSPLINE, "Polyspline"],
+  [WPG_POLYCURVE, "Polycurve"],
+  [WPG_RECTANGLE, "Rectangle"],
+  [WPG_ARC, "Arc"],
+  [WPG_COMPOUND_POLYGON, "Compound Polygon"],
+  [WPG_BITMAP, "Bitmap"],
+  [WPG_TEXT_LINE, "Text Line"],
+  [WPG_TEXT_BLOCK, "Text Block"],
+  [WPG_TEXT_PATH, "Text Path"],
+  [WPG_CHART, "Chart"],
+  [WPG_OBJECT_CAPSULE, "Object Capsule"],
+  [WPG_FONT_SETTINGS, "Font Settings"],
+  [WPG_PEN_BACK_COLOR, "Pen Back Color"],
+  [WPG_DP_PEN_BACK_COLOR, "DP Pen Back Color"],
+  [WPG_PEN_STYLE, "Pen Style"],
+  [WPG_PEN_PATTERN, "Pen Pattern"],
+  [WPG_LINE_CAP, "Line Cap"],
+  [WPG_LINE_JOIN, "Line Join"],
+  [WPG_BRUSH_GRADIENT, "Brush Gradient"],
+  [WPG_DP_BRUSH_GRADIENT, "DP Brush Gradient"],
+  [WPG_BRUSH_BACK_COLOR, "Brush Back Color"],
+  [WPG_DP_BRUSH_BACK_COLOR, "DP Brush Back Color"],
+  [WPG_BRUSH_PATTERN, "Brush Pattern"],
+  [WPG_HORIZONTAL_LINE, "Horizontal Line"],
+  [WPG_VERTICAL_LINE, "Vertical Line"],
+  [WPG_POSTER_SETTINGS, "Poster Settings"],
+  [WPG_IMAGE_STATE, "Image State"],
+  [WPG_ENVELOPE_DEFINITION, "Envelope Definition"],
+  [WPG_ENVELOPE, "Envelope"],
+  [WPG_TEXTURE_DEFINITION, "Texture Definition"],
+  [WPG_BRUSH_TEXTURE, "Brush Texture"],
+  [WPG_TEXTURE_ALIGNMENT, "Texture Alignment"],
+  [WPG_PEN_TEXTURE, "Pen Texture"],
 ]);
 
 // Characterisation flag bits, per the SDK's own table: bits 0-4 state that optional transformation data follows (taper, translate, skew, scale, rotate — every one a transformation this decoder refuses a record for), bit 5 an Object ID, bit 7 an edit-lock descriptor, and the high byte's two-state options — bit 12 the winding path rule, bit 13 fill, bit 14 close, bit 15 frame.
 const FLAG_TAPER = 1 << 0;
 const FLAG_TRANSLATE = 1 << 1;
 const FLAG_SKEW = 1 << 2;
-const FLAG_SCALE = 1 << 3;
-const FLAG_ROTATE = 1 << 4;
-const FLAG_OBJECT_ID = 1 << 5;
-const FLAG_EDIT_LOCK = 1 << 7;
-export const FLAG_PATH_WINDING = 1 << 12;
-export const FLAG_FILL = 1 << 13;
-export const FLAG_CLOSE = 1 << 14;
-export const FLAG_FRAME = 1 << 15;
+const FLAG_SCALE = 0x0008;
+const FLAG_ROTATE = 0x0010;
+const FLAG_OBJECT_ID = 0x0020;
+const FLAG_EDIT_LOCK = 0x0080;
+export const FLAG_PATH_WINDING = 0x1000;
+export const FLAG_FILL = 0x2000;
+export const FLAG_CLOSE = 0x4000;
+export const FLAG_FRAME = 0x8000;
 
 // The one approximation this decoder makes: a rounded Rectangle's corners are quarter ellipses, and the shared path model carries only straight and cubic segments, so each quarter becomes the standard cubic approximation of a quarter ellipse — control points offset by 4/3*(sqrt(2)-1) of the radii, the identical bounded approximation this family's SVG path module applies to elliptical arcs at no more than 90 degrees per cubic. Derived from the circle constant here rather than hard-coded, so the geometry and its derivation stay checkable together.
-export const QUARTER_ELLIPSE_KAPPA = (4 / 3) * (Math.SQRT2 - 1);
+const QUARTER_ELLIPSE_KAPPA_NUMERATOR = 4;
+const QUARTER_ELLIPSE_KAPPA_DENOMINATOR = 3;
+export const QUARTER_ELLIPSE_KAPPA =
+  (QUARTER_ELLIPSE_KAPPA_NUMERATOR / QUARTER_ELLIPSE_KAPPA_DENOMINATOR) *
+  (Math.SQRT2 - 1);
 
 // The WPG prefix's own product/file-type/version gates: product type 1 ("always 1 for WPG files"), file type 22 (0x16, "always 22 for WPG files"), and the major version byte that separates the two record vocabularies (2 for the framed record stream this decoder reads, 1 for WPG 1.0's earlier type-and-length-only stream it refuses).
 const WPG_PRODUCT_TYPE = 1;
@@ -177,21 +276,24 @@ function readCountField(
   if (first === undefined) {
     return undefined;
   }
-  if (first <= 0xfe) {
+  if (first <= WPG_INTEGER_DIRECT_MAX) {
     return { value: first, next: cursor + 1 };
   }
-  if (cursor + 3 > bytes.length) {
+  if (cursor + WPG_SHORT_INTEGER_SIZE > bytes.length) {
     return undefined;
   }
   const shortValue = uint16At(bytes, cursor + 1);
-  if ((shortValue & 0x8000) === 0) {
-    return { value: shortValue, next: cursor + 3 };
+  if ((shortValue & WPG_LONG_ESCAPE_MASK) === 0) {
+    return { value: shortValue, next: cursor + WPG_SHORT_INTEGER_SIZE };
   }
-  if (cursor + 5 > bytes.length) {
+  if (cursor + WPG_LONG_INTEGER_SIZE > bytes.length) {
     return undefined;
   }
-  const lowHalf = uint16At(bytes, cursor + 3);
-  return { value: ((shortValue & 0x7fff) << 16) + lowHalf, next: cursor + 5 };
+  const lowHalf = uint16At(bytes, cursor + WPG_SHORT_INTEGER_SIZE);
+  return {
+    value: ((shortValue & WPG_LONG_VALUE_MASK) << USHORT_BITS) + lowHalf,
+    next: cursor + WPG_LONG_INTEGER_SIZE,
+  };
 }
 
 // Reads one coordinate at the stream's stated precision: a signed 16-bit unit in single precision, a 32-bit 16.16 fixed-point value in double ("Corel products use the fractional portion for rounding only", so the fraction is kept rather than truncated).
@@ -203,7 +305,7 @@ export function coordinateAt(
   if (!doublePrecision) {
     return int16At(bytes, offset);
   }
-  return uint32At(bytes, offset) / 0x10000;
+  return uint32At(bytes, offset) / FIXED_POINT_ONE;
 }
 
 // The characterisation flags word plus the walk past the optional data its low bits state — exactly as far as this decoder needs: past the edit-lock descriptor and the Object ID. A record carrying any transformation flag (taper/translate/skew/scale/rotate) is refused whole, so the transformation elements themselves are never walked past — like every other refusal this function makes, that is undefined, not a sentinel value inside an otherwise-valid result for callers to separately test.
@@ -221,11 +323,14 @@ export function readCharacterization(
     }
     let geometryAt = cursor + 2;
     if ((flags & FLAG_EDIT_LOCK) !== 0) {
-      geometryAt += 4;
+      geometryAt += EDIT_LOCK_FIELD_SIZE;
     }
     if ((flags & FLAG_OBJECT_ID) !== 0) {
       // An Object ID is a short, or a long when the short's high bit is set.
-      geometryAt += (uint16At(bytes, geometryAt) & 0x8000) !== 0 ? 4 : 2;
+      geometryAt +=
+        (uint16At(bytes, geometryAt) & WPG_LONG_ESCAPE_MASK) !== 0
+          ? ULONG_FIELD_SIZE
+          : USHORT_FIELD_SIZE;
     }
     return { flags, geometryAt };
   } catch {
@@ -273,27 +378,27 @@ export function fillOf(state: WpgRenditionState): {
 
 // A single-precision colour record: four bytes, red first, then green, blue, and transparency ("where 255 is 100%").
 function readSingleColor(data: Uint8Array): WpgColor | undefined {
-  if (data.length < 4) {
+  if (data.length < RGBA_COMPONENT_COUNT) {
     return undefined;
   }
   return {
-    r: byteAt(data, 0) / 255,
-    g: byteAt(data, 1) / 255,
-    b: byteAt(data, 2) / 255,
-    a: byteAt(data, 3) / 255,
+    r: byteAt(data, 0) / UINT8_MAX,
+    g: byteAt(data, 1) / UINT8_MAX,
+    b: byteAt(data, 2) / UINT8_MAX,
+    a: byteAt(data, RGBA_ALPHA_OFFSET) / UINT8_MAX,
   };
 }
 
 // A double-precision colour record: the same four components as shorts on the same 0..1 scale, 65535 standing for 100%.
 function readDoubleColor(data: Uint8Array): WpgColor | undefined {
-  if (data.length < 8) {
+  if (data.length < RGBA16_BYTE_LENGTH) {
     return undefined;
   }
   return {
-    r: uint16At(data, 0) / 65535,
-    g: uint16At(data, 2) / 65535,
-    b: uint16At(data, 4) / 65535,
-    a: uint16At(data, 6) / 65535,
+    r: uint16At(data, 0) / UINT16_MAX,
+    g: uint16At(data, USHORT_BYTES) / UINT16_MAX,
+    b: uint16At(data, 2 * USHORT_BYTES) / UINT16_MAX,
+    a: uint16At(data, RGBA_ALPHA_16_OFFSET) / UINT16_MAX,
   };
 }
 
@@ -310,16 +415,16 @@ export function decodeWpgGraphic(
     index += 1
   ) {
     if (
-      byteAt(bytes, index) !== 0xff ||
-      byteAt(bytes, index + 1) !== 0x57 ||
-      byteAt(bytes, index + 2) !== 0x50 ||
-      byteAt(bytes, index + 3) !== 0x43
+      byteAt(bytes, index) !== WPG_FILE_ID[0] ||
+      byteAt(bytes, index + 1) !== WPG_FILE_ID[1] ||
+      byteAt(bytes, index + 2) !== WPG_FILE_ID[2] ||
+      byteAt(bytes, index + WPG_FILE_ID_LAST) !== WPG_FILE_ID[WPG_FILE_ID_LAST]
     ) {
       continue;
     }
     if (
-      byteAt(bytes, index + 8) !== WPG_PRODUCT_TYPE ||
-      byteAt(bytes, index + 9) !== WPG_FILE_TYPE
+      byteAt(bytes, index + PREFIX_PRODUCT_TYPE_OFFSET) !== WPG_PRODUCT_TYPE ||
+      byteAt(bytes, index + PREFIX_FILE_TYPE_OFFSET) !== WPG_FILE_TYPE
     ) {
       continue;
     }
@@ -329,18 +434,18 @@ export function decodeWpgGraphic(
   if (start < 0) {
     return undefined;
   }
-  const majorVersion = byteAt(bytes, start + 10);
+  const majorVersion = byteAt(bytes, start + PREFIX_MAJOR_VERSION_OFFSET);
   if (majorVersion === WPG_MAJOR_1) {
     return { status: "refused", reason: "wpg1" };
   }
   if (majorVersion !== WPG_MAJOR_2) {
     return { status: "refused", reason: "malformed" };
   }
-  if (uint16At(bytes, start + 12) !== 0) {
+  if (uint16At(bytes, start + PREFIX_ENCRYPTION_FLAG_OFFSET) !== 0) {
     return { status: "refused", reason: "encrypted" };
   }
   // Neither half of the original "recordStart < start + WPG_PREFIX_HEAD_SIZE || recordStart >= bytes.length" guard is needed as a check of its own. A recordStart at or past bytes.length makes cursor (start + recordStart, below) at least bytes.length too, and the record walk's own leading read breaks on its very first iteration for any such cursor. A recordStart landing inside the fixed 26-byte header instead points the walk at bytes this format never lays out as a record: the header's own critical fields (product type, file type, major version) are already validated at their own fixed offsets regardless of recordStart, and the remaining header bytes are too few (well short of the 25 a minimal Start WPG record needs) to ever assemble into one — verified directly, not just argued, by removing this guard outright and confirming every test in this file (including the leading-garbage and corrupted-recordStart fixtures written specifically to probe it) still passes. Either way, geometry never gets set, and this function's own later `if (geometry === undefined)` check refuses with the identical {malformed} result no matter how recordStart itself went wrong.
-  const recordStart = uint32At(bytes, start + 4);
+  const recordStart = uint32At(bytes, start + PREFIX_RECORD_START_OFFSET);
 
   const state: WpgRenditionState = {
     penColor: { ...WPG_DEFAULT_BLACK },
@@ -358,7 +463,7 @@ export function decodeWpgGraphic(
   let cursor = start + recordStart;
 
   const recordName = (type: number): string =>
-    RECORD_NAMES.get(type) ?? `record type 0x${type.toString(16)}`;
+    RECORD_NAMES.get(type) ?? `record type 0x${type.toString(HEX_RADIX)}`;
 
   // The loop's own termination: byteAt throws (via its own bounds check) the moment there is no room left even for the Class/Type pair, caught here to end the walk with whatever was already decoded, rather than a separate "cursor + 2 > bytes.length" pre-check whose own threshold exactly matches byteAt's own — the two could never disagree on any input.
   for (;;) {
@@ -401,13 +506,13 @@ export function decodeWpgGraphic(
       switch (type) {
         case RECORD_START_WPG: {
           // [h units/inch][v units/inch]<precision>[viewport 4 coords][extent 4 coords][next Object ID]. The viewport is a clipping rectangle this reader does not model and the next-Object-ID field is editing state; both are stepped over by the record's own length.
-          if (data.length < 13) {
+          if (data.length < START_WPG_MIN_SIZE) {
             skipped.add(recordName(type));
             break;
           }
           const xPpi = uint16At(data, 0);
           const yPpi = uint16At(data, 2);
-          const precision = byteAt(data, 4);
+          const precision = byteAt(data, START_WPG_PRECISION_OFFSET);
           if (
             xPpi === 0 ||
             yPpi === 0 ||
@@ -416,9 +521,16 @@ export function decodeWpgGraphic(
             return { status: "refused", reason: "malformed" };
           }
           const doublePrecision = precision === 1;
-          const coordinateSize = doublePrecision ? 4 : 2;
-          const extentAt = 5 + coordinateSize * 4;
-          if (extentAt + coordinateSize * 4 > data.length) {
+          const coordinateSize = doublePrecision
+            ? ULONG_FIELD_SIZE
+            : USHORT_FIELD_SIZE;
+          const extentAt =
+            START_WPG_EXTENT_OFFSET +
+            coordinateSize * VIEWPORT_COORDINATE_COUNT;
+          if (
+            extentAt + coordinateSize * VIEWPORT_COORDINATE_COUNT >
+            data.length
+          ) {
             return { status: "refused", reason: "malformed" };
           }
           const left = coordinateAt(data, extentAt, doublePrecision);
@@ -434,7 +546,7 @@ export function decodeWpgGraphic(
           );
           const top = coordinateAt(
             data,
-            extentAt + coordinateSize * 3,
+            extentAt + coordinateSize * EXTENT_FIRST_COORDINATE,
             doublePrecision,
           );
           geometry = {
@@ -470,14 +582,14 @@ export function decodeWpgGraphic(
           break;
         }
         case RECORD_PEN_SIZE: {
-          if (data.length >= 4) {
+          if (data.length >= RGBA_COMPONENT_COUNT) {
             state.penWidthUnits = uint16At(data, 0);
           }
           break;
         }
         case RECORD_DP_PEN_SIZE: {
-          if (data.length >= 8) {
-            state.penWidthUnits = uint32At(data, 0) / 0x10000;
+          if (data.length >= RGBA16_BYTE_LENGTH) {
+            state.penWidthUnits = uint32At(data, 0) / FIXED_POINT_ONE;
           }
           break;
         }
@@ -577,7 +689,9 @@ function readTextBlockFrame(
   const characterization = readCharacterization(data, 0);
   if (
     characterization === undefined ||
-    characterization.geometryAt + geometry.coordinateSize * 4 > data.length
+    characterization.geometryAt +
+      geometry.coordinateSize * VIEWPORT_COORDINATE_COUNT >
+      data.length
   ) {
     return undefined;
   }
@@ -593,7 +707,7 @@ function readTextBlockFrame(
     ),
     coordinateAt(
       data,
-      at + geometry.coordinateSize * 3,
+      at + geometry.coordinateSize * EXTENT_FIRST_COORDINATE,
       geometry.doublePrecision,
     ),
   );

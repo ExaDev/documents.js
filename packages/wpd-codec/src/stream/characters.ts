@@ -15,50 +15,81 @@
 import { WP6_CHARACTER_SETS } from "./character-sets";
 
 // The SDK's "Default Extended International Characters" table, byte value 1..32 in order, each with the (character set, character number) pair the table states in parentheses beside the glyph. Both halves matter: the glyph decodes the single-byte shorthand, and the pair is one of the two independent sources WP6_CHARACTER_SETS' own set-1 table is cross-checked against (see ./character-sets) — every one of these thirty-two entries, transcribed here directly from the SDK rather than from libwpd, resolves to the identical glyph at the identical character number in that table.
+// Set-1 character numbers for the thirty-two shorthands, straight from the SDK's own table, named by the glyph each stands for.
+const SET1_A_RING = 35;
+const SET1_A_RING_2 = 34;
+const SET1_AE = 37;
+const SET1_AE_2 = 36;
+const SET1_A_DIAERESIS = 31;
+const SET1_A_DIAERESIS_2 = 30;
+const SET1_A_ACUTE = 27;
+const SET1_A_GRAVE = 33;
+const SET1_A_CIRCUMFLEX = 29;
+const SET1_A_TILDE = 77;
+const SET1_A_TILDE_2 = 76;
+const SET1_C_CEDILLA = 39;
+const SET1_C_CEDILLA_2 = 38;
+const SET1_E_DIAERESIS = 45;
+const SET1_E_ACUTE = 41;
+const SET1_E_ACUTE_2 = 40;
+const SET1_E_GRAVE = 47;
+const SET1_E_CIRCUMFLEX = 43;
+const SET1_I_ACUTE = 49;
+const SET1_N_TILDE = 57;
+const SET1_N_TILDE_2 = 56;
+const SET1_O_SLASH = 81;
+const SET1_O_SLASH_2 = 80;
+const SET1_O_TILDE = 83;
+const SET1_O_TILDE_2 = 82;
+const SET1_O_DIAERESIS = 63;
+const SET1_O_DIAERESIS_2 = 62;
+const SET1_U_DIAERESIS = 71;
+const SET1_U_DIAERESIS_2 = 70;
+const SET1_U_ACUTE = 67;
+const SET1_U_GRAVE = 73;
+const SET1_SHARP_S = 23;
+
+// The shorthands in byte order, 1 through 32: the byte value each carries is its position in this list plus one, so it is not restated per row.
 const DEFAULT_EXTENDED_INTERNATIONAL: readonly (readonly [
-  byteValue: number,
   characterNumber: number,
   glyph: string,
 ])[] = [
-  [0x01, 35, "å"], // a-ring
-  [0x02, 34, "Å"], // A-ring
-  [0x03, 37, "æ"], // ae
-  [0x04, 36, "Æ"], // AE
-  [0x05, 31, "ä"], // a-diaeresis
-  [0x06, 30, "Ä"], // A-diaeresis
-  [0x07, 27, "á"], // a-acute
-  [0x08, 33, "à"], // a-grave
-  [0x09, 29, "â"], // a-circumflex
-  [0x0a, 77, "ã"], // a-tilde
-  [0x0b, 76, "Ã"], // A-tilde
-  [0x0c, 39, "ç"], // c-cedilla
-  [0x0d, 38, "Ç"], // C-cedilla
-  [0x0e, 45, "ë"], // e-diaeresis
-  [0x0f, 41, "é"], // e-acute
-  [0x10, 40, "É"], // E-acute
-  [0x11, 47, "è"], // e-grave
-  [0x12, 43, "ê"], // e-circumflex
-  [0x13, 49, "í"], // i-acute
-  [0x14, 57, "ñ"], // n-tilde
-  [0x15, 56, "Ñ"], // N-tilde
-  [0x16, 81, "ø"], // o-slash
-  [0x17, 80, "Ø"], // O-slash
-  [0x18, 83, "õ"], // o-tilde
-  [0x19, 82, "Õ"], // O-tilde
-  [0x1a, 63, "ö"], // o-diaeresis
-  [0x1b, 62, "Ö"], // O-diaeresis
-  [0x1c, 71, "ü"], // u-diaeresis
-  [0x1d, 70, "Ü"], // U-diaeresis
-  [0x1e, 67, "ú"], // u-acute
-  [0x1f, 73, "ù"], // u-grave
-  [0x20, 23, "ß"], // sharp s
+  [SET1_A_RING, "å"],
+  [SET1_A_RING_2, "Å"],
+  [SET1_AE, "æ"],
+  [SET1_AE_2, "Æ"],
+  [SET1_A_DIAERESIS, "ä"],
+  [SET1_A_DIAERESIS_2, "Ä"],
+  [SET1_A_ACUTE, "á"],
+  [SET1_A_GRAVE, "à"],
+  [SET1_A_CIRCUMFLEX, "â"],
+  [SET1_A_TILDE, "ã"],
+  [SET1_A_TILDE_2, "Ã"],
+  [SET1_C_CEDILLA, "ç"],
+  [SET1_C_CEDILLA_2, "Ç"],
+  [SET1_E_DIAERESIS, "ë"],
+  [SET1_E_ACUTE, "é"],
+  [SET1_E_ACUTE_2, "É"],
+  [SET1_E_GRAVE, "è"],
+  [SET1_E_CIRCUMFLEX, "ê"],
+  [SET1_I_ACUTE, "í"],
+  [SET1_N_TILDE, "ñ"],
+  [SET1_N_TILDE_2, "Ñ"],
+  [SET1_O_SLASH, "ø"],
+  [SET1_O_SLASH_2, "Ø"],
+  [SET1_O_TILDE, "õ"],
+  [SET1_O_TILDE_2, "Õ"],
+  [SET1_O_DIAERESIS, "ö"],
+  [SET1_O_DIAERESIS_2, "Ö"],
+  [SET1_U_DIAERESIS, "ü"],
+  [SET1_U_DIAERESIS_2, "Ü"],
+  [SET1_U_ACUTE, "ú"],
+  [SET1_U_GRAVE, "ù"],
+  [SET1_SHARP_S, "ß"],
 ];
 
 const SINGLE_BYTE_SHORTHAND: ReadonlyMap<number, string> = new Map(
-  DEFAULT_EXTENDED_INTERNATIONAL.map(([byteValue, , glyph]) => [
-    byteValue,
-    glyph,
-  ]),
+  DEFAULT_EXTENDED_INTERNATIONAL.map(([, glyph], index) => [index + 1, glyph]),
 );
 
 // The lowest byte value that is a literal ASCII character rather than one of the thirty-two international shorthands.
@@ -72,7 +103,13 @@ export const UNMAPPED_CHARACTER = "�";
 
 // Character set 0 is ASCII. The SDK's table runs 33 (0x21) to 127 (0x7F) and each entry maps to the identically-numbered ASCII character; the range below starts at 32 because a set-0 character *number* of 32 (reached through the extended-character function, or inside a word string) genuinely is a space — it is only the single-byte document stream where byte 0x20 means something else.
 function decodeAsciiSet(characterNumber: number): string | undefined {
-  if (characterNumber < 0x20 || characterNumber > 0x7f) {
+  // A set-0 character number is printable ASCII: 0x20 (a space as a number, even though byte 0x20 in the single-byte stream is not) through 0x7f.
+  const FIRST_ASCII_CHARACTER_NUMBER = 0x20;
+  const LAST_ASCII_CHARACTER_NUMBER = 0x7f;
+  const isAsciiNumber = (candidate: number): boolean =>
+    candidate >= FIRST_ASCII_CHARACTER_NUMBER &&
+    candidate <= LAST_ASCII_CHARACTER_NUMBER;
+  if (!isAsciiNumber(characterNumber)) {
     return undefined;
   }
   return String.fromCharCode(characterNumber);
