@@ -9,6 +9,7 @@ import { parsePackage } from "../../package-io/read";
 import {
   CellFormatTable,
   DEFAULT_CELL_FORMAT_INDEX,
+  FIRST_CUSTOM_NUM_FMT_ID,
   GENERAL_NUM_FMT_ID,
   assertNeverContentStrokeStyle,
   assertNeverDeclaredFillKind,
@@ -118,41 +119,73 @@ describe("CellFormatTable: the write-side interner, mirroring SharedStringTable"
 
   it("references a built-in format by its own id, declaring no <numFmt> for it", () => {
     const table = new CellFormatTable();
-    expect(table.intern({ kind: "builtin", id: 10 })).toBe(1);
-    expect(table.cellFormats()).toEqual([GENERAL_NUM_FMT_ID, 10]);
+    // ECMA-376's built-in id for "0.00%" (Percent, 2 decimal places).
+    const BUILTIN_PERCENT_2DP_FMT_ID = 10;
+    expect(
+      table.intern({ kind: "builtin", id: BUILTIN_PERCENT_2DP_FMT_ID }),
+    ).toBe(1);
+    expect(table.cellFormats()).toEqual([
+      GENERAL_NUM_FMT_ID,
+      BUILTIN_PERCENT_2DP_FMT_ID,
+    ]);
     expect(table.declarations()).toEqual([]);
   });
 
   it("assigns custom codes ids from 164 upward, the first id a file may declare for itself", () => {
     const table = new CellFormatTable();
+    const SECOND_CUSTOM_NUM_FMT_ID = FIRST_CUSTOM_NUM_FMT_ID + 1;
     expect(table.intern({ kind: "custom", code: "yyyy\\-mm\\-dd" })).toBe(1);
     expect(
       table.intern({ kind: "custom", code: '"TRUE";"TRUE";"FALSE"' }),
     ).toBe(2);
     expect(table.declarations()).toEqual([
-      { id: 164, code: "yyyy\\-mm\\-dd" },
-      { id: 165, code: '"TRUE";"TRUE";"FALSE"' },
+      { id: FIRST_CUSTOM_NUM_FMT_ID, code: "yyyy\\-mm\\-dd" },
+      { id: SECOND_CUSTOM_NUM_FMT_ID, code: '"TRUE";"TRUE";"FALSE"' },
     ]);
-    expect(table.cellFormats()).toEqual([GENERAL_NUM_FMT_ID, 164, 165]);
+    expect(table.cellFormats()).toEqual([
+      GENERAL_NUM_FMT_ID,
+      FIRST_CUSTOM_NUM_FMT_ID,
+      SECOND_CUSTOM_NUM_FMT_ID,
+    ]);
   });
 
   it("hands the same index back for a repeated format, interning one xf per FORMAT rather than one per request", () => {
     const table = new CellFormatTable();
+    // ECMA-376's built-in id for "h:mm:ss" (a 24-hour time-of-day format).
+    const BUILTIN_TIME_HMS_FMT_ID = 21;
     const first = table.intern({ kind: "custom", code: "[$GBP]#,##0.00" });
     expect(table.intern({ kind: "custom", code: "[$GBP]#,##0.00" })).toBe(
       first,
     );
-    expect(table.intern({ kind: "builtin", id: 21 })).not.toBe(first);
-    expect(table.intern({ kind: "builtin", id: 21 })).toBe(2);
-    expect(table.cellFormats()).toEqual([GENERAL_NUM_FMT_ID, 164, 21]);
+    expect(
+      table.intern({ kind: "builtin", id: BUILTIN_TIME_HMS_FMT_ID }),
+    ).not.toBe(first);
+    expect(table.intern({ kind: "builtin", id: BUILTIN_TIME_HMS_FMT_ID })).toBe(
+      2,
+    );
+    expect(table.cellFormats()).toEqual([
+      GENERAL_NUM_FMT_ID,
+      FIRST_CUSTOM_NUM_FMT_ID,
+      BUILTIN_TIME_HMS_FMT_ID,
+    ]);
     expect(table.declarations()).toHaveLength(1);
   });
 
   it("keeps built-in ids and custom codes in separate key spaces, so a code that looks like an id cannot collide with one", () => {
     const table = new CellFormatTable();
-    expect(table.intern({ kind: "builtin", id: 4 })).toBe(1);
-    expect(table.intern({ kind: "custom", code: "4" })).toBe(2);
-    expect(table.cellFormats()).toEqual([GENERAL_NUM_FMT_ID, 4, 164]);
+    // ECMA-376's built-in id for "0.00" (Number, 2 decimal places), chosen only because its decimal spelling ("4") coincides with a custom code string this test interns separately, which is the actual thing under test.
+    const BUILTIN_NUMBER_2DP_FMT_ID = 4;
+    expect(
+      table.intern({ kind: "builtin", id: BUILTIN_NUMBER_2DP_FMT_ID }),
+    ).toBe(1);
+    expect(
+      table.intern({ kind: "custom", code: String(BUILTIN_NUMBER_2DP_FMT_ID) }),
+    ).toBe(2);
+    expect(table.cellFormats()).toEqual([
+      GENERAL_NUM_FMT_ID,
+      BUILTIN_NUMBER_2DP_FMT_ID,
+      FIRST_CUSTOM_NUM_FMT_ID,
+    ]);
   });
 });
 
@@ -859,9 +892,18 @@ describe("colorFromElement/readColorRgb: hex length boundary and validation", ()
   });
 
   it("resolves an 8-digit AARRGGBB rgb by its last 6 (real) digits, dropping the alpha prefix", () => {
+    const RGB_BYTE_MAX = 255;
+    // The r/g/b bytes of the fixture's own "80112233" rgb attribute (alpha 80, then 11/22/33).
+    const FIXTURE_RED_BYTE = 0x11;
+    const FIXTURE_GREEN_BYTE = 0x22;
+    const FIXTURE_BLUE_BYTE = 0x33;
     expect(
       readColorRgb(el("x", {}, [el("color", { rgb: "80112233" })]), "color"),
-    ).toEqual({ r: 0x11 / 255, g: 0x22 / 255, b: 0x33 / 255 });
+    ).toEqual({
+      r: FIXTURE_RED_BYTE / RGB_BYTE_MAX,
+      g: FIXTURE_GREEN_BYTE / RGB_BYTE_MAX,
+      b: FIXTURE_BLUE_BYTE / RGB_BYTE_MAX,
+    });
   });
 
   it("returns undefined when the element carries no rgb attribute at all", () => {
@@ -1229,7 +1271,11 @@ describe("CellFormatTable: fill signature isolates colour, and caches across dif
       { kind: "builtin", id: 9 },
       { background: { ...shared, backgroundColor: { r: 0, g: 1, b: 0 } } },
     );
-    expect(table.fillDeclarations()).toHaveLength(4);
+    // The two mandatory fills every fresh table seeds itself with (none, gray125) plus the two distinct pattern fills interned above.
+    const MANDATORY_AND_DISTINCT_FILL_COUNT = 4;
+    expect(table.fillDeclarations()).toHaveLength(
+      MANDATORY_AND_DISTINCT_FILL_COUNT,
+    );
   });
 
   it("caches a fill interned twice under different number formats to the same fillId, minting only one real <fills> entry", () => {
@@ -1245,7 +1291,11 @@ describe("CellFormatTable: fill signature isolates colour, and caches across dif
     expect(table.cellFormatRecords()[first]?.fillId).toBe(
       table.cellFormatRecords()[second]?.fillId,
     );
-    expect(table.fillDeclarations()).toHaveLength(3);
+    // The two mandatory fills every fresh table seeds itself with (none, gray125) plus the one real solid fill, interned twice but cached to a single entry.
+    const MANDATORY_AND_CACHED_FILL_COUNT = 3;
+    expect(table.fillDeclarations()).toHaveLength(
+      MANDATORY_AND_CACHED_FILL_COUNT,
+    );
   });
 });
 
@@ -1349,7 +1399,11 @@ describe("CellFormatTable: border signature and caching across different outer f
     expect(table.cellFormatRecords()[thin]?.borderId).not.toBe(
       table.cellFormatRecords()[thick]?.borderId,
     );
-    expect(table.borderDeclarations()).toHaveLength(3);
+    // The one mandatory empty-border entry every fresh table seeds itself with, plus the two genuinely distinct real borders interned above.
+    const MANDATORY_AND_DISTINCT_BORDER_COUNT = 3;
+    expect(table.borderDeclarations()).toHaveLength(
+      MANDATORY_AND_DISTINCT_BORDER_COUNT,
+    );
   });
 });
 
