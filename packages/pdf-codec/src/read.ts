@@ -153,7 +153,7 @@ export function readPdf(
 
   const pages = pageDicts.map((pageDict, index) => {
     throwIfAborted(signal);
-    return readPage(
+    const read = readPage(
       index,
       pageDict,
       doc,
@@ -163,9 +163,12 @@ export function readPdf(
       destinationRegistry,
       optionalContent.layerNameOf,
       structure.ownerOf,
-      pageBoxRows,
       sink,
     );
+    if (read.boxRow !== undefined) {
+      pageBoxRows.push(read.boxRow);
+    }
+    return read.page;
   });
 
   // The per-page boundary declarations a distinct crop box or a print-production box left behind, quarantined with the other package-level residue rows.
@@ -305,7 +308,7 @@ export function pageRotationTransform(
 
 function readPageContentBytes(
   page: PdfDict,
-  resolver: PdfObjectResolver,
+  resolver: Readonly<PdfObjectResolver>,
   sink: PdfDiagnosticSink,
 ): Uint8Array<ArrayBuffer> {
   const contentsObj = resolver.resolve(dictGet(page, "Contents"));
@@ -478,19 +481,24 @@ function pageBoxResidueEntry(
   return pdfDict(entries);
 }
 
+// A page as read, plus the boundary-declaration residue row it left behind, if any. The row is handed back rather than appended to a shared list so the residue is assembled where it is reported.
+interface ReadPage {
+  readonly page: LayoutPage;
+  readonly boxRow: PdfObject | undefined;
+}
+
 function readPage(
   pageIndex: number,
   page: PdfDict,
-  resolver: PdfObjectResolver,
+  resolver: Readonly<PdfObjectResolver>,
   fontResolver: FontResolverService,
   images: Record<string, LayoutImageAsset>,
   imageIdCache: Map<PdfDict, string | null>,
   destinationRegistry: DestinationRegistry,
   layerNameOf: (obj: PdfObject | undefined) => string | undefined,
   structureOwnerOf: (pageIndex: number, mcid: number) => string | undefined,
-  pageBoxRows: PdfObject[],
   sink: PdfDiagnosticSink,
-): LayoutPage {
+): ReadPage {
   const resources = resolver.resolveDict(dictGet(page, "Resources"));
   const mediaBox = readMediaBox(page);
   // The crop box is the visible region (ISO 32000-1 14.11.2: a viewer displays and prints it, and it defaults to the media box), so it — not the media box — is the page geometry this package reports, and content outside it is not visible at all. Inherited through the page tree like /MediaBox (one of 7.7.3.4's four inheritable attributes); /BleedBox /TrimBox /ArtBox are ordinary page-direct entries and are quarantined as residue, never clipped to.
@@ -518,9 +526,6 @@ function readPage(
   );
 
   const boxRow = pageBoxResidueEntry(pageIndex, page, mediaBox, cropBox);
-  if (boxRow !== undefined) {
-    pageBoxRows.push(boxRow);
-  }
 
   const items: LayoutItem[] = [];
   if (resources !== undefined) {
@@ -572,11 +577,14 @@ function readPage(
   const annotations = readPageAnnotations(page, pageMatrix, resolver, sink);
 
   return {
-    widthPt,
-    heightPt,
-    items,
-    ...(notes !== undefined ? { notes } : {}),
-    ...(annotations.length > 0 ? { annotations } : {}),
+    page: {
+      widthPt,
+      heightPt,
+      items,
+      ...(notes !== undefined ? { notes } : {}),
+      ...(annotations.length > 0 ? { annotations } : {}),
+    },
+    boxRow,
   };
 }
 
@@ -594,7 +602,7 @@ function convertExtractedItem(
   fontResolver: FontResolverService,
   images: Record<string, LayoutImageAsset>,
   imageIdCache: Map<PdfDict, string | null>,
-  resolver: PdfObjectResolver,
+  resolver: Readonly<PdfObjectResolver>,
   sink: PdfDiagnosticSink,
 ): LayoutItem | undefined {
   if (item.kind === "text") {
@@ -669,7 +677,12 @@ function paintFields(paint: ExtractedPaint): {
 
 // A CTM composed only of 90-degree-multiple rotations (the only kind pageMatrix ever carries) maps an axis-aligned box to another axis-aligned box — transforming just the two opposite corners and re-deriving min/max is enough, no general polygon handling needed. An ellipse's bounding box transforms by exactly the same rule (a 90-degree rotation swaps its two radii and leaves it axis-aligned), so both kinds share this helper.
 function transformBox(
-  item: { xPt: number; yPt: number; widthPt: number; heightPt: number },
+  item: Readonly<{
+    xPt: number;
+    yPt: number;
+    widthPt: number;
+    heightPt: number;
+  }>,
   pageMatrix: Matrix,
 ): { xPt: number; yPt: number; widthPt: number; heightPt: number } {
   const p1 = applyMatrix(pageMatrix, { x: item.xPt, y: item.yPt });
@@ -830,7 +843,7 @@ function resolveCachedImageId(
   raw: Uint8Array<ArrayBuffer>,
   images: Record<string, LayoutImageAsset>,
   cache: Map<PdfDict, string | null>,
-  resolver: PdfObjectResolver,
+  resolver: Readonly<PdfObjectResolver>,
   sink: PdfDiagnosticSink,
 ): string | undefined {
   if (cache.has(dict)) {
@@ -858,7 +871,7 @@ function convertImage(
   pageMatrix: Matrix,
   images: Record<string, LayoutImageAsset>,
   cache: Map<PdfDict, string | null>,
-  resolver: PdfObjectResolver,
+  resolver: Readonly<PdfObjectResolver>,
   sink: PdfDiagnosticSink,
 ) {
   const xobjects = resolver.resolveDict(dictGet(item.resources, "XObject"));
@@ -893,7 +906,7 @@ function convertInlineImage(
   item: ExtractedInlineImage,
   pageMatrix: Matrix,
   images: Record<string, LayoutImageAsset>,
-  resolver: PdfObjectResolver,
+  resolver: Readonly<PdfObjectResolver>,
   sink: PdfDiagnosticSink,
 ) {
   const decoded = readImageXObject(item.dict, item.data, resolver, sink);
@@ -922,7 +935,7 @@ function convertInlineImage(
 function readLinkAnnotations(
   page: PdfDict,
   pageMatrix: Matrix,
-  resolver: PdfObjectResolver,
+  resolver: Readonly<PdfObjectResolver>,
   destinationRegistry: DestinationRegistry,
 ): (LayoutLink | LayoutInternalLink)[] {
   const annotsArr = asArray(dictGet(page, "Annots"));
@@ -983,7 +996,7 @@ function readLinkAnnotations(
 
 function readLinkUri(
   annot: PdfDict,
-  resolver: PdfObjectResolver,
+  resolver: Readonly<PdfObjectResolver>,
 ): string | undefined {
   const action = resolver.resolveDict(dictGet(annot, "A"));
   if (action === undefined || asName(dictGet(action, "S")) !== "URI") {
@@ -995,7 +1008,7 @@ function readLinkUri(
 
 function readInternalDestination(
   annot: PdfDict,
-  resolver: PdfObjectResolver,
+  resolver: Readonly<PdfObjectResolver>,
   destinationRegistry: DestinationRegistry,
 ): string | undefined {
   const dest = dictGet(annot, "Dest");
@@ -1012,7 +1025,7 @@ function readInternalDestination(
 // pptx speaker notes carried as a hidden /Subtype /Text annotation (see write.ts's buildNotesAnnotDict) — the /T marker distinguishes an annotation this package's own writer produced from a genuine sticky note a human or another tool left on the page, which would also be /Subtype /Text but authored by someone/something else. Returns undefined (not '') when no such annotation exists, so reconstructPresentation's own page.notes ?? '' fallback is the one place that decides what "no notes" means for a ContentSlide.
 function readPageNotes(
   page: PdfDict,
-  resolver: PdfObjectResolver,
+  resolver: Readonly<PdfObjectResolver>,
 ): string | undefined {
   const annotsArr = asArray(dictGet(page, "Annots"));
   if (annotsArr === undefined) {
@@ -1041,7 +1054,7 @@ function readPageNotes(
 
 function readMetadata(
   trailer: PdfDict,
-  resolver: PdfObjectResolver,
+  resolver: Readonly<PdfObjectResolver>,
   catalog: PdfDict,
   sink: PdfDiagnosticSink,
 ): LayoutMetadata {
@@ -1082,7 +1095,7 @@ function readMetadata(
 
 function xmpPacket(
   catalog: PdfDict,
-  resolver: PdfObjectResolver,
+  resolver: Readonly<PdfObjectResolver>,
   sink: PdfDiagnosticSink,
 ): string | undefined {
   const metadataObj = resolver.resolve(dictGet(catalog, "Metadata"));

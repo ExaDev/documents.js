@@ -46,7 +46,7 @@ function decryptDict(
   dict: PdfDict,
   num: number,
   gen: number,
-  decryptor: PdfDecryptor,
+  decryptor: Readonly<PdfDecryptor>,
 ): PdfDict {
   return {
     kind: "dict",
@@ -64,7 +64,7 @@ function decryptObject(
   value: PdfObject,
   num: number,
   gen: number,
-  decryptor: PdfDecryptor,
+  decryptor: Readonly<PdfDecryptor>,
 ): PdfObject {
   if (value.kind === "string") {
     return {
@@ -257,18 +257,27 @@ export function openPdfDocument(
     if (pagesRoot === undefined) {
       return [];
     }
-    const result: PdfDict[] = [];
     originalLeaves.clear();
-    walkPageTree(pagesRoot, {}, new Set(), result);
+    const result: PdfDict[] = [];
+    // The identity map is filled here rather than inside the walk so a leaf's index is its real position in the finished list, taken once, in order.
+    for (const leaf of walkPageTree(pagesRoot, {}, new Set())) {
+      originalLeaves.set(leaf.node, result.length);
+      result.push(leaf.page);
+    }
     return result;
+  }
+
+  // One page of the tree: the leaf node as the file states it, which is the identity `pageIndex` answers from, alongside the page dictionary with every inheritable key resolved onto it.
+  interface PageLeaf {
+    readonly node: PdfDict;
+    readonly page: PdfDict;
   }
 
   function walkPageTree(
     node: PdfDict,
     inherited: Record<string, PdfObject>,
     visited: Set<PdfDict>,
-    result: PdfDict[],
-  ): void {
+  ): PageLeaf[] {
     if (visited.has(node)) {
       sink({
         code: "pdf/page-tree-cycle",
@@ -276,7 +285,7 @@ export function openPdfDocument(
         message:
           "the page tree contains a cycle; stopping descent at the repeated node",
       });
-      return;
+      return [];
     }
     visited.add(node);
     const merged: Record<string, PdfObject> = { ...inherited };
@@ -295,16 +304,18 @@ export function openPdfDocument(
           entries.set(key, merged[key]);
         }
       }
-      originalLeaves.set(node, result.length);
-      result.push({ kind: "dict", entries });
-      return;
+      return [{ node, page: { kind: "dict", entries } }];
     }
+    const leaves: PageLeaf[] = [];
     for (const kid of kids) {
       const kidDict = resolveDict(kid);
       if (kidDict !== undefined) {
-        walkPageTree(kidDict, merged, visited, result);
+        for (const leaf of walkPageTree(kidDict, merged, visited)) {
+          leaves.push(leaf);
+        }
       }
     }
+    return leaves;
   }
 
   function pageIndex(obj: PdfObject | undefined): number | undefined {

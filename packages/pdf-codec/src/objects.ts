@@ -9,7 +9,7 @@ export type PdfObject =
   | { kind: "number"; value: number }
   | { kind: "name"; name: string } // stored without the leading '/'
   | { kind: "string"; bytes: Uint8Array<ArrayBuffer>; hex: boolean } // raw bytes, never a decoded JS string — see the module doc below
-  | { kind: "array"; items: PdfObject[] }
+  | { kind: "array"; items: readonly PdfObject[] }
   | { kind: "dict"; entries: Map<string, PdfObject> } // Map, not a plain object: dictionary keys are arbitrary byte sequences and could include '__proto__'
   | { kind: "stream"; dict: PdfDict; raw: Uint8Array<ArrayBuffer> } // raw = still filter-encoded; decoding is lazy (src/pdf/filters.ts)
   | { kind: "ref"; num: number; gen: number };
@@ -44,7 +44,7 @@ export function pdfLiteralString(bytes: Uint8Array<ArrayBuffer>): PdfObject {
   return { kind: "string", bytes, hex: false };
 }
 
-export function pdfArray(items: PdfObject[]): PdfObject {
+export function pdfArray(items: readonly PdfObject[]): PdfObject {
   return { kind: "array", items };
 }
 
@@ -87,7 +87,9 @@ export function asBool(obj: PdfObject | undefined): boolean | undefined {
   return obj?.kind === "bool" ? obj.value : undefined;
 }
 
-export function asArray(obj: PdfObject | undefined): PdfObject[] | undefined {
+export function asArray(
+  obj: PdfObject | undefined,
+): readonly PdfObject[] | undefined {
   return obj?.kind === "array" ? obj.items : undefined;
 }
 

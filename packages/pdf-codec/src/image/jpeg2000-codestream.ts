@@ -375,13 +375,26 @@ function freezeHeader(header: MutableHeader): Jpeg2000HeaderOverrides {
   return base;
 }
 
+// The COM segment texts gathered while walking a codestream. A class rather than a bare array because COM can appear in the main header and in any tile-part header, so one list is shared across both walks and has to be appended to in place.
+class CodestreamComments {
+  readonly #texts: string[] = [];
+
+  add(text: string): void {
+    this.#texts.push(text);
+  }
+
+  texts(): readonly string[] {
+    return this.#texts;
+  }
+}
+
 // Reads one marker segment into `header`, given the cursor already positioned just past the marker itself. Returns nothing: every branch either records something or deliberately skips the segment's body.
 function readHeaderSegment(
   marker: number,
   cursor: MarkerCursor,
   header: MutableHeader,
   componentCount: number,
-  comments: string[],
+  comments: CodestreamComments,
 ): void {
   const length = cursor.uint16();
   if (length < 2) {
@@ -419,7 +432,7 @@ function readHeaderSegment(
     const body = cursor.bytes(segmentEnd - cursor.position);
     // Rcom 1 is ISO/IEC 8859-15 (Latin) text; 0 is binary, which is not worth guessing at.
     if (registration === 1) {
-      comments.push(
+      comments.add(
         Array.from(body, (byte) => String.fromCharCode(byte)).join(""),
       );
     }
@@ -461,7 +474,7 @@ export function parseJpeg2000Codestream(
   const siz = readImageSize(cursor, sizEnd);
   cursor.position = sizEnd;
 
-  const comments: string[] = [];
+  const comments = new CodestreamComments();
   const main = emptyHeader();
   const tileParts: Jpeg2000TilePart[] = [];
   let sawEoc = false;
@@ -482,7 +495,7 @@ export function parseJpeg2000Codestream(
     }
     if (marker === MARKER_SOT) {
       cursor.position -= 2;
-      readTilePart(cursor, siz.components.length, tileParts, comments);
+      tileParts.push(readTilePart(cursor, siz.components.length, comments));
       continue;
     }
     if (marker === MARKER_SOD || marker === MARKER_SOC) {
@@ -502,7 +515,7 @@ export function parseJpeg2000Codestream(
     siz,
     main: freezeHeader(main),
     tileParts,
-    comments,
+    comments: comments.texts(),
     numTilesWide,
     numTilesHigh,
     truncated: !sawEoc,
@@ -513,9 +526,8 @@ export function parseJpeg2000Codestream(
 function readTilePart(
   cursor: MarkerCursor,
   componentCount: number,
-  tileParts: Jpeg2000TilePart[],
-  comments: string[],
-): void {
+  comments: CodestreamComments,
+): Jpeg2000TilePart {
   const sotStart = cursor.position;
   cursor.uint16(); // SOT
   const lsot = cursor.uint16();
@@ -558,14 +570,14 @@ function readTilePart(
   }
   // A truncated final tile-part is the shape a clipped PDF stream takes; keeping whatever bytes did arrive lets the decoder report a partial image rather than nothing at all.
   const trimmedEnd = trimTrailingEoc(cursor.data, dataEnd);
-  tileParts.push({
+  cursor.position = dataEnd;
+  return {
     tileIndex,
     partIndex,
     header: freezeHeader(header),
     dataStart,
     dataEnd: trimmedEnd,
-  });
-  cursor.position = dataEnd;
+  };
 }
 
 // A Psot of 0 runs the tile-part to the end of the codestream, which includes the EOC marker; the packet decoder must not see those two bytes as coded data. Takes no separate start/length: readTilePart, this function's sole caller, always calls it with a range beginning immediately after a real SOD marker (0xFF 0x93), so whenever that range is under 2 bytes long, one of the two positions checked below falls on that marker's own fixed bytes rather than on data — and 0x93 can never be mistaken for 0xD9 — making the byte comparisons already refuse a too-short range on their own, with no need to measure it first.

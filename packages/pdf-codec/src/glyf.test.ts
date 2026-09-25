@@ -424,7 +424,7 @@ describe("parseGlyf over hand-built tables", () => {
   }
 
   function simpleGlyph(
-    box: [number, number, number, number],
+    box: readonly [number, number, number, number],
     contours = 1,
   ): number[] {
     return [

@@ -26,14 +26,19 @@ const RED = { r: 1, g: 0, b: 0 };
 const BLUE = { r: 0, g: 0, b: 1 };
 
 function docWithPages(
-  pages: LayoutPage[],
+  pages: readonly LayoutPage[],
   images: Record<string, LayoutImageAsset> = {},
 ): LayoutDocument {
-  return { formatVersion: LAYOUT_FORMAT_VERSION, metadata: {}, pages, images };
+  return {
+    formatVersion: LAYOUT_FORMAT_VERSION,
+    metadata: {},
+    pages: [...pages],
+    images,
+  };
 }
 
-function docWithItems(items: LayoutItem[]): LayoutDocument {
-  return docWithPages([{ widthPt: 300, heightPt: 200, items }]);
+function docWithItems(items: readonly LayoutItem[]): LayoutDocument {
+  return docWithPages([{ widthPt: 300, heightPt: 200, items: [...items] }]);
 }
 
 function tinyPngAsset(): LayoutImageAsset {

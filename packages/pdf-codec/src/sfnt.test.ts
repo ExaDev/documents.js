@@ -49,14 +49,16 @@ describe("parseSfnt against the real vendored fonts", () => {
 });
 
 // A table directory with `numTables` records, each pointing at `tableOffset`/`tableLength`, for the malformed-container cases below. Written to the spec's own layout (ISO/IEC 14496-22 clause 4.2) rather than derived from this module's reader.
-function buildDirectory(options: {
-  sfntVersion: number;
-  numTables: number;
-  tag: string;
-  tableOffset: number;
-  tableLength: number;
-  totalLength: number;
-}): Uint8Array<ArrayBuffer> {
+function buildDirectory(
+  options: Readonly<{
+    sfntVersion: number;
+    numTables: number;
+    tag: string;
+    tableOffset: number;
+    tableLength: number;
+    totalLength: number;
+  }>,
+): Uint8Array<ArrayBuffer> {
   const bytes = new Uint8Array(options.totalLength);
   const view = new DataView(bytes.buffer);
   view.setUint32(0, options.sfntVersion);

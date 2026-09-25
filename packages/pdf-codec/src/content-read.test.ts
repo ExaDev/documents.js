@@ -21,7 +21,7 @@ function textBytes(text: string): Uint8Array<ArrayBuffer> {
 }
 
 function concatBytes(
-  ...chunks: Uint8Array<ArrayBuffer>[]
+  ...chunks: readonly Uint8Array<ArrayBuffer>[]
 ): Uint8Array<ArrayBuffer> {
   const total = chunks.reduce((sum, c) => sum + c.length, 0);
   const out = new Uint8Array(total);

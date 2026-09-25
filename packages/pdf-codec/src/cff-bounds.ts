@@ -107,12 +107,35 @@ function subrBias(count: number): number {
   return SUBR_BIAS_LARGE;
 }
 
-interface BoundsBox {
-  minX: number;
-  minY: number;
-  maxX: number;
-  maxY: number;
-  drawn: boolean;
+// The running ink extent of one charstring walk. A class rather than a plain record because it is a genuine accumulator: a glyph outline is walked point by point, so widening it has to happen in place, and a method widens the receiver rather than a parameter.
+class BoundsBox {
+  minX = Infinity;
+  minY = Infinity;
+  maxX = -Infinity;
+  maxY = -Infinity;
+  drawn = false;
+
+  includePoint(x: number, y: number): void {
+    this.minX = Math.min(this.minX, x);
+    this.minY = Math.min(this.minY, y);
+    this.maxX = Math.max(this.maxX, x);
+    this.maxY = Math.max(this.maxY, y);
+    this.drawn = true;
+  }
+
+  includeXExtent(value: number): void {
+    this.minX = Math.min(this.minX, value);
+    this.maxX = Math.max(this.maxX, value);
+  }
+
+  includeYExtent(value: number): void {
+    this.minY = Math.min(this.minY, value);
+    this.maxY = Math.max(this.maxY, value);
+  }
+
+  markDrawn(): void {
+    this.drawn = true;
+  }
 }
 
 interface WalkState {
@@ -123,14 +146,6 @@ interface WalkState {
   widthParsed: boolean;
   operations: number;
   readonly box: BoundsBox;
-}
-
-function includePoint(box: BoundsBox, x: number, y: number): void {
-  box.minX = Math.min(box.minX, x);
-  box.minY = Math.min(box.minY, y);
-  box.maxX = Math.max(box.maxX, x);
-  box.maxY = Math.max(box.maxY, y);
-  box.drawn = true;
 }
 
 function cubicAt(
@@ -190,14 +205,12 @@ function includeCubic(
   y3: number,
 ): void {
   includeCubicAxis(x0, x1, x2, x3, (value) => {
-    box.minX = Math.min(box.minX, value);
-    box.maxX = Math.max(box.maxX, value);
+    box.includeXExtent(value);
   });
   includeCubicAxis(y0, y1, y2, y3, (value) => {
-    box.minY = Math.min(box.minY, value);
-    box.maxY = Math.max(box.maxY, value);
+    box.includeYExtent(value);
   });
-  box.drawn = true;
+  box.markDrawn();
 }
 
 // Moves the current point to the end of a cubic whose control points are given as deltas from it, accumulating the curve's exact extent on the way.
@@ -224,10 +237,10 @@ function curveTo(
 }
 
 function lineTo(state: WalkState, dx: number, dy: number): void {
-  includePoint(state.box, state.x, state.y); // the segment's own start, which is only already in the box if something drew it there — a lineto immediately after a moveto is the case that needs it
+  state.box.includePoint(state.x, state.y); // the segment's own start, which is only already in the box if something drew it there — a lineto immediately after a moveto is the case that needs it
   state.x += dx;
   state.y += dy;
-  includePoint(state.box, state.x, state.y);
+  state.box.includePoint(state.x, state.y);
 }
 
 function moveTo(state: WalkState, dx: number, dy: number): void {
@@ -807,13 +820,7 @@ function computeBounds(
     stems: 0,
     widthParsed: false,
     operations: 0,
-    box: {
-      minX: Infinity,
-      minY: Infinity,
-      maxX: -Infinity,
-      maxY: -Infinity,
-      drawn: false,
-    },
+    box: new BoundsBox(),
   };
   if (!execute(code, state, context, 0) || !state.box.drawn) {
     return undefined;

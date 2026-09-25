@@ -51,7 +51,7 @@ function componentsOf(cs: ResolvedColorSpace): number {
 
 function resolveColorSpace(
   csObj: PdfObject | undefined,
-  resolver: PdfObjectResolver,
+  resolver: Readonly<PdfObjectResolver>,
   sink: PdfDiagnosticSink,
 ): ResolvedColorSpace {
   const resolved = resolver.resolve(csObj);
@@ -273,7 +273,7 @@ function readSoftMaskAlpha(
   dict: PdfDict,
   width: number,
   height: number,
-  resolver: PdfObjectResolver,
+  resolver: Readonly<PdfObjectResolver>,
   sink: PdfDiagnosticSink,
 ): Uint8Array<ArrayBuffer> | undefined {
   const smaskObj = resolver.resolve(dictGet(dict, "SMask"));
@@ -297,7 +297,7 @@ function readSoftMaskAlpha(
 function jpeg2000ChannelKind(
   image: Jpeg2000Image,
   dict: PdfDict,
-  resolver: PdfObjectResolver,
+  resolver: Readonly<PdfObjectResolver>,
   sink: PdfDiagnosticSink,
 ): "gray" | "rgb" | "cmyk" {
   const declared = dictGet(dict, "ColorSpace") ?? dictGet(dict, "CS");
@@ -336,7 +336,7 @@ function jpeg2000ChannelKind(
 function readJpeg2000Image(
   dict: PdfDict,
   raw: Uint8Array<ArrayBuffer>,
-  resolver: PdfObjectResolver,
+  resolver: Readonly<PdfObjectResolver>,
   sink: PdfDiagnosticSink,
 ): ExtractedPdfImage | undefined {
   let image: Jpeg2000Image;
@@ -433,7 +433,7 @@ function readJpeg2000Image(
 export function readImageXObject(
   dict: PdfDict,
   raw: Uint8Array<ArrayBuffer>,
-  resolver: PdfObjectResolver,
+  resolver: Readonly<PdfObjectResolver>,
   sink: PdfDiagnosticSink,
 ): ExtractedPdfImage | undefined {
   if (asBool(dictGet(dict, "ImageMask") ?? dictGet(dict, "IM")) === true) {

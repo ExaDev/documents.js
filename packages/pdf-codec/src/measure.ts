@@ -113,7 +113,7 @@ export function createFontMeasurer(
     return corrections[normalizeFamilyKey(family)] ?? 1;
   }
 
-  function resolve(font: LayoutFont): ResolvedFace {
+  function resolve(font: Readonly<LayoutFont>): ResolvedFace {
     return resolveFaceWithRegistry(registry, font);
   }
 

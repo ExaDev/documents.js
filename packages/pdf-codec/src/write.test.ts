@@ -34,14 +34,19 @@ function decode(bytes: Uint8Array): string {
 }
 
 function docWithPages(
-  pages: LayoutPage[],
+  pages: readonly LayoutPage[],
   images: Record<string, LayoutImageAsset> = {},
 ): LayoutDocument {
-  return { formatVersion: LAYOUT_FORMAT_VERSION, metadata: {}, pages, images };
+  return {
+    formatVersion: LAYOUT_FORMAT_VERSION,
+    metadata: {},
+    pages: [...pages],
+    images,
+  };
 }
 
-function docWithItems(items: LayoutItem[]): LayoutDocument {
-  return docWithPages([{ widthPt: 612, heightPt: 792, items }]);
+function docWithItems(items: readonly LayoutItem[]): LayoutDocument {
+  return docWithPages([{ widthPt: 612, heightPt: 792, items: [...items] }]);
 }
 
 function tinyPngAsset(): LayoutImageAsset {

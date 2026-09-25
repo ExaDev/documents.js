@@ -166,7 +166,7 @@ export function renderPdfPage(
   pdfBytes: Uint8Array<ArrayBuffer>,
   pageIndex: number,
   options: RenderPdfPageOptions,
-  rasteriser: PageRasteriser,
+  rasteriser: Readonly<PageRasteriser>,
 ): Uint8Array<ArrayBuffer> | Promise<Uint8Array<ArrayBuffer>> {
   const sink = options.sink ?? NOOP_DIAGNOSTIC_SINK;
   if (options.scale !== undefined && options.dpi !== undefined) {
@@ -325,12 +325,12 @@ export function renderPdfPage(
 
 function drawExtractedItem(
   item: ExtractedItem,
-  resolver: PdfObjectResolver,
+  resolver: Readonly<PdfObjectResolver>,
   fontResolver: FontResolverService,
   outlineFaces: Map<PdfDict, TextOutlineFace | undefined>,
   interpretToDeviceMatrix: Matrix,
   pixelsPerPt: number,
-  rasteriser: PageRasteriser,
+  rasteriser: Readonly<PageRasteriser>,
   sink: PdfDiagnosticSink,
 ): void {
   if (item.kind === "text") {
@@ -385,7 +385,7 @@ function drawRect(
   item: ExtractedRect,
   matrix: Matrix,
   pixelsPerPt: number,
-  rasteriser: PageRasteriser,
+  rasteriser: Readonly<PageRasteriser>,
 ): void {
   const corners = [
     applyMatrix(matrix, { x: item.xPt, y: item.yPt }),
@@ -435,7 +435,7 @@ function drawEllipse(
   item: ExtractedEllipse,
   matrix: Matrix,
   pixelsPerPt: number,
-  rasteriser: PageRasteriser,
+  rasteriser: Readonly<PageRasteriser>,
 ): void {
   const cx = item.xPt + item.widthPt / 2;
   const cy = item.yPt + item.heightPt / 2;
@@ -496,7 +496,7 @@ function drawLine(
   item: ExtractedLine,
   matrix: Matrix,
   pixelsPerPt: number,
-  rasteriser: PageRasteriser,
+  rasteriser: Readonly<PageRasteriser>,
 ): void {
   const p1 = applyMatrix(matrix, { x: item.x1Pt, y: item.y1Pt });
   const p2 = applyMatrix(matrix, { x: item.x2Pt, y: item.y2Pt });
@@ -533,7 +533,7 @@ function drawPath(
   item: ExtractedPath,
   matrix: Matrix,
   pixelsPerPt: number,
-  rasteriser: PageRasteriser,
+  rasteriser: Readonly<PageRasteriser>,
 ): void {
   if (item.stroke !== undefined && item.style === "dotted") {
     const widthPx = item.stroke.widthPt * pixelsPerPt;
@@ -542,7 +542,7 @@ function drawPath(
         x: subpath.startXPt,
         y: subpath.startYPt,
       });
-      const emitTo = (end: { x: number; y: number }): void => {
+      const emitTo = (end: Readonly<{ x: number; y: number }>): void => {
         drawDottedSegment(prev, end, widthPx, item.stroke!.color, rasteriser);
         prev = end;
       };
@@ -607,9 +607,9 @@ function drawPath(
 
 function drawImageXObjectItem(
   item: ExtractedImage,
-  resolver: PdfObjectResolver,
+  resolver: Readonly<PdfObjectResolver>,
   interpretToDeviceMatrix: Matrix,
-  rasteriser: PageRasteriser,
+  rasteriser: Readonly<PageRasteriser>,
   sink: PdfDiagnosticSink,
 ): void {
   const xobjects = resolver.resolveDict(dictGet(item.resources, "XObject"));
@@ -629,9 +629,9 @@ function drawImageXObjectItem(
 
 function drawInlineImageItem(
   item: ExtractedInlineImage,
-  resolver: PdfObjectResolver,
+  resolver: Readonly<PdfObjectResolver>,
   interpretToDeviceMatrix: Matrix,
-  rasteriser: PageRasteriser,
+  rasteriser: Readonly<PageRasteriser>,
   sink: PdfDiagnosticSink,
 ): void {
   const image = readImageXObject(item.dict, item.data, resolver, sink);
@@ -651,7 +651,7 @@ function drawImage(
   },
   ctm: Matrix,
   interpretToDeviceMatrix: Matrix,
-  rasteriser: PageRasteriser,
+  rasteriser: Readonly<PageRasteriser>,
 ): void {
   // (u, v) in the port's top-left unit square -> (u, 1 - v) in PDF's bottom-left unit square.
   const flipImageSpace: Matrix = [1, 0, 0, -1, 0, 1];
@@ -688,11 +688,11 @@ function strokeSpec(
 
 // A dotted stroke as small filled squares of the stroke's own width, centred on the segment at 2w intervals (the writer's own dotted off-length): the axis-aligned approximation of a round-cap dot that a backend with no cap primitives can still draw recognisably.
 function drawDottedSegment(
-  p1: { x: number; y: number },
-  p2: { x: number; y: number },
+  p1: Readonly<{ x: number; y: number }>,
+  p2: Readonly<{ x: number; y: number }>,
   widthPx: number,
-  color: LayoutColor,
-  rasteriser: PageRasteriser,
+  color: Readonly<LayoutColor>,
+  rasteriser: Readonly<PageRasteriser>,
 ): void {
   const length = Math.hypot(p2.x - p1.x, p2.y - p1.y);
   if (length === 0) {
@@ -719,17 +719,17 @@ const MAX_FLATTEN_DEPTH = 16;
 
 // Exported solely so raster.test.ts can drive its own subdivision arithmetic and depth cap directly with hand-computed control points — every caller reaches it only through curves recovered from real PDF content streams, which offers no way to pin an exact subdivision count or force the depth cap deterministically.
 export function flattenCubic(
-  p0: { x: number; y: number },
-  c1: { x: number; y: number },
-  c2: { x: number; y: number },
-  p1: { x: number; y: number },
+  p0: Readonly<{ x: number; y: number }>,
+  c1: Readonly<{ x: number; y: number }>,
+  c2: Readonly<{ x: number; y: number }>,
+  p1: Readonly<{ x: number; y: number }>,
 ): readonly { x: number; y: number }[] {
   const points: { x: number; y: number }[] = [];
   const flatten = (
-    a: { x: number; y: number },
-    b: { x: number; y: number },
-    c: { x: number; y: number },
-    d: { x: number; y: number },
+    a: Readonly<{ x: number; y: number }>,
+    b: Readonly<{ x: number; y: number }>,
+    c: Readonly<{ x: number; y: number }>,
+    d: Readonly<{ x: number; y: number }>,
     depth: number,
   ): void => {
     const chordX = d.x - a.x;
@@ -784,7 +784,7 @@ type EmbeddedProgram =
 // Pulls the /FontDescriptor's embedded program from whichever key it lives under (FontFile2, or FontFile3 — an /OpenType-wrapped sfnt is a legal container for either outline flavour, and the bytes themselves, not the key, say which flavour: the same sniffing rule font-read.ts's readFontProgram applies) and classifies it. A bare CFF program (0x01 0x00 0x04 header) or an 'OTTO' sfnt carrying a 'CFF ' table is CFF; anything parseable as an sfnt with a readable glyf/head/maxp trio is fillable; anything else (no descriptor, no stream, an unparseable or table-less program) is absent.
 function openEmbeddedProgram(
   descriptorOwner: PdfDict,
-  resolver: PdfObjectResolver,
+  resolver: Readonly<PdfObjectResolver>,
 ): EmbeddedProgram {
   const descriptor = resolver.resolveDict(
     dictGet(descriptorOwner, "FontDescriptor"),
@@ -838,7 +838,7 @@ function openEmbeddedProgram(
 function resolveTextOutlineFace(
   fontResourceName: string,
   resources: PdfDict,
-  resolver: PdfObjectResolver,
+  resolver: Readonly<PdfObjectResolver>,
   fontResolver: FontResolverService,
   outlineFaces: Map<PdfDict, TextOutlineFace | undefined>,
   sink: PdfDiagnosticSink,
@@ -868,7 +868,7 @@ function resolveTextOutlineFace(
 
 function buildTextOutlineFace(
   fontDict: PdfDict,
-  resolver: PdfObjectResolver,
+  resolver: Readonly<PdfObjectResolver>,
   fontResolver: FontResolverService,
   fontResourceName: string,
   resources: PdfDict,
@@ -1023,10 +1023,10 @@ function buildTextOutlineFace(
 function drawTextRun(
   item: ExtractedTextRun,
   fontResolver: FontResolverService,
-  resolver: PdfObjectResolver,
+  resolver: Readonly<PdfObjectResolver>,
   outlineFaces: Map<PdfDict, TextOutlineFace | undefined>,
   interpretToDeviceMatrix: Matrix,
-  rasteriser: PageRasteriser,
+  rasteriser: Readonly<PageRasteriser>,
   sink: PdfDiagnosticSink,
 ): void {
   const face = resolveTextOutlineFace(
@@ -1136,8 +1136,8 @@ function drawTextRun(
 export function drawGlyphOutline(
   outline: GlyphOutline,
   glyphMatrix: Matrix,
-  color: LayoutColor,
-  rasteriser: PageRasteriser,
+  color: Readonly<LayoutColor>,
+  rasteriser: Readonly<PageRasteriser>,
 ): void {
   const subpaths = glyphOutlineSubpaths(outline, glyphMatrix);
   if (subpaths.length === 0) {
@@ -1186,9 +1186,9 @@ export function glyphOutlineSubpaths(
     const segments: RasterPathSegment[] = [];
     let pendingOffCurve: { x: number; y: number } | undefined;
     const emitQuad = (
-      from: { x: number; y: number },
-      control: { x: number; y: number },
-      to: { x: number; y: number },
+      from: Readonly<{ x: number; y: number }>,
+      control: Readonly<{ x: number; y: number }>,
+      to: Readonly<{ x: number; y: number }>,
     ): void => {
       const p0 = applyMatrix(matrix, from);
       const q = applyMatrix(matrix, control);
@@ -1203,7 +1203,7 @@ export function glyphOutlineSubpaths(
         yPx: p1.y,
       });
     };
-    const emitLine = (to: { x: number; y: number }): void => {
+    const emitLine = (to: Readonly<{ x: number; y: number }>): void => {
       const p1 = applyMatrix(matrix, to);
       segments.push({ kind: "line", xPx: p1.x, yPx: p1.y });
     };
@@ -1324,7 +1324,7 @@ function rotatedRectBounds(
 // A page's decoded content bytes: its /Contents stream, or the concatenation of the /Contents array's streams separated by a newline (the same separator read.ts uses, so an operator split across array entries parses identically in both walks).
 function readPageContentBytes(
   page: PdfDict,
-  resolver: PdfObjectResolver,
+  resolver: Readonly<PdfObjectResolver>,
   sink: PdfDiagnosticSink,
 ): Uint8Array<ArrayBuffer> {
   const contentsObj = resolver.resolve(dictGet(page, "Contents"));
