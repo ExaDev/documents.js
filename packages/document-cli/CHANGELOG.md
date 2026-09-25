@@ -1,3 +1,14 @@
+## [5.12.54](https://github.com/ExaDev/documents.js/compare/document-cli%405.12.53...document-cli%405.12.54) (2026-09-25)
+
+### Miscellaneous Chores
+
+* **lint:** scope no-magic-numbers to production code and enforce it in three packages ([22f5525](https://github.com/ExaDev/documents.js/commit/22f55250b2824c0f31e53dfb19a4b28cd041dbc9))
+
+
+### Dependencies
+
+- Updated documents.js to 14.4.44
+
 ## [5.12.53](https://github.com/ExaDev/documents.js/compare/document-cli%405.12.52...document-cli%405.12.53) (2026-09-25)
 
 
