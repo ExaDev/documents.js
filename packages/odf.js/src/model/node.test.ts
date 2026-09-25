@@ -5,9 +5,10 @@ import { assertNeverXmlNodeType, isXmlNode } from "./node";
 
 describe("isXmlNode: non-object/malformed input", () => {
   it("rejects null, a primitive, and an array outright", () => {
+    const arbitraryNumber = 42;
     expect(isXmlNode(null)).toBe(false);
     expect(isXmlNode("a string")).toBe(false);
-    expect(isXmlNode(42)).toBe(false);
+    expect(isXmlNode(arbitraryNumber)).toBe(false);
     expect(isXmlNode([])).toBe(false);
   });
 

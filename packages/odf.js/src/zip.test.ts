@@ -69,18 +69,24 @@ describe("zipPackage / unzipPackage round trip", () => {
     ]);
   });
 
+  // The local file header's own compressed-size field offset (PKWARE APPNOTE.TXT section 4.3.7).
+  const lfhCompressedSizeOffset = 18;
+
   it('stores a "stored" entry uncompressed, with a compressed size equal to its input length', () => {
     const original = enc(
       "plain text with no compressible repetition at all, 12345",
     );
     const bytes = zipPackage([["mimetype", { bytes: original, stored: true }]]);
-    expect(readUint32LE(bytes, 18)).toBe(original.length);
+    expect(readUint32LE(bytes, lfhCompressedSizeOffset)).toBe(original.length);
   });
 
   it("deflates a non-stored entry of repetitive content to fewer bytes than the input", () => {
-    const original = enc("a".repeat(1000));
+    const repeatCount = 1000;
+    const original = enc("a".repeat(repeatCount));
     const bytes = zipPackage([["content.xml", { bytes: original }]]);
-    expect(readUint32LE(bytes, 18)).toBeLessThan(original.length);
+    expect(readUint32LE(bytes, lfhCompressedSizeOffset)).toBeLessThan(
+      original.length,
+    );
   });
 });
 
@@ -95,8 +101,10 @@ describe("zipPackage: entry mtime survives every real-world timezone offset", ()
         .formatToParts(FIXED_ENTRY_MTIME)
         .find((part) => part.type === "year")?.value,
     );
-    expect(year).toBeGreaterThanOrEqual(1980);
-    expect(year).toBeLessThanOrEqual(2099);
+    const minDosYear = 1980;
+    const maxDosYear = 2099;
+    expect(year).toBeGreaterThanOrEqual(minDosYear);
+    expect(year).toBeLessThanOrEqual(maxDosYear);
   });
 });
 
