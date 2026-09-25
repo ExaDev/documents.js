@@ -3,44 +3,57 @@ import { skipExpression, takeExpression } from "./expression";
 
 describe("skipExpression", () => {
   it("stops at the first unnested occurrence of endChar", () => {
-    expect(skipExpression("abc,def", 0, ",")).toBe(3);
+    const text = "abc,def";
+    expect(skipExpression(text, 0, ",")).toBe(text.indexOf(","));
   });
 
   it("runs to the end of the string when endChar never occurs", () => {
-    expect(skipExpression("abcdef", 0, ",")).toBe(6);
+    const text = "abcdef";
+    expect(skipExpression(text, 0, ",")).toBe(text.length);
   });
 
   it("a comma or paren INSIDE a nested (...) is not the end", () => {
-    expect(skipExpression("(a,b),c", 0, ",")).toBe(5);
+    const text = "(a,b),c";
+    expect(skipExpression(text, 0, ",")).toBe(text.indexOf(")") + 1);
   });
 
   it("a brace nests exactly like a paren, and does not itself end the expression", () => {
-    expect(skipExpression("{a,b},c", 0, ",")).toBe(5);
+    const text = "{a,b},c";
+    expect(skipExpression(text, 0, ",")).toBe(text.indexOf("}") + 1);
   });
 
   it("braces and parens can nest inside each other", () => {
-    expect(skipExpression("(a{b,c}d),e", 0, ",")).toBe(9);
+    const text = "(a{b,c}d),e";
+    expect(skipExpression(text, 0, ",")).toBe(text.indexOf(")") + 1);
   });
 
   it("advances past an empty brace pair correctly, not merely re-consuming already-processed content that happens to reach the same answer", () => {
     // An immediately-closing "{}" isolates the brace branch's own trailing +1 from the recursive call's return value: rewinding by 2 instead (the mutation this pins) resets index to the opening "{" itself, causing skipExpression to re-open the identical brace pair forever.
-    expect(skipExpression("{},c", 0, ",")).toBe(2);
+    const text = "{},c";
+    expect(skipExpression(text, 0, ",")).toBe(text.indexOf("}") + 1);
   });
 
   it("a comma inside a double-quoted string is not the end", () => {
-    expect(skipExpression('"a,b",c', 0, ",")).toBe(5);
+    const text = '"a,b",c';
+    expect(skipExpression(text, 0, ",")).toBe(text.indexOf('"', 1) + 1);
   });
 
   it("a comma inside a single-quoted string is not the end", () => {
-    expect(skipExpression("'a,b',c", 0, ",")).toBe(5);
+    const text = "'a,b',c";
+    expect(skipExpression(text, 0, ",")).toBe(text.indexOf("'", 1) + 1);
   });
 
   it("an unterminated quoted string runs to the end of the text", () => {
-    expect(skipExpression('"unterminated', 0, ",")).toBe(13);
+    const text = '"unterminated';
+    expect(skipExpression(text, 0, ",")).toBe(text.length);
   });
 
   it("starts scanning exactly at the given start index, not from 0", () => {
-    expect(skipExpression("xx,abc,def", 3, ",")).toBe(6);
+    const text = "xx,abc,def";
+    const startIndex = 3;
+    expect(skipExpression(text, startIndex, ",")).toBe(
+      text.indexOf(",", startIndex + 1),
+    );
   });
 });
 
