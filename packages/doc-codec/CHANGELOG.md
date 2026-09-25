@@ -1,3 +1,15 @@
+## [6.1.17](https://github.com/ExaDev/documents.js/compare/doc-codec%406.1.16...doc-codec%406.1.17) (2026-09-25)
+
+### Bug Fixes
+
+* **doc-codec:** enable max-lines ([6cdb927](https://github.com/ExaDev/documents.js/commit/6cdb92727f32081beedee5bc46db5ef357aa900f))
+
+### Code Refactoring
+
+* **doc-codec:** split read.test.ts at its content/style/stream boundary ([3bea9bc](https://github.com/ExaDev/documents.js/commit/3bea9bc71bf7bd2a1292fcf62124366ad3fce045))
+* **doc-codec:** split table/read.test.ts at its border/grid boundaries ([27a5f71](https://github.com/ExaDev/documents.js/commit/27a5f71066be88758ab8825ae46436398f3e9ccc)), references [#1316](https://github.com/ExaDev/documents.js/issues/1316)
+* **doc-codec:** split write.test.ts at its content/section/table boundary ([92c2fac](https://github.com/ExaDev/documents.js/commit/92c2fac644a44253b3ce31a762baafb5810d25ab))
+
 ## [6.1.16](https://github.com/ExaDev/documents.js/compare/doc-codec%406.1.15...doc-codec%406.1.16) (2026-09-24)
 
 
