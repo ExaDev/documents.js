@@ -1,3 +1,19 @@
+## [4.15.37](https://github.com/ExaDev/documents.js/compare/xls-codec%404.15.36...xls-codec%404.15.37) (2026-09-25)
+
+### Bug Fixes
+
+* **xls-codec:** escape doc-comment punctuation TSDoc reads as markup ([550d55e](https://github.com/ExaDev/documents.js/commit/550d55e9f0674cf6b337083b42a9053271d133f5))
+* **xls-codec:** make readBseImage's truncated-BSE return value explicit ([da072af](https://github.com/ExaDev/documents.js/commit/da072af2691d0cd064d03ea7c0af33fb270f096f))
+* **xls-codec:** move PAPER_SIZE_BY_CODE above its first reader ([150e217](https://github.com/ExaDev/documents.js/commit/150e2177aa6eaae5e707558ead23a1582fd92a7f))
+* **xls-codec:** rename two test-support locals that shadowed an outer binding ([ee33127](https://github.com/ExaDev/documents.js/commit/ee331274b31ad2b92b4f285af26ac2ce58eb684c))
+* **xls-codec:** return through a never-typed guard on borderStyleTokenFor ([4e97768](https://github.com/ExaDev/documents.js/commit/4e97768b85819a00454d207557956123ea6679f4))
+* **xls-codec:** return through never-typed guards on four conditional-format switches ([ecf0602](https://github.com/ExaDev/documents.js/commit/ecf0602a2208af0ba65f192c39687b5493119390))
+* **xls-codec:** share one never-typed guard across five ContentCellValue switches ([17b4372](https://github.com/ExaDev/documents.js/commit/17b4372b953c91fb7cec6f80181852a9030bd9f2))
+
+### Miscellaneous Chores
+
+* **xls-codec:** clear the eslint-config 2.12.1 rule debt list ([ea085f5](https://github.com/ExaDev/documents.js/commit/ea085f53178096723e2318a1c098d7d7e2410293))
+
 ## [4.15.36](https://github.com/ExaDev/documents.js/compare/xls-codec%404.15.35...xls-codec%404.15.36) (2026-09-24)
 
 

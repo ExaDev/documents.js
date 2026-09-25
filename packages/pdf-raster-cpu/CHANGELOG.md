@@ -1,3 +1,14 @@
+## [1.0.53](https://github.com/ExaDev/documents.js/compare/pdf-raster-cpu%401.0.52...pdf-raster-cpu%401.0.53) (2026-09-25)
+
+### Bug Fixes
+
+* **pdf-raster-cpu:** name magic numbers in coverage.test.ts ([4b69952](https://github.com/ExaDev/documents.js/commit/4b69952402f0c969052e81dd3807e0720f141910)), references [#1275](https://github.com/ExaDev/documents.js/issues/1275)
+* **pdf-raster-cpu:** name magic numbers in geometry.test.ts ([d6694b0](https://github.com/ExaDev/documents.js/commit/d6694b043cf0c705adc3fe6150fdb9d99c64dd08)), references [#1275](https://github.com/ExaDev/documents.js/issues/1275)
+* **pdf-raster-cpu:** name magic numbers in rasteriser-ops.test.ts ([725f2fe](https://github.com/ExaDev/documents.js/commit/725f2fe04f8fadd74233d5c1e5615d4279f3894b)), references [#1275](https://github.com/ExaDev/documents.js/issues/1275)
+* **pdf-raster-cpu:** name magic numbers in rasteriser.test.ts ([7019861](https://github.com/ExaDev/documents.js/commit/7019861525e3c1f6e9b28538e7d9d0e3205cf8b8)), references [#1275](https://github.com/ExaDev/documents.js/issues/1275)
+* **pdf-raster-cpu:** name magic numbers in source files ([0b93e70](https://github.com/ExaDev/documents.js/commit/0b93e7040e142ca8a2d27f2b041f5ce1ac0514a3)), references [#1275](https://github.com/ExaDev/documents.js/issues/1275)
+* **pdf-raster-cpu:** name magic numbers in stroke.test.ts ([636472d](https://github.com/ExaDev/documents.js/commit/636472dd2f40aac181d309af5a91bf6304a77885)), references [#1275](https://github.com/ExaDev/documents.js/issues/1275)
+
 ## [1.0.52](https://github.com/ExaDev/documents.js/compare/pdf-raster-cpu%401.0.51...pdf-raster-cpu%401.0.52) (2026-09-24)
 
 
