@@ -4,6 +4,11 @@
 
 import { u16, u32 } from "./biff";
 
+const RECVER_MASK = 0xf;
+const RECINSTANCE_MASK = 0xfff;
+const RECINSTANCE_SHIFT = 4;
+const CONTAINER_RECVER = 0xf;
+
 /** [MS-ODRAW] 2.2.1 OfficeArtRecordHeader: an 8-byte header — a little-endian word packing `recVer` (low nibble) and `recInstance` (remaining 12 bits), a little-endian recType, then a little-endian recLen counting `body`'s own length. */
 function escherRecord(
   recVer: number,
@@ -11,7 +16,9 @@ function escherRecord(
   recType: number,
   body: readonly number[],
 ): number[] {
-  const verInstance = (recVer & 0xf) | ((recInstance & 0xfff) << 4);
+  const verInstance =
+    (recVer & RECVER_MASK) |
+    ((recInstance & RECINSTANCE_MASK) << RECINSTANCE_SHIFT);
   return [...u16(verInstance), ...u16(recType), ...u32(body.length), ...body];
 }
 
@@ -31,16 +38,19 @@ export function escherContainer(
   children: readonly (readonly number[])[],
 ): number[] {
   const body = children.flatMap((child) => child);
-  return escherRecord(0xf, recInstance, recType, body);
+  return escherRecord(CONTAINER_RECVER, recInstance, recType, body);
 }
+
+const GUID_BYTES = 16;
+const BLIP_TAG = 0xff;
 
 /** [MS-ODRAW] OfficeArtFBSE: the fixed fields this package's own readBseImage reads past, then an embedded blip record's own bytes — nameData is always omitted (cbName 0), which every real BSE this reader is meant to accept also does when the file carries no picture name. */
 export function bseEntry(embeddedBlipBytes: readonly number[]): number[] {
   return [
     0x00, // btWin32
     0x00, // btMacOS
-    ...new Array<number>(16).fill(0), // rgbUid
-    ...u16(0xff), // tag
+    ...new Array<number>(GUID_BYTES).fill(0), // rgbUid
+    ...u16(BLIP_TAG), // tag
     ...u32(embeddedBlipBytes.length), // size
     ...u32(1), // cRef
     ...u32(0), // foDelay
@@ -59,11 +69,13 @@ export function embeddedBlip(
   fileBytes: readonly number[],
 ): number[] {
   return escherAtom(recType, recInstance, [
-    ...new Array<number>(16).fill(0), // rgbUid1
-    0xff, // tag
+    ...new Array<number>(GUID_BYTES).fill(0), // rgbUid1
+    BLIP_TAG, // tag
     ...fileBytes,
   ]);
 }
+
+const CLIENT_ANCHOR_SHEET_REC_TYPE = 0xf010;
 
 /** [MS-XLS] 2.5.163 OfficeArtClientAnchorSheet: a flags word, then the top-left and bottom-right corner cells, each a column, a 1/1024ths-of-cell-width X offset, a row, and a 1/256ths-of-cell-height Y offset. */
 export function clientAnchorSheet(
@@ -76,7 +88,7 @@ export function clientAnchorSheet(
   rwB: number,
   dyB: number,
 ): number[] {
-  return escherAtom(0xf010, 0x0, [
+  return escherAtom(CLIENT_ANCHOR_SHEET_REC_TYPE, 0x0, [
     ...u16(0), // flags: fMove/fSize both clear
     ...u16(colL),
     ...u16(dxL),
@@ -89,13 +101,15 @@ export function clientAnchorSheet(
   ]);
 }
 
+const SP_REC_TYPE = 0xf00a;
+
 /** [MS-ODRAW] OfficeArtFSP: shape id then a flags DWORD, with the shape's own type carried in the record HEADER's recInstance (an MSOSPT value) rather than in this body. */
 export function spAtom(
   shapeType: number,
   spid: number,
   flags: number,
 ): number[] {
-  return escherAtom(0xf00a, shapeType, [...u32(spid), ...u32(flags)]);
+  return escherAtom(SP_REC_TYPE, shapeType, [...u32(spid), ...u32(flags)]);
 }
 
 /** [MS-ODRAW] OfficeArtFOPTE: opid (property id, with fBid/fComplex already folded in by the caller) then a 4-byte op value — one property per call, concatenated by the caller into an Opt atom's own body. */
@@ -103,8 +117,10 @@ export function foptEntry(opid: number, op: number): number[] {
   return [...u16(opid), ...u32(op)];
 }
 
+const OPT_REC_TYPE = 0xf00b;
+
 /** [MS-ODRAW] OfficeArtFOPT: recInstance carries the property COUNT, per that record's own spec — derived here from `entries.length` so a fixture never states it separately from the entries it actually holds. */
 export function optAtom(entries: readonly (readonly number[])[]): number[] {
   const body = entries.flatMap((entry) => entry);
-  return escherAtom(0xf00b, entries.length, body);
+  return escherAtom(OPT_REC_TYPE, entries.length, body);
 }
