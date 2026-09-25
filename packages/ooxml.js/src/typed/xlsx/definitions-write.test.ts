@@ -70,13 +70,15 @@ describe("collectTableEntries", () => {
   });
 
   it("rejects a columns array carrying even one non-string entry, not just an array of entirely non-strings", () => {
+    // Deliberately not a string, to exercise the mixed-entry rejection alongside "Col1".
+    const NON_STRING_COLUMN_ENTRY = 42;
     const definitions: DefinitionsTable = {
       broken: {
         kind: "table",
         name: "T",
         ref: "A1:B2",
         sheet: "Sheet1",
-        columns: ["Col1", 42],
+        columns: ["Col1", NON_STRING_COLUMN_ENTRY],
       },
     };
     expect(() => {
@@ -112,6 +114,8 @@ describe("buildNameDefinedNameElements", () => {
 
 describe("buildTablePart", () => {
   it("builds CT_Table's required attributes, an autoFilter over the entry's own ref, and one tableColumn per column in order with 1-based ids", () => {
+    // Arbitrary, distinct from every id/index elsewhere in this test: only pass-through matters.
+    const TABLE_ID = 5;
     const table = buildTablePart(
       {
         name: "Sales",
@@ -119,7 +123,7 @@ describe("buildTablePart", () => {
         sheet: "Sheet1",
         columns: ["Region", "Total"],
       },
-      5,
+      TABLE_ID,
     );
 
     expect(table.tag).toBe("table");
@@ -127,7 +131,10 @@ describe("buildTablePart", () => {
       name: "xmlns",
       value: "http://schemas.openxmlformats.org/spreadsheetml/2006/main",
     });
-    expect(table.attributes).toContainEqual({ name: "id", value: "5" });
+    expect(table.attributes).toContainEqual({
+      name: "id",
+      value: String(TABLE_ID),
+    });
     expect(table.attributes).toContainEqual({
       name: "totalsRowShown",
       value: "0",

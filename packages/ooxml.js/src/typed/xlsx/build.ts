@@ -910,6 +910,9 @@ function buildPageMarginsElement(
   });
 }
 
+// pageSetup@scale's own schema default: no scaling at all.
+const DEFAULT_SCALE_PERCENT = 100;
+
 function buildPageSetupElement(
   settings: ContentSheetPrintSettings,
 ): XmlElement {
@@ -922,7 +925,7 @@ function buildPageSetupElement(
     attrs.paperHeight = ptToUniversalMeasure(settings.pageSize.heightPt);
   }
   // scale/fitToWidth/fitToHeight are written together regardless of which mode sheetPr/pageSetUpPr@fitToPage actually selects — matching real producer output (see this directory's own kitchen-sink fixture, where LibreOffice writes all three unconditionally, only one pair of them ever meaningfully honoured).
-  attrs.scale = String(settings.scalePercent ?? 100);
+  attrs.scale = String(settings.scalePercent ?? DEFAULT_SCALE_PERCENT);
   attrs.fitToWidth = String(settings.fitToPages?.width ?? 1);
   attrs.fitToHeight = String(settings.fitToPages?.height ?? 1);
   attrs.pageOrder = settings.pageOrder;

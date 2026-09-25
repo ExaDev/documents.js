@@ -17,11 +17,24 @@ export const DEFAULT_COLUMN_WIDTH_CHARS = 8.43;
 // The decimal precision <col width="..."> is written at, matching Excel's own convention for this attribute. ptToColumnWidthChars rounds to exactly this many places itself (see below), so build.ts's own .toFixed call on its result is pure string formatting of an already-rounded number, never a second, independent rounding step that could disagree with the first.
 export const COLUMN_WIDTH_CHARS_DECIMAL_PLACES = 2;
 
+// The base [MS-OI29500]'s own column-width formula (pixels = Truncate(((256 * width + Truncate(128 / MDW)) / 256) * MDW)) is defined in: width is scaled up by 256 before the digit-width-allowance correction is added, then the whole numerator is scaled back down by the same 256 before multiplying by MDW. Both occurrences share this one constant because they are the same scale factor applied and then reversed, not two independent numbers that happen to match.
+const COLUMN_WIDTH_FORMULA_SCALE = 256;
+
+// The fixed correction term inside the same spec formula's own Truncate(128 / MDW): half of COLUMN_WIDTH_FORMULA_SCALE, rounding the digit-width allowance to the nearest whole pixel rather than always truncating it down.
+const COLUMN_WIDTH_FORMULA_ROUNDING_NUMERATOR = 128;
+
+// The base ptToColumnWidthChars raises COLUMN_WIDTH_CHARS_DECIMAL_PLACES to, to get the power-of-ten scale factor its own round-up-to-N-places arithmetic multiplies and divides by.
+const DECIMAL_BASE = 10;
+
 // Converts a stored <col width="..."> value (in "characters of the workbook's default font") to points. Two steps: (1) the pixel formula documented and attributed above, confirmed against both the official [MS-OI29500] specification page (which gives the reverse pixels-from-width relationship in the identical MDW terms) and multiple independent real-world tool references (the ClosedXML wiki's own "Cell Dimensions" page, SheetJS's own column-properties documentation) that all state it identically: pixels = Truncate(((256 * width + Truncate(128 / MDW)) / 256) * MDW); (2) the standard 96px/inch -> 72pt/inch conversion. Both truncations are real, integer-pixel-grid truncations Excel itself performs when rendering — reproduced here exactly (via Math.trunc) rather than smoothed into a continuous formula, since a caller round-tripping the exact same width value through this function should see the exact same pixel count Excel itself would render.
 export function columnWidthCharsToPt(width: number): number {
-  const digitWidthAllowance = Math.trunc(128 / MAX_DIGIT_WIDTH_PX);
+  const digitWidthAllowance = Math.trunc(
+    COLUMN_WIDTH_FORMULA_ROUNDING_NUMERATOR / MAX_DIGIT_WIDTH_PX,
+  );
   const pixels = Math.trunc(
-    ((256 * width + digitWidthAllowance) / 256) * MAX_DIGIT_WIDTH_PX,
+    ((COLUMN_WIDTH_FORMULA_SCALE * width + digitWidthAllowance) /
+      COLUMN_WIDTH_FORMULA_SCALE) *
+      MAX_DIGIT_WIDTH_PX,
   );
   return (pixels / PIXELS_PER_INCH) * POINTS_PER_INCH;
 }
@@ -29,8 +42,12 @@ export function columnWidthCharsToPt(width: number): number {
 // The write-side inverse of columnWidthCharsToPt above: given a desired column width in points, produces the "characters" value to store in <col width="...">. It is the correct algebraic inverse of the forward formula's own pixel computation up to that formula's unavoidable truncation loss (multiple stored "width" values truncate to the same pixel count, so this can only recover ONE representative of that pixel's whole bucket, never the caller's original decimal digits) — solving pixels = Truncate(((256*width + K)/256) * MDW) for width (dropping the outer truncation) gives width = pixels/MDW - K/256, where K = Truncate(128/MDW), and that quotient is exactly the LOWEST width value the forward formula truncates to this pixel count. Rounding that lowest value to COLUMN_WIDTH_CHARS_DECIMAL_PLACES places — the precision it is actually written at — has to round UP, never to the nearest value: rounding down, even by one hundredth, can land below the bucket's own lower edge and make the forward formula truncate the stored value down to the PREVIOUS pixel count, which is exactly what used to make a width keep drifting narrower on every further read/write cycle rather than settling. Rounding up instead always stays inside the same bucket, because a bucket spans a full 1/MDW (~0.143) characters, far wider than the <=0.01-character nudge rounding up ever adds — so for any characters value that itself came from a previous call to this function, feeding its resulting points value straight back in reproduces that exact same characters value again: write(read(x)) === x, the fixed point this format needs to actually reach rather than approach asymptotically. That lowest-width quotient is negative for any widthPt below K/256 characters' worth of pixels (a real file can and does store an explicit width="0", commonly for a hidden column), and a stored <col width> can never legitimately be negative — so the result is floored at zero rather than handing buildColsElement a negative width attribute no spreadsheet application expects.
 export function ptToColumnWidthChars(widthPt: number): number {
   const pixels = (widthPt / POINTS_PER_INCH) * PIXELS_PER_INCH;
-  const digitWidthAllowance = Math.trunc(128 / MAX_DIGIT_WIDTH_PX);
-  const exact = pixels / MAX_DIGIT_WIDTH_PX - digitWidthAllowance / 256;
-  const scale = 10 ** COLUMN_WIDTH_CHARS_DECIMAL_PLACES;
+  const digitWidthAllowance = Math.trunc(
+    COLUMN_WIDTH_FORMULA_ROUNDING_NUMERATOR / MAX_DIGIT_WIDTH_PX,
+  );
+  const exact =
+    pixels / MAX_DIGIT_WIDTH_PX -
+    digitWidthAllowance / COLUMN_WIDTH_FORMULA_SCALE;
+  const scale = DECIMAL_BASE ** COLUMN_WIDTH_CHARS_DECIMAL_PLACES;
   return Math.max(0, Math.ceil(exact * scale) / scale);
 }

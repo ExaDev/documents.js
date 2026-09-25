@@ -44,8 +44,9 @@ function numberCell(
 describe("threadedCommentId", () => {
   it("formats the counter as zero-padded, UPPERCASE hex inside the braced GUID shape", () => {
     expect(threadedCommentId(0)).toBe("{00000000-0000-0000-0000-000000000000}");
-    // 10 in hex is "a" — exercises the uppercase-vs-lowercase distinction the digits 0-9 alone cannot.
-    expect(threadedCommentId(10)).toBe(
+    // 10 in hex is "a": exercises the uppercase-vs-lowercase distinction the digits 0-9 alone cannot.
+    const COUNTER_HEX_ENCODING_TO_LOWERCASE_A = 10;
+    expect(threadedCommentId(COUNTER_HEX_ENCODING_TO_LOWERCASE_A)).toBe(
       "{00000000-0000-0000-0000-00000000000A}",
     );
   });
