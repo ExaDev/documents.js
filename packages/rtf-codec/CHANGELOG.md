@@ -1,3 +1,10 @@
+## [8.1.22](https://github.com/ExaDev/documents.js/compare/rtf-codec%408.1.21...rtf-codec%408.1.22) (2026-09-25)
+
+
+### Dependencies
+
+- Updated archive-codec to 1.11.24
+
 ## [8.1.21](https://github.com/ExaDev/documents.js/compare/rtf-codec%408.1.20...rtf-codec%408.1.21) (2026-09-25)
 
 

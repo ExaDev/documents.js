@@ -1,3 +1,17 @@
+## [1.11.24](https://github.com/ExaDev/documents.js/compare/archive-codec%401.11.23...archive-codec%401.11.24) (2026-09-25)
+
+### Code Refactoring
+
+* **archive-codec:** index the xor obfuscation tables by spec order ([cab94f5](https://github.com/ExaDev/documents.js/commit/cab94f5e0ac62904aba664bda6d414f6449592f7))
+* **archive-codec:** name every production magic number and enable the rule ([cd5bc4b](https://github.com/ExaDev/documents.js/commit/cd5bc4b6cd0f85df8875bea4d7b2655365a5526e))
+* **archive-codec:** name md5 round constants and index the sine table by RFC order ([76f0038](https://github.com/ExaDev/documents.js/commit/76f0038a65b98a14cb29b5fbc6febe7b4cda6c06))
+* **archive-codec:** name the compound file reader header and dirent offsets ([fd65dd7](https://github.com/ExaDev/documents.js/commit/fd65dd753ee20f09cd0d9964060da0e8d25721a3))
+* **archive-codec:** name the compound file writer header and dirent offsets ([87a6e2f](https://github.com/ExaDev/documents.js/commit/87a6e2fd1930dc1c7182623e84fe56335df56535))
+* **archive-codec:** name the property-set read and write field offsets ([64a408c](https://github.com/ExaDev/documents.js/commit/64a408cca8b2be04ada2b9945b9fea6d20f3b885))
+* **archive-codec:** name the property-set read and write field offsets ([5af51d7](https://github.com/ExaDev/documents.js/commit/5af51d7996c2027c0c53ffa65825031ed88e3ec0))
+* **archive-codec:** name the property-set wire GUID and tick layout ([6ff5430](https://github.com/ExaDev/documents.js/commit/6ff54302f23e68923fc2ea2f4daeedb5bb0f81d0))
+* **archive-codec:** name the SHA-1 padding, schedule and round constants ([31a74f3](https://github.com/ExaDev/documents.js/commit/31a74f34b3ac89bb3c3d125714438c7c5779acff))
+
 ## [1.11.23](https://github.com/ExaDev/documents.js/compare/archive-codec%401.11.22...archive-codec%401.11.23) (2026-09-25)
 
 ### Code Refactoring
