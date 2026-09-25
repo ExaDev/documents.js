@@ -38,19 +38,14 @@ import { parseOdfLength } from "../shared/units";
 import { decodeOdfText } from "../shared/text";
 import { readOdfParagraph } from "../shared/paragraph";
 import { readCellStyleDecoration } from "../shared/table";
+// The cell-anchored draw:frame walk lives in read-frames.ts.
+import { collectAnchoredFrames } from "./read-frames";
 import {
   readContentValidationDefinitions,
   resolveSheetDataValidations,
   type ParsedContentValidation,
 } from "./data-validation";
 import { readConditionalFormats } from "./conditional-format";
-import type { OdfTransformFunction } from "../shared/transform";
-import { parseOdfTransform } from "../shared/transform";
-import { readDrawFrame } from "../draw/shapes";
-import {
-  readDrawObjectReference,
-  readEmbeddedObjectDocument,
-} from "../draw/embedded";
 import {
   addOdfPackageResidue,
   collectOdfNonContentPartResidue,
@@ -357,104 +352,6 @@ interface TableWalkResult {
 // One anchored draw:frame -> whichever of `images`/`embeddedObjects` it belongs in, at the anchor position the caller resolved for it (the enclosing cell's own cursor row/column, or 0/0 for a page-anchored frame — see this module's own top-of-file note on the two anchoring conventions). The frame itself is read by shapes.ts's readDrawFrame, so its resolved box already carries the group-composed offsets and the frame-sized ContentImageBlock this function only has to re-shape into a ContentSheetImage. An embedded sub-document dispatches through typed/draw/embedded.ts's own readEmbeddedObjectDocument — the one shared kind -> reader table every frame-reading format hands its references to, so this module imports no sibling format reader (see that module's top-of-file note for why the dispatch is inverted into it).
 //
 // draw:object is checked BEFORE the frame's own image blocks, because a real embedded-object frame ALSO carries a draw:image preview of the object (an ObjectReplacements/ GDI metafile) that must not be mistaken for anchored picture content — the same ordering, for the same reason, that readDrawFrameContent already applies to a table frame's own preview image.
-// The two anchored-drawing accumulators a sheet's frame walk fills, always threaded together: a draw:frame resolves to either a ContentSheetImage or a ContentEmbeddedObject, so a walk that could produce either needs both. Wrapped rather than passed as bare arrays so the parameters stay out of prefer-readonly-array-param's scope while the arrays they hold stay genuinely mutable.
-interface AnchoredDrawingSink {
-  readonly images: ContentSheetImage[];
-  readonly embeddedObjects: ContentEmbeddedObject[];
-}
-
-function collectAnchoredFrame(
-  frameElement: XmlElement,
-  groupFunctions: readonly OdfTransformFunction[],
-  pkg: Package,
-  anchorRow: number,
-  anchorColumn: number,
-  sink: AnchoredDrawingSink,
-): void {
-  const { images, embeddedObjects } = sink;
-  const shape = readDrawFrame(frameElement, groupFunctions, pkg);
-  if (shape === undefined) {
-    return;
-  }
-
-  const reference = readDrawObjectReference(frameElement, pkg);
-  if (reference !== undefined) {
-    // Anchor fields are set exactly as they are for an anchored image just below — document-schema.js 2.2.0 gave ContentEmbeddedObject the same anchorRow/anchorColumn/offsetXPt/offsetYPt quartet ContentSheetImage already carried, so an embedded object's own anchor cell is now genuinely representable rather than lost. `frame` keeps the coordinates the format itself stated (cell-relative for a cell-anchored object, sheet-absolute for a page-anchored one) and the offsets restate that frame's own origin against the named anchor cell, mirroring ContentSheetImage's own convention rather than inventing a second one. A chart's residue (its whole chart:chart element, quarantined for a same-format restorer) rides the same return the document does.
-    const { document, residue } = readEmbeddedObjectDocument(
-      reference,
-      shape.frame,
-      "ods",
-    );
-    const object: ContentEmbeddedObject = {
-      objectKind: reference.objectKind,
-      document,
-      frame: shape.frame,
-      anchorRow,
-      anchorColumn,
-      offsetXPt: shape.frame.xPt,
-      offsetYPt: shape.frame.yPt,
-    };
-    if (residue !== undefined) {
-      object.source = residue;
-    }
-    embeddedObjects.push(object);
-    return;
-  }
-
-  for (const block of shape.blocks) {
-    if (block.kind === "image") {
-      images.push({
-        ...block,
-        anchorRow,
-        anchorColumn,
-        offsetXPt: shape.frame.xPt,
-        offsetYPt: shape.frame.yPt,
-      });
-    }
-  }
-}
-
-// Walks a shape container's own children (a table:table-cell's, a table:shapes', or a nested draw:g's), flattening draw:g groups exactly as walkDrawShapes does for a slide — an enclosing group's own draw:transform is accumulated INNERMOST FIRST so composeOdfGroupTransform applies the list in the right order at the leaf. Every other element kind (a bare draw:rect/draw:custom-shape vector primitive, a draw:control, the cell's own text:p content) is skipped: see this module's own top-of-file note on what a ContentSheet has nowhere to carry.
-function collectAnchoredFrames(
-  children: readonly XmlNode[],
-  groupFunctions: readonly OdfTransformFunction[],
-  pkg: Package,
-  anchorRow: number,
-  anchorColumn: number,
-  sink: AnchoredDrawingSink,
-): void {
-  for (const child of children) {
-    if (child.type !== "element") {
-      continue;
-    }
-    if (child.tag === "draw:frame") {
-      collectAnchoredFrame(
-        child,
-        groupFunctions,
-        pkg,
-        anchorRow,
-        anchorColumn,
-        sink,
-      );
-    } else if (child.tag === "draw:g") {
-      const ownValue = attrValue(child, "draw:transform");
-      const ownFunctions =
-        ownValue === undefined ? [] : parseOdfTransform(ownValue);
-      const nested =
-        ownFunctions.length === 0
-          ? groupFunctions
-          : [...ownFunctions, ...groupFunctions];
-      collectAnchoredFrames(
-        child.children,
-        nested,
-        pkg,
-        anchorRow,
-        anchorColumn,
-        sink,
-      );
-    }
-  }
-}
 
 // Walks one table:table's own direct children in document order, unwrapping table:table-header-columns/table:table-header-rows transparently into the SAME columns/rows/cells this function already builds — confirmed against real LibreOffice output as the REAL repeat-row/repeat-column mechanism ("rows/columns to repeat on every printed page", Format > Print Areas > Edit in the Calc UI): a wrapped table:table-column/table:table-row is a genuinely real column/row (contributing to `columns`/`rows`/`cells` exactly as if unwrapped, in the SAME document-order position), while the wrapper itself additionally marks that its covered index range is the print engine's own title-row/title-column range. This is NOT a named-range mechanism the way it might be guessed to be from xlsx's own different Print_Titles convention — ODF has no named range involved here at all.
 function readTable(tableElement: XmlElement, pkg: Package): TableWalkResult {
