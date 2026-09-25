@@ -16,6 +16,20 @@ const TABLE_DIRECTORY_HEADER_SIZE = 12;
 const TABLE_RECORD_SIZE = 16;
 const TABLE_TAG_SIZE = 4;
 
+const BITS_PER_BYTE = 8;
+const UINT32_BYTE_COUNT = 4;
+
+// Field offsets within the table directory header (clause 4.1): sfntVersion uint32 @0, numTables uint16 @4, searchRange/entrySelector/rangeShift uint16 each after it.
+const TABLE_DIRECTORY_NUM_TABLES_FIELD = 4;
+
+// Field offsets within one table record (clause 4.1): tag uint32 @0, checkSum uint32 @4, offset uint32 @8, length uint32 @12.
+const TABLE_RECORD_OFFSET_FIELD = 8;
+const TABLE_RECORD_LENGTH_FIELD = 12;
+
+// The printable-ASCII range (space through tilde) a table tag byte must fall in (clause 4.2).
+const PRINTABLE_ASCII_MIN = 0x20;
+const PRINTABLE_ASCII_MAX = 0x7e;
+
 // The four sfnt version tags a single-font file can legitimately carry (ISO/IEC 14496-22 clause 4.1): 0x00010000 TrueType outlines, 'OTTO' CFF outlines, 'true'/'typ1' the two legacy Apple variants. 'ttcf' (TrueType Collection) is deliberately absent — a collection's own header wraps several table directories at offsets this reader never looks for, so treating its first four bytes as a directory would read nonsense rather than fail.
 const SFNT_VERSION_TRUETYPE = 0x00010000;
 const SFNT_VERSION_CFF = 0x4f54544f; // 'OTTO'
@@ -56,15 +70,15 @@ function requireBytes(
 }
 
 function readUint16(bytes: Uint8Array<ArrayBuffer>, offset: number): number {
-  return (bytes[offset]! << 8) | bytes[offset + 1]!;
+  return (bytes[offset]! << BITS_PER_BYTE) | bytes[offset + 1]!;
 }
 
 function readUint32(bytes: Uint8Array<ArrayBuffer>, offset: number): number {
   return (
-    ((bytes[offset]! << 24) |
-      (bytes[offset + 1]! << 16) |
-      (bytes[offset + 2]! << 8) |
-      bytes[offset + 3]!) >>>
+    ((bytes[offset]! << ((UINT32_BYTE_COUNT - 1) * BITS_PER_BYTE)) |
+      (bytes[offset + 1]! << (2 * BITS_PER_BYTE)) |
+      (bytes[offset + 2]! << BITS_PER_BYTE) |
+      bytes[offset + (UINT32_BYTE_COUNT - 1)]!) >>>
     0
   );
 }
@@ -77,7 +91,7 @@ function decodeTag(
   let tag = "";
   for (let i = 0; i < TABLE_TAG_SIZE; i++) {
     const byte = bytes[offset + i]!;
-    if (byte < 0x20 || byte > 0x7e) {
+    if (byte < PRINTABLE_ASCII_MIN || byte > PRINTABLE_ASCII_MAX) {
       return undefined;
     }
     tag += String.fromCharCode(byte);
@@ -94,7 +108,7 @@ export function parseSfnt(
   if (!SFNT_VERSIONS.has(readUint32(bytes, 0))) {
     return undefined;
   }
-  const numTables = readUint16(bytes, 4);
+  const numTables = readUint16(bytes, TABLE_DIRECTORY_NUM_TABLES_FIELD);
   if (
     !hasBytes(
       bytes,
@@ -112,8 +126,8 @@ export function parseSfnt(
     if (tag === undefined) {
       return undefined;
     }
-    const offset = readUint32(bytes, recordOffset + 8);
-    const length = readUint32(bytes, recordOffset + 12);
+    const offset = readUint32(bytes, recordOffset + TABLE_RECORD_OFFSET_FIELD);
+    const length = readUint32(bytes, recordOffset + TABLE_RECORD_LENGTH_FIELD);
     if (!hasBytes(bytes, offset, length)) {
       continue; // a table record pointing past the end of the file: drop this one table rather than the whole font, so a font whose (say) 'DSIG' is truncated still renders
     }
@@ -146,21 +160,29 @@ export function u16(bytes: Uint8Array<ArrayBuffer>, offset: number): number {
   return readUint16(bytes, offset);
 }
 
+// A 16-bit two's-complement integer's sign bit and the modulus subtracted to reinterpret an unsigned u16 as signed: a value with the sign bit set is `value - 2^16`.
+const INT16_SIGN_BIT = 0x8000;
+const UINT16_MODULUS = 0x10000;
+
 export function i16(bytes: Uint8Array<ArrayBuffer>, offset: number): number {
   const value = u16(bytes, offset);
-  return value >= 0x8000 ? value - 0x10000 : value;
+  return value >= INT16_SIGN_BIT ? value - UINT16_MODULUS : value;
 }
+
+const UINT24_BYTE_COUNT = 3;
 
 // A 3-byte big-endian unsigned integer — the sfnt/CFF primitive an INDEX with offSize 3 uses for its own offset array (CFF 1.0 spec section 5), the one width between uint16 and uint32 the container format actually mixes in.
 export function u24(bytes: Uint8Array<ArrayBuffer>, offset: number): number {
-  requireBytes(bytes, offset, 3);
+  requireBytes(bytes, offset, UINT24_BYTE_COUNT);
   return (
-    (bytes[offset]! << 16) | (bytes[offset + 1]! << 8) | bytes[offset + 2]!
+    (bytes[offset]! << (2 * BITS_PER_BYTE)) |
+    (bytes[offset + 1]! << BITS_PER_BYTE) |
+    bytes[offset + 2]!
   );
 }
 
 export function u32(bytes: Uint8Array<ArrayBuffer>, offset: number): number {
-  requireBytes(bytes, offset, 4);
+  requireBytes(bytes, offset, UINT32_BYTE_COUNT);
   return readUint32(bytes, offset);
 }
 
@@ -169,7 +191,8 @@ export function i32(bytes: Uint8Array<ArrayBuffer>, offset: number): number {
 }
 
 // An F2Dot14: a 16-bit signed fixed-point number with two integer bits and fourteen fraction bits (clause 4.4), used for the scale/2x2 transform entries in a composite glyph's own component records.
-const F2DOT14_SCALE = 1 << 14;
+const F2DOT14_FRACTION_BITS = 14;
+const F2DOT14_SCALE = 1 << F2DOT14_FRACTION_BITS;
 
 export function f2dot14(
   bytes: Uint8Array<ArrayBuffer>,
