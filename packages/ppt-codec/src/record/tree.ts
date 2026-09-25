@@ -6,6 +6,9 @@ import {
   readRecordHeader,
 } from "./header";
 
+// The hexadecimal radix every record-type diagnostic below formats its own recType through.
+const HEX_RADIX = 16;
+
 // The record-tree walk [MS-PPT] is built around. Every record is located by its own offset within the stream it came from rather than by a copy of its bytes, because the format's cross-references are stream offsets: a persist directory entry, a UserEditAtom's offsetLastEdit, and a CurrentUserAtom's offsetToCurrentEdit all name a position in the PowerPoint Document stream, and a reader that had already sliced its records apart could no longer honour them.
 
 export interface PptRecord {
@@ -29,7 +32,7 @@ export function readRecordAt(
   const end = dataOffset + header.recLen;
   if (end > bytes.length) {
     throw new PptFormatError(
-      `record 0x${header.recType.toString(16)} at offset ${offset} declares ${header.recLen} bytes of data but only ${bytes.length - dataOffset} remain in the stream`,
+      `record 0x${header.recType.toString(HEX_RADIX)} at offset ${offset} declares ${header.recLen} bytes of data but only ${bytes.length - dataOffset} remain in the stream`,
     );
   }
   return {
@@ -59,7 +62,7 @@ export function readRecordSequence(
     const recordEnd = record.dataOffset + record.header.recLen;
     if (recordEnd > end) {
       throw new PptFormatError(
-        `record 0x${record.header.recType.toString(16)} at offset ${at} ends at ${recordEnd}, past the ${end} its container allows`,
+        `record 0x${record.header.recType.toString(HEX_RADIX)} at offset ${at} ends at ${recordEnd}, past the ${end} its container allows`,
       );
     }
     records.push(record);

@@ -12,6 +12,7 @@ import {
   CURRENT_USER_DOC_FILE_VERSION,
   CURRENT_USER_FIXED_SIZE,
   CURRENT_USER_HEADER_TOKEN_PLAIN,
+  CURRENT_USER_RELEASE,
 } from "./current-user";
 
 // The write-side mirror of readCurrentUserAtom: the sole record of the "Current User" stream. [MS-PPT] 2.3.2: https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-ppt/940d5700-e4d7-4fc0-ab48-fed5dbc48bc1
@@ -33,7 +34,7 @@ export function writeCurrentUserAtom(
       u32le(offsetToCurrentEdit),
       u16le(ansiUserName.length),
       u16le(CURRENT_USER_DOC_FILE_VERSION),
-      u8(0x03), // release
+      u8(CURRENT_USER_RELEASE),
       u8(0x00), // build
       u16le(0), // padding out CURRENT_USER_FIXED_SIZE's 20-byte fixed portion
       ansiUserName,
