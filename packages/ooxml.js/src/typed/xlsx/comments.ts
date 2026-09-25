@@ -52,12 +52,17 @@ function childrenWithLocalName(
 }
 
 // ST_Guid as written in these parts is braced and upper case, but the brace spelling varies across producers, so both sides of every guid comparison (personId -> person/@id) go through this normaliser. Folding through a direct ASCII offset on the uppercase hex letters, rather than String.prototype.toLowerCase, avoids the one genuinely irreducible equivalent mutation the obvious spelling has: toLowerCase and toUpperCase are BOTH valid, symmetric case folds, so swapping one for the other cannot ever change this function's only observable effect (guid equality, a Map key match in readPersons/readThreadedAuthor) for any input, since only consistency between the two comparison sides matters, never which direction was chosen. Adding 32 (the fixed uppercase-to-lowercase ASCII offset for A-F, matching '0'-'9' and 'a'-'f' already sitting outside the matched class) has no such symmetric sibling: a mutant flipping "+" to "-" folds 'A'-'F' onto the C0 control range instead of 'a'-'f', which is not another valid case fold, so any guid actually containing an uppercase letter fails to compare equal under it.
+// The fixed uppercase-to-lowercase ASCII offset for A-F, per this function's own top comment.
+const UPPERCASE_TO_LOWERCASE_ASCII_OFFSET = 32;
+
 function normalizeGuid(value: string): string {
   return value
     .replaceAll("{", "")
     .replaceAll("}", "")
     .replace(/[A-F]/g, (letter) =>
-      String.fromCharCode(letter.charCodeAt(0) + 32),
+      String.fromCharCode(
+        letter.charCodeAt(0) + UPPERCASE_TO_LOWERCASE_ASCII_OFFSET,
+      ),
     );
 }
 
