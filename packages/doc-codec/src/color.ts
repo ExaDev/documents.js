@@ -9,32 +9,40 @@ const COLOR_COMPONENT_MAX = 255;
 // The Ico palette, [MS-DOC] 2.9.119, reproduced exactly as published. Entry 0x00 is the one with fAuto set — "the default color for the application" — so it names no concrete colour, and a caller decides what an automatic colour means for the property it is reading rather than this table choosing on the format's behalf.
 //
 // Entries 0x0C and 0x0D carry identical RGB values (0x80/0x00/0x80) in the published table, where the surrounding entries' pattern and every other palette of this shape would put dark red at 0x0D. That is reproduced rather than corrected: the table above is the normative statement of what the value means, and silently substituting a different colour would make this reader disagree with the specification it claims to implement on a point no test could catch. If a real-world corpus ever shows producers meaning dark red, that is the evidence to change it on.
+const HEX_RADIX = 16;
+// The fourth byte of a Colour structure: blue, after red and green.
+const FOURTH_BYTE_INDEX = 3;
+const CHANNEL_OFF = 0x00;
+const CHANNEL_DARK = 0x80;
+const CHANNEL_GRAY = 0xc0;
+const CHANNEL_FULL = 0xff;
+
 const ICO_PALETTE: readonly (readonly [number, number, number] | undefined)[] =
   [
-    undefined, // 0x00, fAuto — automatic, no concrete colour.
-    [0x00, 0x00, 0x00], // 0x01
-    [0x00, 0x00, 0xff], // 0x02
-    [0x00, 0xff, 0xff], // 0x03
-    [0x00, 0xff, 0x00], // 0x04
-    [0xff, 0x00, 0xff], // 0x05
-    [0xff, 0x00, 0x00], // 0x06
-    [0xff, 0xff, 0x00], // 0x07
-    [0xff, 0xff, 0xff], // 0x08
-    [0x00, 0x00, 0x80], // 0x09
-    [0x00, 0x80, 0x80], // 0x0A
-    [0x00, 0x80, 0x00], // 0x0B
-    [0x80, 0x00, 0x80], // 0x0C
-    [0x80, 0x00, 0x80], // 0x0D — as published; see the note above.
-    [0x80, 0x80, 0x00], // 0x0E
-    [0x80, 0x80, 0x80], // 0x0F
-    [0xc0, 0xc0, 0xc0], // 0x10
+    undefined, // 0x00
+    [CHANNEL_OFF, CHANNEL_OFF, CHANNEL_OFF], // 0x01
+    [CHANNEL_OFF, CHANNEL_OFF, CHANNEL_FULL], // 0x02
+    [CHANNEL_OFF, CHANNEL_FULL, CHANNEL_FULL], // 0x03
+    [CHANNEL_OFF, CHANNEL_FULL, CHANNEL_OFF], // 0x04
+    [CHANNEL_FULL, CHANNEL_OFF, CHANNEL_FULL], // 0x05
+    [CHANNEL_FULL, CHANNEL_OFF, CHANNEL_OFF], // 0x06
+    [CHANNEL_FULL, CHANNEL_FULL, CHANNEL_OFF], // 0x07
+    [CHANNEL_FULL, CHANNEL_FULL, CHANNEL_FULL], // 0x08
+    [CHANNEL_OFF, CHANNEL_OFF, CHANNEL_DARK], // 0x09
+    [CHANNEL_OFF, CHANNEL_DARK, CHANNEL_DARK], // 0x0A
+    [CHANNEL_OFF, CHANNEL_DARK, CHANNEL_OFF], // 0x0B
+    [CHANNEL_DARK, CHANNEL_OFF, CHANNEL_DARK], // 0x0C
+    [CHANNEL_DARK, CHANNEL_OFF, CHANNEL_DARK], // 0x0D
+    [CHANNEL_DARK, CHANNEL_DARK, CHANNEL_OFF], // 0x0E
+    [CHANNEL_DARK, CHANNEL_DARK, CHANNEL_DARK], // 0x0F
+    [CHANNEL_GRAY, CHANNEL_GRAY, CHANNEL_GRAY], // 0x10
   ];
 
 /** The colour an Ico value names, or undefined for 0x00 (fAuto, "the default color for the application", which names no concrete colour). Throws for a value outside the palette's own published bound rather than resolving it to something. */
 export function icoColor(value: number): Color | undefined {
   if (value >= ICO_PALETTE.length) {
     throw new DocFormatError(
-      `Ico value 0x${value.toString(16)} is not less than 0x11, the bound [MS-DOC] 2.9.119 places on the palette`,
+      `Ico value 0x${value.toString(HEX_RADIX)} is not less than 0x11, the bound [MS-DOC] 2.9.119 places on the palette`,
     );
   }
   const entry = ICO_PALETTE[value];
@@ -111,7 +119,8 @@ export function readColorRef(
   bytes: Uint8Array,
   offset: number,
 ): Color | undefined {
-  if (readUint8(bytes, offset + 3) !== 0x00) return undefined;
+  if (readUint8(bytes, offset + FOURTH_BYTE_INDEX) !== CHANNEL_OFF)
+    return undefined;
   return {
     r: readUint8(bytes, offset) / COLOR_COMPONENT_MAX,
     g: readUint8(bytes, offset + 1) / COLOR_COMPONENT_MAX,
