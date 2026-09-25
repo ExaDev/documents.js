@@ -104,6 +104,9 @@ export function interleave(
 // --- The reversible 5-3 filter (F.3.8.2, equations F-5 and F-6). ---
 
 // Runs in place over an extended buffer where `buffer[index - i0 + EXTENSION_MARGIN]` holds sample `index`, the margin already filled by symmetric extension. Exported for direct unit testing: synthesiseLine's own scratch buffer is always sized generously enough (Math.max(width, height) + 2 * EXTENSION_MARGIN) that a wrong loop bound here would silently write into real, already-allocated cells rather than throwing — only inspecting exactly which cells this function itself touches, directly, can tell the two apart.
+// F-5's own rounding divisor for the 5-3 filter's low-pass update step, X(2n) = Y(2n) - floor((Y(2n-1) + Y(2n+1) + 2) / 4).
+const LOW_PASS_UPDATE_DIVISOR = 4;
+
 export function inverse53Filter(
   buffer: Int32Array,
   i0: number,
@@ -117,7 +120,10 @@ export function inverse53Filter(
     const index = base + 2 * n;
     buffer[index] =
       (buffer[index] ?? 0) -
-      Math.floor(((buffer[index - 1] ?? 0) + (buffer[index + 1] ?? 0) + 2) / 4);
+      Math.floor(
+        ((buffer[index - 1] ?? 0) + (buffer[index + 1] ?? 0) + 2) /
+          LOW_PASS_UPDATE_DIVISOR,
+      );
   }
   // X(2n+1) = Y(2n+1) + floor((X(2n) + X(2n+2)) / 2)
   for (let n = first; n < last; n++) {
