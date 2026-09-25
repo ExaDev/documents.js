@@ -1,3 +1,12 @@
+## [6.1.21](https://github.com/ExaDev/documents.js/compare/doc-codec%406.1.20...doc-codec%406.1.21) (2026-09-25)
+
+### Code Refactoring
+
+* **doc-codec:** name every production magic number and enable the rule ([56247d1](https://github.com/ExaDev/documents.js/commit/56247d14a9684af7b217d9f2b3abb04fdb47f909))
+* **doc-codec:** name the decoration field layout and index the character map ([c4ffafa](https://github.com/ExaDev/documents.js/commit/c4ffafa254cdccbb21f08fc4ecd61e52f20bd795))
+* **doc-codec:** name the ICO palette channels ([ced13de](https://github.com/ExaDev/documents.js/commit/ced13de4bdc926a9b08ed3303f469f15bd3e2b6f))
+* **doc-codec:** name the numbering writer and style table constants ([539c794](https://github.com/ExaDev/documents.js/commit/539c794f0f89cd203c185a05586bec70723e91d1))
+
 ## [6.1.20](https://github.com/ExaDev/documents.js/compare/doc-codec%406.1.19...doc-codec%406.1.20) (2026-09-25)
 
 

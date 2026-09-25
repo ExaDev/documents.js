@@ -1,3 +1,14 @@
+## [2.16.16](https://github.com/ExaDev/documents.js/compare/web%402.16.15...web%402.16.16) (2026-09-25)
+
+### Miscellaneous Chores
+
+* **web:** enforce max-lines and split the convert predicates suite ([ed16cce](https://github.com/ExaDev/documents.js/commit/ed16ccefe099c0218c7cc788af274697c235546d))
+
+
+### Dependencies
+
+- Updated documents.js to 14.4.50
+
 ## [2.16.15](https://github.com/ExaDev/documents.js/compare/web%402.16.14...web%402.16.15) (2026-09-25)
 
 
