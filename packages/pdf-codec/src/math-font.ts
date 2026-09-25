@@ -68,7 +68,7 @@ function measureConstruction(
   placements: readonly MathStretchPlacement[],
   axis: MathStretchAxis,
   inkBounds: CffGlyphBounds | undefined,
-  hmtx: HmtxTable,
+  hmtx: Readonly<HmtxTable>,
 ): { inkAscent: number; inkDescent: number; advanceWidth: number } | undefined {
   let inkAscent = Number.NEGATIVE_INFINITY;
   let inkDescent = Number.NEGATIVE_INFINITY;
@@ -91,7 +91,7 @@ function measureConstruction(
 // MathFontMetrics.stretch's own implementation: resolve the font's MathVariants construction for `codePoint` on `axis` (math-table.ts), pick or assemble the glyphs reaching `targetSizePt` (math-stretch.ts), then measure the result so a layout engine can place it. Kept alongside metricsAtSize rather than inside it because it needs the same closed-over parse state and the same design-units-to-points factor.
 function stretchAtSize(
   cmap: CmapLookup,
-  hmtx: HmtxTable,
+  hmtx: Readonly<HmtxTable>,
   math: MathTable,
   inkBounds: CffGlyphBounds | undefined,
   unitsPerEm: number,
@@ -146,7 +146,7 @@ function stretchAtSize(
 // MathFontMetrics's own *Pt fields are already "at the caller's requested size" by contract (see metrics.ts) — a single, size-independent parsed font cannot supply that directly, so this is the per-size factory loadMathFont's own metricsAt(sizePt) calls.
 function metricsAtSize(
   cmap: CmapLookup,
-  hmtx: HmtxTable,
+  hmtx: Readonly<HmtxTable>,
   math: MathTable,
   inkBounds: CffGlyphBounds | undefined,
   unitsPerEm: number,

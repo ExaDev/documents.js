@@ -11,8 +11,6 @@ export default tseslint.config(
     isomorphic: true,
     // scripts/ holds a standalone build step importing from ../dist, the same reason test/ is ignored.
     additionalIgnores: ["scripts"],
-    // Off: see PackageLintOptions.preferReadonlyParams in eslint.shared.ts for why — this package's own font/glyph-shaping and content-stream interpreters genuinely mutate a large number of array/object parameters in place. Tracked for burn-down.
-    preferReadonlyParams: "off",
   }),
   {
     // src/assets/ holds the vendored font binaries as generated TypeScript modules: nine files whose payload is one base64 string literal per face, the largest a single line of 1,077,633 characters. Prettier has nothing useful to do with a line like that and would spend real time deciding so, and no human edits these — they are regenerated from the font files.

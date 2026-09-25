@@ -898,7 +898,7 @@ describe("readTilePackets", () => {
       component: number;
       precinct: number;
     }[],
-    options: { useSop?: boolean; useEph?: boolean } = {},
+    options: Readonly<{ useSop?: boolean; useEph?: boolean }> = {},
   ): { position: number; warnings: string[] } {
     const warnings: string[] = [];
     const position = readTilePackets(data, 0, end, geometry, sequence, {

@@ -62,7 +62,7 @@ export interface ResolvedImageResource {
 // content-write.ts never allocates font/image resource names itself — write.ts owns that (registry-keyed, sorted-order allocation, so object numbers stay deterministic regardless of Map/object iteration order). This context is purely a lookup back into whatever write.ts already decided, keeping this module a short, dumb dispatch over item kind.
 export interface ContentWriteContext {
   readonly measurer: TextMeasurer;
-  resolveFont: (font: LayoutFont) => ResolvedFontResource;
+  resolveFont: (font: Readonly<LayoutFont>) => ResolvedFontResource;
   resolveImage: (imageId: string) => ResolvedImageResource;
   // #967: the indirect-object number of an optional-content group by layer name (write.ts allocates one OCG per doc.layers row). An item carrying a layer the document's own layers table does not name draws unmarked rather than failing — the model tolerates the dangling name, so the writer does too.
   readonly layerObjectNumberOf?: (name: string) => number | undefined;
@@ -82,7 +82,7 @@ export interface ContentStreamResult {
 
 function writeRgbOperator(
   writer: ByteWriter,
-  color: LayoutColor,
+  color: Readonly<LayoutColor>,
   operator: "rg" | "RG",
 ): void {
   writer.writeAscii(
@@ -162,10 +162,8 @@ function writeStandardText(
   standardName: StandardFontName,
   resourceName: string,
   measurer: TextMeasurer,
-  substitutions: WinAnsiSubstitution[],
-): void {
+): readonly WinAnsiSubstitution[] {
   const encoded = encodeForShow(item.text, standardName);
-  substitutions.push(...encoded.substitutions);
 
   // The Tz (horizontal scaling) percentage is a text-state parameter that persists across content-stream items until explicitly changed — it must be written for every text item, even when the correction is 1.0 (100%), or a preceding item's correction would silently leak into this one.
   const scale = measurer.horizontalScaleFor(item.font);
@@ -186,6 +184,7 @@ function writeStandardText(
       measurer.underlineAtSize(item.font, item.sizePt),
     );
   }
+  return encoded.substitutions;
 }
 
 // How an embedded run's glyphs are shown: 2-byte big-endian CIDs (== glyph IDs, since every embedded font program this package writes preserves glyph IDs and declares /CIDToGIDMap /Identity) against a /Type0 Identity-H resource — the same operand shape math-content-write.ts already uses for the math font — with the run split at each of the face's own pair-kerning adjustments.
@@ -214,10 +213,8 @@ function writeEmbeddedText(
   item: LayoutText,
   face: EmbeddedFace,
   resourceName: string,
-  missingGlyphs: EmbeddedFaceSubstitution[],
-): void {
+): readonly EmbeddedFaceSubstitution[] {
   const encoded = encodeForShowEmbedded(item.text, face);
-  missingGlyphs.push(...encoded.substitutions);
 
   writeShowTextBlock(
     writer,
@@ -240,34 +237,42 @@ function writeEmbeddedText(
         item.sizePt,
     });
   }
+  return encoded.substitutions;
+}
+
+// Whichever of the two substitution kinds this item's own resolved font can produce; the other is empty, since a single run is drawn in exactly one face.
+interface TextSubstitutions {
+  readonly substitutions: readonly WinAnsiSubstitution[];
+  readonly missingGlyphs: readonly EmbeddedFaceSubstitution[];
 }
 
 function writeText(
   writer: ByteWriter,
   item: LayoutText,
   context: ContentWriteContext,
-  substitutions: WinAnsiSubstitution[],
-  missingGlyphs: EmbeddedFaceSubstitution[],
-): void {
+): TextSubstitutions {
   const font = context.resolveFont(item.font);
   if (font.kind === "embedded") {
-    writeEmbeddedText(
+    return {
+      substitutions: [],
+      missingGlyphs: writeEmbeddedText(
+        writer,
+        item,
+        font.face,
+        font.resourceName,
+      ),
+    };
+  }
+  return {
+    substitutions: writeStandardText(
       writer,
       item,
-      font.face,
+      font.standardName,
       font.resourceName,
-      missingGlyphs,
-    );
-    return;
-  }
-  writeStandardText(
-    writer,
-    item,
-    font.standardName,
-    font.resourceName,
-    context.measurer,
-    substitutions,
-  );
+      context.measurer,
+    ),
+    missingGlyphs: [],
+  };
 }
 
 // 'f'/'f*' (fill only, nonzero/evenodd), 'S' (stroke only), 'B'/'B*' (both, nonzero/evenodd), or undefined when neither is set — a rect/ellipse/path with neither fill nor stroke is a valid LayoutItem (the schema permits it) that simply paints nothing, so callers skip emitting path bytes for it entirely rather than drawing an invisible path. fillRule only ever matters when fill is set (rect/ellipse never pass one, always taking the nonzero 'f'/'B' branch); a path with fillRule: 'evenodd' takes the starred variant instead.
@@ -644,7 +649,7 @@ function writePath(writer: ByteWriter, item: LayoutPath): void {
 // Images are drawn into the PDF unit square [0,1]x[0,1] via the Do operator, so the CTM must encode the actual placement (position, size, rotation) in one step: scale the unit square to the image's point dimensions, rotate about its own origin corner, then translate that corner to (xPt, yPt).
 function writeImage(
   writer: ByteWriter,
-  item: LayoutImage,
+  item: Readonly<LayoutImage>,
   context: ContentWriteContext,
 ): void {
   const image = context.resolveImage(item.imageId);
@@ -697,7 +702,9 @@ export function writeContentStream(
       writer.writeAscii(" >> BDC\n");
     }
     if (item.kind === "text") {
-      writeText(writer, item, context, substitutions, missingGlyphs);
+      const written = writeText(writer, item, context);
+      substitutions.push(...written.substitutions);
+      missingGlyphs.push(...written.missingGlyphs);
     } else if (item.kind === "image") {
       writeImage(writer, item, context);
     } else if (item.kind === "rect") {

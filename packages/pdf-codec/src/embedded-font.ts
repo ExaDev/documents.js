@@ -314,7 +314,7 @@ export function encodeForShowEmbedded(
 
 // Every glyph across `texts` that `face` will actually DRAW, keyed by that glyph ID and carrying the Unicode text each drawn glyph represents — one code point for a glyph a character resolved to directly, the whole character run a ligature glyph consumed. Collected across every run a document draws in this one face, through the identical resolve-and-shape path encodeForShowEmbedded takes, so the subset (which these keys feed) and the ToUnicode CMap (which these pairs feed) both describe the glyphs that are shown rather than the ones the raw 'cmap' would have named — a ligature glyph is reachable through no single character's 'cmap' entry at all. Mirrors math-content-write.ts's own collectUsedGlyphs in sharing its injectivity assumption: the first text seen for a glyph is the one that glyph represents. Characters the face cannot map contribute nothing — .notdef stands for no Unicode text at all, and claiming otherwise in a ToUnicode CMap would make a copy/paste recover a character the page never showed.
 export function collectEmbeddedGlyphs(
-  texts: Iterable<string>,
+  texts: Readonly<Iterable<string>>,
   face: EmbeddedFace,
 ): ReadonlyMap<number, readonly number[]> {
   const used = new Map<number, readonly number[]>();

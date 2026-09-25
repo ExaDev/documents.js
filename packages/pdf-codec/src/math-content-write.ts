@@ -27,7 +27,7 @@ function toPdfY(positioned: PositionedFormula, itemYPt: number): number {
 
 function writeRgbOperator(
   writer: ByteWriter,
-  color: MathColor,
+  color: Readonly<MathColor>,
   operator: "rg" | "RG",
 ): void {
   writer.writeAscii(

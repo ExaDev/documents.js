@@ -240,7 +240,7 @@ function numAt(operands: readonly PdfObject[], index: number): number {
 function markedContentProperties(
   operand: PdfObject | undefined,
   resources: PdfDict,
-  resolver: PdfObjectResolver,
+  resolver: Readonly<PdfObjectResolver>,
 ): PdfDict | undefined {
   if (operand?.kind === "dict") {
     return operand;
@@ -661,12 +661,41 @@ function classifyShape(
   );
 }
 
+// The marked-content spans open at a point in a content stream. A class rather than a bare array because a stream pushes and pops it as it runs, and because an invoked form XObject starts from its own seeded copy rather than sharing the enclosing stream's.
+class MarkedContentStack {
+  readonly #frames: MarkedContentProps[];
+
+  constructor(seed: readonly MarkedContentProps[] = []) {
+    this.#frames = [...seed];
+  }
+
+  open(frame: MarkedContentProps): void {
+    this.#frames.push(frame);
+  }
+
+  close(): void {
+    this.#frames.pop();
+  }
+
+  // The innermost span that states the property: a frame carrying the key at all ends the search, including one that explicitly voids it, like a form-stream MCID opened as `mcid: undefined`, while a span that simply lacks the key falls through to the enclosing one (ISO 32000-1 14.10's nested-span model).
+  inScope<K extends keyof MarkedContentProps>(
+    key: K,
+  ): MarkedContentProps[K] | undefined {
+    for (let i = this.#frames.length - 1; i >= 0; i--) {
+      const frame = this.#frames[i];
+      if (frame !== undefined && key in frame) {
+        return frame[key];
+      }
+    }
+    return undefined;
+  }
+}
+
 export function interpretContentStream(
   bytes: Uint8Array<ArrayBuffer>,
   resources: PdfDict,
   context: InterpretContext,
 ): ExtractedItem[] {
-  const items: ExtractedItem[] = [];
   const initialState: GraphicsState = {
     ctm: IDENTITY_MATRIX,
     fillColor: COLOR_BLACK,
@@ -675,8 +704,14 @@ export function interpretContentStream(
     dashArray: [],
     ...initialTextParameters(),
   };
-  runContentStream(bytes, resources, initialState, context, items, 0, []);
-  return items;
+  return runContentStream(
+    bytes,
+    resources,
+    initialState,
+    context,
+    0,
+    new MarkedContentStack(),
+  );
 }
 
 // What a BDC span puts in scope for the items it brackets (ISO 32000-1 14.10): optional-content membership, the replacement reading, and the alternate description. Nested spans stack; the innermost /OC in scope wins for membership, and an absent property in an inner span falls through to the enclosing one.
@@ -708,10 +743,10 @@ function runContentStream(
   resources: PdfDict,
   initialState: GraphicsState,
   context: InterpretContext,
-  items: ExtractedItem[],
   depth: number,
-  markedContent: MarkedContentProps[],
-): void {
+  markedContent: MarkedContentStack,
+): ExtractedItem[] {
+  const items: ExtractedItem[] = [];
   const operations = readContentStream(bytes, context.sink);
   const gsStack: GraphicsState[] = [];
   let gs = initialState;
@@ -719,18 +754,9 @@ function runContentStream(
   let pathSubpaths: MutableSubpath[] = [];
   let currentSubpath: MutableSubpath | undefined;
 
-  // The innermost span that states the property: a frame carrying the key at all ends the search — including one that explicitly voids it, like a form-stream MCID pushed as `mcid: undefined` below — while a span that simply lacks the key falls through to the enclosing one (ISO 32000-1 14.10's nested-span model).
   const inScope = <K extends keyof MarkedContentProps>(
     key: K,
-  ): MarkedContentProps[K] | undefined => {
-    for (let i = markedContent.length - 1; i >= 0; i--) {
-      const frame = markedContent[i];
-      if (frame !== undefined && key in frame) {
-        return frame[key];
-      }
-    }
-    return undefined;
-  };
+  ): MarkedContentProps[K] | undefined => markedContent.inScope(key);
 
   // Every extracted item funnels through here so span membership lands on all of them uniformly: the span's layer fills an unstamped item (an XObject's own /OC already set), and the text-only properties land only on text runs.
   const pushItem = (item: ExtractedItem): void => {
@@ -1055,20 +1081,21 @@ function runContentStream(
         dictGet(xobj.dict, "StructParents") !== undefined
           ? undefined
           : inScope("mcid");
-      runContentStream(
+      for (const formItem of runContentStream(
         decoded.bytes,
         formResources,
         formState,
         context,
-        items,
         depth + 1,
-        [
+        new MarkedContentStack([
           {
             ...(formLayer !== undefined ? { layerName: formLayer } : {}),
             ...(formMcid !== undefined ? { mcid: formMcid } : {}),
           },
-        ],
-      );
+        ]),
+      )) {
+        items.push(formItem);
+      }
     }
   };
 
@@ -1353,19 +1380,20 @@ function runContentStream(
           ...markedContentScopeProps(props),
         };
         // An MCID is a PAGE-scoped handle: the parent tree maps (page, MCID), so an MCID opened INSIDE a recursed form XObject's own stream (depth > 0) must not be looked up as though it were the enclosing page's — the file addresses such content through the form's own /StructParents key in the parent tree. Voiding it as an explicit `mcid: undefined` also closes the fall-through to the page MCID the form inherited at its invocation (seeded in handleDo), so content the form marks as its own resolves to no owner rather than to the invoking span's element.
-        markedContent.push(
+        markedContent.open(
           depth === 0 ? scopeProps : { ...scopeProps, mcid: undefined },
         );
         break;
       }
       case "BMC":
-        markedContent.push({});
+        markedContent.open({});
         break;
       case "EMC":
-        markedContent.pop();
+        markedContent.close();
         break;
       default:
         break; // every other operator (marked content, shading, clipping, ExtGState, dash pattern, line cap/join) is outside v1's extraction scope
     }
   }
+  return items;
 }

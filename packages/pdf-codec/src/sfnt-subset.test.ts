@@ -138,8 +138,8 @@ function expectEveryRecordChecksumToVerify(
 
 // A used glyph's own bytes survive verbatim, followed only by the zero bytes that pad it onto the next four-byte boundary. The padding lands inside this glyph's own 'loca' range by construction (the next entry points past it), which is exactly how the format expresses alignment — a consumer reads the header and contour data and never reaches the padding.
 function expectGlyphOutlinePreserved(
-  source: GlyfTable,
-  subset: GlyfTable,
+  source: Readonly<GlyfTable>,
+  subset: Readonly<GlyfTable>,
   glyphId: number,
 ): void {
   const original = source.glyphBytes(glyphId);

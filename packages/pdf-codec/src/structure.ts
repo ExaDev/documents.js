@@ -19,7 +19,7 @@ export interface StructureContext {
 export function readStructure(
   catalog: PdfDict,
   pages: readonly PdfDict[],
-  resolver: PdfObjectResolver,
+  resolver: Readonly<PdfObjectResolver>,
   sink: PdfDiagnosticSink,
 ): StructureContext {
   const root = resolver.resolveDict(dictGet(catalog, "StructTreeRoot"));
@@ -149,7 +149,7 @@ function elementAttributes(
 // An element's effective attributes: its own /T /Lang /Alt /ActualText, with /ClassMap entries (referenced through /C) filling only the ones the element itself does not state.
 function mergedAttributes(
   dict: PdfDict,
-  resolver: PdfObjectResolver,
+  resolver: Readonly<PdfObjectResolver>,
   classAttributes: Map<string, ElementAttributes>,
 ): ElementAttributes {
   const own = elementAttributes(dict);
@@ -183,7 +183,10 @@ function mergedAttributes(
 }
 
 // A /K value's element children: each kid that resolves to a dictionary CARRYING /S is a nested structure element. Everything else a /K holds — an integer MCID, an MCR or OBJR reference dict — is a content item, the parent tree's channel, not a tree node. A single element in place of the array is legal (14.7.2), hence the asArray-or-single handling.
-function elementKids(dict: PdfDict, resolver: PdfObjectResolver): PdfDict[] {
+function elementKids(
+  dict: PdfDict,
+  resolver: Readonly<PdfObjectResolver>,
+): PdfDict[] {
   const kids: PdfDict[] = [];
   const k = dictGet(dict, "K");
   for (const kid of asArray(k) ?? (k !== undefined ? [k] : [])) {
@@ -198,7 +201,7 @@ function elementKids(dict: PdfDict, resolver: PdfObjectResolver): PdfDict[] {
 // One number-tree leaf entry pair, flattened in tree order (ISO 32000-1 7.9.7: a node's own /Nums come before its /Kids' contents). Non-integer keys and unresolvable /Kids entries are skipped silently, matching names.ts's own behaviour for the string-keyed twin — the surrounding document still reads.
 function numberTreeEntries(
   node: PdfDict,
-  resolver: PdfObjectResolver,
+  resolver: Readonly<PdfObjectResolver>,
   visited: Set<PdfDict>,
 ): [number, PdfObject][] {
   if (visited.has(node)) {
@@ -226,7 +229,7 @@ function numberTreeEntries(
 function parentTreeOwners(
   root: PdfDict,
   pages: readonly PdfDict[],
-  resolver: PdfObjectResolver,
+  resolver: Readonly<PdfObjectResolver>,
   idByDict: Map<PdfDict, string>,
   sink: PdfDiagnosticSink,
 ): (pageIndex: number, mcid: number) => string | undefined {

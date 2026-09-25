@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { decodeCcittFax } from "./ccitt";
 import { encodeCcittFax } from "./ccitt-encode";
 
-function packed(rows: string[]): Uint8Array {
+function packed(rows: readonly string[]): Uint8Array {
   // Each string is one row, "1" = white and "0" = black, MSB first; rows are padded to whole bytes like the decoder's own output.
   const rowBytes = Math.ceil((rows[0]?.length ?? 0) / 8);
   const bytes = new Uint8Array(rowBytes * rows.length);

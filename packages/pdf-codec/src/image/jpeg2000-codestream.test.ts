@@ -261,17 +261,19 @@ function sizSegment(
 }
 
 function codSegment(
-  overrides: Partial<{
-    scod: number;
-    progression: number;
-    layers: number;
-    mct: number;
-    decompLevels: number;
-    cbW: number;
-    cbH: number;
-    cbStyle: number;
-    transform: number;
-  }> = {},
+  overrides: Readonly<
+    Partial<{
+      scod: number;
+      progression: number;
+      layers: number;
+      mct: number;
+      decompLevels: number;
+      cbW: number;
+      cbH: number;
+      cbStyle: number;
+      transform: number;
+    }>
+  > = {},
 ): number[] {
   const {
     scod = 0,

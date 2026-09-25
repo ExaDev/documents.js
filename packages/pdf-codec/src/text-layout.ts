@@ -88,7 +88,7 @@ function fragmentsWidth(
 // Splits `text` at the largest character prefix that fits within `maxWidthPt`, guaranteeing at least one character of progress (so an emergency split of a single, over-long word can never spin forever even in a pathologically narrow column).
 function splitTextToWidth(
   text: string,
-  font: LayoutFont,
+  font: Readonly<LayoutFont>,
   sizePt: number,
   measurer: TextMeasurer,
   maxWidthPt: number,
@@ -318,9 +318,9 @@ export function wrapRunsToWidth(
 // A single-style convenience over wrapRunsToWidth, returning just the wrapped text of each line.
 export function wrapTextToWidth(
   text: string,
-  font: LayoutFont,
+  font: Readonly<LayoutFont>,
   sizePt: number,
-  color: LayoutColor,
+  color: Readonly<LayoutColor>,
   measurer: TextMeasurer,
   maxWidthPt: number,
 ): string[] {

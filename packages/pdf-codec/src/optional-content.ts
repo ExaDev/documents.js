@@ -15,7 +15,7 @@ export interface OptionalContentContext {
 
 export function readOptionalContent(
   catalog: PdfDict,
-  resolver: PdfObjectResolver,
+  resolver: Readonly<PdfObjectResolver>,
   sink: PdfDiagnosticSink,
 ): OptionalContentContext {
   const ocProperties = resolver.resolveDict(dictGet(catalog, "OCProperties"));

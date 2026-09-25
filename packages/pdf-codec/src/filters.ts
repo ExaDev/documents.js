@@ -321,17 +321,18 @@ export function lzwDecode(
 
 // --- ASCII85Decode (ISO 32000-1 7.4.3): groups of 4 bytes as 5 ASCII characters '!'-'u' (0x21-0x75), 'z' as shorthand for four zero bytes, terminated by "~>". ---
 
+// A full ASCII85 group encodes exactly four bytes in five digits.
+const ASCII85_GROUP_BYTES = 4;
 const ASCII85_ZERO_GROUP_MARKER = 0x7a; // 'z'
 const ASCII85_END_MARKER = 0x7e; // '~'
 const ASCII85_MIN_DIGIT = 0x21; // '!'
 const ASCII85_MAX_DIGIT = 0x75; // 'u'
 const ASCII85_MAX_DIGIT_VALUE = ASCII85_MAX_DIGIT - ASCII85_MIN_DIGIT; // 84 — the padding value for a final, partial group
 
-function pushAscii85Group(
-  out: number[],
-  digits: number[],
+function ascii85GroupBytes(
+  digits: readonly number[],
   byteCount: number,
-): void {
+): number[] {
   let value = 0;
   for (const digit of digits) {
     value = value * 85 + digit;
@@ -342,9 +343,7 @@ function pushAscii85Group(
     (value >>> 8) & 0xff,
     value & 0xff,
   ];
-  for (let i = 0; i < byteCount; i++) {
-    out.push(bytes[i]!);
-  }
+  return bytes.slice(0, byteCount);
 }
 
 export function ascii85Decode(
@@ -373,7 +372,7 @@ export function ascii85Decode(
     }
     tuple.push(byte - ASCII85_MIN_DIGIT);
     if (tuple.length === 5) {
-      pushAscii85Group(out, tuple, 4);
+      out.push(...ascii85GroupBytes(tuple, ASCII85_GROUP_BYTES));
       tuple = [];
     }
   }
@@ -382,7 +381,7 @@ export function ascii85Decode(
     while (padded.length < 5) {
       padded.push(ASCII85_MAX_DIGIT_VALUE);
     }
-    pushAscii85Group(out, padded, tuple.length - 1);
+    out.push(...ascii85GroupBytes(padded, tuple.length - 1));
   }
   return Uint8Array.from(out);
 }

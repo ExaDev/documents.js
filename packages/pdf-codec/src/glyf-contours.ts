@@ -158,14 +158,14 @@ function placeComponentContours(
 
 // A glyph's full outline, composites resolved: a simple glyph's own contours, or every component's outline placed through its own transform, recursively. Undefined for anything the walk cannot resolve completely — an unreadable glyph, a composite past the depth limit, or a component positioned by point matching (argument1/argument2 as point indices rather than x/y offsets), which needs exactly the coordinate arrays a byte-verbatim subsetter never decodes and half-placing would silently stack a mark on its base letter. The rule matches glyphInkBounds's own: undefined, never partial.
 export function decodeGlyphOutline(
-  glyf: GlyfTable,
+  glyf: Readonly<GlyfTable>,
   glyphId: number,
 ): GlyphOutline | undefined {
   return decodeOutline(glyf, glyphId, 0);
 }
 
 function decodeOutline(
-  glyf: GlyfTable,
+  glyf: Readonly<GlyfTable>,
   glyphId: number,
   depth: number,
 ): GlyphOutline | undefined {

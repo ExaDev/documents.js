@@ -27,7 +27,7 @@ function coordinateAt(
 // [page /Type ...coordinates...] (ISO 32000-1 Table 151). The page element is an indirect reference in a real file; PDF 2.0 additionally permits a bare integer page number, so both spellings resolve.
 export function parseDestination(
   value: PdfObject | undefined,
-  resolver: PdfObjectResolver,
+  resolver: Readonly<PdfObjectResolver>,
   pageIndex: PageIndexLookup,
   sink: PdfDiagnosticSink,
 ): { pageIndex: number; target: LayoutDestinationTarget } | undefined {
@@ -150,7 +150,7 @@ export interface DestinationRegistry {
 
 export function createDestinationRegistry(
   catalog: PdfDict,
-  resolver: PdfObjectResolver,
+  resolver: Readonly<PdfObjectResolver>,
   pageIndex: PageIndexLookup,
   sink: PdfDiagnosticSink,
 ): DestinationRegistry {
@@ -240,7 +240,7 @@ export function createDestinationRegistry(
 export function readOutline(
   catalog: PdfDict,
   registry: DestinationRegistry,
-  resolver: PdfObjectResolver,
+  resolver: Readonly<PdfObjectResolver>,
   sink: PdfDiagnosticSink,
 ): LayoutOutlineItem[] {
   const root = resolver.resolveDict(dictGet(catalog, "Outlines"));
@@ -251,20 +251,23 @@ export function readOutline(
   if (first === undefined) {
     return [];
   }
-  const items: LayoutOutlineItem[] = [];
-  const visited = new Set<PdfDict>();
-  walkOutlineSiblings(first, items, registry, resolver, sink, visited);
-  return items;
+  return walkOutlineSiblings(
+    first,
+    registry,
+    resolver,
+    sink,
+    new Set<PdfDict>(),
+  );
 }
 
 function walkOutlineSiblings(
   node: PdfDict,
-  out: LayoutOutlineItem[],
   registry: DestinationRegistry,
-  resolver: PdfObjectResolver,
+  resolver: Readonly<PdfObjectResolver>,
   sink: PdfDiagnosticSink,
   visited: Set<PdfDict>,
-): void {
+): LayoutOutlineItem[] {
+  const out: LayoutOutlineItem[] = [];
   let current: PdfDict | undefined = node;
   while (current !== undefined) {
     if (visited.has(current)) {
@@ -274,22 +277,15 @@ function walkOutlineSiblings(
         message:
           "the outline contains a cycle; stopping the sibling chain at the repeated item",
       });
-      return;
+      return out;
     }
     visited.add(current);
     const titleObj = dictGet(current, "Title");
-    const children: LayoutOutlineItem[] = [];
     const childFirst = resolver.resolveDict(dictGet(current, "First"));
-    if (childFirst !== undefined) {
-      walkOutlineSiblings(
-        childFirst,
-        children,
-        registry,
-        resolver,
-        sink,
-        visited,
-      );
-    }
+    const children =
+      childFirst === undefined
+        ? []
+        : walkOutlineSiblings(childFirst, registry, resolver, sink, visited);
     const destination = internOutlineDestination(current, registry, resolver);
     out.push({
       title: titleObj?.kind === "string" ? decodePdfString(titleObj.bytes) : "",
@@ -298,12 +294,13 @@ function walkOutlineSiblings(
     });
     current = resolver.resolveDict(dictGet(current, "Next"));
   }
+  return out;
 }
 
 function internOutlineDestination(
   node: PdfDict,
   registry: DestinationRegistry,
-  resolver: PdfObjectResolver,
+  resolver: Readonly<PdfObjectResolver>,
 ): string | undefined {
   const dest = dictGet(node, "Dest");
   if (dest !== undefined) {

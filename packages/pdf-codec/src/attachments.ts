@@ -13,7 +13,7 @@ import { bytesToBase64 } from "byte-codec";
 export function readAttachments(
   catalog: PdfDict,
   pages: readonly PdfDict[],
-  resolver: PdfObjectResolver,
+  resolver: Readonly<PdfObjectResolver>,
   sink: PdfDiagnosticSink,
 ): LayoutAttachment[] {
   const attachments: LayoutAttachment[] = [];
@@ -88,7 +88,7 @@ function filespecName(filespec: PdfDict): string | undefined {
 function readFilespec(
   name: string,
   filespec: PdfDict,
-  resolver: PdfObjectResolver,
+  resolver: Readonly<PdfObjectResolver>,
   sink: PdfDiagnosticSink,
 ): LayoutAttachment | undefined {
   const ef = resolver.resolveDict(dictGet(filespec, "EF"));

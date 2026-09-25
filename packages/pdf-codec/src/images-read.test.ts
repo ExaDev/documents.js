@@ -55,7 +55,7 @@ function u16be(n: number): number[] {
   return [(n >> 8) & 0xff, n & 0xff];
 }
 
-function jpegMarker(code: number, payload: number[]): number[] {
+function jpegMarker(code: number, payload: readonly number[]): number[] {
   return [0xff, code, ...u16be(payload.length + 2), ...payload];
 }
 

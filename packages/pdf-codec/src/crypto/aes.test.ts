@@ -189,7 +189,7 @@ function referenceXor(a: Uint8Array, b: Uint8Array): Uint8Array {
 
 function referenceEncryptBlock(
   block: Uint8Array,
-  keys: Uint8Array[],
+  keys: readonly Uint8Array[],
 ): Uint8Array {
   let state = referenceXor(block, keys[0]!);
   for (let round = 1; round < keys.length - 1; round += 1) {
@@ -206,7 +206,7 @@ function referenceEncryptBlock(
 
 function referenceDecryptBlock(
   block: Uint8Array,
-  keys: Uint8Array[],
+  keys: readonly Uint8Array[],
 ): Uint8Array {
   let state = referenceXor(block, keys[keys.length - 1]!);
   for (let round = keys.length - 2; round >= 1; round -= 1) {

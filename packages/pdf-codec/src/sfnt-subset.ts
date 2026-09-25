@@ -163,11 +163,11 @@ function buildPostStub(font: SfntFont): Uint8Array<ArrayBuffer> {
 
 // The transitive closure a subset needs: the glyphs the code points map to, any glyph IDs handed over directly (a ligature glyph 'GSUB' substitution produced, which no single code point's 'cmap' entry reaches), GID 0, and — following each composite's own component records, which themselves may be composite — every glyph any of those is assembled from.
 function collectGlyphIds(
-  glyf: GlyfTable,
+  glyf: Readonly<GlyfTable>,
   cmap: CmapLookup,
   numGlyphs: number,
-  codePoints: Iterable<number>,
-  extraGlyphIds: Iterable<number>,
+  codePoints: Readonly<Iterable<number>>,
+  extraGlyphIds: Readonly<Iterable<number>>,
 ): { used: Set<number>; unmapped: number[] } | undefined {
   const used = new Set<number>([0]);
   const unmapped = new Set<number>();
@@ -226,8 +226,8 @@ function collectGlyphIds(
 
 export function subsetSfnt(
   font: SfntFont,
-  codePoints: Iterable<number>,
-  extraGlyphIds: Iterable<number> = [],
+  codePoints: Readonly<Iterable<number>>,
+  extraGlyphIds: Readonly<Iterable<number>> = [],
 ): SfntSubsetResult | undefined {
   const head = parseHead(font);
   const maxp = parseMaxp(font);

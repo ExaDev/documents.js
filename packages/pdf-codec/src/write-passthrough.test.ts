@@ -277,7 +277,9 @@ describe("writePdf: passthrough dictionary shape", () => {
   const ORIGINAL_STREAM = new Uint8Array([0xde, 0xad, 0xbe, 0xef, 0x01]);
 
   function passthroughAsset(
-    overrides: Partial<NonNullable<LayoutImageAsset["original"]>> = {},
+    overrides: Readonly<
+      Partial<NonNullable<LayoutImageAsset["original"]>>
+    > = {},
     canonicalAlpha?: Uint8Array<ArrayBuffer>,
   ): LayoutImageAsset {
     // A real 8x8 bilevel grayscale canonical, optionally with a soft mask.

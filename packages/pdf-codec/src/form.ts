@@ -16,7 +16,7 @@ const FLAG_COMBO = 131072;
 
 export function readAcroForm(
   catalog: PdfDict,
-  resolver: PdfObjectResolver,
+  resolver: Readonly<PdfObjectResolver>,
   pageIndex: PageIndexLookup,
   sink: PdfDiagnosticSink,
 ): LayoutFormField[] {
@@ -31,7 +31,17 @@ export function readAcroForm(
   ) ?? []) {
     const fieldDict = resolver.resolveDict(fieldRef);
     if (fieldDict !== undefined) {
-      readField(fieldDict, "", resolver, pageIndex, sink, fields, visited);
+      const field = readField(
+        fieldDict,
+        "",
+        resolver,
+        pageIndex,
+        sink,
+        visited,
+      );
+      if (field !== undefined) {
+        fields.push(field);
+      }
     }
   }
   return fields;
@@ -40,12 +50,11 @@ export function readAcroForm(
 function readField(
   node: PdfDict,
   parentName: string,
-  resolver: PdfObjectResolver,
+  resolver: Readonly<PdfObjectResolver>,
   pageIndex: PageIndexLookup,
   sink: PdfDiagnosticSink,
-  out: LayoutFormField[],
   visited: Set<PdfDict>,
-): void {
+): LayoutFormField | undefined {
   if (visited.has(node)) {
     sink({
       code: "pdf/form-field-cycle",
@@ -53,7 +62,7 @@ function readField(
       message:
         "the AcroForm field tree contains a cycle; stopping descent at the repeated field",
     });
-    return;
+    return undefined;
   }
   visited.add(node);
   const ownName = annotText(node, "T");
@@ -73,16 +82,18 @@ function readField(
       []) {
       const kid = resolver.resolveDict(kidRef);
       if (kid !== undefined) {
-        readField(kid, name, resolver, pageIndex, sink, children, visited);
+        const child = readField(kid, name, resolver, pageIndex, sink, visited);
+        if (child !== undefined) {
+          children.push(child);
+        }
       }
     }
-    out.push({
+    return {
       name,
       fieldType: "group",
       widgets: [],
       children,
-    });
-    return;
+    };
   }
 
   const flags = asNumber(resolver.resolve(dictGet(node, "Ff"))) ?? 0;
@@ -107,7 +118,7 @@ function readField(
       widgets.push(widget);
     }
   }
-  out.push({
+  return {
     name,
     fieldType: mapFieldType(fieldType, flags),
     ...valueFields(fieldType, value),
@@ -116,7 +127,7 @@ function readField(
     ...((flags & FLAG_READ_ONLY) !== 0 ? { readOnly: true } : {}),
     widgets,
     children: [],
-  });
+  };
 }
 
 // The harmonised control vocabulary the content layer's contentControl construct speaks: /Btn's pushbutton and radio flag bits, /Ch's combo bit, everything else one-to-one.
@@ -161,7 +172,7 @@ function valueFields(
 
 function fieldValue(
   node: PdfDict,
-  resolver: PdfObjectResolver,
+  resolver: Readonly<PdfObjectResolver>,
 ): string | undefined {
   const value = resolver.resolve(dictGet(node, "V"));
   if (value?.kind === "string") {
@@ -179,7 +190,7 @@ function fieldValue(
 // /Opt entries are strings or [export label] two-element arrays (ISO 32000-1 12.7.4.3); the export value is the harmonised choice list.
 function fieldOptions(
   node: PdfDict,
-  resolver: PdfObjectResolver,
+  resolver: Readonly<PdfObjectResolver>,
 ): string[] | undefined {
   const opts = asArray(resolver.resolve(dictGet(node, "Opt")));
   if (opts === undefined) {
@@ -218,7 +229,7 @@ function widgetPlacement(
 }
 
 function rectWidget(
-  rect: PdfObject[] | undefined,
+  rect: readonly PdfObject[] | undefined,
   pageNo: number,
 ): LayoutFormWidget | undefined {
   if (rect === undefined) {

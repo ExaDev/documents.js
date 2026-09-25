@@ -426,7 +426,10 @@ function applyContextualRule(
     }
     const target = visibleInputSlot(window, record.sequenceIndex, skip);
     if (target !== undefined) {
-      applyLookupAtSlot(window, target, lookup, depth + 1);
+      const application = applyLookupAtSlot(window, target, lookup, depth + 1);
+      if (application !== undefined) {
+        window.splice(target, application.consumed, ...application.replacement);
+      }
     }
   }
   return { consumed: last - first + 1, replacement: window };
@@ -452,20 +455,20 @@ function visibleInputSlot(
 }
 
 // Applies one lookup's subtables, in order, at buffer position `index` — the first subtable that matches and applies wins, the order the LookupList itself states. Mutates `slots` in place and returns how many slots the replacement occupies (0 when nothing applied); the top-level per-lookup pass and a contextual rule's nested records share this one path, which is what keeps nested substitutions and top-level ones the same machinery.
+// The first subtable of `lookup` that applies at `index`, or undefined when none does. The application is returned rather than spliced in here so the buffer is only ever rewritten by whichever function owns it.
 function applyLookupAtSlot(
-  slots: ShapingSlot[],
+  slots: readonly ShapingSlot[],
   index: number,
   lookup: GsubLookup,
   depth: number,
-): number {
+): SlotApplication | undefined {
   for (const subtable of lookup.subtables) {
     const application = subtable(slots, index, depth);
     if (application !== undefined) {
-      slots.splice(index, application.consumed, ...application.replacement);
-      return application.replacement.length;
+      return application;
     }
   }
-  return 0;
+  return undefined;
 }
 
 const SUBST_LOOKUP_RECORD_SIZE = 4; // uint16 sequenceIndex + uint16 lookupListIndex
@@ -687,7 +690,7 @@ interface SequenceRuleAccess {
 function sequenceSubtable(
   bytes: Uint8Array<ArrayBuffer>,
   subtableOffset: number,
-  coverage: CoverageTable,
+  coverage: Readonly<CoverageTable>,
   setCount: number,
   setOffsetsOffset: number,
   chained: boolean,
@@ -1153,8 +1156,20 @@ export function buildGsubShaper(
       let slotIndex = 0;
       while (slotIndex < slots.length) {
         // One lookup is a pass over the whole buffer: at each position the first subtable that applies wins, and the pass resumes after the matched window rather than inside it — a chain like 'f','f','i' under an 'ff' then an 'ffi' ligature resolves as whichever the subtable order states first, exactly as a real shaper applies its lookups.
-        const advanced = applyLookupAtSlot(slots, slotIndex, lookup, 0);
-        slotIndex += advanced !== 0 ? advanced : 1;
+        const application = applyLookupAtSlot(slots, slotIndex, lookup, 0);
+        if (application === undefined) {
+          slotIndex += 1;
+          continue;
+        }
+        slots.splice(
+          slotIndex,
+          application.consumed,
+          ...application.replacement,
+        );
+        slotIndex +=
+          application.replacement.length !== 0
+            ? application.replacement.length
+            : 1;
       }
     }
     return {
