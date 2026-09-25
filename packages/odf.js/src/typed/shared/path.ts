@@ -236,9 +236,11 @@ export function parseOdfPathData(d: string): OdfRawSubpath[] {
         : { x: current.x, y };
       pushSegment({ kind: "line", to: point }, point);
     } else if (upper === "C") {
-      const rawArgs = tokens.slice(i, i + 6);
-      i += 6;
-      if (rawArgs.length < 6) {
+      // Two control points and one endpoint: three (x, y) pairs.
+      const cubicArgCount = 6;
+      const rawArgs = tokens.slice(i, i + cubicArgCount);
+      i += cubicArgCount;
+      if (rawArgs.length < cubicArgCount) {
         break;
       }
       const x1 = Number(rawArgs[0]);

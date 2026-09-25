@@ -116,6 +116,7 @@ export function formatPt(valuePt: number): string {
 }
 
 const PERCENTAGE_PATTERN = /^(-?(?:\d+(?:\.\d+)?|\.\d+))%$/;
+const PERCENT_SCALE = 100;
 
 // fo:line-height as a percentage (e.g. "150%") maps to document-schema.js's ContentParagraph.lineSpacing, which is a multiplier (1.5), not a percentage (150) — see ooxml.js's own docx/pptx line-spacing readers, which establish this convention (`expect(props.lineSpacing).toBe(1.5)` for what OOXML calls 360/240). An absolute-length fo:line-height (e.g. "12pt") or the literal value "normal" is valid ODF but outside this multiplier-only model, so it parses as undefined here (triggering the caller's hasUnknown, not a silent misinterpretation).
 function parsePercentageMultiplier(value: string): number | undefined {
@@ -123,11 +124,11 @@ function parsePercentageMultiplier(value: string): number | undefined {
   if (!PERCENTAGE_PATTERN.test(value)) {
     return undefined;
   }
-  return Number(value.slice(0, -1)) / 100;
+  return Number(value.slice(0, -1)) / PERCENT_SCALE;
 }
 
 export function formatPercentageMultiplier(multiplier: number): string {
-  return `${multiplier * 100}%`;
+  return `${multiplier * PERCENT_SCALE}%`;
 }
 
 // The canonical ODF colour parse/format pair now lives in ../typed/shared/color.ts, shared with every other reader in this package rather than duplicated here — see that module's own top-of-file note on the text:color datatype. This module calls parseOdfColor/formatOdfColor directly (see parseTextProperties/textPropertiesToAttributes below) rather than through a local alias.

@@ -86,7 +86,8 @@ export function netRotationDeg(
       totalRad += fn.angleRad;
     }
   }
-  return (-totalRad * 180) / Math.PI;
+  const degreesPerHalfTurn = 180;
+  return (-totalRad * degreesPerHalfTurn) / Math.PI;
 }
 
 export interface OdfShapeGeometry {
