@@ -11,8 +11,12 @@ import {
 //
 // Only two fields of the extended header are documented — a reserved long whose value is 5, and the {file size} long — and the remaining 488 bytes are "Used by WordPerfect and is not documented", so this reader takes the file size and ignores the rest.
 
-// -1,"WPC". "Always the first four bytes of a WP document file." Source: WPFF Document Structure, "File ID Field".
-export const WPD_FILE_ID: readonly number[] = [0xff, 0x57, 0x50, 0x43];
+// -1,"WPC". "Always the first four bytes of a WP document file." Source: WPFF Document Structure, "File ID Field". The leading byte is the literal value -1 (0xFF) rather than an ASCII character, so only "WPC" itself is derived from its own text.
+const FILE_ID_NEGATIVE_ONE_BYTE = 0xff;
+export const WPD_FILE_ID: readonly number[] = [
+  FILE_ID_NEGATIVE_ONE_BYTE,
+  ...Array.from("WPC", (c) => c.charCodeAt(0)),
+];
 
 // The fixed part of the prefix: the 16-byte standard header plus the 496-byte extended header.
 export const WPD_PREFIX_HEADER_SIZE = 512;
@@ -21,7 +25,12 @@ export const WPD_PREFIX_HEADER_SIZE = 512;
 const PRODUCT_TYPE_WORDPERFECT = 1;
 
 // File type 10 (0x0A) is a WordPerfect document; 36 (0x24) is listed separately as ".WPD files". Both are documents this reader accepts; every other value in the SDK's table names something that is not a document at all (a printer resource file, a thesaurus, a graphic). Source: WPFF Document Structure, "Corel File Types".
-const DOCUMENT_FILE_TYPES: readonly number[] = [0x0a, 0x24];
+const FILE_TYPE_WORDPERFECT_DOCUMENT = 0x0a;
+const FILE_TYPE_WPD = 0x24;
+const DOCUMENT_FILE_TYPES: readonly number[] = [
+  FILE_TYPE_WORDPERFECT_DOCUMENT,
+  FILE_TYPE_WPD,
+];
 
 // "The major version number is the same for 6.x through X6 documents. For WP X6 documents the major version byte is 2." That one byte is the whole of this reader's version gate: it separates the single lineage Corel documents as "structured the same" from the earlier formats (WP 5.x and before) that share the file ID but not the structure. Source: WPFF Document Structure, "Major Version and Minor Version Fields".
 const MAJOR_VERSION_WP6_THROUGH_X6 = 2;
@@ -52,26 +61,41 @@ export function hasWordPerfectFileId(bytes: Uint8Array): boolean {
   return WPD_FILE_ID.every((expected, index) => bytes[index] === expected);
 }
 
+// The 16-byte standard header's own field offsets (WPFF Document Structure, "File Header Format"): file ID (0), document area pointer (4, a long), product type (8), file type (9), major version (10), minor version (11), encryption word (12), index area pointer (14).
+const HEX_RADIX = 16;
+const HEX_BYTE_WIDTH = 2;
+const DOCUMENT_AREA_OFFSET_FIELD = 4;
+const PRODUCT_TYPE_FIELD = 8;
+const FILE_TYPE_FIELD = 9;
+const MAJOR_VERSION_FIELD = 10;
+const MINOR_VERSION_FIELD = 11;
+const ENCRYPTION_FIELD = 12;
+const INDEX_AREA_OFFSET_FIELD = 14;
+// The extended header's own documented fields sit at offset 16 (a reserved long whose value is 5) and offset 20 (the file size), both relative to the extended header's own start immediately after the 16-byte standard header.
+const EXTENDED_HEADER_FILE_SIZE_FIELD = 20;
+
 export function readFileHeader(
   bytes: Uint8Array,
   options: ReadWpdHeaderOptions = {},
 ): WpdFileHeader {
   if (!hasWordPerfectFileId(bytes)) {
-    const actual = Array.from(sliceAt(bytes, 0, Math.min(4, bytes.length)))
-      .map((byte) => byte.toString(16).padStart(2, "0"))
+    const actual = Array.from(
+      sliceAt(bytes, 0, Math.min(WPD_FILE_ID.length, bytes.length)),
+    )
+      .map((byte) => byte.toString(HEX_RADIX).padStart(HEX_BYTE_WIDTH, "0"))
       .join(" ");
     throw new WpdNotAWordPerfectFileError(
       `Expected the WordPerfect file ID FF 57 50 43 (-1,"WPC") at offset 0, found ${actual}.`,
     );
   }
 
-  const documentAreaOffset = uint32At(bytes, 4);
-  const productType = byteAt(bytes, 8);
-  const fileType = byteAt(bytes, 9);
-  const majorVersion = byteAt(bytes, 10);
-  const minorVersion = byteAt(bytes, 11);
-  const encryption = uint16At(bytes, 12);
-  const indexAreaOffset = uint16At(bytes, 14);
+  const documentAreaOffset = uint32At(bytes, DOCUMENT_AREA_OFFSET_FIELD);
+  const productType = byteAt(bytes, PRODUCT_TYPE_FIELD);
+  const fileType = byteAt(bytes, FILE_TYPE_FIELD);
+  const majorVersion = byteAt(bytes, MAJOR_VERSION_FIELD);
+  const minorVersion = byteAt(bytes, MINOR_VERSION_FIELD);
+  const encryption = uint16At(bytes, ENCRYPTION_FIELD);
+  const indexAreaOffset = uint16At(bytes, INDEX_AREA_OFFSET_FIELD);
 
   // Checked before the version gate: an encrypted file's version bytes are inside the header and therefore still readable, but reporting "unsupported version" for a file that is merely encrypted would name the wrong problem. With a password supplied, the encrypted file stays readable — the password's verification and the decryption itself happen in the container layer (openWpdDocument), which owns the byte buffer — so this throws only when there is no password to try. An empty-string password is no password, exactly as every other codec here treats one.
   const suppliedPassword =
@@ -101,7 +125,7 @@ export function readFileHeader(
   }
 
   // The extended header's own documented fields sit at 16 (a reserved long whose value is 5) and 20 (the file size).
-  const fileSize = uint32At(bytes, 20);
+  const fileSize = uint32At(bytes, EXTENDED_HEADER_FILE_SIZE_FIELD);
 
   return {
     documentAreaOffset,
