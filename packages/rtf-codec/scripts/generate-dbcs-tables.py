@@ -21,6 +21,15 @@ CODEPAGES = {
     1361: "cp1361",
 }
 
+# The TypeScript identifier generated for each code page's own numeric value: emitted as a `const NAME = value;` in codepage-dbcs.ts so the DBCS_LEAD_BYTE_TABLES/DBCS_SINGLE_BYTE_EXTRAS Map literals key by name rather than by a bare numeric literal, satisfying this package's own @typescript-eslint/no-magic-numbers config (a plain top-level const is exempt; an inline literal in a Map entry is not).
+CODEPAGE_CONST_NAMES = {
+    932: "CODEPAGE_932_SHIFT_JIS",
+    936: "CODEPAGE_936_GBK",
+    949: "CODEPAGE_949_UHC",
+    950: "CODEPAGE_950_BIG5",
+    1361: "CODEPAGE_1361_JOHAB",
+}
+
 REPLACEMENT = "�"
 HERE = Path(__file__).resolve().parent
 SRC_DIR = HERE.parent / "src"
@@ -85,12 +94,29 @@ def write_page_file(cp: int, single: dict[int, str], lead_tables: dict[int, str]
         "where the page leaves that pair undefined."
     )
     lines.append("")
+    lines.append("const LEAD_BYTE_MIN = 0x80;")
     lines.append(
-        "export const LEAD_BYTE_TABLE: ReadonlyMap<number, string> = new Map(["
+        "// Position i in this array is lead byte LEAD_BYTE_MIN + i (0x80 through 0xFF); undefined where that byte is never a lead byte for this page. A computed key built from a named constant and a loop index has no numeric literal for @typescript-eslint/no-magic-numbers to flag, unlike the sparse `new Map([[129, ...], ...])` literal this replaces."
     )
-    for lead in sorted(lead_tables):
-        lines.append(f"  [{lead}, {ts_string_literal(lead_tables[lead])}],")
-    lines.append("]);")
+    lines.append(
+        "const LEAD_BYTE_TRAIL_TABLES: readonly (string | undefined)[] = ["
+    )
+    for lead in range(0x80, 0x100):
+        if lead in lead_tables:
+            lines.append(f"  {ts_string_literal(lead_tables[lead])},")
+        else:
+            lines.append("  undefined,")
+    lines.append("];")
+    lines.append("")
+    lines.append(
+        "export const LEAD_BYTE_TABLE: ReadonlyMap<number, string> = new Map("
+    )
+    lines.append("  LEAD_BYTE_TRAIL_TABLES.flatMap((table, index) =>")
+    lines.append(
+        "    table === undefined ? [] : [[LEAD_BYTE_MIN + index, table] as const],"
+    )
+    lines.append("  ),")
+    lines.append(");")
 
     has_extras = bool(single)
     if has_extras:
@@ -102,7 +128,7 @@ def write_page_file(cp: int, single: dict[int, str], lead_tables: dict[int, str]
             "128-character string indexed by byte-0x80, U+FFFD where that byte is instead a "
             "lead byte or genuinely undefined."
         )
-        lines.append(f"export const SINGLE_BYTE_EXTRAS: string = {ts_string_literal(dense)};")
+        lines.append(f"export const SINGLE_BYTE_EXTRAS = {ts_string_literal(dense)};")
     lines.append("")
 
     PAGES_DIR.mkdir(parents=True, exist_ok=True)
@@ -141,17 +167,23 @@ def write_index_file(pages_with_extras: list[int]) -> None:
         )
     lines.append("")
     lines.append(
+        "// Named per-page RTF code page numbers, so the Map literals below key by name rather than by a bare numeric literal."
+    )
+    for cp in CODEPAGES:
+        lines.append(f"const {CODEPAGE_CONST_NAMES[cp]} = {cp};")
+    lines.append("")
+    lines.append(
         "export const DBCS_LEAD_BYTE_TABLES: ReadonlyMap<number, ReadonlyMap<number, string>> = new Map(["
     )
     for cp in CODEPAGES:
-        lines.append(f"  [{cp}, LEAD_{cp}],")
+        lines.append(f"  [{CODEPAGE_CONST_NAMES[cp]}, LEAD_{cp}],")
     lines.append("]);")
     lines.append("")
     lines.append(
         "export const DBCS_SINGLE_BYTE_EXTRAS: ReadonlyMap<number, string> = new Map(["
     )
     for cp in pages_with_extras:
-        lines.append(f"  [{cp}, SINGLE_{cp}],")
+        lines.append(f"  [{CODEPAGE_CONST_NAMES[cp]}, SINGLE_{cp}],")
     lines.append("]);")
     lines.append("")
 
