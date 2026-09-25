@@ -1,16 +1,9 @@
 import { z } from "zod";
 import {
-  ContentDrawPageSchema,
-  ContentEmbeddedObjectSchema,
   ContentFormulaSchema,
   ContentListMembershipSchema,
   ContentParagraphSchema,
   ContentSectionSchema,
-  ContentShapeSchema,
-  ContentSheetImageSchema,
-  ContentSheetSchema,
-  ContentSlideSchema,
-  ContentVectorSchema,
   isContentBlock,
   isContentConstructEnd,
   isContentConstructStart,
@@ -19,9 +12,20 @@ import {
   type ContentConstructStart,
   type ContentEmbeddedObject,
   type ContentFormula,
-  type ContentSheetImage,
-  type ContentVector,
 } from "./content";
+import { ContentEmbeddedObjectSchema } from "./content-vocabulary";
+import {
+  ContentSheetImageSchema,
+  ContentSheetSchema,
+  type ContentSheetImage,
+} from "./content-sheet";
+import {
+  ContentDrawPageSchema,
+  ContentShapeSchema,
+  ContentSlideSchema,
+  ContentVectorSchema,
+  type ContentVector,
+} from "./content-drawing";
 import {
   ConstructDescriptorSchema,
   type ConstructDescriptor,

@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import type { ContentDocument } from "./content";
+
 import { type DocumentTree, DocumentTreeSchema } from "./package";
 import type { SectionGroupNode } from "./package-node";
 import {
