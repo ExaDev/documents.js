@@ -21,12 +21,17 @@ export const CFF_DICT_OP_ENCODING = 16;
 export const CFF_DICT_OP_CHARSTRINGS = 17;
 export const CFF_DICT_OP_PRIVATE = 18;
 export const CFF_DICT_OP_SUBRS = 19; // Private DICT: an offset RELATIVE to that Private DICT's own start, not to the start of the font
-export const CFF_DICT_OP_ROS = CFF_ESCAPED_OPERATOR_BASE + 30;
+// Escaped operator second byte for ROS (Registry Ordering Supplement, Table 10): `12 30` in the DICT byte stream. Numerically the same 30 as DICT_OPERAND_REAL below, but an unrelated fact of the format — one is an operator's second byte, the other an operand-type marker — so it gets its own name rather than reusing that constant.
+const CFF_DICT_OP_ROS_ESCAPE = 30;
+export const CFF_DICT_OP_ROS =
+  CFF_ESCAPED_OPERATOR_BASE + CFF_DICT_OP_ROS_ESCAPE;
 
 const INDEX_COUNT_SIZE = 2;
 const INDEX_OFF_SIZE_SIZE = 1;
 const MIN_OFF_SIZE = 1;
 const MAX_OFF_SIZE = 4;
+// The one offSize value between MIN_OFF_SIZE and MAX_OFF_SIZE that has no native fixed-width reader (u8/u16/u32): a 3-byte, 24-bit offset, which the INDEX format allows precisely because it is cheaper than 4 bytes for fonts whose offsets never exceed 16MB.
+const OFF_SIZE_3_BYTES = 3;
 
 // DICT operand and operator encodings (spec Table 3 and section 4). Operators are 0..21, with 12 introducing a two-byte escaped operator; everything from 28 upward is operand data, and 22..27, 31, and 255 are reserved and appear in no valid DICT.
 const DICT_OPERATOR_MAX = 21;
@@ -46,7 +51,17 @@ const DICT_OPERAND_MEDIUM_FIRST_BYTE_BIAS = 247;
 const DICT_OPERAND_NEGATIVE_MEDIUM_FIRST_BYTE_BIAS = 251;
 const BYTE_RADIX = 256;
 
+// A DICT_OPERAND_INT16 operand (Table 3): a two's-complement int16 following the 28 marker byte, spanning three bytes of the DICT stream in total (the marker plus the two value bytes).
+const INT16_SIGN_BIT = 0x8000; // set when the unsigned 16-bit read is really a negative two's-complement value
+const UINT16_MODULUS = 0x1_0000; // 2^16: subtracted once to fold an unsigned 16-bit read back into its signed range
+const DICT_OPERAND_INT16_TOTAL_SIZE = 3; // 1 marker byte + 2 value bytes
+// A DICT_OPERAND_INT32 operand (Table 3): a two's-complement int32 following the 29 marker byte, spanning five bytes of the DICT stream in total.
+const INT32_SIZE_BYTES = 4;
+const DICT_OPERAND_INT32_TOTAL_SIZE = 5; // 1 marker byte + 4 value bytes
+
 // A real number is a nibble stream (Table 5), each nibble either a digit, one of '.', 'E', 'E-', '-', or the terminator 0xf. Nibble 0xd is reserved and appears in no valid real.
+// A real-number nibble in 0x0-0x9 is one of the ten decimal digits (Table 5); nibbles above that are the punctuation and control values named below.
+const REAL_NIBBLE_DIGIT_MAX = 9;
 const REAL_NIBBLE_DECIMAL_POINT = 0xa;
 const REAL_NIBBLE_EXPONENT = 0xb;
 const REAL_NIBBLE_NEGATIVE_EXPONENT = 0xc;
@@ -67,7 +82,7 @@ function readOffsetAt(
   if (offSize === 2) {
     return u16(bytes, offset);
   }
-  if (offSize === 3) {
+  if (offSize === OFF_SIZE_3_BYTES) {
     return u24(bytes, offset);
   }
   return u32(bytes, offset);
@@ -158,7 +173,7 @@ function readRealOperand(
       if (nibble === REAL_NIBBLE_RESERVED) {
         return undefined;
       }
-      if (nibble <= 9) {
+      if (nibble <= REAL_NIBBLE_DIGIT_MAX) {
         text += String(nibble);
       } else if (nibble === REAL_NIBBLE_DECIMAL_POINT) {
         text += ".";
@@ -203,16 +218,16 @@ export function parseCffDict(
         return undefined;
       }
       const raw = u16(data, i + 1);
-      operands.push(raw >= 0x8000 ? raw - 0x1_0000 : raw);
-      i += 3;
+      operands.push(raw >= INT16_SIGN_BIT ? raw - UINT16_MODULUS : raw);
+      i += DICT_OPERAND_INT16_TOTAL_SIZE;
       continue;
     }
     if (b0 === DICT_OPERAND_INT32) {
-      if (!hasBytes(data, i + 1, 4)) {
+      if (!hasBytes(data, i + 1, INT32_SIZE_BYTES)) {
         return undefined;
       }
       operands.push(u32(data, i + 1) | 0); // a 32-bit DICT integer is signed (Table 3); the bitwise-or reinterprets the unsigned read as two's complement
-      i += 5;
+      i += DICT_OPERAND_INT32_TOTAL_SIZE;
       continue;
     }
     if (b0 === DICT_OPERAND_REAL) {
