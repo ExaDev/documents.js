@@ -1,3 +1,25 @@
+## [3.10.22](https://github.com/ExaDev/documents.js/compare/document-outline.js%403.10.21...document-outline.js%403.10.22) (2026-09-25)
+
+### Bug Fixes
+
+* **document-outline.js:** enable max-lines ([0018776](https://github.com/ExaDev/documents.js/commit/0018776d2ab6fa86236b423eab2d1dbc1c9f158c))
+* **document-outline.js:** name magic numbers the split carried over from graph.test.ts ([a72a105](https://github.com/ExaDev/documents.js/commit/a72a105b45c8a35d3f5504c9fe9605463388a3b5))
+
+### Code Refactoring
+
+* **document-outline.js:** split graph write API into graph-edit.ts ([4f09a59](https://github.com/ExaDev/documents.js/commit/4f09a590133cb27425c84fb3e94f11583972c87c))
+
+### Tests
+
+* **document-outline.js:** cover the two test-support modules the maxLines split left untested ([4d4d7ad](https://github.com/ExaDev/documents.js/commit/4d4d7ad7acee2217a99a641cf45534ef01e0a83e)), references [#1275](https://github.com/ExaDev/documents.js/issues/1275)
+* **document-outline.js:** split graph.test.ts by projection/edit concern ([55d20a1](https://github.com/ExaDev/documents.js/commit/55d20a18ab19d6d36ddbd7bef4e8ab0990e0bad6))
+* **document-outline.js:** split pdf-regions.test.ts against current main ([95f03d9](https://github.com/ExaDev/documents.js/commit/95f03d9152c4707de0856309705d91c0a0e11081))
+
+
+### Dependencies
+
+- Updated pdf-codec to 5.2.27
+
 ## [3.10.21](https://github.com/ExaDev/documents.js/compare/document-outline.js%403.10.20...document-outline.js%403.10.21) (2026-09-24)
 
 ### Bug Fixes
