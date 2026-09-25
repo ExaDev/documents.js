@@ -271,6 +271,9 @@ const DRAWINGML_MAIN_NS =
 
 describe("buildDocxPackageFromContent: buildDrawing's fixed XML shape", () => {
   it("writes the zero offset, rect preset, distT/B/L/R zeros, and docPr id/name exactly, with alt text as descr", () => {
+    // Arbitrary but distinct fixture dimensions, reused below when converting to the expected EMU extent so the assertion checks the same size the fixture sets.
+    const IMAGE_WIDTH_PT = 100;
+    const IMAGE_HEIGHT_PT = 50;
     const written = buildDocxPackageFromContent({
       sections: [
         {
@@ -280,8 +283,8 @@ describe("buildDocxPackageFromContent: buildDrawing's fixed XML shape", () => {
               kind: "image",
               format: "png",
               base64: TINY_PNG_BASE64,
-              widthPt: 100,
-              heightPt: 50,
+              widthPt: IMAGE_WIDTH_PT,
+              heightPt: IMAGE_HEIGHT_PT,
               altText: "a caption",
             },
           ],
@@ -305,8 +308,8 @@ describe("buildDocxPackageFromContent: buildDrawing's fixed XML shape", () => {
     expect(attr(inline, "distL")).toBe("0");
     expect(attr(inline, "distR")).toBe("0");
 
-    const cx = String(ptToEmu(100));
-    const cy = String(ptToEmu(50));
+    const cx = String(ptToEmu(IMAGE_WIDTH_PT));
+    const cy = String(ptToEmu(IMAGE_HEIGHT_PT));
     const extent = childrenWithTag(inline, "wp:extent")[0];
     expect(extent === undefined ? undefined : attr(extent, "cx")).toBe(cx);
     expect(extent === undefined ? undefined : attr(extent, "cy")).toBe(cy);
@@ -1020,7 +1023,9 @@ describe("buildDocxPackageFromContent: content round trip", () => {
       ]),
     );
     const rows = childrenWithTag(table, "w:tr");
-    expect(rows).toHaveLength(3);
+    // The fixture above defines exactly three `rows` entries.
+    const FIXTURE_ROW_COUNT = 3;
+    expect(rows).toHaveLength(FIXTURE_ROW_COUNT);
     expect(childrenWithTag(rows[0]!, "w:trPr")[0]).toEqual(
       el("w:trPr", {}, [el("w:trHeight", { "w:val": "600" })]),
     );
@@ -1155,7 +1160,12 @@ describe("buildDocxPackageFromContent: content round trip", () => {
       docxPackage([para("first"), firstBreak, para("second")]),
     );
     expect(sections).toHaveLength(2);
-    expect(sections[0]?.pageSize.widthPt).toBeCloseTo(595.3, 1);
+    // 11906 twips (the w:pgSz w:w above) converted to points at 20 twips per point (ECMA-376's own twip definition).
+    const EXPECTED_PAGE_WIDTH_PT = 595.3;
+    expect(sections[0]?.pageSize.widthPt).toBeCloseTo(
+      EXPECTED_PAGE_WIDTH_PT,
+      1,
+    );
   });
 
   it("round-trips a section break kind, re-emitting w:sectPr/w:type for a section that spells one and none for a section that does not", () => {
@@ -2039,14 +2049,15 @@ describe("buildDocxPackageFromContent: construct round trip", () => {
     ).toEqual({ kind: "field", instruction: ' TOC \\o "1-3" \\h ' });
     const document = rootElement(written.parts["word/document.xml"]);
     const body = document === undefined ? undefined : document.children[0];
-    // The field's own characters live inside the extent's paragraphs, so the body gains no paragraph of its own for them.
+    // The field's own characters live inside the extent's paragraphs, so the body gains no paragraph of its own for them: the source above defines exactly three top-level w:p elements (the field-begin paragraph, "Chapter 2", and the field-end paragraph).
+    const SOURCE_PARAGRAPH_COUNT = 3;
     expect(
       body?.type === "element"
         ? body.children.filter(
             (child) => child.type === "element" && child.tag === "w:p",
           ).length
         : undefined,
-    ).toBe(3);
+    ).toBe(SOURCE_PARAGRAPH_COUNT);
   });
 
   it("round-trips a simple field that is a paragraph's whole content", () => {
@@ -2967,8 +2978,9 @@ describe("buildDocxPackageFromContent: page-break materialisation and lifted-ima
     );
     expect(paragraphs).toHaveLength(1);
     const runs = childrenWithTag(paragraphs[0]!, "w:r");
-    // Both drawings ride inside the two trailing empty runs themselves, so no fourth run appears.
-    expect(runs).toHaveLength(3);
+    // Both drawings ride inside the two trailing empty runs themselves, so no fourth run appears: the fixture's own runs array above has exactly three entries ("head" plus the two trailing empty runs).
+    const FIXTURE_RUN_COUNT = 3;
+    expect(runs).toHaveLength(FIXTURE_RUN_COUNT);
     expect(elementsWithTag([runs[1]!], "w:drawing")).toHaveLength(1);
     expect(elementsWithTag([runs[2]!], "w:drawing")).toHaveLength(1);
   });
@@ -3752,12 +3764,15 @@ describe("buildDocxPackageFromContent: media and embedded-object emission", () =
   });
 
   it("numbers distinct embedded payloads sequentially", () => {
+    // Two different widths, chosen only to prove the sequential numbering below doesn't depend on the payload's own frame size.
+    const FIRST_EMBED_WIDTH_PT = 100;
+    const SECOND_EMBED_WIDTH_PT = 120;
     const written = buildDocxPackageFromContent({
       sections: [
         {
           ...emptyBodySection(),
           blocks: [
-            embeddedObjectBlock(embeddedWordprocessing(), 100),
+            embeddedObjectBlock(embeddedWordprocessing(), FIRST_EMBED_WIDTH_PT),
             embeddedObjectBlock(
               {
                 kind: "wordprocessing",
@@ -3775,7 +3790,7 @@ describe("buildDocxPackageFromContent: media and embedded-object emission", () =
                   },
                 ],
               },
-              120,
+              SECOND_EMBED_WIDTH_PT,
             ),
           ],
         },
@@ -3813,6 +3828,15 @@ describe("buildDocxPackageFromContent: media and embedded-object emission", () =
   });
 
   it("refuses an embedded presentation with no injected serialiser, and serialises it through the port when one is injected", () => {
+    // An arbitrary, easily distinguishable placeholder byte sequence for the injected fake serialiser's output below: its exact values carry no format meaning, they only need to land on disk as their own bytes.
+    const ARBITRARY_PAYLOAD_BYTE_THIRD = 3;
+    const ARBITRARY_PAYLOAD_BYTE_FOURTH = 4;
+    const ARBITRARY_PAYLOAD_BYTES = [
+      1,
+      2,
+      ARBITRARY_PAYLOAD_BYTE_THIRD,
+      ARBITRARY_PAYLOAD_BYTE_FOURTH,
+    ];
     const presentation: Extract<
       ContentBlock,
       { kind: "embeddedObject" }
@@ -3838,7 +3862,7 @@ describe("buildDocxPackageFromContent: media and embedded-object emission", () =
       { sections: [{ ...emptyBodySection(), blocks: [block] }] },
       {
         serialiseEmbeddedPresentation: () =>
-          new Uint8Array([1, 2, 3, 4]).slice(),
+          new Uint8Array(ARBITRARY_PAYLOAD_BYTES).slice(),
       },
     );
     expect(Object.keys(written.parts)).toContain(
@@ -3977,11 +4001,13 @@ describe("buildDocxPackageFromContent: run and paragraph property XML exactness"
           },
         ],
       });
-    const positive = paragraphProperties(build(24));
+    // 24pt converts to 480 twips at 20 twips per point (ECMA-376's own twip definition); the negative case below reuses the same magnitude to prove the sign flips which tag is emitted, not the value.
+    const INDENT_FIRST_LINE_PT = 24;
+    const positive = paragraphProperties(build(INDENT_FIRST_LINE_PT));
     expect(positive.find((child) => child.tag === "w:ind")?.attrs).toEqual({
       "w:firstLine": "480",
     });
-    const negative = paragraphProperties(build(-24));
+    const negative = paragraphProperties(build(-INDENT_FIRST_LINE_PT));
     expect(negative.find((child) => child.tag === "w:ind")?.attrs).toEqual({
       "w:hanging": "480",
     });
@@ -4335,9 +4361,15 @@ describe("buildDocxPackageFromContent: table grid and vertical-merge arithmetic"
     isHeader?: boolean;
   }
 
+  // Arbitrary equal-width fallback for tests below that don't care about column widths specifically.
+  const DEFAULT_TABLE_COLUMN_WIDTH_PT = 100;
+
   function tableOf(
     rows: readonly TableFixtureRow[],
-    columnWidthsPt: readonly number[] = [100, 100],
+    columnWidthsPt: readonly number[] = [
+      DEFAULT_TABLE_COLUMN_WIDTH_PT,
+      DEFAULT_TABLE_COLUMN_WIDTH_PT,
+    ],
   ): Extract<ContentBlock, { kind: "table" }> {
     return {
       kind: "table",
@@ -4460,7 +4492,11 @@ describe("buildDocxPackageFromContent: table grid and vertical-merge arithmetic"
                 },
                 { cells: [{ blocks: [] }, { blocks: [] }, { blocks: [] }] },
               ],
-              [100, 100, 100],
+              [
+                DEFAULT_TABLE_COLUMN_WIDTH_PT,
+                DEFAULT_TABLE_COLUMN_WIDTH_PT,
+                DEFAULT_TABLE_COLUMN_WIDTH_PT,
+              ],
             ),
           ],
         },
@@ -4523,12 +4559,18 @@ describe("buildDocxPackageFromContent: table grid and vertical-merge arithmetic"
   });
 
   it("writes a row's own height in the trPr/trHeight spelling and the grid's column widths in twips", () => {
+    // 72pt and 144pt (double the first), chosen so the two resulting w:gridCol widths below are visibly distinct: 72 * 20 = 1440 twips, 144 * 20 = 2880 twips (20 twips per point, per ECMA-376).
+    const FIRST_COLUMN_WIDTH_PT = 72;
+    const SECOND_COLUMN_WIDTH_PT = 144;
     const written = buildDocxPackageFromContent({
       sections: [
         {
           ...emptyBodySection(),
           blocks: [
-            tableOf([{ cells: [{ blocks: [] }], heightPt: 30 }], [72, 144]),
+            tableOf(
+              [{ cells: [{ blocks: [] }], heightPt: 30 }],
+              [FIRST_COLUMN_WIDTH_PT, SECOND_COLUMN_WIDTH_PT],
+            ),
           ],
         },
       ],
@@ -4544,6 +4586,8 @@ describe("buildDocxPackageFromContent: table grid and vertical-merge arithmetic"
   });
 
   it("writes a header row as a bare w:tblHeader, after the row's own w:trHeight", () => {
+    // The single column's width doesn't matter to this test, which only checks w:trHeight/w:tblHeader markup.
+    const ARBITRARY_COLUMN_WIDTH_PT = 72;
     const written = buildDocxPackageFromContent({
       sections: [
         {
@@ -4554,7 +4598,7 @@ describe("buildDocxPackageFromContent: table grid and vertical-merge arithmetic"
                 { cells: [{ blocks: [] }], heightPt: 30, isHeader: true },
                 { cells: [{ blocks: [] }] },
               ],
-              [72],
+              [ARBITRARY_COLUMN_WIDTH_PT],
             ),
           ],
         },
@@ -4574,12 +4618,17 @@ describe("buildDocxPackageFromContent: table grid and vertical-merge arithmetic"
   });
 
   it("writes a header row carrying no height as a w:trPr holding w:tblHeader alone", () => {
+    // The single column's width doesn't matter to this test, which only checks w:trPr/w:tblHeader markup.
+    const ARBITRARY_COLUMN_WIDTH_PT = 72;
     const written = buildDocxPackageFromContent({
       sections: [
         {
           ...emptyBodySection(),
           blocks: [
-            tableOf([{ cells: [{ blocks: [] }], isHeader: true }], [72]),
+            tableOf(
+              [{ cells: [{ blocks: [] }], isHeader: true }],
+              [ARBITRARY_COLUMN_WIDTH_PT],
+            ),
           ],
         },
       ],
