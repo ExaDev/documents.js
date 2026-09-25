@@ -27,10 +27,13 @@ export function jpeg2000FixtureBytes(encoded: string): Uint8Array<ArrayBuffer> {
   return base64ToBytes(encoded);
 }
 
+// A bit depth above one byte's worth of bits needs a 16-bit sample encoding, per the fixture-format comment above (one little-endian 16-bit word per sample for a deeper fixture, one byte per sample for an 8-bit one).
+const BITS_PER_BYTE = 8;
+
 // Decodes a fixture's `expected` field into one array per component, matching what decodeJpeg2000 returns.
 export function jpeg2000FixtureSamples(fixture: Jpeg2000Fixture): number[][] {
   const bytes = base64ToBytes(fixture.expected);
-  const wide = fixture.bitDepth > 8;
+  const wide = fixture.bitDepth > BITS_PER_BYTE;
   const perComponent = fixture.width * fixture.height;
   // Built from fixture.componentCount via Array.from's length argument, not a counted for-loop: an off-by-one loop bound here would silently append one extra all-zero plane (every index inside it reads past the end of `bytes`, and `?? 0` swallows the resulting `undefined`), a difference visible only in the returned array's own length — exactly the kind of boundary a comparison-operator mutant survives when nothing re-checks the plane count.
   return Array.from({ length: fixture.componentCount }, (_, c) => {
@@ -39,7 +42,7 @@ export function jpeg2000FixtureSamples(fixture: Jpeg2000Fixture): number[][] {
       const at = (c * perComponent + i) * (wide ? 2 : 1);
       plane.push(
         wide
-          ? (bytes[at] ?? 0) | ((bytes[at + 1] ?? 0) << 8)
+          ? (bytes[at] ?? 0) | ((bytes[at + 1] ?? 0) << BITS_PER_BYTE)
           : (bytes[at] ?? 0),
       );
     }
