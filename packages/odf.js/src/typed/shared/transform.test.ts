@@ -10,28 +10,45 @@ import {
 
 // The geometry expectations below are not derived from the OASIS spec text alone — they are the exact pixel-measured results of a real LibreOffice round trip: a 200pt x 60pt shape at svg:x=100pt/svg:y=100pt was rewritten with draw:transform="rotate(<radians>) translate(100pt 100pt)" for two different angles, converted to PDF via `soffice --headless --convert-to pdf`, rasterised, and its rendered bounding box measured in pixels. See transform.ts's own top-of-file note for why this was necessary (the naive SVG-transform-list reading gets the composition order/sign wrong).
 
+const PRECISION_DIGITS = 6;
 const closeTo = (value: number, expected: number) => {
-  expect(value).toBeCloseTo(expected, 6);
+  expect(value).toBeCloseTo(expected, PRECISION_DIGITS);
 };
+
+const POINTS_PER_INCH = 72;
+const CM_PER_INCH = 2.54;
 
 describe("parseOdfTransform", () => {
   it('parses "rotate(angle) translate(x y)" (no space before the parenthesis) into its function list, in document order', () => {
+    const xCm = 2;
+    const yCm = 3;
     expect(
-      parseOdfTransform("rotate(0.5235987755982988) translate(2cm 3cm)"),
+      parseOdfTransform(
+        `rotate(0.5235987755982988) translate(${xCm}cm ${yCm}cm)`,
+      ),
     ).toEqual([
       { kind: "rotate", angleRad: 0.5235987755982988 },
-      { kind: "translate", xPt: 2 * (72 / 2.54), yPt: 3 * (72 / 2.54) },
+      {
+        kind: "translate",
+        xPt: xCm * (POINTS_PER_INCH / CM_PER_INCH),
+        yPt: yCm * (POINTS_PER_INCH / CM_PER_INCH),
+      },
     ]);
   });
 
   it("parses the real LibreOffice-written form, WITH a space before the parenthesis (verified via an odp -> odp round trip)", () => {
+    const xyCm = 3.528;
     expect(
       parseOdfTransform(
-        "rotate (0.523598775598299) translate (3.528cm 3.528cm)",
+        `rotate (0.523598775598299) translate (${xyCm}cm ${xyCm}cm)`,
       ),
     ).toEqual([
       { kind: "rotate", angleRad: 0.523598775598299 },
-      { kind: "translate", xPt: 3.528 * (72 / 2.54), yPt: 3.528 * (72 / 2.54) },
+      {
+        kind: "translate",
+        xPt: xyCm * (POINTS_PER_INCH / CM_PER_INCH),
+        yPt: xyCm * (POINTS_PER_INCH / CM_PER_INCH),
+      },
     ]);
   });
 
@@ -90,10 +107,14 @@ describe("applyOdfTransform: matches the real LibreOffice-rendered bounding box"
     ].map((p) => applyOdfTransform(functions, p));
     const xs = corners.map((p) => p.xPt);
     const ys = corners.map((p) => p.yPt);
-    closeTo(Math.min(...xs), 100);
-    closeTo(Math.max(...xs), 160);
-    closeTo(Math.min(...ys), -100);
-    closeTo(Math.max(...ys), 100);
+    const measuredMinXPt = 100;
+    const measuredMaxXPt = 160;
+    const measuredMinYPt = -100;
+    const measuredMaxYPt = 100;
+    closeTo(Math.min(...xs), measuredMinXPt);
+    closeTo(Math.max(...xs), measuredMaxXPt);
+    closeTo(Math.min(...ys), measuredMinYPt);
+    closeTo(Math.max(...ys), measuredMaxYPt);
   });
 
   it("rotate(pi/6) translate(100pt 100pt) on the same box lands its corners at the pixel-measured x:[100,303.2] / y:[0,151.96]", () => {
@@ -108,10 +129,21 @@ describe("applyOdfTransform: matches the real LibreOffice-rendered bounding box"
     ].map((p) => applyOdfTransform(functions, p));
     const xs = corners.map((p) => p.xPt);
     const ys = corners.map((p) => p.yPt);
-    closeTo(Math.min(...xs), 100);
-    expect(Math.max(...xs)).toBeCloseTo(303.205, 2);
-    closeTo(Math.min(...ys), 0);
-    expect(Math.max(...ys)).toBeCloseTo(151.9615, 2);
+    const measuredMinXPt = 100;
+    const measuredMaxXPt = 303.205;
+    const measuredMinYPt = 0;
+    const measuredMaxYPt = 151.9615;
+    const measuredPrecisionDigits = 2;
+    closeTo(Math.min(...xs), measuredMinXPt);
+    expect(Math.max(...xs)).toBeCloseTo(
+      measuredMaxXPt,
+      measuredPrecisionDigits,
+    );
+    closeTo(Math.min(...ys), measuredMinYPt);
+    expect(Math.max(...ys)).toBeCloseTo(
+      measuredMaxYPt,
+      measuredPrecisionDigits,
+    );
   });
 
   it("a bare translate is a plain offset, independent of any rotate", () => {
@@ -133,15 +165,21 @@ describe("applyOdfTransform: matches the real LibreOffice-rendered bounding box"
 
 describe("netRotationDeg", () => {
   it("is the negated sum of every rotate() angle in the list, converted to degrees (translate contributes nothing)", () => {
-    closeTo(netRotationDeg([{ kind: "rotate", angleRad: Math.PI / 2 }]), -90);
+    const quarterTurnRad = Math.PI / 2;
+    const eighthTurnRad = quarterTurnRad / 2;
+    const negativeQuarterTurnDeg = -90;
+    closeTo(
+      netRotationDeg([{ kind: "rotate", angleRad: quarterTurnRad }]),
+      negativeQuarterTurnDeg,
+    );
     closeTo(netRotationDeg([{ kind: "translate", xPt: 10, yPt: 10 }]), 0);
     closeTo(
       netRotationDeg([
-        { kind: "rotate", angleRad: Math.PI / 4 },
+        { kind: "rotate", angleRad: eighthTurnRad },
         { kind: "translate", xPt: 1, yPt: 1 },
-        { kind: "rotate", angleRad: Math.PI / 4 },
+        { kind: "rotate", angleRad: eighthTurnRad },
       ]),
-      -90,
+      negativeQuarterTurnDeg,
     );
   });
 
@@ -174,18 +212,23 @@ describe("resolveOdfShapeGeometry", () => {
 
   it("resolves a rotated frame (draw:transform, no svg:x/svg:y) to a CENTER-pivoting frame + clockwise rotationDeg, matching the pixel-verified geometry", () => {
     // rotate(pi/2) translate(100pt 100pt) on a 200x60pt box: verified center = (130, 0) via applyOdfTransform's own confirmed formula, so top-left = (30, -30).
+    const widthPt = 200;
+    const heightPt = 60;
+    const expectedXPt = 30;
+    const expectedYPt = -30;
+    const expectedRotationDeg = -90;
     const frame = el("draw:frame", {
-      "svg:width": "200pt",
-      "svg:height": "60pt",
+      "svg:width": `${widthPt}pt`,
+      "svg:height": `${heightPt}pt`,
       "draw:transform": "rotate(1.5707963267948966) translate(100pt 100pt)",
     });
     const result = resolveOdfShapeGeometry(frame);
     expect(result).toBeDefined();
-    closeTo(result?.frame.xPt ?? NaN, 30);
-    closeTo(result?.frame.yPt ?? NaN, -30);
-    closeTo(result?.frame.widthPt ?? NaN, 200);
-    closeTo(result?.frame.heightPt ?? NaN, 60);
-    closeTo(result?.rotationDeg ?? NaN, -90);
+    closeTo(result?.frame.xPt ?? NaN, expectedXPt);
+    closeTo(result?.frame.yPt ?? NaN, expectedYPt);
+    closeTo(result?.frame.widthPt ?? NaN, widthPt);
+    closeTo(result?.frame.heightPt ?? NaN, heightPt);
+    closeTo(result?.rotationDeg ?? NaN, expectedRotationDeg);
   });
 
   it("rotationDeg is undefined (not 0) for a draw:transform that carries only a translate, no rotate", () => {
@@ -226,21 +269,26 @@ describe("composeOdfGroupTransform", () => {
     );
     const result = composeOdfGroupTransform(groupFunctions, child);
     // applyOdfTransform(groupFunctions, {xPt:90, yPt:70}): rotate first -> (70, -90), then translate -> (170, 10).
-    closeTo(result.frame.xPt, 170 - 40); // new center x minus half width
-    closeTo(result.frame.yPt, 10 - 20); // new center y minus half height
-    closeTo(result.frame.widthPt, 80); // unchanged — no scale in ODF's own group model
-    closeTo(result.frame.heightPt, 40);
-    closeTo(result.rotationDeg ?? NaN, -90);
+    const newCenterXPt = 170;
+    const newCenterYPt = 10;
+    const expectedRotationDeg = -90;
+    closeTo(result.frame.xPt, newCenterXPt - child.frame.widthPt / 2);
+    closeTo(result.frame.yPt, newCenterYPt - child.frame.heightPt / 2);
+    closeTo(result.frame.widthPt, child.frame.widthPt); // unchanged — no scale in ODF's own group model
+    closeTo(result.frame.heightPt, child.frame.heightPt);
+    closeTo(result.rotationDeg ?? NaN, expectedRotationDeg);
   });
 
   it("adds the group's own rotation onto a child that already carries its own rotation", () => {
+    const childRotationDeg = 30;
     const rotatedChild = {
       frame: { xPt: 0, yPt: 0, widthPt: 10, heightPt: 10 },
-      rotationDeg: 30,
+      rotationDeg: childRotationDeg,
     };
-    const groupFunctions = [{ kind: "rotate" as const, angleRad: Math.PI / 2 }]; // netRotationDeg = -90
+    const groupRotationDeg = -90;
+    const groupFunctions = [{ kind: "rotate" as const, angleRad: Math.PI / 2 }]; // netRotationDeg = groupRotationDeg
     const result = composeOdfGroupTransform(groupFunctions, rotatedChild);
-    closeTo(result.rotationDeg ?? NaN, 30 - 90);
+    closeTo(result.rotationDeg ?? NaN, childRotationDeg + groupRotationDeg);
   });
 
   it("cancels out to undefined rotationDeg when the composed rotation is exactly 0", () => {
