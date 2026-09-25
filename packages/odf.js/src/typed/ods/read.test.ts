@@ -34,6 +34,10 @@ function knownLength(value: string): number {
   return parsed;
 }
 
+// Column/row width fixtures compare at a coarser precision than image/frame geometry, since LibreOffice itself rounds column/row lengths to fewer digits on write.
+const COARSE_LENGTH_PRECISION_DIGITS = 3;
+const FINE_LENGTH_PRECISION_DIGITS = 6;
+
 describe("readOdsContent: kitchen-sink.ods (real LibreOffice output)", () => {
   const { metadata, sheets } = readOdsContent(loadFixture("kitchen-sink.ods"));
   const data = sheets.find((sheet) => sheet.name === "Data");
@@ -53,14 +57,29 @@ describe("readOdsContent: kitchen-sink.ods (real LibreOffice output)", () => {
   describe("column widths and hidden columns (real style:table-column-properties, real table:visibility)", () => {
     it("reads real column widths in the exact units LibreOffice itself rounded them to", () => {
       const widths = data.columns.map((column) => column.widthPt);
-      expect(widths[0]).toBeCloseTo(knownLength("3cm"), 3);
-      expect(widths[1]).toBeCloseTo(knownLength("2.499cm"), 3);
-      expect(widths[2]).toBeCloseTo(knownLength("2cm"), 3);
-      expect(widths[3]).toBeCloseTo(knownLength("2.6cm"), 3);
+      expect(widths[0]).toBeCloseTo(
+        knownLength("3cm"),
+        COARSE_LENGTH_PRECISION_DIGITS,
+      );
+      expect(widths[1]).toBeCloseTo(
+        knownLength("2.499cm"),
+        COARSE_LENGTH_PRECISION_DIGITS,
+      );
+      expect(widths[2]).toBeCloseTo(
+        knownLength("2cm"),
+        COARSE_LENGTH_PRECISION_DIGITS,
+      );
+      expect(widths[3]).toBeCloseTo(
+        knownLength("2.6cm"),
+        COARSE_LENGTH_PRECISION_DIGITS,
+      );
     });
 
     it('marks column G (index 6, the Fee column) hidden via table:visibility="collapse"', () => {
-      const hiddenColumn = data.columns.find((column) => column.index === 6);
+      const feeColumnIndex = 6;
+      const hiddenColumn = data.columns.find(
+        (column) => column.index === feeColumnIndex,
+      );
       expect(hiddenColumn?.hidden).toBe(true);
       expect(
         data.columns.filter((column) => column.hidden === true),
@@ -82,15 +101,22 @@ describe("readOdsContent: kitchen-sink.ods (real LibreOffice output)", () => {
     it("reads the header row and first data row's own explicit heights", () => {
       const headerRow = data.rows.find((row) => row.index === 0);
       const firstDataRow = data.rows.find((row) => row.index === 1);
-      expect(headerRow?.heightPt).toBeCloseTo(knownLength("0.9cm"), 3);
-      expect(firstDataRow?.heightPt).toBeCloseTo(knownLength("0.6cm"), 3);
+      expect(headerRow?.heightPt).toBeCloseTo(
+        knownLength("0.9cm"),
+        COARSE_LENGTH_PRECISION_DIGITS,
+      );
+      expect(firstDataRow?.heightPt).toBeCloseTo(
+        knownLength("0.6cm"),
+        COARSE_LENGTH_PRECISION_DIGITS,
+      );
     });
 
     it('marks row 10 (index 9, "Hidden Row Content") hidden via table:visibility="collapse", while its own real content still reads', () => {
-      const hiddenRow = data.rows.find((row) => row.index === 9);
+      const hiddenRowIndex = 9;
+      const hiddenRow = data.rows.find((row) => row.index === hiddenRowIndex);
       expect(hiddenRow?.hidden).toBe(true);
       const hiddenCell = data.cells.find(
-        (cell) => cell.row === 9 && cell.column === 0,
+        (cell) => cell.row === hiddenRowIndex && cell.column === 0,
       );
       expect(hiddenCell?.displayText).toBe("Hidden Row Content");
     });
@@ -112,27 +138,48 @@ describe("readOdsContent: kitchen-sink.ods (real LibreOffice output)", () => {
     });
 
     it('translates office:value-type="float" to kind "number" (NOT "float" — ContentCellValueSchema has no "float" member)', () => {
-      expect(cellAt(1).value).toEqual({ kind: "number", value: 1234.56 });
+      const floatColumnIndex = 1;
+      expect(cellAt(floatColumnIndex).value).toEqual({
+        kind: "number",
+        value: 1234.56,
+      });
     });
 
     it("reads a boolean cell from office:boolean-value", () => {
-      expect(cellAt(2).value).toEqual({ kind: "boolean", value: true });
+      const booleanColumnIndex = 2;
+      expect(cellAt(booleanColumnIndex).value).toEqual({
+        kind: "boolean",
+        value: true,
+      });
     });
 
     it("reads a date cell's bare office:date-value string, unparsed", () => {
-      expect(cellAt(3).value).toEqual({ kind: "date", value: "2026-07-31" });
+      const dateColumnIndex = 3;
+      expect(cellAt(dateColumnIndex).value).toEqual({
+        kind: "date",
+        value: "2026-07-31",
+      });
     });
 
     it("reads a time cell's bare office:time-value ISO-8601-duration string, unparsed", () => {
-      expect(cellAt(4).value).toEqual({ kind: "time", value: "PT14H30M00S" });
+      const timeColumnIndex = 4;
+      expect(cellAt(timeColumnIndex).value).toEqual({
+        kind: "time",
+        value: "PT14H30M00S",
+      });
     });
 
     it("reads a percentage cell as its own fraction, not multiplied by 100", () => {
-      expect(cellAt(5).value).toEqual({ kind: "percentage", value: 0.4256 });
+      const percentageColumnIndex = 5;
+      expect(cellAt(percentageColumnIndex).value).toEqual({
+        kind: "percentage",
+        value: 0.4256,
+      });
     });
 
     it("reads a currency cell with its real ISO currency code from office:currency", () => {
-      expect(cellAt(6).value).toEqual({
+      const currencyColumnIndex = 6;
+      expect(cellAt(currencyColumnIndex).value).toEqual({
         kind: "currency",
         value: 99.99,
         currency: "GBP",
@@ -140,13 +187,15 @@ describe("readOdsContent: kitchen-sink.ods (real LibreOffice output)", () => {
     });
 
     it("carries a real OpenFormula table:formula string verbatim, alongside its own cached numeric result", () => {
-      const formulaCell = cellAt(7);
+      const formulaColumnIndex = 7;
+      const formulaCell = cellAt(formulaColumnIndex);
       expect(formulaCell.formula).toBe("of:=SUM([.B2:.B3])");
       expect(formulaCell.value).toEqual({ kind: "number", value: 1276.56 });
     });
 
     it('reads a genuine formula-error cell (=1/0) as kind "string" with an empty office:string-value — ODF itself has no "error" value-type — while still carrying the real #DIV/0! text as displayText', () => {
-      const errorCell = cellAt(8);
+      const errorColumnIndex = 8;
+      const errorCell = cellAt(errorColumnIndex);
       expect(errorCell.formula).toBe("of:=1/0");
       expect(errorCell.value).toEqual({ kind: "string", value: "" });
       expect(errorCell.displayText).toBe("#DIV/0!");
@@ -154,26 +203,38 @@ describe("readOdsContent: kitchen-sink.ods (real LibreOffice output)", () => {
   });
 
   describe("merged range (table:number-columns-spanned/table:number-rows-spanned, table:covered-table-cell)", () => {
+    const anchorRow = 5;
+    const anchorColumn = 0;
+    const colSpan = 2;
+    const rowSpan = 2;
+
     it("reads the anchor cell with its own colSpan/rowSpan and text", () => {
       const anchor = data.cells.find(
-        (cell) => cell.row === 5 && cell.column === 0,
+        (cell) => cell.row === anchorRow && cell.column === anchorColumn,
       );
       expect(anchor).toMatchObject({
-        colSpan: 2,
-        rowSpan: 2,
+        colSpan,
+        rowSpan,
         displayText: "Merged Cell",
       });
     });
 
     it('emits nothing at all for the covered positions (B6, A7, B7) — no placeholder cell object, matching the repeat-hazard\'s "skip empty" rule', () => {
       expect(
-        data.cells.find((cell) => cell.row === 5 && cell.column === 1),
+        data.cells.find(
+          (cell) => cell.row === anchorRow && cell.column === anchorColumn + 1,
+        ),
       ).toBeUndefined();
       expect(
-        data.cells.find((cell) => cell.row === 6 && cell.column === 0),
+        data.cells.find(
+          (cell) => cell.row === anchorRow + 1 && cell.column === anchorColumn,
+        ),
       ).toBeUndefined();
       expect(
-        data.cells.find((cell) => cell.row === 6 && cell.column === 1),
+        data.cells.find(
+          (cell) =>
+            cell.row === anchorRow + 1 && cell.column === anchorColumn + 1,
+        ),
       ).toBeUndefined();
     });
   });
@@ -192,19 +253,19 @@ describe("readOdsContent: kitchen-sink.ods (real LibreOffice output)", () => {
     it("resolves the Data sheet's own explicit page size and margins", () => {
       expect(data.printSettings.pageSize.widthPt).toBeCloseTo(
         knownLength("21.001cm"),
-        3,
+        COARSE_LENGTH_PRECISION_DIGITS,
       );
       expect(data.printSettings.pageSize.heightPt).toBeCloseTo(
         knownLength("29.7cm"),
-        3,
+        COARSE_LENGTH_PRECISION_DIGITS,
       );
       expect(data.printSettings.margins.topPt).toBeCloseTo(
         knownLength("1.199cm"),
-        3,
+        COARSE_LENGTH_PRECISION_DIGITS,
       );
       expect(data.printSettings.margins.leftPt).toBeCloseTo(
         knownLength("1.499cm"),
-        3,
+        COARSE_LENGTH_PRECISION_DIGITS,
       );
     });
 
@@ -218,7 +279,8 @@ describe("readOdsContent: kitchen-sink.ods (real LibreOffice output)", () => {
     });
 
     it('reads a percentage scale from style:scale-to="150%"', () => {
-      expect(data.printSettings.scalePercent).toBe(150);
+      const scalePercent = 150;
+      expect(data.printSettings.scalePercent).toBe(scalePercent);
       expect(data.printSettings.fitToPages).toBeUndefined();
     });
 
@@ -245,9 +307,11 @@ describe("readOdsContent: kitchen-sink.ods (real LibreOffice output)", () => {
     });
 
     it("reads manual page breaks from fo:break-before=\"page\" on the row/column's own style, at the row/column's real index", () => {
+      const rowBreakIndex = 15;
+      const columnBreakIndex = 3;
       expect(data.printSettings.manualBreaks).toEqual({
-        rows: [15],
-        columns: [3],
+        rows: [rowBreakIndex],
+        columns: [columnBreakIndex],
       });
       expect(summary.printSettings.manualBreaks).toBeUndefined();
     });
@@ -292,7 +356,7 @@ describe("readOdsContent: minimal.ods (real LibreOffice output, default/unmodifi
     expect(sheet.printSettings.pageSize).toEqual(PAGE_SIZE_A4);
     expect(sheet.printSettings.margins.topPt).toBeCloseTo(
       knownLength("2cm"),
-      3,
+      COARSE_LENGTH_PRECISION_DIGITS,
     );
     expect(sheet.printSettings.gridlines).toBe(false);
     expect(sheet.printSettings.headers).toBe(false);
@@ -323,16 +387,29 @@ describe("readOdsContent: sheet-anchors.ods (real LibreOffice output — anchore
   });
 
   it("resolves the cell-anchored image to its real anchor cell (C5) with its own cell-relative offsets, never a fabricated address attribute", () => {
+    const anchorCellRow = 4;
     const anchored = sheet.images[1];
     expect(anchored?.anchorColumn).toBe(2);
-    expect(anchored?.anchorRow).toBe(4);
-    expect(anchored?.offsetXPt).toBeCloseTo(knownLength("0.5cm"), 6);
-    expect(anchored?.offsetYPt).toBeCloseTo(knownLength("0.3cm"), 6);
+    expect(anchored?.anchorRow).toBe(anchorCellRow);
+    expect(anchored?.offsetXPt).toBeCloseTo(
+      knownLength("0.5cm"),
+      FINE_LENGTH_PRECISION_DIGITS,
+    );
+    expect(anchored?.offsetYPt).toBeCloseTo(
+      knownLength("0.3cm"),
+      FINE_LENGTH_PRECISION_DIGITS,
+    );
   });
 
   it("sizes the cell-anchored image to its own frame, not to the source PNG's 8x8 native pixels", () => {
-    expect(sheet.images[1]?.widthPt).toBeCloseTo(knownLength("3cm"), 6);
-    expect(sheet.images[1]?.heightPt).toBeCloseTo(knownLength("2cm"), 6);
+    expect(sheet.images[1]?.widthPt).toBeCloseTo(
+      knownLength("3cm"),
+      FINE_LENGTH_PRECISION_DIGITS,
+    );
+    expect(sheet.images[1]?.heightPt).toBeCloseTo(
+      knownLength("2cm"),
+      FINE_LENGTH_PRECISION_DIGITS,
+    );
   });
 
   it("carries the image's real bytes through as base64, sniffed to png from its own magic bytes", () => {
@@ -347,8 +424,14 @@ describe("readOdsContent: sheet-anchors.ods (real LibreOffice output — anchore
     const pageAnchored = sheet.images[0];
     expect(pageAnchored?.anchorRow).toBe(0);
     expect(pageAnchored?.anchorColumn).toBe(0);
-    expect(pageAnchored?.offsetXPt).toBeCloseTo(knownLength("7cm"), 6);
-    expect(pageAnchored?.offsetYPt).toBeCloseTo(knownLength("0.9cm"), 6);
+    expect(pageAnchored?.offsetXPt).toBeCloseTo(
+      knownLength("7cm"),
+      FINE_LENGTH_PRECISION_DIGITS,
+    );
+    expect(pageAnchored?.offsetYPt).toBeCloseTo(
+      knownLength("0.9cm"),
+      FINE_LENGTH_PRECISION_DIGITS,
+    );
     expect(pageAnchored?.altText).toBeUndefined();
   });
 
@@ -366,23 +449,48 @@ describe("readOdsContent: sheet-anchors.ods (real LibreOffice output — anchore
     if (vector?.kind !== "rect") {
       throw new Error("expected the embedded drawing's own rectangle");
     }
-    expect(vector.fill).toEqual({ r: 1, g: 0x88 / 255, b: 0 });
+    const RGB_CHANNEL_MAX = 255;
+    const quantizedGreen = 0x88;
+    expect(vector.fill).toEqual({
+      r: 1,
+      g: quantizedGreen / RGB_CHANNEL_MAX,
+      b: 0,
+    });
   });
 
   it("reads the embedded object's own frame from the draw:frame, keeping the cell-relative coordinates the format itself states", () => {
     const frame = sheet.embeddedObjects?.[0]?.frame;
-    expect(frame?.xPt).toBeCloseTo(knownLength("0.2cm"), 6);
-    expect(frame?.yPt).toBeCloseTo(knownLength("0.1cm"), 6);
-    expect(frame?.widthPt).toBeCloseTo(knownLength("4cm"), 6);
-    expect(frame?.heightPt).toBeCloseTo(knownLength("3cm"), 6);
+    expect(frame?.xPt).toBeCloseTo(
+      knownLength("0.2cm"),
+      FINE_LENGTH_PRECISION_DIGITS,
+    );
+    expect(frame?.yPt).toBeCloseTo(
+      knownLength("0.1cm"),
+      FINE_LENGTH_PRECISION_DIGITS,
+    );
+    expect(frame?.widthPt).toBeCloseTo(
+      knownLength("4cm"),
+      FINE_LENGTH_PRECISION_DIGITS,
+    );
+    expect(frame?.heightPt).toBeCloseTo(
+      knownLength("3cm"),
+      FINE_LENGTH_PRECISION_DIGITS,
+    );
   });
 
   it("resolves the embedded object to its real anchor cell (B8) with the same cell-relative offsets an anchored image gets", () => {
+    const anchorCellRow = 7;
     const embedded = sheet.embeddedObjects?.[0];
     expect(embedded?.anchorColumn).toBe(1);
-    expect(embedded?.anchorRow).toBe(7);
-    expect(embedded?.offsetXPt).toBeCloseTo(knownLength("0.2cm"), 6);
-    expect(embedded?.offsetYPt).toBeCloseTo(knownLength("0.1cm"), 6);
+    expect(embedded?.anchorRow).toBe(anchorCellRow);
+    expect(embedded?.offsetXPt).toBeCloseTo(
+      knownLength("0.2cm"),
+      FINE_LENGTH_PRECISION_DIGITS,
+    );
+    expect(embedded?.offsetYPt).toBeCloseTo(
+      knownLength("0.1cm"),
+      FINE_LENGTH_PRECISION_DIGITS,
+    );
   });
 
   it("never mistakes the embedded object's own ObjectReplacements preview for anchored picture content", () => {
@@ -446,24 +554,37 @@ describe("readOdsContent: sheet-formula.ods (real LibreOffice output — a Math 
   });
 
   it("resolves the formula object to its real anchor cell (C4) with its own cell-relative offsets", () => {
+    const anchorCellRow = 3;
     const embedded = sheet.embeddedObjects?.[0];
     expect(embedded?.anchorColumn).toBe(2);
-    expect(embedded?.anchorRow).toBe(3);
-    expect(embedded?.offsetXPt).toBeCloseTo(knownLength("0.4cm"), 6);
-    expect(embedded?.offsetYPt).toBeCloseTo(knownLength("0.2cm"), 6);
-    expect(embedded?.frame.xPt).toBeCloseTo(knownLength("0.4cm"), 6);
-    expect(embedded?.frame.yPt).toBeCloseTo(knownLength("0.2cm"), 6);
+    expect(embedded?.anchorRow).toBe(anchorCellRow);
+    expect(embedded?.offsetXPt).toBeCloseTo(
+      knownLength("0.4cm"),
+      FINE_LENGTH_PRECISION_DIGITS,
+    );
+    expect(embedded?.offsetYPt).toBeCloseTo(
+      knownLength("0.2cm"),
+      FINE_LENGTH_PRECISION_DIGITS,
+    );
+    expect(embedded?.frame.xPt).toBeCloseTo(
+      knownLength("0.4cm"),
+      FINE_LENGTH_PRECISION_DIGITS,
+    );
+    expect(embedded?.frame.yPt).toBeCloseTo(
+      knownLength("0.2cm"),
+      FINE_LENGTH_PRECISION_DIGITS,
+    );
   });
 
   it("reads the frame at the size LibreOffice itself sized the rendered formula to, not at the size the OLE shape was created with", () => {
     // LibreOffice resizes a Math OLE object's own frame to its rendered formula: the shape was created 4cm x 2cm and saved as 2.701cm x 4.515cm.
     expect(sheet.embeddedObjects?.[0]?.frame.widthPt).toBeCloseTo(
       knownLength("2.701cm"),
-      6,
+      FINE_LENGTH_PRECISION_DIGITS,
     );
     expect(sheet.embeddedObjects?.[0]?.frame.heightPt).toBeCloseTo(
       knownLength("4.515cm"),
-      6,
+      FINE_LENGTH_PRECISION_DIGITS,
     );
   });
 
@@ -482,10 +603,12 @@ describe("readOdsContent: sheet-formula.ods (real LibreOffice output — a Math 
 
 describe("readOdsContent: anchored drawings (synthetic packages — the scope boundaries and group flattening real LibreOffice output does not exercise)", () => {
   // Only the PNG magic-byte signature matters to sniffImageFormat — the rest is arbitrary filler, matching typed/draw/shapes.test.ts's own convention.
+  const PNG_SIGNATURE_BYTES: readonly number[] = Array.from(
+    "\x89PNG\r\n\x1a\n",
+    (c) => c.charCodeAt(0),
+  );
   const pngBase64 = bytesToBase64(
-    new Uint8Array([
-      0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0,
-    ]),
+    new Uint8Array([...PNG_SIGNATURE_BYTES, 0, 0, 0, 0]),
   );
 
   function imageFrame(attrs: Readonly<Record<string, string>>): XmlElement {
@@ -683,9 +806,10 @@ describe("readOdsContent: repeat-count hazards (synthetic packages — proving t
   });
 
   it("completes in well under a second, confirming no O(repeatCount) work happened at all", () => {
+    const maxDurationMs = 1000;
     const start = performance.now();
     readOdsContent(buildHugeRepeatPackage());
-    expect(performance.now() - start).toBeLessThan(1000);
+    expect(performance.now() - start).toBeLessThan(maxDurationMs);
   });
 });
 
@@ -1050,9 +1174,11 @@ describe('readOdsContent: cell background/borders/alignment/verticalAlignment (s
       el("table:table-column", {}, []),
       el("table:table-row", {}, [stringCell("a")]),
     ]);
+    const defaultColumnWidthPt = 64;
+    const defaultRowHeightPt = 15;
     const { sheets } = readOdsContent(sheetPackage([], table));
-    expect(sheets[0]?.columns[0]?.widthPt).toBe(64);
-    expect(sheets[0]?.rows[0]?.heightPt).toBe(15);
+    expect(sheets[0]?.columns[0]?.widthPt).toBe(defaultColumnWidthPt);
+    expect(sheets[0]?.rows[0]?.heightPt).toBe(defaultRowHeightPt);
   });
 
   it("resolves fo:background-color from the cell's own table:style-name -> table-cell family style", () => {
