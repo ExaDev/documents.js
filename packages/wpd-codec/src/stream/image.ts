@@ -4,8 +4,31 @@
 
 import { byteAt, sliceAt } from "../bytes/view";
 
-const PNG_SIGNATURE = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a] as const;
-const JPEG_SOI = [0xff, 0xd8] as const;
+// Place values for big-endian byte reassembly, named by each byte's own position from the top.
+const UINT32_LAST_BYTE = 3; // the fourth byte of a big-endian u32; the first three indexes sit inside the rule's ignored range
+const PNG_TYPE_LAST_BYTE = 3; // the type's fourth byte, same shape
+const BYTE_PLACE_1 = 0x100;
+const BYTE_PLACE_2 = 0x10000;
+const BYTE_PLACE_3 = 0x1000000;
+
+// A PNG chunk is a 4-byte length, a 4-byte type, the data, and a 4-byte CRC.
+const PNG_CHUNK_TYPE_OFFSET = 4;
+const PNG_CHUNK_HEADER_SIZE = 8;
+const PNG_CHUNK_CRC_SIZE = 4;
+
+// JPEG structure: every marker opens with 0xFF; SOI/EOI/SOS are the start-of-image, end-of-image and start-of-scan markers, and RST0-RST7 the restart markers.
+const JPEG_MARKER_PREFIX = 0xff;
+const JPEG_SOI_MARKER = 0xd8;
+const JPEG_EOI_MARKER = 0xd9;
+const JPEG_SOS_MARKER = 0xda;
+const JPEG_RST_FIRST = 0xd0;
+const JPEG_RST_LAST = 0xd7;
+const JPEG_EOI = [JPEG_MARKER_PREFIX, JPEG_EOI_MARKER] as const;
+
+const PNG_SIGNATURE = Array.from("\u0089PNG\r\n\u001a\n", (char) =>
+  char.charCodeAt(0),
+);
+const JPEG_SOI = [JPEG_MARKER_PREFIX, JPEG_SOI_MARKER] as const;
 
 export interface WpdImagePayload {
   readonly format: "png" | "jpeg";
@@ -41,15 +64,15 @@ function indexOf(
 // Exported for this package's own tests only, so each byte's own place value is proven directly with a distinct, nonzero digit in every position — every real PNG/JPEG fixture this module's own tests otherwise construct keeps its chunk/segment lengths small, meaning every byte but the last stays zero and a wrong sign or operator on one of those upper-byte terms would go unobserved (0 added, subtracted, multiplied, or divided is still 0).
 export function bigEndianUint32At(bytes: Uint8Array, offset: number): number {
   return (
-    byteAt(bytes, offset) * 0x1000000 +
-    byteAt(bytes, offset + 1) * 0x10000 +
-    byteAt(bytes, offset + 2) * 0x100 +
-    byteAt(bytes, offset + 3)
+    byteAt(bytes, offset) * BYTE_PLACE_3 +
+    byteAt(bytes, offset + 1) * BYTE_PLACE_2 +
+    byteAt(bytes, offset + 2) * BYTE_PLACE_1 +
+    byteAt(bytes, offset + UINT32_LAST_BYTE)
   );
 }
 
 export function bigEndianUint16At(bytes: Uint8Array, offset: number): number {
-  return byteAt(bytes, offset) * 0x100 + byteAt(bytes, offset + 1);
+  return byteAt(bytes, offset) * BYTE_PLACE_1 + byteAt(bytes, offset + 1);
 }
 
 function scanPng(
@@ -62,12 +85,12 @@ function scanPng(
     for (;;) {
       const length = bigEndianUint32At(bytes, cursor);
       const type = String.fromCharCode(
-        byteAt(bytes, cursor + 4),
-        byteAt(bytes, cursor + 5),
-        byteAt(bytes, cursor + 6),
-        byteAt(bytes, cursor + 7),
+        byteAt(bytes, cursor + PNG_CHUNK_TYPE_OFFSET),
+        byteAt(bytes, cursor + PNG_CHUNK_TYPE_OFFSET + 1),
+        byteAt(bytes, cursor + PNG_CHUNK_TYPE_OFFSET + 2),
+        byteAt(bytes, cursor + PNG_CHUNK_TYPE_OFFSET + PNG_TYPE_LAST_BYTE),
       );
-      cursor += 8 + length + 4;
+      cursor += PNG_CHUNK_HEADER_SIZE + length + PNG_CHUNK_CRC_SIZE;
       if (type === "IEND") {
         return {
           format: "png",
@@ -88,22 +111,22 @@ function scanJpeg(
   let cursor = soiAt + JPEG_SOI.length;
   try {
     for (;;) {
-      if (byteAt(bytes, cursor) !== 0xff) {
+      if (byteAt(bytes, cursor) !== JPEG_MARKER_PREFIX) {
         return undefined;
       }
-      while (byteAt(bytes, cursor) === 0xff) {
+      while (byteAt(bytes, cursor) === JPEG_MARKER_PREFIX) {
         cursor += 1;
       }
       const marker = byteAt(bytes, cursor);
       cursor += 1;
       const standalone =
-        marker === 0xd8 ||
+        marker === JPEG_SOI_MARKER ||
         marker === 0x01 ||
-        (marker >= 0xd0 && marker <= 0xd7);
+        (marker >= JPEG_RST_FIRST && marker <= JPEG_RST_LAST);
       if (standalone) {
         continue;
       }
-      if (marker === 0xd9) {
+      if (marker === JPEG_EOI_MARKER) {
         return { format: "jpeg", bytes: bytes.subarray(soiAt, cursor) };
       }
       const length = bigEndianUint16At(bytes, cursor);
@@ -112,10 +135,10 @@ function scanJpeg(
       }
       // The segment's own declared extent, bounds-checked by sliceAt itself; its length (equal to `length` when it does not throw) is what actually advances the cursor, rather than a separately-mutable "cursor + length > bytes.length" comparison of its own.
       cursor += sliceAt(bytes, cursor, length).length;
-      if (marker === 0xda) {
+      if (marker === JPEG_SOS_MARKER) {
         // Entropy-coded data: scan byte-wise for the EOI marker (a preceding 0xff run is the marker prefix). A stuffed FF inside the entropy stream is always followed by a non-zero byte, so FF D9 can only be EOI.
         // indexOf itself throws (caught by this function's own try/catch, below) rather than returning undefined for entropy-coded data that never reaches an EOI.
-        const eoi = indexOf(bytes, [0xff, 0xd9], cursor);
+        const eoi = indexOf(bytes, JPEG_EOI, cursor);
         return { format: "jpeg", bytes: bytes.subarray(soiAt, eoi + 2) };
       }
     }
