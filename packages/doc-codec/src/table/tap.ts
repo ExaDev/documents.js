@@ -22,6 +22,13 @@ import {
   type TableBordersSet,
 } from "./decoration";
 
+// A TcGrf's merge-state bits, and the fixed operand offsets of the shading and border sprms.
+const MERGE_STATE_MASK = 0x3;
+const VERT_MERGE_SHIFT = 5;
+const SHD_OFFSET = 3;
+const BORDERS_TO_APPLY_OFFSET = 3;
+const BORDER_OFFSET = 4;
+
 // Table row properties (TAP), [MS-DOC] 2.4.3 (Overview of Tables) and 2.6.3 (Table Properties) — the row-ending mark's own grpprl carries sgc-5 (table) sprms alongside the ordinary sgc-1 (paragraph) sprms pap.ts already folds. Of the roughly seventy table sprms 2.6.3 names, this reader acts on the following, in three groups.
 //
 // Structure and merge state: sprmTDefTable, which alone carries the row's own column boundaries, every physical cell's horizontal/vertical merge state (via TC80.tcgrf — [MS-DOC] 2.9.313's TC80, 2.9.317's TCGRF) and every physical cell's own four Brc80 borders, and which this package's own writer now uses for a horizontal merge too, purely through a merged row's own narrower, wider physical cells rather than any TCGRF/sprmTMerge flag (ExaDev/documents.js#895; see table/write.ts's own top-of-file note); sprmTMerge, an ItcFirstLim range this reader still folds on top of sprmTDefTable's own column layout in case a genuine third-party producer states a horizontal merge that way instead — a spec-conformant encoding, and the one a real, independent [MS-DOC] implementation (LibreOffice) was verified NOT to honour on its own read side either (its own vertMerge from the identical TC80 array was honoured, but not horzMerge), which is exactly why this package's own writer no longer emits it; sprmTVertMerge, the incremental per-cell equivalent for a vertical merge (this package's own writer states a vertical merge only through TC80.tcgrf, but a real producer may equally state it incrementally, the same asymmetry sprmTMerge exists to cover on the horizontal side); and sprmTDyaRowHeight, the row's own height.
@@ -152,8 +159,8 @@ function readTdefTableOperand(operand: Uint8Array): TableRowDefinition {
       );
     });
     cells.push({
-      horzMerge: tcgrf & 0x3,
-      vertMerge: (tcgrf >> 5) & 0x3,
+      horzMerge: tcgrf & MERGE_STATE_MASK,
+      vertMerge: (tcgrf >> VERT_MERGE_SHIFT) & MERGE_STATE_MASK,
       borders: cellBordersFrom(sides),
     });
   }
@@ -241,7 +248,7 @@ function applyTableShade(
 ): TableRowDefinition {
   const itcFirst = readUint8(operand, 1);
   const itcLim = readUint8(operand, 2);
-  const background = readShd(operand, 3);
+  const background = readShd(operand, SHD_OFFSET);
   return withCells(definition, (cell, index) => {
     if (index < itcFirst || index >= itcLim) return cell;
     if (everyOther && index % 2 !== itcFirst % 2) return cell;
@@ -316,8 +323,8 @@ export function applyTableSprms(
         if (into.definition === undefined) break;
         const itcFirst = readUint8(prl.operand, 1);
         const itcLim = readUint8(prl.operand, 2);
-        const bordersToApply = readUint8(prl.operand, 3);
-        const border = readBrc(prl.operand, 4);
+        const bordersToApply = readUint8(prl.operand, BORDERS_TO_APPLY_OFFSET);
+        const border = readBrc(prl.operand, BORDER_OFFSET);
         into.definition = withCells(into.definition, (cell, index) =>
           index < itcFirst || index >= itcLim
             ? cell
@@ -330,8 +337,8 @@ export function applyTableSprms(
         if (into.definition === undefined) break;
         const itcFirst = readUint8(prl.operand, 1);
         const itcLim = readUint8(prl.operand, 2);
-        const bordersToApply = readUint8(prl.operand, 3);
-        const border = readBrc80(prl.operand, 4);
+        const bordersToApply = readUint8(prl.operand, BORDERS_TO_APPLY_OFFSET);
+        const border = readBrc80(prl.operand, BORDER_OFFSET);
         into.definition = withCells(into.definition, (cell, index) =>
           index < itcFirst || index >= itcLim
             ? cell

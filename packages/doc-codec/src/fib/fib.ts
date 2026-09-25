@@ -14,6 +14,12 @@ import {
   LW_OFFSET,
 } from "./offsets";
 
+// Hex, for printing a field the way [MS-DOC]'s own tables do; the Fib's flags word at byte 10; and each fc/lcb pair's own 8 bytes.
+const HEX_RADIX = 16;
+const FIB_FLAGS_OFFSET = 10;
+const FC_LCB_VALUE_BYTES = 4;
+const W_IDENT_HEX_DIGITS = 4;
+
 // The File Information Block, [MS-DOC] 2.5.1 — the structure at offset zero of the WordDocument stream that every other structure in a .doc is reached through. Only the fields this reader acts on are surfaced: peekFibBaseFlags's own stream-selection and encryption-detection flags, the per-subdocument CP counts that carve the logical text stream into main document, footnotes, headers and the rest, the offset/length pairs locating the piece table, the character and paragraph formatting bin tables, the style sheet, PlcfSed, and the footnote/endnote/comment reference and text plexes and Plcfhdd that notes.ts and headers-footers.ts resolve. The remaining ~170 pairs are deliberately not modelled — a field this package cannot yet act on is better absent than present and ignored, which would read as support it does not have.
 
 export interface Fib {
@@ -74,7 +80,7 @@ export function peekFibBaseFlags(wordDocument: Uint8Array): {
   readonly fObfuscated: boolean;
   readonly fWhichTblStm: 0 | 1;
 } {
-  const flags = readUint16LE(wordDocument, 10);
+  const flags = readUint16LE(wordDocument, FIB_FLAGS_OFFSET);
   return {
     fEncrypted: (flags & FIB_BASE_FLAG.fEncrypted) !== 0,
     fObfuscated: (flags & FIB_BASE_FLAG.fObfuscated) !== 0,
@@ -86,24 +92,24 @@ export function parseFib(wordDocument: Uint8Array): Fib {
   const wIdent = readUint16LE(wordDocument, 0);
   if (wIdent !== FIB_W_IDENT) {
     throw new DocFormatError(
-      `the WordDocument stream begins with 0x${wIdent.toString(16).toUpperCase().padStart(4, "0")} rather than the 0xA5EC every Word Binary File's FibBase.wIdent must carry`,
+      `the WordDocument stream begins with 0x${wIdent.toString(HEX_RADIX).toUpperCase().padStart(W_IDENT_HEX_DIGITS, "0")} rather than the 0xA5EC every Word Binary File's FibBase.wIdent must carry`,
     );
   }
 
   const nFib = readUint16LE(wordDocument, 2);
-  const flags = readUint16LE(wordDocument, 10);
+  const flags = readUint16LE(wordDocument, FIB_FLAGS_OFFSET);
 
   // csw and cslw are fixed by the specification for every nFib, and the offsets of everything after them are computed from those fixed sizes. A file disagreeing is either corrupt or a format this reader does not know, and either way every subsequent read would land on neighbouring bytes.
   const csw = readUint16LE(wordDocument, FIB_BASE_SIZE);
   if (csw !== FIB_CSW_REQUIRED) {
     throw new DocFormatError(
-      `Fib.csw is 0x${csw.toString(16)} rather than the mandated 0x${FIB_CSW_REQUIRED.toString(16)}, so FibRgW97 is not the size every later offset assumes`,
+      `Fib.csw is 0x${csw.toString(HEX_RADIX)} rather than the mandated 0x${FIB_CSW_REQUIRED.toString(HEX_RADIX)}, so FibRgW97 is not the size every later offset assumes`,
     );
   }
   const cslw = readUint16LE(wordDocument, FIB_CSLW_OFFSET);
   if (cslw !== FIB_CSLW_REQUIRED) {
     throw new DocFormatError(
-      `Fib.cslw is 0x${cslw.toString(16)} rather than the mandated 0x${FIB_CSLW_REQUIRED.toString(16)}, so FibRgLw97 is not the size every later offset assumes`,
+      `Fib.cslw is 0x${cslw.toString(HEX_RADIX)} rather than the mandated 0x${FIB_CSLW_REQUIRED.toString(HEX_RADIX)}, so FibRgLw97 is not the size every later offset assumes`,
     );
   }
 
@@ -120,7 +126,10 @@ export function parseFib(wordDocument: Uint8Array): Fib {
   const lw = (offset: number): number =>
     readInt32LE(wordDocument, FIB_RG_LW_OFFSET + offset);
   const fcLcb = (index: number): number =>
-    readUint32LE(wordDocument, FIB_FC_LCB_BLOB_OFFSET + index * 4);
+    readUint32LE(
+      wordDocument,
+      FIB_FC_LCB_BLOB_OFFSET + index * FC_LCB_VALUE_BYTES,
+    );
 
   return {
     nFib,

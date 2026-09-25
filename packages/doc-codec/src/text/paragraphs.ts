@@ -30,6 +30,8 @@ import {
   isAnchorOnly,
 } from "./special";
 
+const LINE_FEED = 0x0a;
+
 // The paragraph-level read shared by every document-stream range this package reads (the main document, and — notes.ts/headers-footers.ts — the footnote, endnote, comment, and header/footer subdocuments): splitting a logical text stream into paragraphs at the marks [MS-DOC] 2.4.2 names as paragraph ends, and each paragraph into runs at the boundaries of the character-formatting exceptions covering it. Every one of those ranges lives in the same WordDocument stream and is addressed through the same ChpxFkp/PapxFkp bin tables and style sheet, so this module carries no notion of which range it is reading — that is entirely the caller's concern (which text/fcs it hands in), which is what lets read.ts's own DocContent.sections read and notes.ts's plain-text footnote/endnote/comment bodies share one implementation rather than two that could drift apart.
 
 export interface ReadContext {
@@ -445,7 +447,7 @@ function buildRuns(
         );
     }
     // A line break inside a paragraph is a real break in the text rather than a paragraph boundary, so it survives as a newline instead of being dropped as a control character. Rebuilt from the code unit already in hand rather than indexed back out of the string, which the loop bound has established is present but the type of an indexed read cannot.
-    currentText += String.fromCharCode(code === LINE_BREAK ? 0x0a : code);
+    currentText += String.fromCharCode(code === LINE_BREAK ? LINE_FEED : code);
   }
   flush();
   return runs;

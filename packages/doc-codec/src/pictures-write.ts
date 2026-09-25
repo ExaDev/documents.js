@@ -2,6 +2,14 @@ import type { ContentImageBlock } from "document-schema.js";
 import { base64ToBytes } from "byte-codec";
 import { DocFormatError, DocUnsupportedError } from "./errors";
 
+// The picture record's own constants: a record header packs its 12-bit instance above a 4-bit version with the length at byte 4; the picture container shape is OfficeArtClientBox (0xF004); and the paragraph istd sprm the anchor writes is sprmPIstd (0x4A6A opcode assembled as 0x03,0x6a little-endian) with a 4-byte operand.
+const RECORD_INSTANCE_SHIFT = 4;
+const RECORD_LENGTH_OFFSET = 4;
+const ESCHER_CLIENT_BOX = 0xf004;
+const SPRM_ISTD_OPCODE = 0x03;
+const SPRM_ISTD_ISTD = 0x6a;
+const ISTD_OPERAND_BYTES = 4;
+
 // The inverse of pictures.ts's readInlinePicture: a ContentImageBlock to the PICFAndOfficeArtData bytes a real MS-DOC producer places in the Data stream, plus the sprmCPicLocation grpprl a run's own Chpx states to point at them — an empty OfficeArtSpContainer.shape (pictures.ts's own reader skips it whole by recLen and never looks inside it, so this writer states no shape properties of its own either) followed by a single-rgbUid OfficeArtBlip record wrapping the image's own raw file bytes verbatim. Only the two raster formats pictures.ts itself decodes from a real OfficeArtBlip — PNG (OfficeArtBlipPNG, 0xF01E) and JPEG (OfficeArtBlipJPEG, 0xF01D) — can be written this way; ContentImageBlock's own 'svg'/'gif' members have no OfficeArtBlip type this format defines at all, so writing one would mean fabricating a bitmap tag this reader could not itself decode back, the identical "genuinely unimplemented, not approximated" boundary pictures.ts's own top comment already draws for every blip kind beyond PNG/JPEG.
 
 const PICF_SIZE = 68;
@@ -38,9 +46,9 @@ function recordHeaderBytes(
 ): Uint8Array {
   const bytes = new Uint8Array(RECORD_HEADER_SIZE);
   const view = new DataView(bytes.buffer);
-  view.setUint16(0, recInstance << 4, true); // recVer 0 (every OfficeArt record this writer emits is a non-container leaf).
+  view.setUint16(0, recInstance << RECORD_INSTANCE_SHIFT, true); // recVer 0 (every OfficeArt record this writer emits is a non-container leaf).
   view.setUint16(2, recType, true);
-  view.setUint32(4, recLen, true);
+  view.setUint32(RECORD_LENGTH_OFFSET, recLen, true);
   return bytes;
 }
 
@@ -97,7 +105,7 @@ export function buildInlinePicture(
   picfView.setUint16(PICF_MY_OFFSET, NO_SCALING, true);
 
   // OfficeArtInlineSpContainer.shape: an empty OfficeArtSpContainer — pictures.ts's own reader skips it whole by this record header's own recLen and never looks inside it, so this writer states no shape properties of its own either.
-  const shapeHeader = recordHeaderBytes(0xf004, 0, 0);
+  const shapeHeader = recordHeaderBytes(ESCHER_CLIENT_BOX, 0, 0);
   // rgbUid, [MS-ODRAW] 2.2.27/2.2.28 — always the zero GUID this writer states rather than a genuinely random one, so `data`'s own zero-initialised bytes at this offset already are the uid's own bytes; nothing is ever written into them.
   const uid = new Uint8Array(BLIP_UID_SIZE);
   const blipHeader = recordHeaderBytes(
@@ -131,8 +139,8 @@ export function buildInlinePicture(
 
 /** sprmCPicLocation, [MS-DOC] 2.6.1 — a signed 32-bit offset into the Data stream, little-endian. */
 function buildPicLocationGrpprl(dataStreamOffset: number): number[] {
-  const grpprl: number[] = [0x03, 0x6a];
-  const operand = new Uint8Array(4);
+  const grpprl: number[] = [SPRM_ISTD_OPCODE, SPRM_ISTD_ISTD];
+  const operand = new Uint8Array(ISTD_OPERAND_BYTES);
   new DataView(operand.buffer).setInt32(0, dataStreamOffset, true);
   grpprl.push(...operand);
   return grpprl;
