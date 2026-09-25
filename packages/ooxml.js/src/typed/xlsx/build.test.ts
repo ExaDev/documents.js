@@ -29,6 +29,15 @@ import { BUILTIN_NUMBER_FORMATS } from "excel-number-format";
 
 // buildXlsxPackageFromContent's own real-LibreOffice validation (`soffice --headless --convert-to ods` against a genuine built .xlsx, confirming Excel/LibreOffice actually open the file rather than merely well-formed XML) is a manual verification step, deliberately NOT wired into this vitest suite — this package's CI runners have no LibreOffice installed (unlike documents.js's own gitignored, opt-in test:corpus project, which exists for exactly this reason: real-third-party-software checks that need a local tool this repo's CI can't assume). This suite instead verifies everything checkable in-process: the produced Package's own XML structure (parsed back through this package's own lossless parsePackage/encodePackage, never assumed), and that readXlsxContent(buildXlsxPackageFromContent(x)) round-trips the real content.
 
+// KITCHEN_SINK_SHEET's own row indices below, named where the tests further down read a specific row back out by index.
+const FORMULA_CELL_ROW = 3;
+const ERROR_CELL_ROW = 4;
+// Also the row after which the manual page break below is placed, so the printed pagination genuinely splits mid-sheet.
+const DEDUPED_STRING_CELL_ROW = 5;
+
+const MERGE_ANCHOR_ROW = 6;
+const ESCAPED_TEXT_CELL_ROW = 8;
+
 const KITCHEN_SINK_SHEET: ContentSheet = {
   name: "Data",
   cells: [
@@ -119,7 +128,7 @@ const KITCHEN_SINK_SHEET: ContentSheet = {
     gridlines: true,
     headers: true,
     pageOrder: "overThenDown",
-    manualBreaks: { rows: [5], columns: [1] },
+    manualBreaks: { rows: [DEDUPED_STRING_CELL_ROW], columns: [1] },
   },
 };
 
@@ -203,7 +212,8 @@ describe("buildXlsxPackageFromContent: produces a structurally valid xlsx packag
       (node) => node.type === "element" && node.tag === "si",
     ).length;
     // "Name", "Amount", "Acme Corp" (deduplicated across rows 1 and 5), "Merged Cell", "Tom & Jerry <b>" — 5 unique strings, not 6.
-    expect(siCount).toBe(5);
+    const KITCHEN_SINK_UNIQUE_STRING_COUNT = 5;
+    expect(siCount).toBe(KITCHEN_SINK_UNIQUE_STRING_COUNT);
   });
 
   it("writes a structurally complete xl/styles.xml in CT_Stylesheet element order, numFmts first", () => {
@@ -256,28 +266,38 @@ describe("readXlsxContent(buildXlsxPackageFromContent(x)) round-trips real conte
       data.cells.find((cell) => cell.row === 2 && cell.column === 0)?.value,
     ).toEqual({ kind: "boolean", value: true });
     expect(
-      data.cells.find((cell) => cell.row === 4 && cell.column === 0)?.value,
+      data.cells.find(
+        (cell) => cell.row === ERROR_CELL_ROW && cell.column === 0,
+      )?.value,
     ).toEqual({ kind: "error", value: "#DIV/0!" });
     expect(
-      data.cells.find((cell) => cell.row === 5 && cell.column === 0)?.value,
+      data.cells.find(
+        (cell) => cell.row === DEDUPED_STRING_CELL_ROW && cell.column === 0,
+      )?.value,
     ).toEqual({ kind: "string", value: "Acme Corp" });
     expect(
-      data.cells.find((cell) => cell.row === 8 && cell.column === 0)?.value,
+      data.cells.find(
+        (cell) => cell.row === ESCAPED_TEXT_CELL_ROW && cell.column === 0,
+      )?.value,
     ).toEqual({ kind: "string", value: "Tom & Jerry <b>" });
   });
 
   it("preserves formulas", () => {
     expect(
-      data.cells.find((cell) => cell.row === 3 && cell.column === 0)?.formula,
+      data.cells.find(
+        (cell) => cell.row === FORMULA_CELL_ROW && cell.column === 0,
+      )?.formula,
     ).toBe("SUM(B2:B3)");
     expect(
-      data.cells.find((cell) => cell.row === 4 && cell.column === 0)?.formula,
+      data.cells.find(
+        (cell) => cell.row === ERROR_CELL_ROW && cell.column === 0,
+      )?.formula,
     ).toBe("1/0");
   });
 
   it("preserves the merged range as colSpan/rowSpan on the anchor cell", () => {
     const anchor = data.cells.find(
-      (cell) => cell.row === 6 && cell.column === 0,
+      (cell) => cell.row === MERGE_ANCHOR_ROW && cell.column === 0,
     );
     expect(anchor).toMatchObject({ colSpan: 2, rowSpan: 2 });
   });
@@ -286,12 +306,18 @@ describe("readXlsxContent(buildXlsxPackageFromContent(x)) round-trips real conte
     const hiddenColumn = data.columns.find((column) => column.index === 1);
     expect(hiddenColumn?.hidden).toBe(true);
     const firstColumn = data.columns.find((column) => column.index === 0);
-    expect(firstColumn?.widthPt).toBeGreaterThan(80); // approximate, not exact — see units.ts's own documented round-trip caveat
-    expect(firstColumn?.widthPt).toBeLessThan(120);
+    // The fixture's own first column is 100pt (see KITCHEN_SINK_SHEET above); these bounds are deliberately loose, not exact, per units.ts's own documented round-trip caveat.
+    const COLUMN_WIDTH_LOWER_BOUND_PT = 80;
+    const COLUMN_WIDTH_UPPER_BOUND_PT = 120;
+    expect(firstColumn?.widthPt).toBeGreaterThan(COLUMN_WIDTH_LOWER_BOUND_PT);
+    expect(firstColumn?.widthPt).toBeLessThan(COLUMN_WIDTH_UPPER_BOUND_PT);
   });
 
   it("column widths converge to a fixed point rather than drifting on repeated read/write cycles (ExaDev/documents.js#953)", () => {
     // A dedicated document, not DOCUMENT above: DOCUMENT's own column widths (100pt/60pt) already reproduce write 2 byte-identically from write 2 onward even under the pre-fix rounding, so they would pass this assertion whether or not the fix is present and exercise nothing. These two widthPt values instead come from columnWidthCharsToPt(12.76) and columnWidthCharsToPt(9.7) — points equivalents of two of kitchen-sink.xlsx's own real, LibreOffice-authored stored widths (see content.test.ts's dataSheetColWidthAttrs suite) — independently re-verified to keep narrowing across multiple further write cycles under the pre-fix rounding (12.76 chars -> 12.64 -> 12.5 -> 12.36; 9.7 chars -> 9.64 -> 9.5 -> 9.36) rather than settling after the first.
+    // The two real, LibreOffice-authored kitchen-sink.xlsx widths (chars) the comment above names.
+    const LIBREOFFICE_COLUMN_WIDTH_CHARS_FIRST = 12.76;
+    const LIBREOFFICE_COLUMN_WIDTH_CHARS_SECOND = 9.7;
     const drifting: ContentDocument = {
       kind: "spreadsheet",
       metadata: {},
@@ -300,8 +326,18 @@ describe("readXlsxContent(buildXlsxPackageFromContent(x)) round-trips real conte
           name: "Data",
           cells: [],
           columns: [
-            { index: 0, widthPt: columnWidthCharsToPt(12.76) },
-            { index: 1, widthPt: columnWidthCharsToPt(9.7) },
+            {
+              index: 0,
+              widthPt: columnWidthCharsToPt(
+                LIBREOFFICE_COLUMN_WIDTH_CHARS_FIRST,
+              ),
+            },
+            {
+              index: 1,
+              widthPt: columnWidthCharsToPt(
+                LIBREOFFICE_COLUMN_WIDTH_CHARS_SECOND,
+              ),
+            },
           ],
           rows: [],
           images: [],
@@ -364,15 +400,23 @@ describe("readXlsxContent(buildXlsxPackageFromContent(x)) round-trips real conte
   });
 
   it("preserves row heights and hidden flags", () => {
-    expect(data.rows.find((row) => row.index === 0)?.heightPt).toBe(20);
-    const hiddenRow = data.rows.find((row) => row.index === 9);
+    // KITCHEN_SINK_SHEET's own row heights above.
+    const FIRST_ROW_HEIGHT_PT = 20;
+    const HIDDEN_ROW_INDEX = 9;
+    const HIDDEN_ROW_HEIGHT_PT = 15;
+    expect(data.rows.find((row) => row.index === 0)?.heightPt).toBe(
+      FIRST_ROW_HEIGHT_PT,
+    );
+    const hiddenRow = data.rows.find((row) => row.index === HIDDEN_ROW_INDEX);
     expect(hiddenRow?.hidden).toBe(true);
-    expect(hiddenRow?.heightPt).toBe(15);
+    expect(hiddenRow?.heightPt).toBe(HIDDEN_ROW_HEIGHT_PT);
   });
 
   it("preserves print settings: page size, scale, gridlines/headers, page order, print range, repeat rows/columns, manual breaks", () => {
+    // KITCHEN_SINK_SHEET's own scalePercent above.
+    const KITCHEN_SINK_SCALE_PERCENT = 125;
     expect(data.printSettings.pageSize).toEqual(PAGE_SIZE_A4);
-    expect(data.printSettings.scalePercent).toBe(125);
+    expect(data.printSettings.scalePercent).toBe(KITCHEN_SINK_SCALE_PERCENT);
     expect(data.printSettings.fitToPages).toBeUndefined();
     expect(data.printSettings.gridlines).toBe(true);
     expect(data.printSettings.headers).toBe(true);
@@ -386,7 +430,7 @@ describe("readXlsxContent(buildXlsxPackageFromContent(x)) round-trips real conte
     expect(data.printSettings.repeatRows).toEqual({ start: 0, end: 0 });
     expect(data.printSettings.repeatColumns).toEqual({ start: 0, end: 0 });
     expect(data.printSettings.manualBreaks).toEqual({
-      rows: [5],
+      rows: [DEDUPED_STRING_CELL_ROW],
       columns: [1],
     });
   });
@@ -671,9 +715,14 @@ describe("buildXlsxPackageFromContent: writes a real number format for every val
     );
     expect(attributeOf(writtenCell(pkg, "I1"), "s")).toBe("0");
     // Seven distinct non-General formats across nine cells (percentage, GBP currency, plain amount, date, time, dateTime, boolean), plus the General default at index 0.
+    const EXPECTED_DISTINCT_CELL_FORMAT_COUNT = 8;
     const cellXfs = requireChild(styleSheetOf(pkg), "cellXfs");
-    expect(elementsOf(cellXfs, "xf").length).toBe(8);
-    expect(attributeOf(cellXfs, "count")).toBe("8");
+    expect(elementsOf(cellXfs, "xf").length).toBe(
+      EXPECTED_DISTINCT_CELL_FORMAT_COUNT,
+    );
+    expect(attributeOf(cellXfs, "count")).toBe(
+      `${EXPECTED_DISTINCT_CELL_FORMAT_COUNT}`,
+    );
   });
 
   it("marks every non-General cell format applyNumberFormat, and never the General one", () => {
@@ -696,9 +745,21 @@ describe("buildXlsxPackageFromContent: writes a real number format for every val
       expect(Number.isFinite(Number(writtenValue(pkg, reference)))).toBe(true);
     }
     // 46234 is the serial this package's own kitchen-sink fixture (a real LibreOffice export) stores for 2026-07-31; a time of day is the fraction-of-a-day part alone, and a dateTime the two summed.
-    expect(writtenValue(pkg, "D1")).toBe("46234");
-    expect(Number(writtenValue(pkg, "E1"))).toBeCloseTo(14.5 / 24, 12);
-    expect(Number(writtenValue(pkg, "F1"))).toBeCloseTo(46234 + 14.5 / 24, 9);
+    const DATE_SERIAL_2026_07_31 = 46234;
+    const TIME_OF_DAY_HOURS = 14.5;
+    const HOURS_PER_DAY = 24;
+    // toBeCloseTo's own precision (decimal places), chosen per assertion for the floating-point tolerance each computation actually needs.
+    const TIME_FRACTION_PRECISION_DIGITS = 12;
+    const DATETIME_SUM_PRECISION_DIGITS = 9;
+    expect(writtenValue(pkg, "D1")).toBe(`${DATE_SERIAL_2026_07_31}`);
+    expect(Number(writtenValue(pkg, "E1"))).toBeCloseTo(
+      TIME_OF_DAY_HOURS / HOURS_PER_DAY,
+      TIME_FRACTION_PRECISION_DIGITS,
+    );
+    expect(Number(writtenValue(pkg, "F1"))).toBeCloseTo(
+      DATE_SERIAL_2026_07_31 + TIME_OF_DAY_HOURS / HOURS_PER_DAY,
+      DATETIME_SUM_PRECISION_DIGITS,
+    );
   });
 
   it("round-trips every kind back through readXlsxContent, including the deliberate currency-without-a-code narrowing", () => {
@@ -709,6 +770,13 @@ describe("buildXlsxPackageFromContent: writes a real number format for every val
     const cells = roundTripped.sheets[0]?.cells ?? [];
     const valueAt = (column: number): unknown =>
       cells.find((cell) => cell.row === 0 && cell.column === column)?.value;
+    // Row 0's own columns, in the order this describe block's own pkg fixture defines them below.
+    const DATE_COLUMN = 3;
+    const TIME_COLUMN = 4;
+    const DATETIME_COLUMN = 5;
+    const BOOLEAN_TRUE_COLUMN = 6;
+    const BOOLEAN_FALSE_COLUMN = 7;
+    const PLAIN_NUMBER_COLUMN = 8;
     expect(valueAt(0)).toEqual({ kind: "percentage", value: 0.4256 });
     expect(valueAt(1)).toEqual({
       kind: "currency",
@@ -717,16 +785,25 @@ describe("buildXlsxPackageFromContent: writes a real number format for every val
     });
     // The documented loss: nothing in '#,##0.00' says money, so a currency that named no ISO code comes back as the plain number it now looks like.
     expect(valueAt(2)).toEqual({ kind: "number", value: 12.5 });
-    expect(valueAt(3)).toEqual({ kind: "date", value: "2026-07-31" });
+    expect(valueAt(DATE_COLUMN)).toEqual({
+      kind: "date",
+      value: "2026-07-31",
+    });
     // The bug this write side exists to fix: a time cell no longer collapses into a date/dateTime, because its serial and format distinguish it.
-    expect(valueAt(4)).toEqual({ kind: "time", value: "14:30:00" });
-    expect(valueAt(5)).toEqual({
+    expect(valueAt(TIME_COLUMN)).toEqual({ kind: "time", value: "14:30:00" });
+    expect(valueAt(DATETIME_COLUMN)).toEqual({
       kind: "dateTime",
       value: "2026-07-31T14:30:00",
     });
-    expect(valueAt(6)).toEqual({ kind: "boolean", value: true });
-    expect(valueAt(7)).toEqual({ kind: "boolean", value: false });
-    expect(valueAt(8)).toEqual({ kind: "number", value: 42 });
+    expect(valueAt(BOOLEAN_TRUE_COLUMN)).toEqual({
+      kind: "boolean",
+      value: true,
+    });
+    expect(valueAt(BOOLEAN_FALSE_COLUMN)).toEqual({
+      kind: "boolean",
+      value: false,
+    });
+    expect(valueAt(PLAIN_NUMBER_COLUMN)).toEqual({ kind: "number", value: 42 });
   });
 });
 
@@ -1342,7 +1419,9 @@ describe("buildXlsxPackageFromContent: writes the per-cell font into xl/styles.x
       "expected a <fonts> element",
     );
     const fonts = childrenWithTag(fontsEl, "font");
-    expect(fonts).toHaveLength(3);
+    // The default font (index 0), the bold red header font, and the Courier New strike font: row 2's bold: false restates the default and mints no font of its own.
+    const EXPECTED_FONT_COUNT = 3;
+    expect(fonts).toHaveLength(EXPECTED_FONT_COUNT);
     const defaultFont = required(fonts[0], "expected the default <font> at 0");
     expect(
       childrenWithTag(defaultFont, "sz")[0]?.attributes.find(
@@ -1382,7 +1461,8 @@ describe("buildXlsxPackageFromContent: writes the per-cell font into xl/styles.x
     );
     const xfs = childrenWithTag(cellXfsEl, "xf");
     // xf[0] = default (General + default font, shared with the bold:false cell); xf[1] = bold red; xf[2] = courier
-    expect(xfs).toHaveLength(3);
+    const EXPECTED_XF_COUNT = 3;
+    expect(xfs).toHaveLength(EXPECTED_XF_COUNT);
     const defaultXf = required(xfs[0], "expected the default <xf> at 0");
     expect(defaultXf.attributes.map((a) => a.name)).not.toContain("applyFont");
     expect(defaultXf.attributes.find((a) => a.name === "fontId")?.value).toBe(
@@ -1474,7 +1554,9 @@ describe("buildXlsxPackageFromContent: writes cell decoration (fills/borders/ali
       "expected a <fills> element",
     );
     const fills = childrenWithTag(fillsEl, "fill");
-    expect(fills).toHaveLength(4); // none, gray125, red, yellow
+    // The two reserved fills (none, gray125) plus one solid fill per distinct background colour (red, yellow).
+    const EXPECTED_FILL_COUNT = 4;
+    expect(fills).toHaveLength(EXPECTED_FILL_COUNT);
     const patternType = (fill: XmlElement | undefined): string | undefined =>
       fill === undefined
         ? undefined
@@ -2041,6 +2123,9 @@ describe("buildXlsxPackageFromContent: drawing layer (charts and pictures)", () 
   });
 
   it("writes a real xl/drawings/drawingN.xml plus xl/media/imageN.png for a sheet image, and reading it back recovers the same bytes", () => {
+    // Arbitrary but distinct fixture dimensions, reused below when checking the round-tripped size survives the EMU conversion.
+    const IMAGE_WIDTH_PT = 100;
+    const IMAGE_HEIGHT_PT = 50;
     const document: ContentDocument = {
       kind: "spreadsheet",
       metadata: {},
@@ -2055,8 +2140,8 @@ describe("buildXlsxPackageFromContent: drawing layer (charts and pictures)", () 
               kind: "image",
               format: "png",
               base64: TINY_PNG_BASE64,
-              widthPt: 100,
-              heightPt: 50,
+              widthPt: IMAGE_WIDTH_PT,
+              heightPt: IMAGE_HEIGHT_PT,
               anchorRow: 0,
               anchorColumn: 0,
               offsetXPt: 0,
@@ -2076,8 +2161,16 @@ describe("buildXlsxPackageFromContent: drawing layer (charts and pictures)", () 
     const image = roundTripped.sheets[0]?.images[0];
     expect(image?.format).toBe("png");
     expect(image?.base64).toBe(TINY_PNG_BASE64);
-    expect(image?.widthPt).toBeCloseTo(100, 5);
-    expect(image?.heightPt).toBeCloseTo(50, 5);
+    // The pt -> EMU -> pt round trip isn't exact, so this checks closeness rather than equality.
+    const ROUND_TRIP_PRECISION_DIGITS = 5;
+    expect(image?.widthPt).toBeCloseTo(
+      IMAGE_WIDTH_PT,
+      ROUND_TRIP_PRECISION_DIGITS,
+    );
+    expect(image?.heightPt).toBeCloseTo(
+      IMAGE_HEIGHT_PT,
+      ROUND_TRIP_PRECISION_DIGITS,
+    );
   });
 
   it("writes no drawing part, no worksheet rels, and no Content_Types override at all for a sheet carrying neither an image nor a chart", () => {
@@ -3262,7 +3355,13 @@ describe("buildBreaksElements: manual row and column breaks are written independ
   }
 
   it("writes rowBreaks with the exact id/min/max/man attributes and count/manualBreakCount, no colBreaks at all, for row breaks alone", () => {
-    const pkg = pkgWithBreaks({ rows: [3, 7], columns: [] });
+    // Two arbitrary, distinct row indices, asserted below by their own written ids ("3", "7").
+    const FIRST_ROW_BREAK_INDEX = 3;
+    const SECOND_ROW_BREAK_INDEX = 7;
+    const pkg = pkgWithBreaks({
+      rows: [FIRST_ROW_BREAK_INDEX, SECOND_ROW_BREAK_INDEX],
+      columns: [],
+    });
     const worksheet = rootElement(pkg.parts["xl/worksheets/sheet1.xml"]);
     if (worksheet === undefined) {
       throw new Error("expected a worksheet root element");
@@ -4008,11 +4107,13 @@ describe("buildXlsxPackageFromContent: styles part scaffolding counts and exact 
     // The font element spells its toggles and size/name in CT_Font's own child order.
     const fonts = requireChild(styles, "fonts");
     const arial = elementsOf(fonts, "font")[1]!;
+    // One <b>, one <sz>, and one <name> child, and no more.
+    const EXPECTED_FONT_CHILD_COUNT = 3;
     expect(
       elementsOf(arial, "b").length +
         elementsOf(arial, "sz").length +
         elementsOf(arial, "name").length,
-    ).toBe(3);
+    ).toBe(EXPECTED_FONT_CHILD_COUNT);
     expect(attr(requireChild(arial, "sz"), "val")).toBe("12");
     expect(attr(requireChild(arial, "name"), "val")).toBe("Arial");
   });
