@@ -45,6 +45,13 @@ const CS_OPERAND_MEDIUM_BIAS = 108;
 const CS_OPERAND_MEDIUM_FIRST_BYTE_BIAS = 247;
 const CS_OPERAND_NEGATIVE_MEDIUM_FIRST_BYTE_BIAS = 251;
 const BYTE_RADIX = 256;
+// A raw 16-bit unsigned read at or above this is negative in two's complement; INT16_MODULUS (2^16) is subtracted to recover the signed value.
+const INT16_SIGN_BIT = 0x8000;
+const INT16_MODULUS = 0x1_0000;
+// Bytes consumed by CS_OPERAND_INT16 (1 opcode byte + 2 operand bytes) and CS_OPERAND_FIXED (1 opcode byte + 4 operand bytes) respectively.
+const CS_OPERAND_INT16_TOTAL_LENGTH = 3;
+const CS_OPERAND_FIXED_BYTE_LENGTH = 4;
+const CS_OPERAND_FIXED_TOTAL_LENGTH = 5;
 const FIXED_POINT_SCALE = 65536;
 
 // Operators (TN 5177 Appendix A).
@@ -87,6 +94,15 @@ const SUBR_BIAS_LARGE = 32768;
 
 const HINT_MASK_BITS_PER_BYTE = 8;
 const STEM_ARGS_PER_STEM = 2;
+// curveTo's six stack operands, addressed relative to the group's first index k: dx1 (k+0), dy1 (k+1), dx2 (k+2), dy2 (k+3), dx3 (k+4), dy3 (k+5), RRCURVETO/RCURVELINE/RLINECURVE's own argument order (TN 5177 Appendix A). 0-2 fall inside this rule's own ignored range.
+const CURVE_ARG_COUNT = 6;
+const CURVE_DY2_OFFSET = 3;
+const CURVE_DX3_OFFSET = 4;
+const CURVE_DY3_OFFSET = 5;
+// vv/hhcurveto and vh/hvcurveto both consume groups of four stack operands per curve (TN 5177 Appendix A); the last curve in a vh/hvcurveto group may carry one extra, fifth operand.
+const QUAD_CURVE_ARG_COUNT = 4;
+const QUAD_CURVE_LAST_OFFSET = 3;
+const QUAD_CURVE_WITH_EXTRA_ARG_COUNT = 5;
 // The interpreter's own operand stack limit (TN 5177 section 3.1 puts it at 48). A charstring pushing past it is malformed rather than merely unusual.
 const MAX_OPERAND_STACK = 48;
 // The spec's own subroutine nesting limit (section 4.7).
@@ -148,6 +164,11 @@ interface WalkState {
   readonly box: BoundsBox;
 }
 
+// The cubic Bernstein basis's own binomial coefficient for its two middle terms, B(t) = (1-t)^3 P0 + 3(1-t)^2 t P1 + 3(1-t) t^2 P2 + t^3 P3 (choose(3,1) = choose(3,2) = 3).
+const CUBIC_BERNSTEIN_COEFFICIENT = 3;
+// The quadratic formula's own coefficient in the discriminant b^2 - 4ac.
+const QUADRATIC_FORMULA_COEFFICIENT = 4;
+
 function cubicAt(
   p0: number,
   p1: number,
@@ -157,7 +178,10 @@ function cubicAt(
 ): number {
   const s = 1 - t;
   return (
-    s * s * s * p0 + 3 * s * s * t * p1 + 3 * s * t * t * p2 + t * t * t * p3
+    s * s * s * p0 +
+    CUBIC_BERNSTEIN_COEFFICIENT * s * s * t * p1 +
+    CUBIC_BERNSTEIN_COEFFICIENT * s * t * t * p2 +
+    t * t * t * p3
   );
 }
 
@@ -171,7 +195,11 @@ function includeCubicAxis(
 ): void {
   apply(p0);
   apply(p3);
-  const a = -p0 + 3 * p1 - 3 * p2 + p3;
+  const a =
+    -p0 +
+    CUBIC_BERNSTEIN_COEFFICIENT * p1 -
+    CUBIC_BERNSTEIN_COEFFICIENT * p2 +
+    p3;
   const b = 2 * (p0 - 2 * p1 + p2);
   const c = p1 - p0;
   const roots: number[] = [];
@@ -180,7 +208,7 @@ function includeCubicAxis(
       roots.push(-c / b);
     }
   } else {
-    const discriminant = b * b - 4 * a * c;
+    const discriminant = b * b - QUADRATIC_FORMULA_COEFFICIENT * a * c;
     if (discriminant >= 0) {
       const root = Math.sqrt(discriminant);
       roots.push((-b + root) / (2 * a), (-b - root) / (2 * a));
@@ -292,17 +320,17 @@ function readOperand(
     }
     const raw = u16(code, offset + 1);
     return {
-      value: raw >= 0x8000 ? raw - 0x1_0000 : raw,
-      endOffset: offset + 3,
+      value: raw >= INT16_SIGN_BIT ? raw - INT16_MODULUS : raw,
+      endOffset: offset + CS_OPERAND_INT16_TOTAL_LENGTH,
     };
   }
   if (b0 === CS_OPERAND_FIXED) {
-    if (!hasBytes(code, offset + 1, 4)) {
+    if (!hasBytes(code, offset + 1, CS_OPERAND_FIXED_BYTE_LENGTH)) {
       return undefined;
     }
     return {
       value: (u32(code, offset + 1) | 0) / FIXED_POINT_SCALE,
-      endOffset: offset + 5,
+      endOffset: offset + CS_OPERAND_FIXED_TOTAL_LENGTH,
     };
   }
   if (b0 >= CS_OPERAND_SMALL_FIRST && b0 <= CS_OPERAND_SMALL_LAST) {
@@ -432,15 +460,19 @@ function execute(
         break;
       }
       case OP_RRCURVETO: {
-        for (let k = 0; k + 5 < stack.length; k += 6) {
+        for (
+          let k = 0;
+          k + CURVE_DY3_OFFSET < stack.length;
+          k += CURVE_ARG_COUNT
+        ) {
           curveTo(
             state,
             stack[k]!,
             stack[k + 1]!,
             stack[k + 2]!,
-            stack[k + 3]!,
-            stack[k + 4]!,
-            stack[k + 5]!,
+            stack[k + CURVE_DY2_OFFSET]!,
+            stack[k + CURVE_DX3_OFFSET]!,
+            stack[k + CURVE_DY3_OFFSET]!,
           );
         }
         stack.length = 0;
@@ -448,15 +480,15 @@ function execute(
       }
       case OP_RCURVELINE: {
         let k = 0;
-        for (; k + 5 < stack.length - 2; k += 6) {
+        for (; k + CURVE_DY3_OFFSET < stack.length - 2; k += CURVE_ARG_COUNT) {
           curveTo(
             state,
             stack[k]!,
             stack[k + 1]!,
             stack[k + 2]!,
-            stack[k + 3]!,
-            stack[k + 4]!,
-            stack[k + 5]!,
+            stack[k + CURVE_DY2_OFFSET]!,
+            stack[k + CURVE_DX3_OFFSET]!,
+            stack[k + CURVE_DY3_OFFSET]!,
           );
         }
         if (k + 1 < stack.length) {
@@ -467,18 +499,18 @@ function execute(
       }
       case OP_RLINECURVE: {
         let k = 0;
-        for (; k + 1 < stack.length - 6; k += 2) {
+        for (; k + 1 < stack.length - CURVE_ARG_COUNT; k += 2) {
           lineTo(state, stack[k]!, stack[k + 1]!);
         }
-        if (k + 5 < stack.length) {
+        if (k + CURVE_DY3_OFFSET < stack.length) {
           curveTo(
             state,
             stack[k]!,
             stack[k + 1]!,
             stack[k + 2]!,
-            stack[k + 3]!,
-            stack[k + 4]!,
-            stack[k + 5]!,
+            stack[k + CURVE_DY2_OFFSET]!,
+            stack[k + CURVE_DX3_OFFSET]!,
+            stack[k + CURVE_DY3_OFFSET]!,
           );
         }
         stack.length = 0;
@@ -489,11 +521,15 @@ function execute(
         // Both take an optional leading cross-axis delta applied to the FIRST curve's first control point only, marked by an odd argument count.
         let k = 0;
         let firstCross = 0;
-        if (stack.length % 4 === 1) {
+        if (stack.length % QUAD_CURVE_ARG_COUNT === 1) {
           firstCross = stack[0]!;
           k = 1;
         }
-        for (; k + 3 < stack.length; k += 4) {
+        for (
+          ;
+          k + QUAD_CURVE_LAST_OFFSET < stack.length;
+          k += QUAD_CURVE_ARG_COUNT
+        ) {
           const cross = k <= 1 ? firstCross : 0;
           if (b0 === OP_VVCURVETO) {
             curveTo(
@@ -503,7 +539,7 @@ function execute(
               stack[k + 1]!,
               stack[k + 2]!,
               0,
-              stack[k + 3]!,
+              stack[k + QUAD_CURVE_LAST_OFFSET]!,
             );
           } else {
             curveTo(
@@ -512,7 +548,7 @@ function execute(
               cross,
               stack[k + 1]!,
               stack[k + 2]!,
-              stack[k + 3]!,
+              stack[k + QUAD_CURVE_LAST_OFFSET]!,
               0,
             );
           }
@@ -525,9 +561,9 @@ function execute(
         // Alternating groups of four, each curve starting on the axis the previous one ended off; a trailing fifth argument on the LAST group gives that curve's final delta on the other axis.
         let horizontal = b0 === OP_HVCURVETO;
         let k = 0;
-        while (stack.length - k >= 4) {
-          const last = stack.length - k === 5;
-          const extra = last ? stack[k + 4]! : 0;
+        while (stack.length - k >= QUAD_CURVE_ARG_COUNT) {
+          const last = stack.length - k === QUAD_CURVE_WITH_EXTRA_ARG_COUNT;
+          const extra = last ? stack[k + QUAD_CURVE_ARG_COUNT]! : 0;
           if (horizontal) {
             curveTo(
               state,
@@ -536,7 +572,7 @@ function execute(
               stack[k + 1]!,
               stack[k + 2]!,
               extra,
-              stack[k + 3]!,
+              stack[k + QUAD_CURVE_LAST_OFFSET]!,
             );
           } else {
             curveTo(
@@ -545,11 +581,11 @@ function execute(
               stack[k]!,
               stack[k + 1]!,
               stack[k + 2]!,
-              stack[k + 3]!,
+              stack[k + QUAD_CURVE_LAST_OFFSET]!,
               extra,
             );
           }
-          k += 4;
+          k += QUAD_CURVE_ARG_COUNT;
           horizontal = !horizontal;
         }
         stack.length = 0;
@@ -609,11 +645,17 @@ function execute(
 }
 
 // The flex family (TN 5177 section 4.2): two cubics drawn as one operator, in four encodings that each omit whichever deltas the construction fixes. Every other escaped operator — the arithmetic, storage, and conditional set — returns false rather than being approximated.
+// The flex-family operators' own required argument counts (TN 5177 section 4.2).
+const FLEX_ARG_COUNT = 13;
+const HFLEX_ARG_COUNT = 7;
+const HFLEX1_ARG_COUNT = 9;
+const FLEX1_ARG_COUNT = 11;
+
 function executeEscaped(operator: number, state: WalkState): boolean {
   const stack = state.stack;
   const startY = state.y;
   if (operator === ESC_FLEX) {
-    if (stack.length < 13) {
+    if (stack.length < FLEX_ARG_COUNT) {
       return false;
     }
     curveTo(
@@ -638,7 +680,7 @@ function executeEscaped(operator: number, state: WalkState): boolean {
     return true;
   }
   if (operator === ESC_HFLEX) {
-    if (stack.length < 7) {
+    if (stack.length < HFLEX_ARG_COUNT) {
       return false;
     }
     // dx1 dx2 dy2 dx3 dx4 dx5 dx6: the first curve rises by dy2 at its second control point and the second falls by the same amount, so both the join and the final point sit on the original y.
@@ -648,7 +690,7 @@ function executeEscaped(operator: number, state: WalkState): boolean {
     return true;
   }
   if (operator === ESC_HFLEX1) {
-    if (stack.length < 9) {
+    if (stack.length < HFLEX1_ARG_COUNT) {
       return false;
     }
     // dx1 dy1 dx2 dy2 dx3 dx4 dx5 dy5 dx6: the final point returns to the original y.
@@ -667,14 +709,15 @@ function executeEscaped(operator: number, state: WalkState): boolean {
     return true;
   }
   if (operator === ESC_FLEX1) {
-    if (stack.length < 11) {
+    if (stack.length < FLEX1_ARG_COUNT) {
       return false;
     }
     // dx1 dy1 dx2 dy2 dx3 dy3 dx4 dy4 dx5 dy5 d6: the last delta applies to whichever axis the five preceding deltas moved further along, and the other axis returns to where the flex started.
     const startX = state.x;
     let dx = 0;
     let dy = 0;
-    for (let k = 0; k < 10; k += 2) {
+    // Only the first ten of the eleven operands (dx1..dy5) are summed here; the eleventh (d6) is handled separately below.
+    for (let k = 0; k < FLEX1_ARG_COUNT - 1; k += 2) {
       dx += stack[k]!;
       dy += stack[k + 1]!;
     }
