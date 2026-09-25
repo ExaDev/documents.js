@@ -1,3 +1,10 @@
+## [14.4.54](https://github.com/ExaDev/documents.js/compare/documents.js%4014.4.53...documents.js%4014.4.54) (2026-09-25)
+
+
+### Dependencies
+
+- Updated odf.js to 11.2.0
+
 ## [14.4.53](https://github.com/ExaDev/documents.js/compare/documents.js%4014.4.52...documents.js%4014.4.53) (2026-09-25)
 
 
