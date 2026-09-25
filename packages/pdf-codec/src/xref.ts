@@ -38,9 +38,30 @@ export interface XrefTable {
 const STARTXREF_BYTES = new TextEncoder().encode("startxref");
 const OBJ_BYTES = new TextEncoder().encode("obj");
 const TRAILER_BYTES = new TextEncoder().encode("trailer");
+// ISO 32000-1 7.2.2's ten delimiter characters, by their ASCII byte value.
+const DELIMITER_LEFT_PAREN = 0x28; // (
+const DELIMITER_RIGHT_PAREN = 0x29; // )
+const DELIMITER_LESS_THAN = 0x3c; // <
+const DELIMITER_GREATER_THAN = 0x3e; // >
+const DELIMITER_LEFT_BRACKET = 0x5b; // [
+const DELIMITER_RIGHT_BRACKET = 0x5d; // ]
+const DELIMITER_LEFT_BRACE = 0x7b; // {
+const DELIMITER_RIGHT_BRACE = 0x7d; // }
+const DELIMITER_SOLIDUS = 0x2f; // /
+const DELIMITER_PERCENT = 0x25; // %
+
 // A minimal local copy of the lexer's own delimiter set (ISO 32000-1 7.2.2), used only to boundary-check a recovered "obj" keyword occurrence during linear-scan recovery — lexer.ts keeps its own copy private, and this is the one other place PDF syntax needs to know what counts as a token boundary.
 const DELIMITER_BYTES = new Set([
-  0x28, 0x29, 0x3c, 0x3e, 0x5b, 0x5d, 0x7b, 0x7d, 0x2f, 0x25,
+  DELIMITER_LEFT_PAREN,
+  DELIMITER_RIGHT_PAREN,
+  DELIMITER_LESS_THAN,
+  DELIMITER_GREATER_THAN,
+  DELIMITER_LEFT_BRACKET,
+  DELIMITER_RIGHT_BRACKET,
+  DELIMITER_LEFT_BRACE,
+  DELIMITER_RIGHT_BRACE,
+  DELIMITER_SOLIDUS,
+  DELIMITER_PERCENT,
 ]);
 
 // Guards a looping /Prev chain (a corrupt or adversarial file pointing back at an already-visited offset) — generous for any real-world incremental-update history, which rarely exceeds single digits of revisions.
@@ -335,6 +356,9 @@ function readXrefStreamSection(
   };
 }
 
+// The radix of one big-endian byte position: each successive byte shifts the accumulated value up by a full byte's worth of range.
+const BYTE_RADIX = 256;
+
 function readBigEndian(
   bytes: Uint8Array<ArrayBuffer>,
   offset: number,
@@ -342,7 +366,7 @@ function readBigEndian(
 ): number {
   let value = 0;
   for (let i = 0; i < width; i++) {
-    value = value * 256 + (bytes[offset + i] ?? 0);
+    value = value * BYTE_RADIX + (bytes[offset + i] ?? 0);
   }
   return value;
 }
@@ -377,8 +401,14 @@ function findAllKeywordPositions(
   return positions;
 }
 
+// ASCII byte values of '0' and '9', the bounds of a decimal digit.
+const ASCII_DIGIT_ZERO = 0x30;
+const ASCII_DIGIT_NINE = 0x39;
+
 function isDigitByte(byte: number | undefined): boolean {
-  return byte !== undefined && byte >= 0x30 && byte <= 0x39;
+  return (
+    byte !== undefined && byte >= ASCII_DIGIT_ZERO && byte <= ASCII_DIGIT_NINE
+  );
 }
 
 // Walks `bytes` backward from `end`, stopping at the first byte (from the right) that fails `predicate` — e.g. skipping a run of trailing whitespace or trailing digits. Returns the index just past that stopping point, i.e. the start of the run that satisfied `predicate`.
