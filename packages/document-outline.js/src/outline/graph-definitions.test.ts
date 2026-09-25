@@ -121,12 +121,11 @@ describe("definitions tables", () => {
     );
     const expectedEntryCount = 4; // all four exist whether or not anything references them
     expect(entries).toHaveLength(expectedEntryCount);
-    expect(entries.map((node) => node.tenantKind).sort()).toEqual([
-      "attachment",
-      "destination",
-      "footnote",
-      "layer",
-    ]);
+    expect(
+      entries
+        .map((node) => String(node.tenantKind))
+        .sort((a, b) => (a < b ? -1 : 1)),
+    ).toEqual(["attachment", "destination", "footnote", "layer"]);
     // Table-entry nodes are flushed sorted by their own content-hash id (project()'s own pendingEntryNodes.sort), so two differently-spelled key sets emit these four nodes in the same, id-ascending order — comparing the emitted order against a FRESH, independent default sort of the same ids (rather than re-deriving expected ids by hand, which the hash recipe makes impractical) is what actually distinguishes a genuinely-sorted emission from an unsorted or wrongly-ordered one.
     const ids = entries.map((node) => node.id);
     expect(ids).toEqual([...ids].sort());
@@ -209,10 +208,11 @@ describe("definitions tables", () => {
       (node) =>
         node.kind === "definitionEntry" && node.tenantKind === "glossary",
     );
-    expect(glossary.map((node) => node.definition).sort()).toEqual([
-      "n1",
-      "the minimum number of members needed",
-    ]);
+    expect(
+      glossary
+        .map((node) => String(node.definition))
+        .sort((a, b) => (a < b ? -1 : 1)),
+    ).toEqual(["n1", "the minimum number of members needed"]);
     // The one DEFINED_BY edge is the tree anchor's own ref; neither glossary body produced one.
     expect(
       graph.edges.filter((edge) => edge.kind === "DEFINED_BY"),
@@ -458,7 +458,9 @@ describe("extraction policy", () => {
     expect(graph.edges.filter((edge) => edge.kind === "PROPERTY")).toHaveLength(
       2,
     );
-    for (const edge of graph.edges.filter((edge) => edge.kind === "PROPERTY")) {
+    for (const edge of graph.edges.filter(
+      (candidate) => candidate.kind === "PROPERTY",
+    )) {
       expect(edge.path).toEqual(["metadata", "title"]);
       expect(edge.to).toBe(valueNodes[0]!.id);
       expect(edge.orderKey).toBe(orderKeys.orderKeyForIndex(0));

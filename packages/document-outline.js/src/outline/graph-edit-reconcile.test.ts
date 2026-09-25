@@ -50,7 +50,8 @@ describe("write API: insertNode's fresh-mint children-wiring reconciles pre-exis
     const contains = result.graph.edges.filter(
       (edge) => edge.from === sectionId && edge.kind === "CONTAINS",
     );
-    expect(contains).toHaveLength(3);
+    const expectedContainsCount = 3;
+    expect(contains).toHaveLength(expectedContainsCount);
     // Genuinely exercises byOrderKeyAsc, not just "no duplicates": reading originalSiblings by CREATION order (unsorted) would see [C, A, B], which is NOT a subsequence of the requested [A, B, C] (C can never precede A in a subsequence of [A,B,C]) — so a broken sort would fail to match at least one requested position against its existing edge and mint a spurious extra one, changing this exact final order.
     expect(
       contains
