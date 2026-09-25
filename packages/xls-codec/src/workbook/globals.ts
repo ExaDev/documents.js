@@ -33,6 +33,12 @@ import {
 import { BUILTIN_NUMBER_FORMATS } from "excel-number-format";
 import { readPrintNames, type SheetPrintNames } from "./print-names";
 
+// Hex, for printing a supporting-link type the way the spec's own table does; a transfer-protocol URL's own vt value; and the -2 itab spelling of a workbook-level reference.
+const HEX_RADIX = 16;
+const HEX_DIGITS = 4;
+const EXTERNAL_LINK_TRANSFER_PROTOCOL_URL = 0x05;
+const WORKBOOK_LEVEL_ITAB = -2;
+
 // The workbook globals substream ([MS-XLS] 2.1.7.20.3): everything that belongs to the workbook rather than to one sheet — which sheets exist and in what order, the shared string table every string cell indexes into, the number-format and cell-format tables every numeric cell's meaning depends on, and which date epoch the whole file counts serials from. https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/ca4c1748-8729-4a93-abb9-4602b3a01fb1
 //
 // Read before any sheet, because a worksheet substream is close to meaningless on its own: a LabelSst cell carries only an index into the SST, and an RK cell carries only a number whose kind lives in the Format record its XF points at.
@@ -223,7 +229,7 @@ export function readSupBook(record: RecordGroup): SupBookInfo {
   if (cch < 1 || cch > SUPBOOK_VIRTPATH_MAX_CCH) {
     return {
       kind: "unresolvable",
-      diagnostic: `supporting link of unrecognised type (cch=0x${cch.toString(16).padStart(4, "0")})`,
+      diagnostic: `supporting link of unrecognised type (cch=0x${cch.toString(HEX_RADIX).padStart(HEX_DIGITS, "0")})`,
     };
   }
   const virtPath = readXLUnicodeStringNoCch(cursor, cch);
@@ -281,7 +287,7 @@ export function fileNameFromVirtPath(virtPath: string): string | undefined {
     switch (marker) {
       // A volume/unc-volume (both open with a SECOND 0x01) or a transfer-protocol URL (whose own "count" field is a raw byte rather than a character this reader could safely treat as part of the path) needs more of the grammar than a trailing segment can supply.
       case 0x01:
-      case 0x05:
+      case EXTERNAL_LINK_TRANSFER_PROTOCOL_URL:
         return undefined;
       case VIRTPATH_REL_VOLUME_MARKER:
       case VIRTPATH_STARTUP_MARKER:
@@ -329,7 +335,7 @@ export function resolveXti(
   if (supBook.kind === "unresolvable") {
     return { label: diagnosticLabel(supBook.diagnostic), diagnostic: true };
   }
-  if (itabFirst === -2 || itabLast === -2) {
+  if (itabFirst === WORKBOOK_LEVEL_ITAB || itabLast === WORKBOOK_LEVEL_ITAB) {
     return {
       label: diagnosticLabel("workbook-level reference"),
       diagnostic: true,

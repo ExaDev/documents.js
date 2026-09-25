@@ -31,6 +31,9 @@ import { readChartSeries, type ChartRangeContext } from "./chart";
 import { readEmbeddedObjectPackage } from "./embedded-object";
 import type { RawColumn, RawRow } from "./sheet";
 
+// A column width in chars converts to its char-width units against a 256ths denominator.
+const DEFAULT_COLUMN_WIDTH_DENOMINATOR = 256;
+
 // One worksheet's own drawing content: pictures (ContentSheetImage) and everything else a shape can hold that has no dedicated image slot — a chart ([MS-XLS] "Obj" ftCmo objType Chart, resolved through its own nested BOF(dt=chart)...EOF substream, see chart.ts) or a generic autoshape/textbox/line (objectKind 'drawing', a ContentDrawPage of one ContentShape). A shape's own drawing geometry (Sp/Opt/ClientAnchor, drawing/shapes.ts) and the Obj record naming what it actually IS pair up 1:1, in document order, across the worksheet substream's own MsoDrawing/Obj records — the same positional correlation every real BIFF8 reader (this reader's own design, cross-checked against how Apache POI's EscherAggregate and xlrd both resolve this exact pairing) relies on, since neither record names the other directly.
 
 /** [MS-XLS] "FtCmo" ot enumeration, the values this reader routes on. */
@@ -66,7 +69,7 @@ export class SheetGridGeometry {
   private readonly columnWidths = new Map<number, number>();
   private readonly rowHeights = new Map<number, number>();
   private readonly defaultColumnWidthPt = columnWidthToPoints(
-    DEFAULT_COLUMN_WIDTH_CHARS * 256,
+    DEFAULT_COLUMN_WIDTH_CHARS * DEFAULT_COLUMN_WIDTH_DENOMINATOR,
   );
 
   constructor(columns: readonly RawColumn[], rows: readonly RawRow[]) {

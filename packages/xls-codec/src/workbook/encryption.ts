@@ -23,6 +23,10 @@ import {
   RECORD_USREXCL,
 } from "../biff/record-types";
 
+// Hex, for printing the encryption type the way [MS-XLS]'s own table does.
+const HEX_RADIX = 16;
+const HEX_DIGITS = 4;
+
 // [MS-XLS] 2.4.117's FilePass record, and the two [MS-OFFCRYPTO] schemes it can name, decrypted end to end: reading FilePass's own header fields, verifying the caller's password against the header's own verifier, then decrypting every other record's data in the workbook stream that [MS-XLS] 2.2.10 requires encrypted — the RC4 encryption header (2.3.6.1/2.3.6.2) and XOR obfuscation Method 1 (2.3.7, see archive-codec's own crypto/xor-obfuscation.ts for the real, cross-validated algorithm and why it diverges from the published spec text). https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/cf9ae8d5-4e8c-40a2-95f1-3b31f16b5529
 //
 // The RC4 CryptoAPI encryption header ([MS-OFFCRYPTO] 2.3.5.1, a different header shape and derivation entirely — ppt-codec's own scheme, tracked separately as ExaDev/documents.js#1116) is explicitly out of scope, and reported as a distinct, named failure rather than folded into "wrong password" or a generic parse error.
@@ -76,7 +80,7 @@ function readFilePassHeader(filePassRecord: BiffRecord): FilePassHeader {
   }
   if (encryptionType !== ENCRYPTION_TYPE_RC4) {
     throw new BiffFormatError(
-      `workbook uses FilePass wEncryptionType 0x${encryptionType.toString(16).padStart(4, "0")}, which this reader does not decrypt`,
+      `workbook uses FilePass wEncryptionType 0x${encryptionType.toString(HEX_RADIX).padStart(HEX_DIGITS, "0")}, which this reader does not decrypt`,
     );
   }
   const versionMajor = cursor.u16();
