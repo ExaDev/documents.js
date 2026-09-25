@@ -26,11 +26,15 @@ export const CONTEXT: DrawingWriteContext = {
   strict: false,
 };
 
+// PowerPoint's own default text insets in points, mirroring read.ts's DEFAULT_INSET_LEFT_RIGHT_PT/DEFAULT_INSET_TOP_BOTTOM_PT: 0.1 inch left/right, 0.05 inch top/bottom, at 72 points per inch.
+const POINTS_PER_INCH = 72;
+const INSET_LEFT_RIGHT_INCHES = 0.1;
+const INSET_TOP_BOTTOM_INCHES = 0.05;
 export const DEFAULT_TEXT_INSETS = {
-  insetLeftPt: 0.1 * 72,
-  insetTopPt: 0.05 * 72,
-  insetRightPt: 0.1 * 72,
-  insetBottomPt: 0.05 * 72,
+  insetLeftPt: INSET_LEFT_RIGHT_INCHES * POINTS_PER_INCH,
+  insetTopPt: INSET_TOP_BOTTOM_INCHES * POINTS_PER_INCH,
+  insetRightPt: INSET_LEFT_RIGHT_INCHES * POINTS_PER_INCH,
+  insetBottomPt: INSET_TOP_BOTTOM_INCHES * POINTS_PER_INCH,
 };
 
 export function textShape(overrides: Partial<ContentShape> = {}): ContentShape {

@@ -23,10 +23,27 @@ import {
 
 // The drawing walk: a slide's DrawingContainer holds an [MS-ODRAW] OfficeArtDgContainer, and beneath it a tree of group and shape containers. This module flattens that tree into the shapes a reader actually cares about, resolving each one's rectangle into the slide's own coordinate system on the way down — a grouped shape's anchor is stated in its group's private coordinate system, so the rectangle is only meaningful once every enclosing group's transform has been applied to it. [MS-PPT] 2.5.13 DrawingContainer: https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-ppt/0595b49f-da96-4402-b353-1f766e9d548f [MS-ODRAW] 2.2.13 OfficeArtDgContainer: https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-odraw/68976475-fcfd-4483-8fc4-75adc635130d [MS-ODRAW] 2.2.14 OfficeArtSpContainer: https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-odraw/16194cb9-b4b0-476c-9678-a6ac1f06b034 [MS-ODRAW] 2.2.16 OfficeArtSpgrContainer: https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-odraw/e42f26e5-c0eb-4d10-a708-eef5958af44d
 
-// [MS-ODRAW] 2.2.40 OfficeArtFSP's flags word, in the spec's own A-to-L order. Only the bits the walk acts on are named.
+// [MS-ODRAW] 2.2.40 OfficeArtFSP's flags word, in the spec's own A-to-L order. Only the bits the walk acts on are named. FSP_DELETED's own bit position (3) is named separately from the flag, since @typescript-eslint/no-magic-numbers checks a shift amount's own literal independently of the constant it composes.
+const FSP_BIT_DELETED = 3;
 const FSP_GROUP = 1 << 0;
 const FSP_PATRIARCH = 1 << 2;
-const FSP_DELETED = 1 << 3;
+const FSP_DELETED = 1 << FSP_BIT_DELETED;
+
+// The hexadecimal radix every record-type diagnostic below formats its own recType through.
+const HEX_RADIX = 16;
+// A rectangle is always four coordinates (left, top, right, bottom), whether each is a 16-bit SmallRectStruct field or a 32-bit RectStruct one.
+const RECT_FIELD_COUNT = 4;
+// The bottom coordinate's own position among those four, the one index above the rule's own ignored [-1, 0, 1, 2] range.
+const RECT_BOTTOM_INDEX = 3;
+// A RectStruct/OfficeArtChildAnchor/OfficeArtFSPGR coordinate's own byte width (32-bit, signed) — the `size` argument readRectFields takes when reading one of those rather than a 16-bit SmallRectStruct.
+const RECT_STRUCT_COORD_SIZE = 4;
+const INT32_BYTES = 4;
+// [MS-PPT] 2.7.1 OfficeArtClientAnchor's own recLen values: a SmallRectStruct's four 16-bit coordinates, or a RectStruct's four 32-bit ones.
+const SMALL_RECT_STRUCT_LEN = 0x00000008;
+const RECT_STRUCT_LEN = 0x00000010;
+// [MS-ODRAW] 2.2.40 OfficeArtFSP's own fixed size: a 4-byte spid then a 4-byte flags word.
+const FSP_FIXED_SIZE = 8;
+const FSP_FLAGS_OFFSET = 4;
 
 // A rectangle in master units. Kept in the format's own coordinate system rather than converted to points here, so the geometry and the unit conversion stay separately testable.
 export interface ShapeRect {
@@ -83,40 +100,43 @@ function applyTransform(transform: Transform, rect: ShapeRect): ShapeRect {
   };
 }
 
+// A coordinate's own byte width: 2 for a SmallRectStruct's 16-bit fields, 4 for a RectStruct/OfficeArtChildAnchor/OfficeArtFSPGR's 32-bit ones. A named type alias rather than an inline `2 | 4`, since ignoreNumericLiteralTypes only exempts a type alias's own literals, not the identical union written inline in a parameter position.
+type RectCoordinateSize = 2 | 4;
+
 function readRectFields(
   record: PptRecord,
-  size: 2 | 4,
+  size: RectCoordinateSize,
   order: "top-left" | "left-top",
 ): ShapeRect {
   const { data } = record;
-  const needed = size * 4;
+  const needed = size * RECT_FIELD_COUNT;
   if (data.length < needed) {
     throw new PptFormatError(
-      `anchor record 0x${record.header.recType.toString(16)} carries ${data.length} bytes, fewer than the ${needed} its four ${size}-byte coordinates need`,
+      `anchor record 0x${record.header.recType.toString(HEX_RADIX)} carries ${data.length} bytes, fewer than the ${needed} its four ${size}-byte coordinates need`,
     );
   }
   const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
   const at = (index: number): number =>
     size === 2
       ? view.getInt16(index * 2, true)
-      : view.getInt32(index * 4, true);
+      : view.getInt32(index * INT32_BYTES, true);
   // SmallRectStruct and RectStruct both order their fields top, left, right, bottom — not the left-first order the names suggest — while OfficeArtChildAnchor and OfficeArtFSPGR order theirs xLeft, yTop, xRight, yBottom. Reading either with the other's order silently transposes the rectangle.
   return order === "top-left"
-    ? { top: at(0), left: at(1), right: at(2), bottom: at(3) }
-    : { left: at(0), top: at(1), right: at(2), bottom: at(3) };
+    ? { top: at(0), left: at(1), right: at(2), bottom: at(RECT_BOTTOM_INDEX) }
+    : { left: at(0), top: at(1), right: at(2), bottom: at(RECT_BOTTOM_INDEX) };
 }
 
 // [MS-PPT] 2.7.1: the client anchor's own recLen picks its payload — 0x8 is a SmallRectStruct of 16-bit coordinates, 0x10 a RectStruct of 32-bit ones. Both are already in slide coordinates, which is why a grouped shape carrying one needs no group transform applied.
 function readClientAnchor(record: PptRecord): ShapeRect {
   const { recLen } = record.header;
-  if (recLen === 0x00000008) {
+  if (recLen === SMALL_RECT_STRUCT_LEN) {
     return readRectFields(record, 2, "top-left");
   }
-  if (recLen === 0x00000010) {
-    return readRectFields(record, 4, "top-left");
+  if (recLen === RECT_STRUCT_LEN) {
+    return readRectFields(record, RECT_STRUCT_COORD_SIZE, "top-left");
   }
   throw new PptFormatError(
-    `OfficeArtClientAnchor declares recLen 0x${recLen.toString(16)}, neither the 0x8 of a SmallRectStruct nor the 0x10 of a RectStruct`,
+    `OfficeArtClientAnchor declares recLen 0x${recLen.toString(HEX_RADIX)}, neither the 0x8 of a SmallRectStruct nor the 0x10 of a RectStruct`,
   );
 }
 
@@ -128,13 +148,20 @@ interface ShapeIdentity {
 // [MS-ODRAW] 2.2.14 makes shapeProp a required field of every OfficeArtSpContainer, so a container without a readable one is malformed rather than a shape with unknown identity — read as one pair so neither half can be answered while the other fails.
 function readShapeIdentity(shape: PptRecord): ShapeIdentity {
   const fsp = findChild(childRecords(shape), OfficeArtFSP);
-  if (fsp === undefined || fsp.data.length < 8) {
+  if (fsp === undefined || fsp.data.length < FSP_FIXED_SIZE) {
     throw new PptFormatError(
       `OfficeArtSpContainer at offset ${shape.offset} has no readable OfficeArtFSP, so the shape has neither an identity nor its flags`,
     );
   }
-  const view = new DataView(fsp.data.buffer, fsp.data.byteOffset, 8);
-  return { spid: view.getUint32(0, true), flags: view.getUint32(4, true) };
+  const view = new DataView(
+    fsp.data.buffer,
+    fsp.data.byteOffset,
+    FSP_FIXED_SIZE,
+  );
+  return {
+    spid: view.getUint32(0, true),
+    flags: view.getUint32(FSP_FLAGS_OFFSET, true),
+  };
 }
 
 // A shape's rectangle in slide coordinates. A client anchor is absolute and needs no transform; a child anchor is stated in the enclosing group's coordinate system and is mapped through it.
@@ -149,7 +176,10 @@ function resolveAnchor(
   }
   const child = findChild(children, OfficeArtChildAnchor);
   if (child !== undefined) {
-    return applyTransform(transform, readRectFields(child, 4, "left-top"));
+    return applyTransform(
+      transform,
+      readRectFields(child, RECT_STRUCT_COORD_SIZE, "left-top"),
+    );
   }
   return undefined;
 }
@@ -189,7 +219,7 @@ function groupTransform(groupShape: PptRecord, parent: Transform): Transform {
       `group shape ${spid} lacks ${fspgr === undefined ? "an OfficeArtFSPGR coordinate system" : "an anchor"}, so its children's coordinates cannot be placed on the slide`,
     );
   }
-  const space = readRectFields(fspgr, 4, "left-top");
+  const space = readRectFields(fspgr, RECT_STRUCT_COORD_SIZE, "left-top");
   const spaceWidth = space.right - space.left;
   const spaceHeight = space.bottom - space.top;
   if (spaceWidth === 0 || spaceHeight === 0) {
@@ -285,7 +315,7 @@ export function readDrawingShapes(
 ): readonly (PptShape | PptTable)[] {
   if (drawing.header.recType !== RT_Drawing) {
     throw new PptFormatError(
-      `expected RT_Drawing (0x${RT_Drawing.toString(16)}), found record type 0x${drawing.header.recType.toString(16)}`,
+      `expected RT_Drawing (0x${RT_Drawing.toString(HEX_RADIX)}), found record type 0x${drawing.header.recType.toString(HEX_RADIX)}`,
     );
   }
   const dg = findChild(childRecords(drawing), OfficeArtDgContainer);

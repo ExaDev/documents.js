@@ -29,6 +29,13 @@ import {
 const MSOBLIP_JPEG = 0x05;
 const MSOBLIP_PNG = 0x06;
 
+// The hexadecimal radix every record-type/instance diagnostic below formats its own field through.
+const HEX_RADIX = 16;
+// An MD4 digest ([RFC1320]) is 16 bytes, whether it is an OfficeArtBlip's own rgbUid1/rgbUid2 or an FBSE's own rgbUid.
+const MD4_DIGEST_BYTES = 16;
+// A little-endian 32-bit field's own byte width, used repeatedly below for FBSE's size/cRef/foDelay fields.
+const UINT32_BYTES = 4;
+
 // The OfficeArtBlip record types for the two formats this package decodes, each mapped to the ContentImageBlock format token the bytes genuinely are. OfficeArtBlipJPEG 2.2.27: https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-odraw/704b3ec5-3e3f-425f-b2f7-a090cc68e624 OfficeArtBlipPNG 2.2.28: https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-odraw/7af7d17e-6ae1-4c43-a3d6-691e6b3b4a45
 export interface PptBlip {
   readonly format: "png" | "jpeg";
@@ -52,19 +59,34 @@ function blipPayload(record: PptRecord): PptBlip | undefined {
     return undefined;
   }
   const uidCount = (record.header.recInstance & 1) + 1;
-  const dataStart = uidCount * 16 + 1;
+  const dataStart = uidCount * MD4_DIGEST_BYTES + 1;
   if (record.data.length < dataStart) {
     throw new PptFormatError(
-      `a blip record of type 0x${record.header.recType.toString(16)} declares ${record.header.recInstance.toString(16)} as its instance (so ${uidCount} digest(s)) but carries only ${record.data.length} bytes`,
+      `a blip record of type 0x${record.header.recType.toString(HEX_RADIX)} declares ${record.header.recInstance.toString(HEX_RADIX)} as its instance (so ${uidCount} digest(s)) but carries only ${record.data.length} bytes`,
     );
   }
   return { format, bytes: record.data.subarray(dataStart) };
 }
 
 // The fixed head an FBSE carries ahead of its optional name and embedded blip: btWin32, btMacOS, rgbUid (16), tag (2), size (4), cRef (4), foDelay (4), then three unused bytes and cbName — 36 bytes in total, every one of them positioned by adding the specification's own declared sizes.
-const FBSE_FIXED_SIZE = 1 + 1 + 16 + 2 + 4 + 4 + 4 + 1 + 1 + 1 + 1;
+const FBSE_FIXED_SIZE =
+  1 +
+  1 +
+  MD4_DIGEST_BYTES +
+  2 +
+  UINT32_BYTES +
+  UINT32_BYTES +
+  UINT32_BYTES +
+  1 +
+  1 +
+  1 +
+  1;
 // foDelay's "the file is not in the delay stream" sentinel.
 const FO_DELAY_NONE = 0xffffffff;
+
+// FBSE's own cRef/foDelay/cbName byte offsets ([MS-ODRAW] 2.2.32): btWin32(1) + btMacOS(1) + rgbUid(16) + tag(2) + size(4) = 24 for cRef, +4 for foDelay (28), and cbName sits after the three unused bytes FBSE_FIXED_SIZE's own breakdown accounts for (35).
+const FBSE_FO_DELAY_OFFSET = 28;
+const FBSE_CB_NAME_OFFSET = 35;
 
 // One OfficeArtBStoreContainerFileBlock: an FBSE atom whose data ends in the blip it embeds, an FBSE pointing at the Pictures stream, or (a spelling no producer this package has been checked against uses, but the container permits) a bare blip record. cRef 0 marks an empty slot in the store — a deleted picture's reusable position — and contributes no blip to the index sequence, since pib references are positional over rgfb as a whole.
 function readStoreEntry(
@@ -85,8 +107,8 @@ function readStoreEntry(
     entry.data[25] === 0 &&
     entry.data[26] === 0 &&
     entry.data[27] === 0;
-  const foDelay = view.getUint32(28, true);
-  const cbName = view.getUint8(35);
+  const foDelay = view.getUint32(FBSE_FO_DELAY_OFFSET, true);
+  const cbName = view.getUint8(FBSE_CB_NAME_OFFSET);
   const embeddedAt = entry.dataOffset + FBSE_FIXED_SIZE + cbName;
   // An FBSE whose data runs past its name carries the blip record inline; the spec's own recLen rule ("the size of nameData plus size plus 36 if the BLIP is embedded in this record") makes the embedded blip run exactly to the end of the atom.
   const hasEmbedded = embeddedAt < entry.dataOffset + entry.header.recLen;
@@ -143,15 +165,22 @@ export function blipForPib(
 }
 
 // The rgbUid digests are MD4 ([RFC1320]) of the pixel data — de-duplication keys a producer matches on. This package has no MD4 implementation and no consumer of its output needs one (this reader never verifies a digest), so the FBSEs and blips this writer emits carry zero digests: a well-formed value by shape, an honest non-computation by content.
-const ZERO_DIGEST = new Uint8Array(16);
+const ZERO_DIGEST = new Uint8Array(MD4_DIGEST_BYTES);
 
 // The tag field's "external file" value, which every producer this package has been checked against writes.
 const TAG_EXTERNAL = 0xff;
 
+// The RGB, one-UID recInstance each format's own OfficeArtBlip specification page enumerates.
+const PNG_BLIP_SINGLE_UID_INSTANCE = 0x6e0;
+const JPEG_BLIP_SINGLE_UID_INSTANCE = 0x46a;
+
 // One OfficeArtBlip record wrapping a picture's own file bytes verbatim, in the single-digest spelling of each format (PNG 0x6E0, JPEG 0x46A — the RGB, one-UID instances each format's own specification page enumerates).
 function writeBlipRecord(blip: PptBlip): Uint8Array<ArrayBuffer> {
   const recType = blip.format === "png" ? OfficeArtBlipPNG : OfficeArtBlipJPEG;
-  const recInstance = blip.format === "png" ? 0x6e0 : 0x46a;
+  const recInstance =
+    blip.format === "png"
+      ? PNG_BLIP_SINGLE_UID_INSTANCE
+      : JPEG_BLIP_SINGLE_UID_INSTANCE;
   return writeAtom(
     recType,
     concatBytes(ZERO_DIGEST, u8(TAG_EXTERNAL), blip.bytes),
