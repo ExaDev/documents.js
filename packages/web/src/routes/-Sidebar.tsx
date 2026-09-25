@@ -17,6 +17,9 @@ import {
 import { relativeTime } from "../shared/relativeTime";
 import { groupHeading, navLink, versionAnchor } from "./-Sidebar.css";
 
+// The abbreviation GitHub itself shows for a commit, so the label matches what the link opens.
+const SHORT_SHA_LENGTH = 7;
+
 // Not a route: the '-' prefix keeps TanStack Router's file-based generator from treating this as one.
 //
 // Grouped rather than one flat list, because the two groups behave differently. Everything under "Document" is a lens on the one currently-open document (each is a route nested in the '/_document' layout, which is what opens that document), so moving between them never asks for a file again. "Library" is the one place that picks which document that is. Before this split, a flat list of nine gave no hint that eight of them shared state and one did not.
@@ -60,7 +63,7 @@ export function computeVersionInfo(
       Icon: IconTag,
     };
   return {
-    label: commitSha.slice(0, 7),
+    label: commitSha.slice(0, SHORT_SHA_LENGTH),
     href: `${repoUrl}/commit/${commitSha}`,
     Icon: IconGitCommit,
   };

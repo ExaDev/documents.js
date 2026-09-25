@@ -1,6 +1,8 @@
 const MINUTE_MS = 60_000;
-const HOUR_MS = 60 * MINUTE_MS;
-const DAY_MS = 24 * HOUR_MS;
+const MINUTES_PER_HOUR = 60;
+const HOURS_PER_DAY = 24;
+const HOUR_MS = MINUTES_PER_HOUR * MINUTE_MS;
+const DAY_MS = HOURS_PER_DAY * HOUR_MS;
 
 export function relativeTime(timestamp: number): string {
   const elapsedMs = Date.now() - timestamp;
