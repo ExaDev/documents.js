@@ -2,6 +2,10 @@
 const CRC32_POLYNOMIAL = 0xedb88320;
 const BYTE_VALUES = 256;
 const BITS_PER_BYTE = 8;
+// Masks the low 8 bits of the running CRC to select the table entry, one less than BYTE_VALUES.
+const BYTE_MASK = 0xff;
+// This CRC32 variant's mandated initial register value and final output XOR (both all-ones, per the same IEEE 802.3/ZIP/PNG convention the polynomial above follows): starting from all-ones rather than zero, and inverting the result, detects leading/trailing zero bytes that a naive zero-seeded CRC would miss.
+const CRC32_INVERT_MASK = 0xffffffff;
 
 const CRC32_TABLE: Uint32Array = (() => {
   const table = new Uint32Array(BYTE_VALUES);
@@ -16,9 +20,9 @@ const CRC32_TABLE: Uint32Array = (() => {
 })();
 
 export function crc32(bytes: Uint8Array<ArrayBuffer>): number {
-  let crc = 0xffffffff;
+  let crc = CRC32_INVERT_MASK;
   for (const byte of bytes) {
-    crc = CRC32_TABLE[(crc ^ byte) & 0xff]! ^ (crc >>> 8);
+    crc = CRC32_TABLE[(crc ^ byte) & BYTE_MASK]! ^ (crc >>> BITS_PER_BYTE);
   }
-  return (crc ^ 0xffffffff) >>> 0;
+  return (crc ^ CRC32_INVERT_MASK) >>> 0;
 }
