@@ -11,9 +11,11 @@ import type {
 } from "document-schema.js";
 import { el, txt } from "../../xml/fragment";
 import { bytesToBase64 } from "byte-codec";
+import { COMPOUND_FILE_MAGIC } from "archive-codec";
 import { zipPackage } from "../../zip";
 import { oleObjectBin } from "../../test-support/cfb";
 import { minimalXlsxBytes } from "../../test-support/embedded";
+import { PNG_SIGNATURE } from "../../image/sniff";
 import { PptxDocumentSchema, readPptxContent } from "./read";
 
 // Ported from documents.js's src/ooxml/pptx/read.test.ts, adapted to readPptxContent's own PptxDocument shape (no wrapping ContentDocument discriminant) and dropping the dependency on documents.js's own PNG encoder (out of this port's scope): sniffImageFormat only inspects magic bytes, so a bare PNG-signature-prefixed byte array stands in for a real encoded PNG here.
@@ -119,9 +121,7 @@ function rels(
 
 // Only the PNG magic-byte signature matters to sniffImageFormat — the rest is arbitrary filler, not a real encoded image.
 function tinyPngBase64(): string {
-  const bytes = new Uint8Array([
-    0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0,
-  ]);
+  const bytes = new Uint8Array([...PNG_SIGNATURE, 0, 0, 0, 0]);
   return bytesToBase64(bytes);
 }
 
@@ -598,7 +598,8 @@ describe("readPptxContent: placeholder inheritance and run cascade", () => {
     const titleShape = doc.slides[1]?.shapes.find((s) => s.name === "Title 1");
     const run = asParagraph(titleShape?.blocks[0]).runs[0];
     expect(run?.text).toBe("Hello");
-    expect(run?.sizePt).toBe(44);
+    const MASTER_TITLE_STYLE_SIZE_PT = 44; // the fixture's own master titleStyle font size, inherited since this run sets no own rPr
+    expect(run?.sizePt).toBe(MASTER_TITLE_STYLE_SIZE_PT);
     expect(run?.bold).toBe(true);
     expect(run?.fontFamily).toBe("Aptos Display"); // +mj-lt resolved via the theme
     expect(run?.color).toEqual({ r: 0, g: 0, b: 0 }); // tx1 -> dk1 via clrMap -> black
@@ -609,7 +610,8 @@ describe("readPptxContent: placeholder inheritance and run cascade", () => {
     const titleShape = doc.slides[1]?.shapes.find((s) => s.name === "Title 1");
     const run = asParagraph(titleShape?.blocks[0]).runs[1];
     expect(run?.text).toBe(" World");
-    expect(run?.sizePt).toBe(20); // overridden
+    const OVERRIDDEN_RUN_SIZE_PT = 20; // this run's own direct rPr size, overriding the master titleStyle
+    expect(run?.sizePt).toBe(OVERRIDDEN_RUN_SIZE_PT); // overridden
     expect(run?.italic).toBe(true); // overridden
     expect(run?.bold).toBe(true); // still inherited from the master
     expect(run?.fontFamily).toBe("Aptos Display"); // still inherited
@@ -622,10 +624,15 @@ describe("readPptxContent: paragraph formatting", () => {
     const bodyShape = doc.slides[1]?.shapes.find((s) => s.name === "Body 1");
     const para = asParagraph(bodyShape?.blocks[0]);
     expect(para.alignment).toBe("center");
-    expect(para.indentLeftPt).toBe(36);
-    expect(para.indentFirstLinePt).toBe(-36);
-    expect(para.spacingBeforePt).toBe(6);
-    expect(para.lineSpacing).toBe(1.5);
+    // The fixture's own explicit paragraph-formatting values: a positive left indent, an equal-magnitude negative first-line indent (a hanging indent back to the margin), an absolute spacing-before, and a 150% line-spacing multiplier.
+    const FIXTURE_INDENT_LEFT_PT = 36;
+    const FIXTURE_HANGING_INDENT_PT = -36;
+    const FIXTURE_SPACING_BEFORE_PT = 6;
+    const FIXTURE_LINE_SPACING_MULTIPLIER = 1.5;
+    expect(para.indentLeftPt).toBe(FIXTURE_INDENT_LEFT_PT);
+    expect(para.indentFirstLinePt).toBe(FIXTURE_HANGING_INDENT_PT);
+    expect(para.spacingBeforePt).toBe(FIXTURE_SPACING_BEFORE_PT);
+    expect(para.lineSpacing).toBe(FIXTURE_LINE_SPACING_MULTIPLIER);
   });
 
   it("resolves an external hyperlink through the slide's own relationships", () => {
@@ -648,21 +655,31 @@ describe("readPptxContent: text-box insets and autofit", () => {
   it("reads explicit a:bodyPr insets and a:normAutofit scaling", () => {
     const doc = readPptxContent(buildFixturePackage());
     const bodyShape = doc.slides[1]?.shapes.find((s) => s.name === "Body 1");
-    expect(bodyShape?.insetLeftPt).toBe(14.4);
-    expect(bodyShape?.insetTopPt).toBe(7.2);
-    expect(bodyShape?.insetRightPt).toBe(14.4);
-    expect(bodyShape?.insetBottomPt).toBe(7.2);
-    expect(bodyShape?.fontScale).toBe(0.92);
-    expect(bodyShape?.lineSpacingReduction).toBe(0.1);
+    // The fixture's own explicit a:bodyPr insets (left/right wider than top/bottom, a common real-world text-box convention) and a:normAutofit scaling (92% font scale, 10% line-spacing reduction).
+    const FIXTURE_INSET_LEFT_RIGHT_PT = 14.4;
+    const FIXTURE_INSET_TOP_BOTTOM_PT = 7.2;
+    const FIXTURE_FONT_SCALE = 0.92;
+    const FIXTURE_LINE_SPACING_REDUCTION = 0.1;
+    expect(bodyShape?.insetLeftPt).toBe(FIXTURE_INSET_LEFT_RIGHT_PT);
+    expect(bodyShape?.insetTopPt).toBe(FIXTURE_INSET_TOP_BOTTOM_PT);
+    expect(bodyShape?.insetRightPt).toBe(FIXTURE_INSET_LEFT_RIGHT_PT);
+    expect(bodyShape?.insetBottomPt).toBe(FIXTURE_INSET_TOP_BOTTOM_PT);
+    expect(bodyShape?.fontScale).toBe(FIXTURE_FONT_SCALE);
+    expect(bodyShape?.lineSpacingReduction).toBe(
+      FIXTURE_LINE_SPACING_REDUCTION,
+    );
   });
 
   it("falls back to ECMA-376's default insets when a:bodyPr is absent, with no autofit", () => {
     const doc = readPptxContent(buildFixturePackage());
     const titleShape = doc.slides[1]?.shapes.find((s) => s.name === "Title 1");
-    expect(titleShape?.insetLeftPt).toBe(7.2);
-    expect(titleShape?.insetTopPt).toBe(3.6);
-    expect(titleShape?.insetRightPt).toBe(7.2);
-    expect(titleShape?.insetBottomPt).toBe(3.6);
+    // ECMA-376's own default a:bodyPr insets when the element is absent: 0.1 inch left/right, 0.05 inch top/bottom.
+    const ECMA376_DEFAULT_INSET_LEFT_RIGHT_PT = 7.2;
+    const ECMA376_DEFAULT_INSET_TOP_BOTTOM_PT = 3.6;
+    expect(titleShape?.insetLeftPt).toBe(ECMA376_DEFAULT_INSET_LEFT_RIGHT_PT);
+    expect(titleShape?.insetTopPt).toBe(ECMA376_DEFAULT_INSET_TOP_BOTTOM_PT);
+    expect(titleShape?.insetRightPt).toBe(ECMA376_DEFAULT_INSET_LEFT_RIGHT_PT);
+    expect(titleShape?.insetBottomPt).toBe(ECMA376_DEFAULT_INSET_TOP_BOTTOM_PT);
     expect(titleShape?.fontScale).toBeUndefined();
     expect(titleShape?.lineSpacingReduction).toBeUndefined();
   });
@@ -684,8 +701,9 @@ describe("readPptxContent: images", () => {
     const image = asImage(picShape?.blocks[0]);
     expect(image.kind).toBe("image");
     expect(image.format).toBe("png");
-    expect(image.widthPt).toBe(80);
-    expect(image.heightPt).toBe(80);
+    const FIXTURE_PICTURE_SIZE_PT = 80; // the fixture's own square frame for Picture 1
+    expect(image.widthPt).toBe(FIXTURE_PICTURE_SIZE_PT);
+    expect(image.heightPt).toBe(FIXTURE_PICTURE_SIZE_PT);
   });
 
   it("reads p:cNvPr/@descr as ContentImageBlock.altText", () => {
@@ -726,7 +744,13 @@ describe("readPptxContent: tables", () => {
     const doc = readPptxContent(buildFixturePackage());
     const tableShape = doc.slides[1]?.shapes.find((s) => s.name === "Table 1");
     const table = asTable(tableShape?.blocks[0]);
-    expect(table.columns.map((c) => c.widthPt)).toEqual([100, 150]);
+    // The fixture's own two column widths for Table 1.
+    const FIXTURE_FIRST_COLUMN_WIDTH_PT = 100;
+    const FIXTURE_SECOND_COLUMN_WIDTH_PT = 150;
+    expect(table.columns.map((c) => c.widthPt)).toEqual([
+      FIXTURE_FIRST_COLUMN_WIDTH_PT,
+      FIXTURE_SECOND_COLUMN_WIDTH_PT,
+    ]);
     expect(table.rows[0]?.cells[0]?.colSpan).toBe(2);
     expect(asParagraph(table.rows[0]?.cells[0]?.blocks[0]).runs[0]?.text).toBe(
       "Merged",
@@ -738,7 +762,8 @@ describe("readPptxContent: tables", () => {
     const doc = readPptxContent(buildFixturePackage());
     const tableShape = doc.slides[1]?.shapes.find((s) => s.name === "Table 1");
     const table = asTable(tableShape?.blocks[0]);
-    expect(table.rows[0]?.heightPt).toBe(36);
+    const FIXTURE_FIRST_ROW_HEIGHT_PT = 36; // the fixture's own explicit a:tr/@h for the first row
+    expect(table.rows[0]?.heightPt).toBe(FIXTURE_FIRST_ROW_HEIGHT_PT);
     expect(table.rows[1]?.heightPt).toBeUndefined();
   });
 
@@ -1179,7 +1204,8 @@ describe("readPptxContent: rotation", () => {
   it("carries a shape's own rotationDeg through unchanged", () => {
     const doc = readPptxContent(buildFixturePackage());
     const rotated = doc.slides[0]?.shapes.find((s) => s.name === "Rotated");
-    expect(rotated?.rotationDeg).toBe(45);
+    const FIXTURE_ROTATION_DEG = 45; // the fixture's own p:xfrm@rot for the Rotated shape, in whole degrees
+    expect(rotated?.rotationDeg).toBe(FIXTURE_ROTATION_DEG);
   });
 
   it("leaves rotationDeg undefined for an unrotated shape", () => {
@@ -1325,14 +1351,28 @@ function rotationCompositionFixturePackage(): Package {
 }
 
 describe("readPptxContent: rotation composed through rotated/flipped ancestor groups", () => {
+  // toBeCloseTo precision (decimal places) for the composed-position assertions below: tight enough to catch a real composition-math bug, loose enough for ordinary floating-point noise from the rotation transform.
+  const POSITION_PRECISION_DIGITS = 9;
+
   it("composes an unrotated shape's position and rotation through a single rotated (unflipped) group", () => {
     const doc = readPptxContent(rotationCompositionFixturePackage());
     const shape = doc.slides[0]?.shapes.find((s) => s.name === "InRotGroup");
-    expect(shape?.frame.xPt).toBeCloseTo(230, 9);
-    expect(shape?.frame.yPt).toBeCloseTo(250, 9);
-    expect(shape?.frame.widthPt).toBe(20);
-    expect(shape?.frame.heightPt).toBe(20);
-    expect(shape?.rotationDeg).toBe(90);
+    // The fixture's own composed position and size for InRotGroup, and its rotation as inherited unchanged from the single unflipped ancestor group.
+    const COMPOSED_X_PT = 230;
+    const COMPOSED_Y_PT = 250;
+    const COMPOSED_SIZE_PT = 20;
+    const INHERITED_ROTATION_DEG = 90;
+    expect(shape?.frame.xPt).toBeCloseTo(
+      COMPOSED_X_PT,
+      POSITION_PRECISION_DIGITS,
+    );
+    expect(shape?.frame.yPt).toBeCloseTo(
+      COMPOSED_Y_PT,
+      POSITION_PRECISION_DIGITS,
+    );
+    expect(shape?.frame.widthPt).toBe(COMPOSED_SIZE_PT);
+    expect(shape?.frame.heightPt).toBe(COMPOSED_SIZE_PT);
+    expect(shape?.rotationDeg).toBe(INHERITED_ROTATION_DEG);
   });
 
   it("composes a shape's own rotation through a rotated AND flipped group, negating the sense of the shape's own rotation", () => {
@@ -1340,10 +1380,19 @@ describe("readPptxContent: rotation composed through rotated/flipped ancestor gr
     const shape = doc.slides[0]?.shapes.find(
       (s) => s.name === "InRotFlipGroup",
     );
-    expect(shape?.frame.xPt).toBeCloseTo(230, 9);
-    expect(shape?.frame.yPt).toBeCloseTo(130, 9);
-    // 90 (group) - 30 (own) = 60, not 90 + 30 = 120 — the group's flipH negates the sign of the shape's own rotation.
-    expect(shape?.rotationDeg).toBe(60);
+    const COMPOSED_X_PT = 230;
+    const COMPOSED_Y_PT = 130;
+    // 90 (group) - 30 (own) = 60, not 90 + 30 = 120: the group's flipH negates the sign of the shape's own rotation.
+    const NEGATED_ROTATION_DEG = 60;
+    expect(shape?.frame.xPt).toBeCloseTo(
+      COMPOSED_X_PT,
+      POSITION_PRECISION_DIGITS,
+    );
+    expect(shape?.frame.yPt).toBeCloseTo(
+      COMPOSED_Y_PT,
+      POSITION_PRECISION_DIGITS,
+    );
+    expect(shape?.rotationDeg).toBe(NEGATED_ROTATION_DEG);
   });
 
   it("composes position and rotation through two levels of nested rotated groups", () => {
@@ -1351,10 +1400,18 @@ describe("readPptxContent: rotation composed through rotated/flipped ancestor gr
     const shape = doc.slides[0]?.shapes.find(
       (s) => s.name === "InNestedGroups",
     );
-    expect(shape?.frame.xPt).toBeCloseTo(330, 9);
-    expect(shape?.frame.yPt).toBeCloseTo(330, 9);
+    const COMPOSED_POSITION_PT = 330;
     // 90 (outer) + 90 (inner) + 0 (own) = 180.
-    expect(shape?.rotationDeg).toBe(180);
+    const SUMMED_ROTATION_DEG = 180;
+    expect(shape?.frame.xPt).toBeCloseTo(
+      COMPOSED_POSITION_PT,
+      POSITION_PRECISION_DIGITS,
+    );
+    expect(shape?.frame.yPt).toBeCloseTo(
+      COMPOSED_POSITION_PT,
+      POSITION_PRECISION_DIGITS,
+    );
+    expect(shape?.rotationDeg).toBe(SUMMED_ROTATION_DEG);
   });
 });
 
@@ -1814,18 +1871,24 @@ describe("readPptxContent: chart graphic frames", () => {
     expect(cellText(table, 1, 0)).toBe("Q1");
     expect(cellText(table, 1, 1)).toBe("8.5");
     expect(cellText(table, 1, 2)).toBe("4");
-    expect(cellText(table, 3, 0)).toBe("Q3");
+    const CACHED_MODEL_Q3_ROW_INDEX = 3; // the fixture's own third category row
+    expect(cellText(table, CACHED_MODEL_Q3_ROW_INDEX, 0)).toBe("Q3");
     // A category only series 2 labels still gets its row; series 1 has no cached value there, which reads as an empty cell.
     expect(table.rows[3]?.cells[1]?.blocks).toEqual([]);
-    expect(cellText(table, 3, 2)).toBe("6");
+    expect(cellText(table, CACHED_MODEL_Q3_ROW_INDEX, 2)).toBe("6");
   });
 
   it("splits the frame's own width evenly across the category and series columns", () => {
     const doc = readPptxContent(chartFixturePackage());
     const chartShape = doc.slides[0]?.shapes.find((s) => s.name === "Chart 1");
+    const EQUAL_COLUMN_WIDTH_PT = 120; // the frame's own total width split evenly across the category column and both series columns
     expect(
       asTable(chartShape?.blocks[0]).columns.map((c) => c.widthPt),
-    ).toEqual([120, 120, 120]);
+    ).toEqual([
+      EQUAL_COLUMN_WIDTH_PT,
+      EQUAL_COLUMN_WIDTH_PT,
+      EQUAL_COLUMN_WIDTH_PT,
+    ]);
   });
 
   it("keeps the frame's geometry with empty content when the chart reference resolves to no readable chart", () => {
@@ -2200,8 +2263,10 @@ describe("readPptxContent: OLE graphic frames", () => {
     const image = asImage(oleShape?.blocks[0]);
     expect(image.format).toBe("png");
     expect(image.base64).toBe(tinyPngBase64());
-    expect(image.widthPt).toBe(360);
-    expect(image.heightPt).toBe(216);
+    const FIXTURE_OLE_FRAME_WIDTH_PT = 360; // the fixture's own p:xfrm/a:ext for the OLE graphic frame
+    const FIXTURE_OLE_FRAME_HEIGHT_PT = 216;
+    expect(image.widthPt).toBe(FIXTURE_OLE_FRAME_WIDTH_PT);
+    expect(image.heightPt).toBe(FIXTURE_OLE_FRAME_HEIGHT_PT);
   });
 
   it("records the object's progId as a paragraph when no fallback picture resolves", () => {
@@ -2340,14 +2405,19 @@ describe("readPptxContent: OLE graphic frames", () => {
   it("keeps a malformed compound-file .bin payload on exactly the fallback-picture behaviour, with no embedded block and no slide-read failure", () => {
     // rIdOle retargeted at a part whose bytes carry the OLE/CFB magic but no walkable structure — the named CompoundFileFormatError the decode throws is a property of the embedded payload, degraded to nothing rather than poisoning the host slide read (the #737 failure policy extended to the CFB gate).
     const pkg = oleFixturePackage("../embeddings/oleObject1.bin");
+    // Four arbitrary trailing bytes standing in for whatever real header content would normally follow the signature; their exact values carry no meaning, so they simply count upward.
+    const TRAILING_BYTE_COUNT = 4;
+    const arbitraryTrailingBytes = Array.from(
+      { length: TRAILING_BYTE_COUNT },
+      (_unused, index) => index + 1,
+    );
+    const malformedCompoundFileBytes = new Uint8Array([
+      ...COMPOUND_FILE_MAGIC,
+      ...arbitraryTrailingBytes,
+    ]);
     pkg.parts["ppt/embeddings/oleObject1.bin"] = {
       kind: "binary",
-      base64: bytesToBase64(
-        new Uint8Array([
-          0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1, 0x01, 0x02, 0x03,
-          0x04,
-        ]),
-      ),
+      base64: bytesToBase64(malformedCompoundFileBytes),
     };
     const doc = readPptxContent(pkg);
     const oleShape = doc.slides[0]?.shapes.find((s) => s.name === "Object 1");
@@ -2724,7 +2794,8 @@ describe("readPptxContent: a:spcAft", () => {
         ]),
       ),
     ]);
-    expect(para.spacingAfterPt).toBe(4);
+    const EXPECTED_SPACING_AFTER_PT = 4; // a:spcPts's own val="400" (hundredths of a point)
+    expect(para.spacingAfterPt).toBe(EXPECTED_SPACING_AFTER_PT);
   });
 });
 
@@ -2738,7 +2809,8 @@ describe("readPptxContent: a paragraph-level a:pPr/a:defRPr overrides the master
         ]),
       ),
     ]);
-    expect(para.runs[0]?.sizePt).toBe(36);
+    const EXPECTED_DEFRPR_SIZE_PT = 36; // a:defRPr's own sz="3600" (hundredths of a point)
+    expect(para.runs[0]?.sizePt).toBe(EXPECTED_DEFRPR_SIZE_PT);
   });
 });
 
@@ -3038,7 +3110,8 @@ describe("readPptxContent: a graphic frame's own rotation, composed the same way
       minimalSlidePackage([tableFrameWith({ rot: "2700000" })]),
     );
     const shape = doc.slides[0]?.shapes.find((s) => s.name === "Table 1");
-    expect(shape?.rotationDeg).toBe(45);
+    const ROTATION_DEG = 45; // 2700000 sixtieths-of-a-degree (p:xfrm@rot's own unit) converted to whole degrees
+    expect(shape?.rotationDeg).toBe(ROTATION_DEG);
   });
 
   it("leaves rotationDeg undefined for an unrotated table frame", () => {
