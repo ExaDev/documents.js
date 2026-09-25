@@ -1,6 +1,27 @@
 import { readUint16LE, readUint8, slice } from "../bytes";
 import { DocFormatError, DocUnsupportedError } from "../errors";
 
+// A Sprm opcode's own bit layout ([MS-DOC] 2.6.13): a 9-bit ispmd, one fSpec bit at 9, a 3-bit sgc at 10, and a 3-bit spra at 13.
+const ISPMD_MASK = 0x01ff;
+const FSPEC_SHIFT = 9;
+const SINGLE_BIT = 0x0001;
+const SGC_SHIFT = 10;
+const SGC_MASK = 0x0007;
+const SPRA_SHIFT = 13;
+const SPRA_MASK = 0x0007;
+const HEX_RADIX = 16;
+// spra values, the operand-size classes [MS-DOC] 2.6.13's own spra table defines.
+const SPRA_OPERAND_ONE_BYTE = 0;
+const SPRA_OPERAND_BYTE_OR_TOGGLE = 1;
+const SPRA_OPERAND_TWO_BYTES = 2;
+const SPRA_OPERAND_FOUR_BYTES = 3;
+const SPRA_OPERAND_TWO_BYTES_2 = 4;
+const SPRA_OPERAND_TWO_BYTES_3 = 5;
+const SPRA_OPERAND_VARIABLE = 6;
+const SPRA_OPERAND_THREE_BYTES = 7;
+const SPRA_FOUR_BYTE_SIZE = 4;
+const SPRA_THREE_BYTE_SIZE = 3;
+
 // The Sprm ("Single Property Modifier"), [MS-DOC] 2.2.5.1 — the two-byte opcode every formatting change in the format is expressed as, and the Prl that pairs it with an operand. A grpprl is just a run of Prls back to back, with nothing marking where one ends: the only way to find the next is to size the current one's operand from its own opcode. Get one size wrong and every Prl after it in that grpprl is read from the wrong offset, so the operand-size table below is the single most load-bearing piece of arithmetic in this package after the piece table.
 
 export interface Sprm {
@@ -35,10 +56,10 @@ const P_CHG_TABS_COMPUTED_SIZE = 0xff;
 export function decodeSprm(value: number): Sprm {
   return {
     value,
-    ispmd: value & 0x01ff,
-    fSpec: ((value >> 9) & 0x0001) === 1 ? 1 : 0,
-    sgc: (value >> 10) & 0x0007,
-    spra: (value >> 13) & 0x0007,
+    ispmd: value & ISPMD_MASK,
+    fSpec: ((value >> FSPEC_SHIFT) & SINGLE_BIT) === 1 ? 1 : 0,
+    sgc: (value >> SGC_SHIFT) & SGC_MASK,
+    spra: (value >> SPRA_SHIFT) & SPRA_MASK,
   };
 }
 
@@ -50,23 +71,23 @@ export function operandSize(
 ): number {
   switch (sprm.spra) {
     // "Operand is a ToggleOperand (which is 1 byte in size)" and "Operand is 1 byte".
-    case 0:
-    case 1:
+    case SPRA_OPERAND_ONE_BYTE:
+    case SPRA_OPERAND_BYTE_OR_TOGGLE:
       return 1;
     // spra 2, 4 and 5 are each documented as a 2-byte operand; they differ in what the two bytes mean, not in how many there are.
-    case 2:
-    case 4:
-    case 5:
+    case SPRA_OPERAND_TWO_BYTES:
+    case SPRA_OPERAND_TWO_BYTES_2:
+    case SPRA_OPERAND_TWO_BYTES_3:
       return 2;
-    case 3:
-      return 4;
-    case 7:
-      return 3;
-    case 6:
+    case SPRA_OPERAND_FOUR_BYTES:
+      return SPRA_FOUR_BYTE_SIZE;
+    case SPRA_OPERAND_THREE_BYTES:
+      return SPRA_THREE_BYTE_SIZE;
+    case SPRA_OPERAND_VARIABLE:
       return variableOperandSize(sprm, bytes, offset);
     default:
       throw new DocFormatError(
-        `sprm 0x${sprm.value.toString(16)} has spra ${sprm.spra}, which is outside the 0..7 range a 3-bit field can hold`,
+        `sprm 0x${sprm.value.toString(HEX_RADIX)} has spra ${sprm.spra}, which is outside the 0..7 range a 3-bit field can hold`,
       );
   }
 }
@@ -116,7 +137,7 @@ export function readGrpprl(bytes: Uint8Array): Prl[] {
         bytes,
         cursor + 2,
         size,
-        `operand of sprm 0x${sprm.value.toString(16)} at grpprl offset ${cursor}`,
+        `operand of sprm 0x${sprm.value.toString(HEX_RADIX)} at grpprl offset ${cursor}`,
       ),
     });
     cursor += 2 + size;

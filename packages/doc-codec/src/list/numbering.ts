@@ -8,6 +8,18 @@ import {
 import { DocFormatError } from "../errors";
 import type { Fib } from "../fib/fib";
 
+// Numbering structure offsets and counts ([MS-DOC] 2.9.147/2.9.148/2.9.151): LSTF's flags at byte 26, LVLF's nfc/flags/rgbxchNums at 4/5/6 and its three trailing bytes at 24-26, nine levels per list (one when fSimpleList), and a PLC's own 4-byte count header.
+const LSTF_FLAGS_OFFSET = 26;
+const LVLF_NFC_OFFSET = 4;
+const LVLF_FLAGS_OFFSET = 5;
+const LVLF_RGBXCH_NUMS_OFFSET = 6;
+const LVLF_CB_GRPPRL_CHPX_OFFSET = 24;
+const LVLF_CB_GRPPRL_PAPX_OFFSET = 25;
+const LVLF_ILVL_RESTART_LIM_OFFSET = 26;
+const LEVEL_COUNT = 9;
+const SIMPLE_LIST_LEVEL_COUNT = 1;
+const PLF_HEADER_BYTES = 4;
+
 // Resolves what a paragraph's own sprmPIlfo (prop/pap.ts's listId, an index into PlfLfo.rgLfo) actually means: the glyph/format, level-text template, and start-at value a consumer needs to render the paragraph's list marker. A paragraph's listId/listLevel membership alone (already read, unchanged by this module) says only WHICH list and WHAT DEPTH; PlfLst and PlfLfo are what say what that list looks like.
 //
 // NumberingDefinitions is deliberately a separate, top-level structure returned alongside ContentDocument rather than folded into ContentListMembership itself — the identical reasoning and shape ooxml.js's own typed/docx/numbering.ts states for word/numbering.xml's abstractNum/num tables: (1) ContentListMembership is document-schema.js's own schema, shared verbatim across every codec — widening it with a doc-codec-specific numbering-definition payload would leak this package's own model into a schema the sibling packages also depend on; (2) a definition is a genuinely document-level resource referenced by listId, not a per-paragraph one, so a keyed-map-once, referenced-by-id-many-times shape avoids every paragraph sharing a listId carrying an identical copy of its full level table. NumberingLevel.format/text deliberately reuse ooxml.js's own vocabulary — MSONFC's own values ([MS-OSHARED] 2.2.1.3) are individually documented as "mapped to the ST_NumberFormat... equivalents", so format is the identical ECMA-376 string ("decimal", "upperRoman", "bullet", ...) ooxml.js's NumberingLevel.format already carries, and text is the identical '%1.'-style placeholder convention — so a consumer that already knows how to render one already knows how to render the other.
@@ -127,7 +139,7 @@ interface Lstf {
 /** LSTF ([MS-DOC] 2.9.147): lsid(4) + tplc(4, ignored — UI-only) + rgistdPara(18, ignored — this reader has no per-level style cascade to link into) + a flags byte (only fSimpleList, bit 0, acted on) + grfhic(1, ignored — HTML-export-only incompatibility flags). Fixed 28 bytes. */
 function readLstf(bytes: Uint8Array, offset: number): Lstf {
   const lsid = readInt32LE(bytes, offset);
-  const flags = readUint8(bytes, offset + 26);
+  const flags = readUint8(bytes, offset + LSTF_FLAGS_OFFSET);
   return { lsid, fSimpleList: (flags & LSTF_FLAG_SIMPLE_LIST) !== 0 };
 }
 
@@ -147,7 +159,7 @@ function readXst(
 /** rgbxchNums ([MS-DOC] 2.9.150's own LVLF field): nine 8-bit one-based character offsets into the LVL's own xst.rgtchar, zero-terminated (a 0 entry, or the end of the fixed 9-byte array, ends the list). Each offset it names is a POSITION in the string, not a value — readLevelText is what turns a position into the placeholder it names. */
 function readRgbxchNums(bytes: Uint8Array, offset: number): number[] {
   const positions: number[] = [];
-  for (let index = 0; index < 9; index += 1) {
+  for (let index = 0; index < LEVEL_COUNT; index += 1) {
     const value = readUint8(bytes, offset + index);
     if (value === 0) {
       break;
@@ -189,13 +201,16 @@ function readLvl(bytes: Uint8Array, offset: number): ParsedLvl {
     );
   }
   const iStartAt = readInt32LE(bytes, offset);
-  const nfc = readUint8(bytes, offset + 4);
-  const flags = readUint8(bytes, offset + 5);
+  const nfc = readUint8(bytes, offset + LVLF_NFC_OFFSET);
+  const flags = readUint8(bytes, offset + LVLF_FLAGS_OFFSET);
   const fNoRestart = (flags & 0x02) !== 0;
-  const rgbxchNums = readRgbxchNums(bytes, offset + 6);
-  const cbGrpprlChpx = readUint8(bytes, offset + 24);
-  const cbGrpprlPapx = readUint8(bytes, offset + 25);
-  const ilvlRestartLim = readUint8(bytes, offset + 26);
+  const rgbxchNums = readRgbxchNums(bytes, offset + LVLF_RGBXCH_NUMS_OFFSET);
+  const cbGrpprlChpx = readUint8(bytes, offset + LVLF_CB_GRPPRL_CHPX_OFFSET);
+  const cbGrpprlPapx = readUint8(bytes, offset + LVLF_CB_GRPPRL_PAPX_OFFSET);
+  const ilvlRestartLim = readUint8(
+    bytes,
+    offset + LVLF_ILVL_RESTART_LIM_OFFSET,
+  );
 
   const xstOffset = offset + LVLF_SIZE + cbGrpprlPapx + cbGrpprlChpx;
   const { text: xstText, byteLength: xstByteLength } = readXst(
@@ -237,7 +252,7 @@ function parsePlfLst(table: Uint8Array, fc: number, lcb: number): ParsedPlfLst {
   let cursor = fc + lcb;
   const levelsByLstf: NumberingLevel[][] = [];
   for (const lstf of lstfs) {
-    const count = lstf.fSimpleList ? 1 : 9;
+    const count = lstf.fSimpleList ? SIMPLE_LIST_LEVEL_COUNT : LEVEL_COUNT;
     const levels: NumberingLevel[] = [];
     for (let index = 0; index < count; index += 1) {
       const { level, byteLength } = readLvl(table, cursor);
@@ -264,10 +279,10 @@ function parseLfoLsids(
   }
   const lsids: number[] = [];
   for (let index = 0; index < lfoMac; index += 1) {
-    const offset = 4 + index * LFO_SIZE;
+    const offset = PLF_HEADER_BYTES + index * LFO_SIZE;
     if (offset + LFO_SIZE > plfLfo.length) {
       throw new DocFormatError(
-        `PlfLfo declares lfoMac=${lfoMac} LFO entries, but its own ${plfLfo.length}-byte buffer has room for only ${Math.floor((plfLfo.length - 4) / LFO_SIZE)}`,
+        `PlfLfo declares lfoMac=${lfoMac} LFO entries, but its own ${plfLfo.length}-byte buffer has room for only ${Math.floor((plfLfo.length - PLF_HEADER_BYTES) / LFO_SIZE)}`,
       );
     }
     lsids.push(readInt32LE(plfLfo, offset));

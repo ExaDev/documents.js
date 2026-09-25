@@ -31,6 +31,16 @@ import {
   type TableCellToWrite,
 } from "./tap-write";
 
+// The sprmPFSpec grpprl a row's cell paragraphs carry, and little-endian byte assembly.
+const VERT_MERGE_CLEAR = 0;
+const VERT_MERGE_CONTINUATION = 1;
+const VERT_MERGE_RESTART = 3;
+const FSPEC_GRPPRL_OPCODE_LOW = 0x55;
+const FSPEC_GRPPRL_OPCODE_HIGH = 0x08;
+const FSPEC_GRPPRL_OPERAND = 0x01;
+const U8_MASK = 0xff;
+const BITS_PER_BYTE = 8;
+
 /** Reports a non-fatal write-time degradation — this package's own analogue of byte-codec's/pdf-codec's `onWarning`, adopted here rather than a new shape of its own so a caller already handling one already handles the other. */
 export type WriteWarning = (message: string) => void;
 
@@ -46,7 +56,11 @@ const SPRM_P_F_TTP = 0x2417;
 const TWIPS_PER_POINT = 20;
 
 // sprmCFSpec (0x0855, ispmd 0x55 / sgc 2 / spra 0) with its 1-byte toggle operand set: the mark that tells a consumer a run's characters are special rather than glyphs — applied to the field characters (0x13/0x14/0x15) this module injects, exactly as [MS-DOC] 2.6.1's own sprmCFSpec entry enumerates them. Byte layout is the sprm's little-endian opcode followed by the operand, the same pushSprm layout chp-write.ts uses internally.
-const FSPEC_GRPPRL: readonly number[] = [0x55, 0x08, 0x01];
+const FSPEC_GRPPRL: readonly number[] = [
+  FSPEC_GRPPRL_OPCODE_LOW,
+  FSPEC_GRPPRL_OPCODE_HIGH,
+  FSPEC_GRPPRL_OPERAND,
+];
 
 /** One run to write, alongside grpprl bytes appended after encodeCharacterGrpprl's own output for it — the run-level analogue of WriteParagraph.extraGrpprl below. Every ordinary run carries none (its whole grpprl comes from its own ContentRun fields); imageParagraph's own picture-anchor run is the one exception, since sprmCPicLocation is not a ContentRun field encodeCharacterGrpprl could ever derive on its own. */
 export interface WriteRun {
@@ -132,7 +146,11 @@ function pushSprm(
   opcode: number,
   operand: readonly number[],
 ): void {
-  sink.bytes.push(opcode & 0xff, (opcode >> 8) & 0xff, ...operand);
+  sink.bytes.push(
+    opcode & U8_MASK,
+    (opcode >> BITS_PER_BYTE) & U8_MASK,
+    ...operand,
+  );
 }
 
 function inTableGrpprl(): number[] {
@@ -316,10 +334,10 @@ function flattenRow(
     const { span, cell } = physicalCell;
     const isContinuation = physicalCell.anchorColumn !== undefined;
     const vertMerge: TableCellToWrite["vertMerge"] = isContinuation
-      ? 1
+      ? VERT_MERGE_CONTINUATION
       : tableCellRowSpan(cell) > 1
-        ? 3
-        : 0;
+        ? VERT_MERGE_RESTART
+        : VERT_MERGE_CLEAR;
     const blocks = isContinuation ? [] : cell.blocks;
 
     const subSpans = splitAtLostBoundaries(startColumn, span, lostBoundaries);

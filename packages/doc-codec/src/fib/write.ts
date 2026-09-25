@@ -16,6 +16,13 @@ import {
   LW_OFFSET,
 } from "./offsets";
 
+// The Fib write side's own offsets: the flags word at byte 10 and nFib at 12, each fc/lcb pair's fc at the blob offset plus 4 bytes per index, and each lcb 4 bytes past its fc.
+const FC_LCB_PAIR_BYTES = 8;
+const FIB_FLAGS_OFFSET = 10;
+const FIB_N_FIB_OFFSET = 12;
+const FC_OFFSET_BYTES = 4;
+const LCB_OFFSET_IN_PAIR = 4;
+
 /** [MS-DOC]'s own Fib page: nFib 0x00C1 mandates cbRgFcLcb 0x005D and cswNew 0. */
 const NFIB_WORD_97 = 0x00c1;
 const CB_RG_FC_LCB_WORD_97 = 0x005d;
@@ -64,7 +71,7 @@ export interface FibWriteSpec {
 }
 
 export function buildFib(spec: FibWriteSpec): Uint8Array<ArrayBuffer> {
-  const blobBytes = CB_RG_FC_LCB_WORD_97 * 8;
+  const blobBytes = CB_RG_FC_LCB_WORD_97 * FC_LCB_PAIR_BYTES;
   const total = FIB_FC_LCB_BLOB_OFFSET + blobBytes + 2; // + cswNew, which is 0 and carries no fibRgCswNew after it.
   const bytes = new Uint8Array(total);
   const view = new DataView(bytes.buffer);
@@ -72,8 +79,12 @@ export function buildFib(spec: FibWriteSpec): Uint8Array<ArrayBuffer> {
   view.setUint16(0, FIB_W_IDENT, true);
   view.setUint16(2, NFIB_WORD_97, true);
   // fWhichTblStm always selects "1Table" (see write.ts's use of tableStreamName); fComplex, fEncrypted and fObfuscated are never set by a fresh, unencrypted, single-save document this writer produces.
-  view.setUint16(10, FLAG_F_EXT_CHAR | FIB_BASE_FLAG.fWhichTblStm, true);
-  view.setUint16(12, N_FIB_BACK, true);
+  view.setUint16(
+    FIB_FLAGS_OFFSET,
+    FLAG_F_EXT_CHAR | FIB_BASE_FLAG.fWhichTblStm,
+    true,
+  );
+  view.setUint16(FIB_N_FIB_OFFSET, N_FIB_BACK, true);
 
   view.setUint16(FIB_BASE_SIZE, FIB_CSW_REQUIRED, true); // csw.
   view.setUint16(FIB_CSLW_OFFSET, FIB_CSLW_REQUIRED, true); // cslw.
@@ -91,9 +102,9 @@ export function buildFib(spec: FibWriteSpec): Uint8Array<ArrayBuffer> {
 
   view.setUint16(FIB_CB_RG_FC_LCB_OFFSET, CB_RG_FC_LCB_WORD_97, true);
   const pair = (index: number, fc: number, lcb: number): void => {
-    const offset = FIB_FC_LCB_BLOB_OFFSET + index * 4;
+    const offset = FIB_FC_LCB_BLOB_OFFSET + index * FC_OFFSET_BYTES;
     view.setUint32(offset, fc, true);
-    view.setUint32(offset + 4, lcb, true);
+    view.setUint32(offset + LCB_OFFSET_IN_PAIR, lcb, true);
   };
   pair(FC_LCB_VALUE_INDEX.fcStshf, spec.fcStshf, spec.lcbStshf);
   pair(

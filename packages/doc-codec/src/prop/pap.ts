@@ -2,6 +2,16 @@ import type { Alignment } from "document-schema.js";
 import { readInt16LE, readUint16LE, readUint32LE, readUint8 } from "../bytes";
 import { SGC, type Prl } from "./sprm";
 
+// ST_Jc values ([MS-DOC] 2.6.17): the alignments this reader maps, named per the enumeration's own members. The unmapped 6 is left alone below.
+const ST_JC_CENTER = 1;
+const ST_JC_RIGHT = 2;
+const ST_JC_JUSTIFY_LOW = 3;
+const ST_JC_JUSTIFY = 4;
+const ST_JC_JUSTIFY_HIGH = 5;
+const ST_JC_THAI_JUSTIFY = 7;
+const ST_JC_JUSTIFY_MEDIUM = 8;
+const ST_JC_JUSTIFY_DISTRIB = 9;
+
 // Paragraph properties, [MS-DOC] 2.6.2 — the subset of the paragraph-property sprm table this reader converts. As with the character side, an opcode this package does not act on is absent rather than present-and-ignored.
 //
 // Several properties exist in two spellings: a "physical" or "80" form kept for compatibility with pre-2000 producers, and a "logical" form that supersedes it. Both are read, in the table order the specification lists them, so a later logical sprm naturally wins over an earlier physical one through the same last-Prl-wins fold every other property uses — no precedence special case needed.
@@ -92,16 +102,16 @@ function alignmentFromJc(value: number): Alignment | undefined {
   switch (value) {
     case 0:
       return "left";
-    case 1:
+    case ST_JC_CENTER:
       return "center";
-    case 2:
+    case ST_JC_RIGHT:
       return "right";
-    case 3:
-    case 4:
-    case 5:
-    case 7:
-    case 8:
-    case 9:
+    case ST_JC_JUSTIFY_LOW:
+    case ST_JC_JUSTIFY:
+    case ST_JC_JUSTIFY_HIGH:
+    case ST_JC_THAI_JUSTIFY:
+    case ST_JC_JUSTIFY_MEDIUM:
+    case ST_JC_JUSTIFY_DISTRIB:
       return "justify";
     // sprmPJc's 6 is "Paragraph is indented", which names an indent rather than an alignment and has no ST_Jc equivalent; left unmapped rather than approximated.
     default:

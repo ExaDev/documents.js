@@ -2,6 +2,7 @@
 //
 // They are constants rather than a running cursor because the sections that precede the blob are fixed in size for every nFib this reader accepts: csw MUST be 0x000E (14 x 2 bytes = 28) and cslw MUST be 0x0016 (22 x 4 bytes = 88), so only the blob and the trailing cswNew section vary. The counts are still read and checked at parse time — a file disagreeing with its own mandated counts is corrupt, and reading past it would land every subsequent field on neighbouring bytes.
 
+const LW_ENTRY_BYTES = 4;
 /** FibBase, [MS-DOC] 2.5.2 — the fixed 32-byte head of every Fib. csw, the count of 16-bit values in FibRgW97, sits immediately after it, so this doubles as csw's own offset. */
 export const FIB_BASE_SIZE = 32;
 
@@ -21,7 +22,7 @@ export const FIB_CSLW_REQUIRED = 0x0016;
 
 /** FibRgLw97, [MS-DOC] 2.5.4 — 22 32-bit values holding cbMac and the per-subdocument CP counts. */
 export const FIB_RG_LW_OFFSET = FIB_CSLW_OFFSET + 2;
-export const FIB_RG_LW_SIZE = FIB_CSLW_REQUIRED * 4;
+export const FIB_RG_LW_SIZE = FIB_CSLW_REQUIRED * LW_ENTRY_BYTES;
 
 /** cbRgFcLcb, the count of 64-bit values in FibRgFcLcbBlob. Varies by nFib (0x005D for 0x00C1 through 0x00B7 for 0x0112), so it is read rather than assumed. */
 export const FIB_CB_RG_FC_LCB_OFFSET = FIB_RG_LW_OFFSET + FIB_RG_LW_SIZE;

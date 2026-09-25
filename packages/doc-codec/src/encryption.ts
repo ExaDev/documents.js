@@ -15,6 +15,13 @@ import { readUint16LE, readUint32LE } from "./bytes";
 import { DocFormatError, DocUnsupportedError } from "./errors";
 import { FIB_LKEY_OFFSET } from "./fib/offsets";
 
+// RC4 encryption's own layout: a 4-byte salt word, and the header as salt plus one verifier-length each of verifier and verifier hash; the 16-bit halves of the header's own key check.
+const SALT_BYTES = 4;
+const VERIFIER_HASH_LENGTH_FACTOR = 2;
+const TOTAL_LENGTH_FACTOR = 3;
+const HEADER_KEY_SHIFT = 16;
+const U16_MASK = 0xffff;
+
 // [MS-DOC] 2.2.6 "Encryption and Obfuscation (Password to Open)" (https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-doc/37639397-6451-427b-9cf2-01d56e927f25) names three schemes, selected by FibBase's own fEncrypted/fObfuscated flags (fib/fib.ts's peekFibBaseFlags): fObfuscated=1 is XOR obfuscation Method 2 (2.2.6.1, this module — see archive-codec's own crypto/xor-obfuscation.ts for the real, cross-validated Method 1/Method 2 algorithm and why it diverges from the published spec text for array construction), fObfuscated=0 is RC4 encryption (2.2.6.2, this module) or RC4 CryptoAPI (2.2.6.3, a different EncryptionHeader shape this module does not implement, rejected below by its own EncryptionVersionInfo).
 //
 // XOR obfuscation needs no EncryptionHeader in the Table stream the way RC4 does: [MS-DOC]'s own XOR Obfuscation section states the password verifier "MUST be stored in FibBase.lKey" directly — the same 32-bit field RC4 instead uses as the Table stream's own unencrypted-prefix byte length — so FIB_LKEY_OFFSET is read here under two entirely different interpretations depending on fObfuscated, not one shared meaning. lKey's own high 16 bits are createXorObfuscationKey's output ([MS-OFFCRYPTO] 2.3.7.4's own CreatePasswordVerifier_Method2, which packs CreateXorKey_Method1 as the high word and CreatePasswordVerifier_Method1 as the low word), and its low 16 bits are createXorObfuscationPasswordVerifier's output — confirmed against LibreOffice's own WW8 import (`ww8par.cxx`'s `eAlgo = XOR` branch checks `aCtx.VerifyKey(m_xWwFib->m_nKey, m_xWwFib->m_nHash)`, where `m_nKey`/`m_nHash` are that same FIB field's own high/low halves). Unlike RC4's Table stream (whose own EncryptionHeader occupies an unencrypted FibBase.lKey-byte prefix), XOR obfuscation's Table stream carries no unencrypted prefix at all and is obfuscated in full from its own byte 0 — confirmed against the same LibreOffice source, whose `DecryptXOR` call for the Table stream passes no prior seek/skip the way the WordDocument stream's own 68-byte copy-then-decrypt does.
@@ -30,11 +37,13 @@ const HEADER_OFFSET = {
   versionMajor: 0,
   versionMinor: 2,
   salt: 4,
-  encryptedVerifier: 4 + OFFICE_RC4_VERIFIER_LENGTH,
-  encryptedVerifierHash: 4 + OFFICE_RC4_VERIFIER_LENGTH * 2,
+  encryptedVerifier: SALT_BYTES + OFFICE_RC4_VERIFIER_LENGTH,
+  encryptedVerifierHash:
+    SALT_BYTES + VERIFIER_HASH_LENGTH_FACTOR * OFFICE_RC4_VERIFIER_LENGTH,
 } as const;
 /** The RC4 (non-CryptoAPI) EncryptionHeader's own total size — EncryptionVersionInfo(4) + Salt(16) + EncryptedVerifier(16) + EncryptedVerifierHash(16). Used only to slice the header's own fields out of the Table stream; the actual unencrypted-prefix boundary for decrypting the rest of the Table stream is FibBase.lKey itself (see this file's own top comment), not this constant. */
-const RC4_HEADER_SIZE = 4 + OFFICE_RC4_VERIFIER_LENGTH * 3;
+const RC4_HEADER_SIZE =
+  SALT_BYTES + TOTAL_LENGTH_FACTOR * OFFICE_RC4_VERIFIER_LENGTH;
 /** [MS-DOC] 2.2.6.2/2.2.6.1's own literal, stated identically in both sections: the WordDocument stream's initial 68 bytes are never encrypted regardless of scheme. Not further decomposed by the spec into named sub-fields covering exactly this span, so it is carried here as the constant the spec itself states rather than derived from FibBase's own field sizes (which do not sum to 68). */
 const WORD_DOCUMENT_UNENCRYPTED_PREFIX = 68;
 /** [MS-OFFCRYPTO] 2.3.6.1's own EncryptionVersionInfo values naming the plain "RC4 encryption header" this module implements; vMajor 2-4 with vMinor 2 names RC4 CryptoAPI (2.2.6.3) instead, a different header shape this module rejects rather than misreads. */
@@ -195,8 +204,8 @@ function decryptDocStreamsXor(
   password: string,
 ): DecryptedDocStreams {
   const lKey = readUint32LE(wordDocument, FIB_LKEY_OFFSET);
-  const headerKey = (lKey >>> 16) & 0xffff;
-  const headerVerifier = lKey & 0xffff;
+  const headerKey = (lKey >>> HEADER_KEY_SHIFT) & U16_MASK;
+  const headerVerifier = lKey & U16_MASK;
 
   // A password too long or carrying a character outside single-byte ASCII/Latin-1 cannot be the real one — see xls-codec's own workbook/encryption.ts for the identical reasoning. archive-codec's own createXorObfuscationKey/createXorObfuscationPasswordVerifier throw only RangeError for exactly this reason, so no instanceof check or fallback rethrow is needed: whatever they throw here always means the same thing.
   let computedKey: number;

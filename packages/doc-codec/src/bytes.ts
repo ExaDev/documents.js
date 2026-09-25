@@ -1,5 +1,7 @@
 import { DocFormatError } from "./errors";
 
+const U32_BYTES = 4;
+
 // Bounds-checked little-endian integer reads over a raw stream. Every [MS-DOC] structure is little-endian ([MS-DOC] 1.3.1 "all values are stored in little-endian byte order"), and every offset in the format is attacker-controlled data read out of the file itself — an FKP page number, a Clx offset, a Plc element count — so a read that runs past the end must fail loudly rather than return a partial or wrapped value. DataView already throws a RangeError for that; these wrappers exist to convert it into this package's own named error class with the offset that caused it, so a consumer catching DocFormatError catches every structural failure rather than two unrelated error types.
 
 function checkRange(
@@ -37,12 +39,12 @@ export function readInt16LE(bytes: Uint8Array, offset: number): number {
 }
 
 export function readUint32LE(bytes: Uint8Array, offset: number): number {
-  checkRange(bytes, offset, 4, "uint32");
+  checkRange(bytes, offset, U32_BYTES, "uint32");
   return view(bytes).getUint32(offset, true);
 }
 
 export function readInt32LE(bytes: Uint8Array, offset: number): number {
-  checkRange(bytes, offset, 4, "int32");
+  checkRange(bytes, offset, U32_BYTES, "int32");
   return view(bytes).getInt32(offset, true);
 }
 

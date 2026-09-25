@@ -2,6 +2,10 @@ import type { ContentRun } from "document-schema.js";
 import { colorRefBytes } from "../color";
 import { DocFormatError } from "../errors";
 
+// Little-endian byte assembly: each byte's own place value is 8 bits.
+const U8_MASK = 0xff;
+const BITS_PER_BYTE = 8;
+
 // The inverse of chp.ts's applyCharacterSprms: a ContentRun's direct character formatting to a Chpx grpprl — the bytes a ChpxFkp entry carries (see prop/fkp-write.ts). Each property this package's reader folds gets exactly the sprm chp.ts itself reads back, so a round trip through readDocContent(writeDocContent(x)) recovers the identical value rather than a lossy approximation through a different (but readable) encoding — sprmCCv for colour rather than the fixed 17-entry sprmCIco palette, for instance, since sprmCCv carries the colour exactly and sprmCIco would have to snap it to the nearest palette entry.
 //
 // Opcodes are restated as local constants rather than imported from chp.ts: that module names them for its OWN switch cases, and importing them here would couple this file's exports to chp.ts's private naming rather than to the specification both independently cite.
@@ -35,7 +39,11 @@ function pushSprm(
   opcode: number,
   operand: readonly number[],
 ): void {
-  sink.bytes.push(opcode & 0xff, (opcode >> 8) & 0xff, ...operand);
+  sink.bytes.push(
+    opcode & U8_MASK,
+    (opcode >> BITS_PER_BYTE) & U8_MASK,
+    ...operand,
+  );
 }
 
 function toggle(value: boolean): number[] {
@@ -43,7 +51,7 @@ function toggle(value: boolean): number[] {
 }
 
 function uint16(value: number): number[] {
-  return [value & 0xff, (value >> 8) & 0xff];
+  return [value & U8_MASK, (value >> BITS_PER_BYTE) & U8_MASK];
 }
 
 // Builds the Chpx grpprl for one run's direct formatting. Returns an empty array for a run with no formatting at all, which the caller (write.ts) treats as "no exception" — exactly the rgb-zero case parseChpxFkp reads back as undefined.

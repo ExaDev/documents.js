@@ -13,6 +13,17 @@ import {
   writeShd,
 } from "./decoration";
 
+// TcVertMerge's own values ([MS-DOC] 2.9.322): 0 fvmClear, 1 fvmMerge (a continuation cell), 3 fvmRestart (the first cell of a merged span).
+type TcVertMerge = 0 | 1 | 3;
+
+// Little-endian byte assembly: each byte's own place value is 8 bits.
+const U8_MASK = 0xff;
+const BITS_PER_BYTE = 8;
+
+// A TcGrf's own bits: the two-bit merge states, horzMerge at bit 0 and vertMerge at bit 5.
+const MERGE_STATE_MASK = 0x3;
+const VERT_MERGE_SHIFT = 5;
+
 // The inverse of tap.ts's applyTableSprms: a row's own column boundaries, every physical cell's merge state and decoration, and its optional height, to the row-ending mark's own sgc-5 grpprl — a single sprmTDefTable (which alone carries the column layout, every cell's TCGRF, and every cell's four Brc80 borders), a sprmTDefTableShd array whenever any cell in the row states a background, a sprmTSetBrc for each border whose colour the Brc80 palette cannot state exactly, and, when the row states one, a sprmTDyaRowHeight. Opcodes are restated as local constants rather than imported from tap.ts, for the same reason chp-write.ts/pap-write.ts restate their own siblings' — this module's exports are coupled to the specification's own opcode table, not to a sibling module's private constants.
 //
 // A horizontal merge is ordinarily not stated here at all: table/write.ts's own flattenRow collapses a colSpan>1 cell into one physical cell whose own rgdxaCenter boundaries (passed in here as `columnBoundariesTwips`) span the merged columns' combined width, exactly the encoding a real, independent [MS-DOC] implementation (LibreOffice 26.2.5.2) was confirmed to produce and read back: a merged row simply carries fewer, wider physical cells through its own row-specific TDefTableOperand, with every TCGRF.horzMerge left at 0 and no sprmTMerge anywhere in the row mark's grpprl (ExaDev/documents.js#895; ground truth reproduced by round-tripping a LibreOffice-authored horizontal merge through its own `.doc` writer and parsing the result's raw TAP bytes with this package's own primitives). The one exception is table/write.ts's own lost-boundary fallback (ExaDev/documents.js#992): when every row in a table would otherwise merge across the identical column boundary, leaving no row's own rgdxaCenter to state it at all, flattenRow instead keeps that boundary physically present and marks the cell(s) either side of it with a genuine TCGRF.horzMerge — 2 for the anchor, 1 (`fvmMerge`'s horizontal cousin) for a contentless continuation — via `TableCellToWrite.horzMerge`, so this module still writes only what it is handed rather than deciding when the fallback applies. Vertical merge is unaffected and still stated exactly as before, through TC80.tcgrf.vertMerge alone.
@@ -55,7 +66,7 @@ const TABLE_BRC_OPERAND_CB = 11;
 
 export interface TableCellToWrite {
   /** VerticalMergeFlag: 0 fvmClear, 1 fvmMerge (continuation), 3 fvmRestart (first cell). */
-  readonly vertMerge: 0 | 1 | 3;
+  readonly vertMerge: TcVertMerge;
   /** TCGRF.horzMerge, [MS-DOC] 2.9.317: 0 not merged (the ordinary case, see this module's own top-of-file note), 1 a continuation cell of the lost-boundary fallback's own physical split, 2 the anchor of one. Every one of table/write.ts's own flattenRow construction branches states this explicitly — 0 for an ordinary cell, 2 for a split anchor, 1 for its continuation — so this field carries no default of its own; the only fallback flattenRow ever applies for the ExaDev/documents.js#992 fallback is deciding WHICH row of a table states a given lost boundary at all, not what a stated cell's own horzMerge value is. */
   readonly horzMerge: 0 | 1 | 2;
   /** The cell's own four borders, from ContentTableCell.borders; an absent side is written as the Brc80MayBeNil no-border sentinel. */
@@ -72,16 +83,17 @@ function int16(value: number, what: string): number[] {
     );
   }
   // No separate "add 0x10000 for a negative value" conversion: & and >> operate on the 32-bit two's complement form already, which for any value in MIN_INT16..MAX_INT16 has exactly the same low 16 bits as its unsigned 16-bit equivalent — rounded & 0xff and (rounded >> 8) & 0xff already read the right two bytes whether rounded is negative or not (matching prop/pap-write.ts's own identical int16).
-  return [rounded & 0xff, (rounded >> 8) & 0xff];
+  return [rounded & U8_MASK, (rounded >> BITS_PER_BYTE) & U8_MASK];
 }
 
 function le16(value: number): number[] {
-  return [value & 0xff, (value >> 8) & 0xff];
+  return [value & U8_MASK, (value >> BITS_PER_BYTE) & U8_MASK];
 }
 
 function buildTc80(cell: TableCellToWrite): number[] {
   // TCGRF.horzMerge's own low 2 bits are 0 for an ordinary merge — see this module's own top-of-file note on why a horizontal merge is normally stated through this row's own boundaries instead — and only ever non-zero when table/write.ts's own lost-boundary fallback hands one in.
-  const tcgrf = ((cell.vertMerge & 0x3) << 5) | cell.horzMerge;
+  const tcgrf =
+    ((cell.vertMerge & MERGE_STATE_MASK) << VERT_MERGE_SHIFT) | cell.horzMerge;
   return [
     ...le16(tcgrf),
     0x00,

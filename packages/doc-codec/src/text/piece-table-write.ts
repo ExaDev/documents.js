@@ -4,6 +4,14 @@
 
 import { DocFormatError } from "../errors";
 
+// Little-endian byte assembly: each byte's own place value is 8 bits.
+const U8_MASK = 0xff;
+const BITS_PER_BYTE = 8;
+const BYTE_2_MULTIPLIER = 2;
+const BYTE_3_MULTIPLIER = 3;
+const BITS_2_PER_BYTE = BYTE_2_MULTIPLIER * BITS_PER_BYTE;
+const BITS_3_PER_BYTE = BYTE_3_MULTIPLIER * BITS_PER_BYTE;
+
 /** Pcdt's own marker byte, [MS-DOC] 2.9.19. */
 const CLXT_PCDT = 0x02;
 
@@ -14,10 +22,10 @@ interface ByteSink {
 
 function push32(sink: ByteSink, value: number): void {
   sink.bytes.push(
-    value & 0xff,
-    (value >> 8) & 0xff,
-    (value >> 16) & 0xff,
-    (value >>> 24) & 0xff,
+    value & U8_MASK,
+    (value >> BITS_PER_BYTE) & U8_MASK,
+    (value >> BITS_2_PER_BYTE) & U8_MASK,
+    (value >>> BITS_3_PER_BYTE) & U8_MASK,
   );
 }
 

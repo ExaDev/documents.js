@@ -1,6 +1,11 @@
 import { assertDefined, DocFormatError } from "../errors";
 import { FKP_PAGE_SIZE } from "./fkp";
 
+// An FKP's rgfc array is 4-byte fc entries; little-endian byte assembly masks each byte in turn.
+const FC_ENTRY_BYTES = 4;
+const U8_MASK = 0xff;
+const BITS_PER_BYTE = 8;
+
 // Both messages below name an invariant buildChpxPages/buildPapxPages already maintain, never one a caller's input could violate: a batch's own fit depends only on its own record count and grpprl/GrpPrlAndIstd sizes, never on the trailing fcLim value written alongside them (always a fixed 4-byte uint32 slot, whatever fcLim itself is), so a batch splitIntoBatches already proved fits at fcLim 0 can never stop fitting once rebuilt with the real, final fcLim. Exported for this package's own tests only, so a change to the actual wording stays directly testable even though nothing in the public build path can trigger it.
 export const CHPX_BATCH_REFIT_FAILED_MESSAGE =
   "a ChpxFkp batch that fit during splitting no longer fits when finalised; this is an internal defect";
@@ -39,12 +44,12 @@ function buildChpxPage(
   const page = new Uint8Array(FKP_PAGE_SIZE);
   const view = new DataView(page.buffer);
   runs.forEach((run, index) => {
-    view.setUint32(index * 4, run.fc, true);
+    view.setUint32(index * FC_ENTRY_BYTES, run.fc, true);
   });
-  view.setUint32(crun * 4, fcLim, true);
+  view.setUint32(crun * FC_ENTRY_BYTES, fcLim, true);
   page[FKP_PAGE_SIZE - 1] = crun;
 
-  const rgbStart = (crun + 1) * 4;
+  const rgbStart = (crun + 1) * FC_ENTRY_BYTES;
   const frontUsed = rgbStart + crun;
   let writeAt = FKP_PAGE_SIZE - 1;
   // .entries() rather than an indexed runs[index] read: it types run as ChpxRunToWrite directly, not ChpxRunToWrite | undefined, since every index it yields is genuinely in bounds — unlike a manual index read, which noUncheckedIndexedAccess can never narrow past "possibly absent" even though runs[index] can never actually be absent for index < runs.length.
@@ -74,20 +79,20 @@ function buildPapxPage(
   const page = new Uint8Array(FKP_PAGE_SIZE);
   const view = new DataView(page.buffer);
   paragraphs.forEach((paragraph, index) => {
-    view.setUint32(index * 4, paragraph.fc, true);
+    view.setUint32(index * FC_ENTRY_BYTES, paragraph.fc, true);
   });
-  view.setUint32(cpara * 4, fcLim, true);
+  view.setUint32(cpara * FC_ENTRY_BYTES, fcLim, true);
   page[FKP_PAGE_SIZE - 1] = cpara;
 
-  const bxPapStart = (cpara + 1) * 4;
+  const bxPapStart = (cpara + 1) * FC_ENTRY_BYTES;
   const frontUsed = bxPapStart + cpara * BX_PAP_SIZE;
   let writeAt = FKP_PAGE_SIZE - 1;
   // .entries(), for the identical reason buildChpxPage's own loop uses it: types paragraph as PapxParagraphToWrite directly rather than PapxParagraphToWrite | undefined.
   for (const [index, paragraph] of paragraphs.entries()) {
     const bxPapAt = bxPapStart + index * BX_PAP_SIZE;
     const grpPrlAndIstd = [
-      paragraph.istd & 0xff,
-      (paragraph.istd >> 8) & 0xff,
+      paragraph.istd & U8_MASK,
+      (paragraph.istd >> BITS_PER_BYTE) & U8_MASK,
       ...paragraph.grpprl,
     ];
     // No separate grpPrlAndIstd.length > MAX_GRP_PRL_AND_ISTD check: BX_PAP_SIZE (13 bytes per paragraph) already reserves so much of the page's own front that even the smallest possible frontUsed (a single paragraph, 21 bytes) leaves far less room for a record than MAX_GRP_PRL_AND_ISTD (510) permits — the writeAt < frontUsed check just below always rejects a GrpPrlAndIstd anywhere near that size on capacity grounds alone, well before the format's own cb/cb' encoding limit could ever be the deciding factor. Which of PapxInFkp's two length spellings applies is decided by parity alone — see fkp.ts's own comment on parsePapxFkp for why an odd GrpPrlAndIstd always takes the one-byte cb form and an even one the two-byte cb' form.
@@ -178,7 +183,10 @@ export function buildPapxPages(
 
 /** A built page's own first rgfc entry — the byte offset of the first run or paragraph it covers. Reading it back out of the page's own bytes, rather than threading it through as separate metadata, keeps the bin table's keys and the page's own content provably in agreement: there is exactly one place either could disagree with itself. */
 export function firstFcOfPage(page: Uint8Array): number {
-  return new DataView(page.buffer, page.byteOffset, 4).getUint32(0, true);
+  return new DataView(page.buffer, page.byteOffset, FC_ENTRY_BYTES).getUint32(
+    0,
+    true,
+  );
 }
 
 /** Whether a paragraph carrying exactly this grpprl — alone, on an otherwise-empty page — fits within a single 512-byte PapxFkp page. This is precisely the fits-in-isolation check splitIntoBatches performs immediately before it throws "a single paragraph-formatting record does not fit in one 512-byte formatted disk page": production code that can predict an oversized grpprl before committing to it (table/write.ts's own lost-boundary fallback, ExaDev/documents.js#1013) calls this ahead of time, rather than re-deriving fkp-write.ts's own page-packing arithmetic — the front-reserved rgfc/BxPap bytes, the record-length-prefix parity — as a second, driftable copy of it. A paragraph that fits alone can always be given its own page by the batching above, so "fits alone" is the exact condition that keeps a paragraph this large from ever reaching that throw, regardless of what else shares its page. `istd` defaults to 0, matching every paragraph this package's own writer ever produces (see write.ts's own PapxParagraphToWrite construction). */
@@ -199,13 +207,19 @@ export function buildPropertyBinTable(
       `buildPropertyBinTable was given ${firstFcs.length} keys for ${pageNumbers.length} page numbers; a PLC needs exactly one more key than element`,
     );
   }
-  const bytes = new Uint8Array(firstFcs.length * 4 + pageNumbers.length * 4);
+  const bytes = new Uint8Array(
+    firstFcs.length * FC_ENTRY_BYTES + pageNumbers.length * FC_ENTRY_BYTES,
+  );
   const view = new DataView(bytes.buffer);
   firstFcs.forEach((fc, index) => {
-    view.setUint32(index * 4, fc, true);
+    view.setUint32(index * FC_ENTRY_BYTES, fc, true);
   });
   pageNumbers.forEach((pageNumber, index) => {
-    view.setUint32(firstFcs.length * 4 + index * 4, pageNumber, true);
+    view.setUint32(
+      firstFcs.length * FC_ENTRY_BYTES + index * FC_ENTRY_BYTES,
+      pageNumber,
+      true,
+    );
   });
   return bytes;
 }

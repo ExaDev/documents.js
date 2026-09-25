@@ -8,6 +8,17 @@ import {
   slice,
 } from "./bytes";
 
+// Blip record instances ([MS-ODRAW] 2.2.17's own recInstance values for the blip types a .doc picture carries), the record header's 12-bit instance over a 4-bit version with the 32-bit length at byte 4, and the PNG signature derived from its own ASCII.
+const BLIP_INSTANCE_JPEG_RGB_V1 = 0x046a;
+const BLIP_INSTANCE_JPEG_RGB_V2 = 0x046b;
+const BLIP_INSTANCE_JPEG_CMYK_V1 = 0x06e2;
+const BLIP_INSTANCE_JPEG_CMYK_V2 = 0x06e3;
+const BLIP_INSTANCE_PNG_V1 = 0x06e0;
+const BLIP_INSTANCE_PNG_V2 = 0x06e1;
+const RECORD_INSTANCE_SHIFT = 4;
+const RECORD_INSTANCE_MASK = 0x0fff;
+const RECORD_LENGTH_OFFSET = 4;
+
 // Inline pictures, [MS-DOC] "Pictures": a picture character (U+0001, sprmCFSpec applied) names its own data through sprmCPicLocation, a signed 32-bit offset into the Data stream where a PICFAndOfficeArtData structure lives — a PICF (68 bytes: type/size/border information) followed by the picture's OfficeArt container chain. Word wraps the blip in an OfficeArtInlineSpContainer ([MS-ODRAW] 2.2.15); LibreOffice (verified against a real LibreOffice-produced corpus file) wraps it in a SpgrContainer with a property table and no InlineSp wrapper at all — so the reader walks container headers forward from PICF's end until the blip's own record type appears, tolerating either producer's wrapper shape without looking inside any of them. There is no simpler, non-OfficeArt path even for the plainest bitmap.
 //
 // This reads exactly as much of that chain as the common case needs: the validated blip record the locator lands on is read directly — in practice a single OfficeArtBlip record for one inline picture with no separate blip-store indirection — and every wrapper container before it is skipped without being parsed at all. Only the two raster formats document-schema.js's ContentImageBlock can hold losslessly (OfficeArtBlipJPEG 0xF01D, OfficeArtBlipPNG 0xF01E) are decoded; every other blip kind (WMF/EMF/PICT metafiles, a raw DIB with no format this schema names, TIFF) is a genuinely different structure — a metafile blip carries a further OfficeArtMetafileHeader and, for WMF/EMF, DEFLATE-compressed payload bytes; a DIB has no ContentImageBlock format token to hold it under at all without re-encoding pixels this package has no image codec to perform — so those return undefined here rather than being mis-decoded, the identical "genuinely unimplemented, not approximated" convention the rest of this package's own scope table already follows for floating drawn objects (PlcfSpa/OfficeArt shapes generally) and text boxes, which this module does not attempt at all.
@@ -27,8 +38,16 @@ const BLIP_JPEG = 0xf01d;
 /** OfficeArtBlipPNG, [MS-ODRAW] 2.2.28. */
 const BLIP_PNG = 0xf01e;
 /** rh.recInstance values naming a single rgbUid rather than two — [MS-ODRAW] 2.2.27's own table for JPEG (RGB and CMYK) and 2.2.28's for PNG. */
-const ONE_UID_INSTANCES = new Set([0x046a, 0x06e2, 0x06e0]);
-const TWO_UID_INSTANCES = new Set([0x046b, 0x06e3, 0x06e1]);
+const ONE_UID_INSTANCES = new Set([
+  BLIP_INSTANCE_JPEG_RGB_V1,
+  BLIP_INSTANCE_JPEG_CMYK_V2,
+  BLIP_INSTANCE_PNG_V1,
+]);
+const TWO_UID_INSTANCES = new Set([
+  BLIP_INSTANCE_JPEG_RGB_V2,
+  BLIP_INSTANCE_JPEG_CMYK_V1 + 1,
+  BLIP_INSTANCE_PNG_V2,
+]);
 const ONE_UID_BYTES = 16;
 const TWO_UID_BYTES = 32;
 /** The one byte following rgbUid(1|2) in every OfficeArtBlip variant this module reads, before the raw file bytes themselves. */
@@ -47,9 +66,10 @@ interface RecordHeader {
 function readRecordHeader(data: Uint8Array, offset: number): RecordHeader {
   const versionAndInstance = readUint16LE(data, offset);
   return {
-    recInstance: (versionAndInstance >> 4) & 0x0fff,
+    recInstance:
+      (versionAndInstance >> RECORD_INSTANCE_SHIFT) & RECORD_INSTANCE_MASK,
     recType: readUint16LE(data, offset + 2),
-    recLen: readUint32LE(data, offset + 4),
+    recLen: readUint32LE(data, offset + RECORD_LENGTH_OFFSET),
   };
 }
 
@@ -130,8 +150,11 @@ function blipFormat(recType: number): "jpeg" | "png" | undefined {
 }
 
 // The PNG and JPEG file signatures, the one-byte-prefix form OfficeArtBlip carries them under (rgbUid, then the one-byte tag, then raw file bytes).
-const PNG_SIGNATURE = [0x89, 0x50, 0x4e, 0x47];
-const JPEG_SIGNATURE = [0xff, 0xd8];
+const PNG_SIGNATURE = Array.from("\u0089PNG", (c) => c.charCodeAt(0));
+// SOI, the JPEG marker prefix followed by the start-of-image code.
+const JPEG_MARKER_PREFIX = 0xff;
+const JPEG_SOI = 0xd8;
+const JPEG_SIGNATURE = [JPEG_MARKER_PREFIX, JPEG_SOI];
 
 function payloadHasSignature(
   data: Uint8Array,

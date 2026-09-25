@@ -4,6 +4,8 @@ import { icoColor, readColorRef } from "../color";
 import { DocFormatError } from "../errors";
 import { SGC, type Prl } from "./sprm";
 
+const HEX_RADIX = 16;
+
 // Character properties, [MS-DOC] 2.6.1 — the subset of the character-property sprm table this reader converts. Every opcode below was read off the specification's own table rather than recalled, and the ones this package does not yet act on (font selection through the font table, spacing, kerning, borders, revision marks, East Asian typography) are simply absent: an opcode present but ignored would read as support this package does not have.
 
 /** sprmCFBold: a ToggleOperand switching bold. */
@@ -60,7 +62,7 @@ function toggle(operand: Uint8Array, current: boolean | undefined): boolean {
       return !(current ?? false);
     default:
       throw new DocFormatError(
-        `ToggleOperand value 0x${value.toString(16)} is none of the four [MS-DOC] 2.9.336 defines (0x00, 0x01, 0x80, 0x81)`,
+        `ToggleOperand value 0x${value.toString(HEX_RADIX)} is none of the four [MS-DOC] 2.9.336 defines (0x00, 0x01, 0x80, 0x81)`,
       );
   }
 }
