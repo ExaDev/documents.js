@@ -6,6 +6,15 @@ import { FTAB_FIXED_ARITY, FTAB_NAMES } from "./ptg-functions";
 import { recoverFromFormatError } from "./records";
 import { readShortXLUnicodeString, readXLUnicodeString } from "./strings";
 
+// A 32-bit JavaScript bitwise word; the relative-reference field widths; and the wrap spaces the spec states ("adjusted by 0x00010000" for a row, "adjusted by 0x0100" for a column).
+const JS_WORD_BITS = 32;
+const ROW_FIELD_BITS = 16;
+const COLUMN_FIELD_BITS = 14;
+const ROW_SPACE = 0x10000;
+const MAX_ROW = 0xffff;
+const COLUMN_SPACE = 0x100;
+const MAX_COLUMN = 0xff;
+
 // A BIFF8 compiled formula (Ptg token stream, [MS-XLS] 2.5.198.25 — https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/94229a89-a5b6-4f2b-834f-bd28cdc57c6b) walked left to right and rebuilt into the infix text a spreadsheet application would show.
 //
 // The tokens are postfix (reverse Polish): an operand token pushes a value, an operator or function token pops however many operands it needs and pushes the combined result. This module carries that same shape one level up — an OPERAND STACK of already-formatted text, each entry tagged with the precedence of whatever built it — so a binary operator or function call is always "pop N, join, push" and the only real complexity is deciding when a child needs literal parentheses around it before it can sit inside its parent's text. That decision is precedence comparison, not a special case: wrap the left child when its own precedence is lower than the operator being applied, wrap the right child when its precedence is lower than OR EQUAL to it. The equal case on the right is what reproduces `a-(b-c)` correctly (and, for a commutative operator, only ever fires when the postfix stream itself demanded that grouping — which happens only when the formula's own author wrote explicit parentheses, since a bare `a+b+c` always compiles left-nested) — so this one rule is correct for every operator here regardless of its true associativity, and this module never needs to know what that associativity actually is.
@@ -212,15 +221,15 @@ export interface FormulaOrigin {
 
 /** Sign-extends the low `bits` bits of `raw` by shifting them out to the top of a 32-bit word and back with an arithmetic shift — the same trick BlockCursor.i16 uses for a full 16-bit field, generalised here to the 14-bit column delta a relative column field packs ([MS-XLS] 174e856e ColRelNegU: "col (14 bits): A signed integer... MUST be greater than or equal to -255 [and] less than or equal to 255"). */
 function signExtend(raw: number, bits: number): number {
-  const shift = 32 - bits;
+  const shift = JS_WORD_BITS - bits;
   return (raw << shift) >> shift;
 }
 
 /** RgceLocRel's row field, once known to be relative ([MS-XLS] 2db37ba7 RgceLocRel): a signed 16-bit delta from `currentRow`, wrapped back into 0..65535 exactly as the spec states ("adjusted by 0x00010000") rather than left negative or overflowing — Excel itself lets a filled-down/across shared formula's relative reference wrap around the sheet edge this way. */
 function resolveRelativeRow(rawRow: number, currentRow: number): number {
-  const row = currentRow + signExtend(rawRow, 16);
-  if (row < 0) return row + 0x10000;
-  if (row > 0xffff) return row - 0x10000;
+  const row = currentRow + signExtend(rawRow, ROW_FIELD_BITS);
+  if (row < 0) return row + ROW_SPACE;
+  if (row > MAX_ROW) return row - ROW_SPACE;
   return row;
 }
 
@@ -229,9 +238,9 @@ function resolveRelativeColumn(
   rawColumn: number,
   currentColumn: number,
 ): number {
-  const column = currentColumn + signExtend(rawColumn, 14);
-  if (column < 0) return column + 0x100;
-  if (column > 0xff) return column - 0x100;
+  const column = currentColumn + signExtend(rawColumn, COLUMN_FIELD_BITS);
+  if (column < 0) return column + COLUMN_SPACE;
+  if (column > MAX_COLUMN) return column - COLUMN_SPACE;
   return column;
 }
 
