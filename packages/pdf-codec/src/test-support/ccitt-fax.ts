@@ -42,6 +42,51 @@ export function ccittFixtureBitmap(fixture: CcittFaxFixture): boolean[] {
   return out;
 }
 
+// Every numeric literal below that is not a fixture's own `columns`/`rows` is an arbitrary pattern parameter: a modulus, divisor, or bound chosen only to make that fixture's isBlack produce a distinctive scanline pattern (runs of different lengths, diagonals, a nested rectangle, a striped band) for the CCITT G3/G4 encoder to exercise. None of them encodes anything from the T.4/T.6 spec itself; the spec-meaningful constants live in the decoder this module's fixtures feed, not here.
+const DIAGONAL_COLUMNS = 24;
+const DIAGONAL_ROWS = 12;
+// The third edge of the diagonal fixture's triangle, alongside x === y and x === y + 1: chosen only to sit inside the fixture's own 24x12 bounds and produce a third, differently-angled run boundary.
+const DIAGONAL_ANTI_DIAGONAL_SUM = 20;
+
+const BOX_COLUMNS = 32;
+const BOX_ROWS = 16;
+// The nested rectangle drawn one run of white pixels inside the box fixture's own outer border: arbitrary inset coordinates, chosen only to sit well within the 32x16 outer box.
+const BOX_INNER_LEFT = 8;
+const BOX_INNER_RIGHT = 20;
+const BOX_INNER_TOP = 5;
+const BOX_INNER_BOTTOM = 9;
+
+const SPARSE_COLUMNS = 64;
+const SPARSE_ROWS = 6;
+// Coprime moduli chosen so x % SPARSE_X_MODULUS === y % SPARSE_Y_MODULUS is true for only a sparse, irregularly-spaced set of pixels, unlike the dense checker/diagonal/box fixtures above.
+const SPARSE_X_MODULUS = 17;
+const SPARSE_Y_MODULUS = 3;
+
+const WIDE_COLUMNS = 200;
+const WIDE_ROWS = 5;
+// Chosen so a 200-column row produces many colour changes (long enough to need multiple T.4/T.6 code words per line) without any single run degenerating to a single pixel.
+const WIDE_X_DIVISOR = 7;
+const WIDE_MODULUS = 3;
+
+const ODDWIDTH_COLUMNS = 13;
+const ODDWIDTH_ROWS = 7;
+// Chosen so (x * y) % ODDWIDTH_MODULUS produces an irregular pattern across this fixture's deliberately non-byte-aligned 13-pixel row width, the case packBilevel's own row-padding logic exists for.
+const ODDWIDTH_MODULUS = 5;
+
+const SHRINK_COLUMNS = 40;
+const SHRINK_ROWS = 9;
+// A horizontal band, one row in three, spanning a fixed inner span of the row: arbitrary bounds chosen only to sit well inside the fixture's own 40-column width.
+const SHRINK_ROW_MODULUS = 3;
+const SHRINK_X_MIN = 4;
+const SHRINK_X_MAX = 34;
+
+const LONGRUNS_COLUMNS = 2600;
+const LONGRUNS_ROWS = 3;
+// Chosen so each of the fixture's three rows carries one very long run (this fixture's own name and purpose: exercising the T.4/T.6 long-run code words a short fixture never reaches, since LONGRUNS_COLUMNS is deliberately much wider than every fixture above).
+const LONGRUNS_X_MODULUS = 1900;
+const LONGRUNS_BASE_THRESHOLD = 1300;
+const LONGRUNS_ROW_STEP = 400;
+
 export const CCITT_FAX_FIXTURES: readonly CcittFaxFixture[] = [
   {
     name: "checker8",
@@ -60,9 +105,10 @@ export const CCITT_FAX_FIXTURES: readonly CcittFaxFixture[] = [
   },
   {
     name: "diagonal",
-    columns: 24,
-    rows: 12,
-    isBlack: (x, y) => x === y || x === y + 1 || x + y === 20,
+    columns: DIAGONAL_COLUMNS,
+    rows: DIAGONAL_ROWS,
+    isBlack: (x, y) =>
+      x === y || x === y + 1 || x + y === DIAGONAL_ANTI_DIAGONAL_SUM,
     encodings: {
       group4: "JrlOraVtK2lbStpW0raVtKw70ER+ACAC",
       group3OneDimensional:
@@ -75,14 +121,17 @@ export const CCITT_FAX_FIXTURES: readonly CcittFaxFixture[] = [
   },
   {
     name: "box",
-    columns: 32,
-    rows: 16,
+    columns: BOX_COLUMNS,
+    rows: BOX_ROWS,
     isBlack: (x, y) =>
       x === 0 ||
-      x === 31 ||
+      x === BOX_COLUMNS - 1 ||
       y === 0 ||
-      y === 15 ||
-      (x >= 8 && x <= 20 && y >= 5 && y <= 9),
+      y === BOX_ROWS - 1 ||
+      (x >= BOX_INNER_LEFT &&
+        x <= BOX_INNER_RIGHT &&
+        y >= BOX_INNER_TOP &&
+        y <= BOX_INNER_BOTTOM),
     encodings: {
       group4: "JqDVKA//+fBP////H//+MAEAEA==",
       group3OneDimensional:
@@ -95,9 +144,9 @@ export const CCITT_FAX_FIXTURES: readonly CcittFaxFixture[] = [
   },
   {
     name: "sparse",
-    columns: 64,
-    rows: 6,
-    isBlack: (x, y) => x % 17 === y % 3,
+    columns: SPARSE_COLUMNS,
+    rows: SPARSE_ROWS,
+    isBlack: (x, y) => x % SPARSE_X_MODULUS === y % SPARSE_Y_MODULUS,
     encodings: {
       group4: "JqjUjUjUrKqKqKqKQyqiqiqijhBCEEIQQhBDZVRVRVRSGVUVUVUUcAEAEA==",
       group3OneDimensional:
@@ -134,9 +183,9 @@ export const CCITT_FAX_FIXTURES: readonly CcittFaxFixture[] = [
   },
   {
     name: "wide",
-    columns: 200,
-    rows: 5,
-    isBlack: (x, y) => (((x / 7) | 0) + y) % 3 === 0,
+    columns: WIDE_COLUMNS,
+    rows: WIDE_ROWS,
+    isBlack: (x, y) => (((x / WIDE_X_DIVISOR) | 0) + y) % WIDE_MODULUS === 0,
     encodings: {
       group4:
         "JqM6DOgzoM6DOgzoM6DOgzoOJ8Z0GdBnQZ0GdBnQZ0GdBz4zoM6DOgzoM6DOgzoM6DOjJqM6DOgzoM6DOgzoM6DOgzoOJ8Z0GdBnQZ0GdBnQZ0GdBwAQAQ==",
@@ -150,9 +199,9 @@ export const CCITT_FAX_FIXTURES: readonly CcittFaxFixture[] = [
   },
   {
     name: "oddwidth",
-    columns: 13,
-    rows: 7,
-    isBlack: (x, y) => (x * y) % 5 < 2,
+    columns: ODDWIDTH_COLUMNS,
+    rows: ODDWIDTH_ROWS,
+    isBlack: (x, y) => (x * y) % ODDWIDTH_MODULUS < 2,
     encodings: {
       group4: "JqCTweFoIFQQKulpa4qKuIhzweFABABA",
       group3OneDimensional:
@@ -164,9 +213,10 @@ export const CCITT_FAX_FIXTURES: readonly CcittFaxFixture[] = [
   },
   {
     name: "shrink",
-    columns: 40,
-    rows: 9,
-    isBlack: (x, y) => y % 3 === 0 && x >= 4 && x <= 34,
+    columns: SHRINK_COLUMNS,
+    rows: SHRINK_ROWS,
+    isBlack: (x, y) =>
+      y % SHRINK_ROW_MODULUS === 0 && x >= SHRINK_X_MIN && x <= SHRINK_X_MAX,
     encodings: {
       group4: "Ng0xzYNMc2DTHABABA==",
       group3OneDimensional: "ABsGnAASkAEpABsGnAASkAEpABsGnAASkAEp",
@@ -177,9 +227,10 @@ export const CCITT_FAX_FIXTURES: readonly CcittFaxFixture[] = [
   },
   {
     name: "longruns",
-    columns: 2600,
-    rows: 3,
-    isBlack: (x, y) => x % 1900 < 1300 - y * 400,
+    columns: LONGRUNS_COLUMNS,
+    rows: LONGRUNS_ROWS,
+    isBlack: (x, y) =>
+      x % LONGRUNS_X_MODULUS < LONGRUNS_BASE_THRESHOLD - y * LONGRUNS_ROW_STEP,
     encodings: {
       group4: "JqBSDQWhQBKAskDk2oU5A1AkbSyQNQJF5gAgAg==",
       group3OneDimensional: "ABNQKQaGhQBKAsABNQOTahSBKAsABNQNQJG0sgagSLzA",
