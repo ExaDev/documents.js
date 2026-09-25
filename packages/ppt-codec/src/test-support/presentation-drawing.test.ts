@@ -28,11 +28,11 @@ import {
 } from "../drawing/properties";
 import { readCurrentUserAtom } from "../stream/current-user";
 import { buildPersistDirectory, resolvePersistObject } from "../stream/persist";
+import { syntheticPresentation } from "./presentation";
 import {
   MASTER_COLOR_SCHEME,
   TABLE_ROW_HEIGHT,
-  syntheticPresentation,
-} from "./presentation";
+} from "./presentation-table-shape";
 import {
   assertNoPhantomRecords,
   resolveDocumentContainer,

@@ -1,37 +1,24 @@
-import { deriveRc4CryptoApiBlockKey, rc4, sha1 } from "archive-codec";
+import { deriveRc4CryptoApiBlockKey, rc4 } from "archive-codec";
 import {
-  OfficeArtBStoreContainer,
-  OfficeArtClientAnchor,
   OfficeArtClientTextbox,
   OfficeArtDgContainer,
-  OfficeArtDggContainer,
-  OfficeArtFBSE,
-  OfficeArtFSP,
   OfficeArtFSPGR,
-  OfficeArtFOPT,
   OfficeArtSpContainer,
   OfficeArtSpgrContainer,
-  OfficeArtTertiaryFOPT,
-  RT_ColorSchemeAtom,
   RT_CryptSession10Container,
   RT_CurrentUserAtom,
   RT_Document,
-  RT_DocumentAtom,
   RT_Drawing,
-  RT_DrawingGroup,
   RT_Environment,
   RT_FontCollection,
-  RT_FontEntityAtom,
   RT_MainMaster,
   RT_Notes,
   RT_NotesAtom,
   RT_OutlineTextRefAtom,
   RT_PersistDirectoryAtom,
   RT_Slide,
-  RT_SlideAtom,
   RT_SlideListWithText,
   RT_SlidePersistAtom,
-  RT_TextBytesAtom,
   RT_TextHeaderAtom,
   RT_TextMasterStyleAtom,
   RT_UserEditAtom,
@@ -41,7 +28,6 @@ import {
 import {
   asciiBytes,
   concatBytes,
-  i16le,
   i32le,
   u8,
   u16le,
@@ -51,146 +37,50 @@ import {
   writeContainer as container,
 } from "../record/write";
 import {
-  PROPERTY_PIB,
-  PROPERTY_ROTATION,
-  PROPERTY_TABLE_PROPERTIES,
-  PROPERTY_TABLE_ROW_PROPERTIES,
-  TABLE_FLAG_IS_TABLE,
-  degreesToFixedPoint,
-  writeIMsoArray,
-  writeShapePropertyTable,
-} from "../drawing/properties";
-import { CURRENT_USER_HEADER_TOKEN_PLAIN } from "../stream/current-user";
+  CURRENT_USER_DOC_FILE_VERSION,
+  CURRENT_USER_FIXED_SIZE,
+  CURRENT_USER_HEADER_TOKEN_ENCRYPTED,
+  CURRENT_USER_HEADER_TOKEN_PLAIN,
+  CURRENT_USER_RELEASE,
+} from "../stream/current-user";
 import {
   TEXT_TYPE_BODY,
   TEXT_TYPE_NOTES,
   TEXT_TYPE_OTHER,
   TEXT_TYPE_TITLE,
 } from "../text/atoms";
-import { CF_BOLD, CF_COLOR, STYLE_BOLD } from "../text/style";
+import {
+  clientAnchor,
+  documentAtom,
+  fontEntityAtom,
+  fsp,
+  slideAtom,
+  slidePersistAtom,
+  textBytesAtom,
+} from "./presentation-atoms";
+import {
+  extraColorSchemeAtom,
+  slideSchemeColorSchemeAtom,
+  titleMasterStyleAtomWithBoldAccent1,
+} from "./presentation-color-atoms";
+import {
+  CRYPTOAPI_KEY_SIZE_BITS,
+  CRYPTOAPI_SALT_SIZE_BYTES,
+  encryptionAtomBytes,
+} from "./presentation-encryption-atom";
+import {
+  blipRecord,
+  delayFbse,
+  drawingGroupContainer,
+  embeddedFbse,
+  pictureShape,
+} from "./presentation-blip-atoms";
+import { MASTER_COLOR_SCHEME, tableShape } from "./presentation-table-shape";
 
 // A whole synthetic presentation: the two [MS-PPT] streams of a one-slide document carrying a title placeholder (whose text lives in the document's slide list, reached by an OutlineTextRefAtom), a plain text box (whose text lives on the shape), and — when asked for — a notes slide of its own in a separate persist object reached through the document's notes list. Assembled from the same record builders the per-record suites use, so the end-to-end test exercises the real offset arithmetic — the persist directory, the edit chain, and every cross-stream reference — rather than a stubbed one.
 
-// [MS-PPT] 2.4.2 DocumentAtom's 40-byte body: slideSize and notesSize as PointStructs, serverZoom as a RatioStruct, two persist references, firstSlideNumber, slideSizeType, four bool1 bytes.
-function documentAtom(
-  slideWidth: number,
-  slideHeight: number,
-): Uint8Array<ArrayBuffer> {
-  return atom(
-    RT_DocumentAtom,
-    concatBytes(
-      i32le(slideWidth),
-      i32le(slideHeight),
-      i32le(slideWidth),
-      i32le(slideHeight),
-      i32le(1),
-      i32le(2),
-      u32le(0),
-      u32le(0),
-      u16le(1),
-      u16le(0),
-      new Uint8Array(4),
-    ),
-    { recVer: 0x1 },
-  );
-}
-
-function fontEntityAtom(faceName: string): Uint8Array<ArrayBuffer> {
-  const name = new Uint8Array(64);
-  name.set(utf16le(faceName).subarray(0, 62));
-  return atom(RT_FontEntityAtom, concatBytes(name, new Uint8Array(4)));
-}
-
-function slidePersistAtom(
-  persistIdRef: number,
-  cTexts: number,
-  slideId: number,
-): Uint8Array<ArrayBuffer> {
-  return atom(
-    RT_SlidePersistAtom,
-    concatBytes(
-      u32le(persistIdRef),
-      u32le(0),
-      i32le(cTexts),
-      u32le(slideId),
-      u32le(0),
-    ),
-  );
-}
-
-function textBytesAtom(text: string): Uint8Array<ArrayBuffer> {
-  return atom(RT_TextBytesAtom, asciiBytes(text));
-}
-
-function fsp(spid: number, flags: number): Uint8Array<ArrayBuffer> {
-  return atom(OfficeArtFSP, concatBytes(u32le(spid), u32le(flags)), {
-    recVer: 0x2,
-  });
-}
-
-// [MS-PPT] 2.5.2's 0x18-byte SlideAtom, recVer 0x2 — geom and placeholderTypes are irrelevant to this reader (shapes come from the drawing tree, not this array) and are left zero; only masterIdRef/notesIdRef, the two fields readSlideAtom actually surfaces, carry real values.
-function slideAtom(
-  masterIdRef: number,
-  notesIdRef: number,
-): Uint8Array<ArrayBuffer> {
-  return atom(
-    RT_SlideAtom,
-    concatBytes(
-      i32le(0), // geom
-      new Uint8Array(8), // placeholderTypes
-      u32le(masterIdRef),
-      u32le(notesIdRef),
-      u16le(0), // slideFlags
-      u16le(0), // unused
-    ),
-    { recVer: 0x2 },
-  );
-}
-
-// [MS-PPT] 2.9.51 SlideSchemeColorSchemeAtom: 8 ColorStruct entries (red, green, blue, unused), independently fixed here rather than reused from color-scheme-write.ts's own DEFAULT_SCHEME_COLORS — a read-path fixture should not depend on what the write path happens to choose.
-function slideSchemeColorSchemeAtom(
-  colors: readonly (readonly [number, number, number])[],
-): Uint8Array<ArrayBuffer> {
-  return atom(
-    RT_ColorSchemeAtom,
-    concatBytes(
-      ...colors.map(
-        ([red, green, blue]) => new Uint8Array([red, green, blue, 0]),
-      ),
-    ),
-    { recInstance: 0x001 },
-  );
-}
-
-// A recInstance 0x006 RT_ColorSchemeAtom ahead of the real one in the master — the "extra colour scheme" spelling a real producer opens its main master with (LibreOffice 26.2.5.2 writes a run of these, confirmed by inspecting its raw bytes), placed in this fixture so the master's scheme lookup is exercised against a sibling sharing its record type rather than only against an empty container.
-function extraColorSchemeAtom(): Uint8Array<ArrayBuffer> {
-  return atom(RT_ColorSchemeAtom, new Uint8Array(32), { recInstance: 0x006 });
-}
-
-// A TextMasterStyleAtom for TITLE stating one real level (level 0): bold, and a colour-scheme reference to Accent 1 (slot 0x05) rather than a literal RGB value — built directly from the mask-bit layout text/style.ts's own readTextPFException/readTextCFException expect (the same low-level construction style.test.ts's own fixtures already use), independently of those readers, so this fixture proves the wiring rather than merely reflecting it. Used only when a test asks for it (masterTitleBold): every other master-related test keeps the empty-levels master every other test already relies on.
-function titleMasterStyleAtomWithBoldAccent1(): Uint8Array<ArrayBuffer> {
-  const pfLevel = u32le(0); // masks: no paragraph-level fields stated
-  const cfMasks = CF_BOLD | CF_COLOR;
-  const cfLevel = concatBytes(
-    u32le(cfMasks),
-    u16le(STYLE_BOLD), // fontStyle
-    new Uint8Array([0, 0, 0, 0x05]), // ColorIndexStruct: rgb bytes unused for a scheme reference, index 0x05 = Accent 1
-  );
-  // No explicit recInstance: TEXT_TYPE_TITLE is 0x0, the same value atom() already defaults an unstated recInstance to, so stating it would be a redundant assignment rather than a real choice between two different bytes.
-  return atom(RT_TextMasterStyleAtom, concatBytes(u16le(1), pfLevel, cfLevel));
-}
-
-function clientAnchor(
-  top: number,
-  left: number,
-  right: number,
-  bottom: number,
-): Uint8Array<ArrayBuffer> {
-  return atom(
-    OfficeArtClientAnchor,
-    concatBytes(i16le(top), i16le(left), i16le(right), i16le(bottom)),
-  );
-}
+// OfficeArtFSPGR's own fixed size (4 int32 coordinates), all zero for the patriarch since its coordinate system is never read.
+const FSPGR_PATRIARCH_BYTES = 16;
 
 export interface SyntheticPresentation {
   readonly currentUserStream: Uint8Array<ArrayBuffer>;
@@ -257,283 +147,6 @@ export interface SyntheticPresentationOptions {
   readonly omitPersistObject?: "document" | "master" | "slide" | "notes";
 }
 
-// [MS-OFFCRYPTO] 2.3.5.1's own RC4 CryptoAPI EncryptionInfo/EncryptionHeader/EncryptionVerifier layout, built independently of encryption.ts's own reader (readDocumentEncryptionAtom) rather than by calling it in reverse — the two are cross-checked against each other only by the read.test.ts round trip that decrypts what this function encrypts, not by sharing this byte-layout logic. keySizeBits is fixed at 128 here: this package's own decryptor supports any RC4 key size the header states, so a fixture testing the 40-bit special case belongs in encryption.test.ts, which exercises deriveRc4CryptoApiBlockKey directly rather than through a whole synthetic presentation.
-const CRYPTOAPI_KEY_SIZE_BITS = 128;
-
-function encryptionAtomBytes(
-  password: string,
-  salt: Uint8Array<ArrayBuffer>,
-): Uint8Array<ArrayBuffer> {
-  const blockZeroKey = deriveRc4CryptoApiBlockKey(
-    password,
-    salt,
-    0,
-    CRYPTOAPI_KEY_SIZE_BITS,
-  );
-  // An arbitrary 16-byte "random" verifier — [MS-OFFCRYPTO] 2.3.4.9 never constrains its value, only that SHA-1 of it must match what decrypting encryptedVerifierHash recovers. Fixed as a literal rather than derived from a formula: no computation makes an arbitrary value more "correct", and a literal removes the arithmetic as a thing to get wrong.
-  const verifier = new Uint8Array([
-    3, 10, 17, 24, 31, 38, 45, 52, 59, 66, 73, 80, 87, 94, 101, 108,
-  ]);
-  const verifierHash = sha1(verifier);
-  const encryptedCombined = rc4(
-    blockZeroKey,
-    concatBytes(verifier, verifierHash),
-  );
-  const encryptedVerifier = encryptedCombined.subarray(0, 16);
-  const encryptedVerifierHash = encryptedCombined.subarray(16, 36);
-
-  const header = concatBytes(
-    u32le(0x04), // flags: fCryptoAPI
-    u32le(0), // sizeExtra
-    u32le(0x6801), // algId: RC4
-    u32le(0x8004), // algIdHash: SHA-1
-    u32le(CRYPTOAPI_KEY_SIZE_BITS),
-    u32le(0x01), // providerType: PROV_RSA_FULL, unread by this package's own reader
-    u32le(0), // reserved1
-    u32le(0), // reserved2 — no CSPName follows, so the header ends here
-  );
-  const verifierFields = concatBytes(
-    u32le(16), // saltSize
-    salt,
-    encryptedVerifier,
-    u32le(20), // verifierHashSize
-    encryptedVerifierHash,
-  );
-
-  return concatBytes(
-    u16le(2), // versionMajor
-    u16le(2), // versionMinor
-    u32le(0x04), // encryptionFlags: fCryptoAPI
-    u32le(header.length),
-    header,
-    verifierFields,
-  );
-}
-
-// One OfficeArtBlip record wrapping an image's file bytes, in the single-uid spelling of each format (PNG 0x6E0, JPEG 0x46A).
-function blipRecord(options: {
-  readonly format: "png" | "jpeg";
-  readonly bytes: Uint8Array<ArrayBuffer>;
-}): Uint8Array<ArrayBuffer> {
-  const recType = options.format === "png" ? 0xf01e : 0xf01d;
-  const recInstance = options.format === "png" ? 0x6e0 : 0x46a;
-  return atom(
-    recType,
-    concatBytes(new Uint8Array(16), u8(0xff), options.bytes),
-    { recInstance },
-  );
-}
-
-// One OfficeArtFBSE whose blip is embedded inline (foDelay 0, the payload after an empty name).
-function embeddedFbse(options: {
-  readonly format: "png" | "jpeg";
-  readonly bytes: Uint8Array<ArrayBuffer>;
-}): Uint8Array<ArrayBuffer> {
-  const blipType = options.format === "png" ? 0x06 : 0x05;
-  const embedded = blipRecord(options);
-  return atom(
-    OfficeArtFBSE,
-    concatBytes(
-      u8(blipType),
-      u8(blipType),
-      new Uint8Array(16), // rgbUid — a zero digest; this fixture never verifies one
-      u16le(0xff), // tag
-      u32le(embedded.length), // size
-      u32le(1), // cRef
-      u32le(0), // foDelay — embedded
-      u8(0),
-      u8(0), // cbName — no nameData
-      u8(0),
-      u8(0),
-      embedded,
-    ),
-    { recVer: 0x2, recInstance: blipType },
-  );
-}
-
-// One FBSE pointing at a Pictures stream offset instead of embedding (foDelay names the offset; cRef 1).
-function delayFbse(options: {
-  readonly format: "png" | "jpeg";
-  readonly foDelay: number;
-}): Uint8Array<ArrayBuffer> {
-  const blipType = options.format === "png" ? 0x06 : 0x05;
-  return atom(
-    OfficeArtFBSE,
-    concatBytes(
-      u8(blipType),
-      u8(blipType),
-      new Uint8Array(16),
-      u16le(0xff),
-      u32le(0), // size — unknown to this fixture, and unread on the delay path
-      u32le(1),
-      u32le(options.foDelay),
-      u8(0),
-      u8(0),
-      u8(0),
-      u8(0),
-    ),
-    { recVer: 0x2, recInstance: blipType },
-  );
-}
-
-// The DocumentContainer's own DrawingGroupContainer: a real OfficeArtDggContainer whose mandatory OfficeArtFDGGBlock states document-wide counts, with the blip store after it.
-function drawingGroupContainer(
-  fbseRecords: readonly Uint8Array<ArrayBuffer>[],
-): Uint8Array<ArrayBuffer> {
-  const fdggBlock = atom(
-    0xf006,
-    concatBytes(
-      u32le(6), // spidMax
-      u32le(2), // cidcl
-      u32le(5), // cspSaved
-      u32le(2), // cdgSaved
-      u32le(1), // one IDCL: dgid
-      u32le(6), // cspidCur
-    ),
-  );
-  // This function's only caller (below) never passes an empty array — a picture is always exactly one FBSE — so an empty-store guard here would be dead code with no test that could ever reach its branch; a genuinely empty OfficeArtBStoreContainer (recInstance 0) is itself spec-conformant should a future caller ever pass one.
-  return container(RT_DrawingGroup, [
-    container(OfficeArtDggContainer, [
-      fdggBlock,
-      container(OfficeArtBStoreContainer, fbseRecords, {
-        recInstance: fbseRecords.length,
-      }),
-    ]),
-  ]);
-}
-
-// A picture shape: an ordinary OfficeArtSpContainer whose property table states pib, the one-based index into the document's blip store.
-function pictureShape(
-  spid: number,
-  pib: number,
-  top: number,
-  left: number,
-  right: number,
-  bottom: number,
-): Uint8Array<ArrayBuffer> {
-  return container(OfficeArtSpContainer, [
-    fsp(spid, 0),
-    writeShapePropertyTable(OfficeArtFOPT, [
-      { opid: PROPERTY_PIB, op: pib, fBid: true },
-    ]),
-    clientAnchor(top, left, right, bottom),
-  ]);
-}
-
-// The table's own rectangle and per-row height, in master units — fixed here so every table fixture's geometry is derivable by hand. TABLE_ROW_HEIGHT is exported for the byte-level fidelity tests, which decode the fixture's own tableRowProperties IMsoArray and need the same value to compare against.
-const TABLE_TOP = 2000;
-const TABLE_LEFT = 1440;
-const TABLE_RIGHT = 4896;
-export const TABLE_ROW_HEIGHT = 480;
-
-// PowerPoint's own default light scheme — an arbitrary but fixed and realistic 8-entry colour scheme, independently chosen from color-scheme-write.ts's own defaults (see slideSchemeColorSchemeAtom's own comment). Module scope and exported, like TABLE_ROW_HEIGHT above, because the byte-level fidelity tests parse the master's own SlideSchemeColorSchemeAtom bytes directly and need the same values to compare against — read.ts itself only ever resolves one slot of this scheme (whichever a run's own ColorIndexStruct names), so nothing but a direct byte comparison exercises the other seven.
-export const MASTER_COLOR_SCHEME: readonly (readonly [
-  number,
-  number,
-  number,
-])[] = [
-  [0xff, 0xff, 0xff], // background
-  [0x00, 0x00, 0x00], // text
-  [0x80, 0x80, 0x80], // shadow
-  [0x00, 0x00, 0x00], // title text
-  [0xe6, 0xf2, 0xff], // fill
-  [0x1a, 0x4b, 0x8c], // Accent 1
-  [0x8c, 0x1a, 0x4b], // Accent 2
-  [0x4b, 0x8c, 0x1a], // Accent 3
-];
-
-// A native table group: the group shape opens with the FSPGR child coordinate system ([MS-ODRAW] 2.2.14 puts shapeGroup first), carries fGroup, states tableProperties fIsTable and tableRowProperties as a complex IMsoArray of row minimum heights in the tertiary property table where a real producer puts them, and anchors the whole table with a client anchor; then one plain text-box shape per cell, each carrying its own client anchor — the grid itself lives nowhere but in those anchors.
-function tableShape(
-  spid: number,
-  table: {
-    readonly rows: readonly (readonly string[])[];
-    readonly rotationDeg?: number;
-    readonly reverseCellOrder?: boolean;
-    readonly includeGridlineShapes?: boolean;
-  },
-): Uint8Array<ArrayBuffer> {
-  const columnCount = Math.max(...table.rows.map((row) => row.length), 1);
-  const rowCount = table.rows.length;
-  const bottom = TABLE_TOP + rowCount * TABLE_ROW_HEIGHT;
-  const columnWidth = Math.floor((TABLE_RIGHT - TABLE_LEFT) / columnCount);
-  const rowHeights = writeIMsoArray(
-    table.rows.map(() => TABLE_ROW_HEIGHT),
-    4,
-  );
-  const groupShape = container(OfficeArtSpContainer, [
-    atom(
-      OfficeArtFSPGR,
-      concatBytes(
-        i32le(TABLE_LEFT),
-        i32le(TABLE_TOP),
-        i32le(TABLE_RIGHT),
-        i32le(bottom),
-      ),
-      { recVer: 0x1 },
-    ),
-    fsp(spid, 1 << 0),
-    ...(table.rotationDeg === undefined
-      ? []
-      : [
-          writeShapePropertyTable(OfficeArtFOPT, [
-            {
-              opid: PROPERTY_ROTATION,
-              op: degreesToFixedPoint(table.rotationDeg),
-            },
-          ]),
-        ]),
-    writeShapePropertyTable(OfficeArtTertiaryFOPT, [
-      { opid: PROPERTY_TABLE_PROPERTIES, op: TABLE_FLAG_IS_TABLE },
-      {
-        opid: PROPERTY_TABLE_ROW_PROPERTIES,
-        op: rowHeights.length,
-        complex: rowHeights,
-      },
-    ]),
-    clientAnchor(TABLE_TOP, TABLE_LEFT, TABLE_RIGHT, bottom),
-  ]);
-  const cells = table.rows.flatMap((row, rowIndex) =>
-    row.map((text, columnIndex) => {
-      const cellTop = TABLE_TOP + rowIndex * TABLE_ROW_HEIGHT;
-      const cellLeft = TABLE_LEFT + columnIndex * columnWidth;
-      return container(OfficeArtSpContainer, [
-        fsp(spid + 1 + rowIndex * columnCount + columnIndex, 0),
-        clientAnchor(
-          cellTop,
-          cellLeft,
-          cellLeft + columnWidth,
-          cellTop + TABLE_ROW_HEIGHT,
-        ),
-        container(OfficeArtClientTextbox, [
-          atom(RT_TextHeaderAtom, u32le(TEXT_TYPE_BODY)),
-          textBytesAtom(text),
-        ]),
-      ]);
-    }),
-  );
-  // Two degenerate shapes sharing the group's own coordinate system — one zero-width (left equals right), one zero-height (top equals bottom) — placed well clear of every real cell's own anchor, spelling the gridline shapes a genuine PowerPoint-authored table carries alongside its actual cells.
-  const gridlineShapes =
-    table.includeGridlineShapes === true
-      ? [
-          container(OfficeArtSpContainer, [
-            fsp(spid + 900, 0),
-            clientAnchor(TABLE_TOP, TABLE_RIGHT, TABLE_RIGHT, bottom),
-          ]),
-          container(OfficeArtSpContainer, [
-            fsp(spid + 901, 0),
-            clientAnchor(bottom, TABLE_LEFT, TABLE_RIGHT, bottom),
-          ]),
-        ]
-      : [];
-  const orderedCells =
-    table.reverseCellOrder === true ? [...cells].reverse() : cells;
-  return container(OfficeArtSpgrContainer, [
-    groupShape,
-    ...gridlineShapes,
-    ...orderedCells,
-  ]);
-}
-
 export function syntheticPresentation(
   options: SyntheticPresentationOptions = {},
 ): SyntheticPresentation {
@@ -574,10 +187,46 @@ export function syntheticPresentation(
   const MASTER_ID = 0x80000000;
   const SLIDE_ID = 256;
   const NOTES_ID = 512;
-  // Fixed rather than random: a reproducible fixture is easier to debug than one that only fails intermittently, and RC4 CryptoAPI's own security properties are not what this fixture is testing. A literal, not a formula: no computation makes an arbitrary salt more "correct" than another.
-  const ENCRYPTION_SALT = new Uint8Array([
-    5, 16, 27, 38, 49, 60, 71, 82, 93, 104, 115, 126, 137, 148, 159, 170,
-  ]);
+  // The fixed geometry (master units) of this fixture's own title, body, picture and notes shapes, and the fixed shape ids of the picture and table.
+  const TITLE_PLACEHOLDER_TOP = 360;
+  const TITLE_PLACEHOLDER_LEFT = 480;
+  const TITLE_PLACEHOLDER_RIGHT = 5280;
+  const TITLE_PLACEHOLDER_BOTTOM = 1080;
+  const BODY_TEXTBOX_SPID = 3;
+  const BODY_TEXTBOX_TOP = 1440;
+  const BODY_TEXTBOX_LEFT = 480;
+  const BODY_TEXTBOX_RIGHT = 5280;
+  const BODY_TEXTBOX_BOTTOM = 3960;
+  const PICTURE_SHAPE_SPID = 8;
+  const PICTURE_SHAPE_PIB = 1;
+  const PICTURE_TOP = 360;
+  const PICTURE_LEFT = 1440;
+  const PICTURE_RIGHT = 2240;
+  const PICTURE_BOTTOM = 1080;
+  const TABLE_SHAPE_SPID = 9;
+  const NOTES_TEXTBOX_TOP = 2160;
+  const NOTES_TEXTBOX_LEFT = 288;
+  const NOTES_TEXTBOX_RIGHT = 5472;
+  const NOTES_TEXTBOX_BOTTOM = 4104;
+  // Out of range for this fixture's own one- or two-entry slide-list text array, for titleOutlineRefOutOfRange.
+  const OUT_OF_RANGE_TEXT_INDEX = 99;
+  // PersistDirectoryEntry's own packed header word ([MS-PPT] 2.3.5): cPersist occupies the high bits starting at bit 20.
+  const PERSIST_ENTRY_CPERSIST_SHIFT = 20;
+  // [MS-PPT] 2.3.3 UserEditAtom's own majorVersion field: the PowerPoint-97-2003 value this fixture uses throughout.
+  const USER_EDIT_MAJOR_VERSION = 0x03;
+  // [MS-PPT] 2.3.2 CurrentUserAtom's own relVersion field: unused, matching current-user-write.ts's own value.
+  const CURRENT_USER_REL_VERSION = 0x00000008;
+  // Padded past the compound-file writer's own minimum stream size.
+  const CURRENT_USER_STREAM_PADDING_BYTES = 64;
+  const SALT_SEQUENCE_START = 5;
+  const SALT_SEQUENCE_STEP = 11;
+  // Fixed rather than random: a reproducible fixture is easier to debug than one that only fails intermittently, and RC4 CryptoAPI's own security properties are not what this fixture is testing. Generated by a fixed arithmetic sequence (start 5, step 11) rather than sixteen individual literals, the same reasoning encryptionAtomBytes' own VERIFIER_SEQUENCE_START/STEP already apply to its verifier.
+  const ENCRYPTION_SALT = new Uint8Array(
+    Array.from(
+      { length: CRYPTOAPI_SALT_SIZE_BYTES },
+      (_unused, index) => SALT_SEQUENCE_START + index * SALT_SEQUENCE_STEP,
+    ),
+  );
 
   const documentChildren: Uint8Array<ArrayBuffer>[] =
     documentMissingDocumentAtom ? [] : [documentAtom(slideWidth, slideHeight)];
@@ -652,7 +301,7 @@ export function syntheticPresentation(
     ? new Uint8Array(2)
     : i32le(
         titleOutlineRefOutOfRange
-          ? 99
+          ? OUT_OF_RANGE_TEXT_INDEX
           : secondSlideListText === undefined
             ? 0
             : 1,
@@ -672,22 +321,34 @@ export function syntheticPresentation(
         container(OfficeArtDgContainer, [
           container(OfficeArtSpgrContainer, [
             container(OfficeArtSpContainer, [
-              atom(OfficeArtFSPGR, new Uint8Array(16), { recVer: 0x1 }),
+              atom(OfficeArtFSPGR, new Uint8Array(FSPGR_PATRIARCH_BYTES), {
+                recVer: 0x1,
+              }),
               // fGroup | fPatriarch, the outermost group every drawing carries.
               fsp(1, (1 << 0) | (1 << 2)),
             ]),
             // The title placeholder: its text is not here, only a reference to the first text of this slide's entry in the document's slide list.
             container(OfficeArtSpContainer, [
               fsp(2, 0),
-              clientAnchor(360, 480, 5280, 1080),
+              clientAnchor(
+                TITLE_PLACEHOLDER_TOP,
+                TITLE_PLACEHOLDER_LEFT,
+                TITLE_PLACEHOLDER_RIGHT,
+                TITLE_PLACEHOLDER_BOTTOM,
+              ),
               container(OfficeArtClientTextbox, [
                 atom(RT_OutlineTextRefAtom, outlineRefBytes),
               ]),
             ]),
             // An ordinary text box, whose text is stored on the shape itself.
             container(OfficeArtSpContainer, [
-              fsp(3, 0),
-              clientAnchor(1440, 480, 5280, 3960),
+              fsp(BODY_TEXTBOX_SPID, 0),
+              clientAnchor(
+                BODY_TEXTBOX_TOP,
+                BODY_TEXTBOX_LEFT,
+                BODY_TEXTBOX_RIGHT,
+                BODY_TEXTBOX_BOTTOM,
+              ),
               container(OfficeArtClientTextbox, [
                 ...(bodyTextboxMissingHeader
                   ? []
@@ -696,9 +357,20 @@ export function syntheticPresentation(
               ]),
             ]),
             ...(picture !== undefined
-              ? [pictureShape(8, 1, 360, 1440, 2240, 1080)]
+              ? [
+                  pictureShape(
+                    PICTURE_SHAPE_SPID,
+                    PICTURE_SHAPE_PIB,
+                    PICTURE_TOP,
+                    PICTURE_LEFT,
+                    PICTURE_RIGHT,
+                    PICTURE_BOTTOM,
+                  ),
+                ]
               : []),
-            ...(table !== undefined ? [tableShape(9, table)] : []),
+            ...(table !== undefined
+              ? [tableShape(TABLE_SHAPE_SPID, table)]
+              : []),
           ]),
         ]),
       ]),
@@ -717,12 +389,19 @@ export function syntheticPresentation(
             container(OfficeArtDgContainer, [
               container(OfficeArtSpgrContainer, [
                 container(OfficeArtSpContainer, [
-                  atom(OfficeArtFSPGR, new Uint8Array(16), { recVer: 0x1 }),
+                  atom(OfficeArtFSPGR, new Uint8Array(FSPGR_PATRIARCH_BYTES), {
+                    recVer: 0x1,
+                  }),
                   fsp(1, (1 << 0) | (1 << 2)),
                 ]),
                 container(OfficeArtSpContainer, [
                   fsp(2, 0),
-                  clientAnchor(2160, 288, 5472, 4104),
+                  clientAnchor(
+                    NOTES_TEXTBOX_TOP,
+                    NOTES_TEXTBOX_LEFT,
+                    NOTES_TEXTBOX_RIGHT,
+                    NOTES_TEXTBOX_BOTTOM,
+                  ),
                   container(OfficeArtClientTextbox, [
                     atom(RT_TextHeaderAtom, u32le(TEXT_TYPE_OTHER)),
                     textBytesAtom(notesText),
@@ -804,7 +483,10 @@ export function syntheticPresentation(
   for (const object of persistObjects) {
     // One PersistDirectoryEntry per object (cPersist 0x001), the same one-run-per-entry form stream/persist-write.ts emits.
     persistEntries.push(
-      concatBytes(u32le(object.persistId | (1 << 20)), u32le(persistOffset)),
+      concatBytes(
+        u32le(object.persistId | (1 << PERSIST_ENTRY_CPERSIST_SHIFT)),
+        u32le(persistOffset),
+      ),
     );
     persistOffset += object.bytes.length;
   }
@@ -821,7 +503,7 @@ export function syntheticPresentation(
       u32le(SLIDE_ID),
       u16le(0),
       u8(0x00),
-      u8(0x03),
+      u8(USER_EDIT_MAJOR_VERSION),
       u32le(0),
       u32le(persistDirectoryOffset),
       u32le(DOCUMENT_PERSIST_ID),
@@ -837,27 +519,30 @@ export function syntheticPresentation(
   const currentUserAtom = atom(
     RT_CurrentUserAtom,
     concatBytes(
-      u32le(0x00000014),
+      u32le(CURRENT_USER_FIXED_SIZE),
       u32le(
         encrypted || password !== undefined
-          ? 0xf3d1c4df
+          ? CURRENT_USER_HEADER_TOKEN_ENCRYPTED
           : CURRENT_USER_HEADER_TOKEN_PLAIN,
       ),
       u32le(userEditOffset),
       u16le(ansiUserName.length),
-      u16le(0x03f4),
-      u8(0x03),
+      u16le(CURRENT_USER_DOC_FILE_VERSION),
+      u8(CURRENT_USER_RELEASE),
       u8(0x00),
       u16le(0),
       ansiUserName,
-      u32le(0x00000008),
+      u32le(CURRENT_USER_REL_VERSION),
       utf16le(USER_NAME),
     ),
   );
 
   return {
     // Padded past the compound-file writer's own minimum stream size; every byte after the atom is outside its recLen and is therefore never read.
-    currentUserStream: concatBytes(currentUserAtom, new Uint8Array(64)),
+    currentUserStream: concatBytes(
+      currentUserAtom,
+      new Uint8Array(CURRENT_USER_STREAM_PADDING_BYTES),
+    ),
     powerPointDocumentStream: concatBytes(
       ...persistObjects.map((object) => object.bytes),
       persistDirectory,

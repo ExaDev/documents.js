@@ -151,7 +151,7 @@ describe("readPptStreams", () => {
           {
             text: "Quarterly review",
             bold: true,
-            // Accent 1 (colour-scheme slot 0x05) resolved against the master's own colour scheme — see MASTER_COLOR_SCHEME's own comment in test-support/presentation.ts.
+            // Accent 1 (colour-scheme slot 0x05) resolved against the master's own colour scheme — see MASTER_COLOR_SCHEME's own comment in test-support/presentation-table-shape.ts.
             color: { r: 0x1a / 255, g: 0x4b / 255, b: 0x8c / 255 },
           },
         ],
