@@ -102,7 +102,7 @@ function unicodeSubtable(
 
 // Inverts a Unicode subtable, built once on first use. A glyph reachable from several code points keeps the first non-private-use one found, so a symbol glyph that a font maps both from a real code point and from its own private-use alias is identified by the real one.
 function invertUnicodeSubtable(
-  subtable: CmapSubtable,
+  subtable: Readonly<CmapSubtable>,
 ): (glyphId: number) => number | undefined {
   let inverse: Map<number, number> | undefined;
   return (glyphId) => {

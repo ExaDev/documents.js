@@ -14,7 +14,7 @@ import type { Matrix } from "./matrix";
 export function readPageAnnotations(
   page: PdfDict,
   pageMatrix: Matrix,
-  resolver: PdfObjectResolver,
+  resolver: Readonly<PdfObjectResolver>,
   sink: PdfDiagnosticSink,
 ): LayoutAnnotation[] {
   // Both sets are scoped to this function, its only reader, rather than declared at module level: a module-level initializer runs exactly once per process, which puts every one of its literal entries permanently beyond the reach of Stryker's per-test mutation switch (see the memory note on this in the project's own notes) — scoping them here re-evaluates them fresh on every call, where each entry is reachable again.

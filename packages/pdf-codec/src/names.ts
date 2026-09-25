@@ -14,21 +14,18 @@ export interface NameTreeEntry {
 // A node whose /Kids points back into its own ancestry would loop forever without this guard — a corrupt or adversarial file, not something a real producer emits (the same stance document.ts's page-tree cycle guard takes).
 export function walkNameTree(
   root: PdfObject | undefined,
-  resolver: PdfObjectResolver,
+  resolver: Readonly<PdfObjectResolver>,
   sink: PdfDiagnosticSink,
 ): NameTreeEntry[] {
-  const entries: NameTreeEntry[] = [];
-  collectNameTreeEntries(root, resolver, sink, entries, new Set());
-  return entries;
+  return collectNameTreeEntries(root, resolver, sink, new Set());
 }
 
 function collectNameTreeEntries(
   node: PdfObject | undefined,
-  resolver: PdfObjectResolver,
+  resolver: Readonly<PdfObjectResolver>,
   sink: PdfDiagnosticSink,
-  entries: NameTreeEntry[],
   visited: Set<PdfDict>,
-): void {
+): NameTreeEntry[] {
   const dict = asDict(resolver.resolve(node));
   if (dict === undefined) {
     if (node !== undefined) {
@@ -39,7 +36,7 @@ function collectNameTreeEntries(
           "a name tree node did not resolve to a dictionary; skipping it",
       });
     }
-    return;
+    return [];
   }
   if (visited.has(dict)) {
     sink({
@@ -48,9 +45,10 @@ function collectNameTreeEntries(
       message:
         "the name tree contains a cycle; stopping descent at the repeated node",
     });
-    return;
+    return [];
   }
   visited.add(dict);
+  const entries: NameTreeEntry[] = [];
   // A node's own /Names pairs come before its /Kids' contents in tree order — an intermediate node may carry both, and the flattening preserves document order.
   const names = asArray(dictGet(dict, "Names"));
   if (names !== undefined) {
@@ -67,7 +65,15 @@ function collectNameTreeEntries(
   const kids = asArray(dictGet(dict, "Kids"));
   if (kids !== undefined) {
     for (const kid of kids) {
-      collectNameTreeEntries(kid, resolver, sink, entries, visited);
+      for (const entry of collectNameTreeEntries(
+        kid,
+        resolver,
+        sink,
+        visited,
+      )) {
+        entries.push(entry);
+      }
     }
   }
+  return entries;
 }

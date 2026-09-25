@@ -241,7 +241,7 @@ interface CmapSubtableRecord {
 }
 
 // Ranks the subtables this module can read, best first: (3, 10) Windows/UCS-4 format 12, (0, *) Unicode format 12, any format 12, (3, 1) Windows/BMP format 4, any format 4, then format 6.
-function preferenceRank(subtable: CmapSubtable): number {
+function preferenceRank(subtable: Readonly<CmapSubtable>): number {
   if (subtable.format === 12) {
     if (subtable.platformId === 3 && subtable.encodingId === 10) {
       return 0;

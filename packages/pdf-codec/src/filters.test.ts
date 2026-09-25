@@ -167,7 +167,7 @@ function referenceLzwEncode(
 }
 
 function packBits(
-  entries: { code: number; width: number }[],
+  entries: readonly { code: number; width: number }[],
 ): Uint8Array<ArrayBuffer> {
   let bitBuffer = 0;
   let bitCount = 0;

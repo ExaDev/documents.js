@@ -34,13 +34,17 @@ function findRange(
   return undefined;
 }
 
-// Appends `[glyphId, glyphId] -> value` to `ranges`, extending the previous range instead when this glyph continues it. Whether a glyph continues the previous range depends on which table is being built: a Coverage index climbs by one per glyph (`valueStep` 1), a ClassDef class stays flat across its range (`valueStep` 0).
-function pushGlyph(
-  ranges: GlyphRange[],
+// Where `[glyphId, glyphId] -> value` belongs in a run-length range list: `extended` replaces the previous range because this glyph continues it, `fresh` starts a new one. Returned rather than applied so the list is only ever mutated where it is owned. Whether a glyph continues the previous range depends on which table is being built: a Coverage index climbs by one per glyph (`valueStep` 1), a ClassDef class stays flat across its range (`valueStep` 0).
+type GlyphPlacement =
+  | { readonly extended: GlyphRange; readonly fresh?: never }
+  | { readonly fresh: GlyphRange; readonly extended?: never };
+
+function placeGlyph(
+  ranges: readonly GlyphRange[],
   glyphId: number,
   value: number,
   valueStep: number,
-): void {
+): GlyphPlacement {
   const previous = ranges[ranges.length - 1];
   if (
     previous !== undefined &&
@@ -49,14 +53,15 @@ function pushGlyph(
       previous.value +
         (previous.endGlyphId - previous.startGlyphId + 1) * valueStep
   ) {
-    ranges[ranges.length - 1] = {
-      startGlyphId: previous.startGlyphId,
-      endGlyphId: glyphId,
-      value: previous.value,
+    return {
+      extended: {
+        startGlyphId: previous.startGlyphId,
+        endGlyphId: glyphId,
+        value: previous.value,
+      },
     };
-    return;
   }
-  ranges.push({ startGlyphId: glyphId, endGlyphId: glyphId, value });
+  return { fresh: { startGlyphId: glyphId, endGlyphId: glyphId, value } };
 }
 
 const RANGE_RECORD_SIZE = 6; // uint16 startGlyphID + uint16 endGlyphID + uint16 (startCoverageIndex | class) — the identical record layout Coverage format 2 and ClassDef format 2 both use
@@ -116,7 +121,17 @@ export function parseCoverage(
     }
     ranges = [];
     for (let i = 0; i < count; i++) {
-      pushGlyph(ranges, u16(bytes, glyphArrayOffset + i * 2), i, 1);
+      const placement = placeGlyph(
+        ranges,
+        u16(bytes, glyphArrayOffset + i * 2),
+        i,
+        1,
+      );
+      if (placement.extended !== undefined) {
+        ranges[ranges.length - 1] = placement.extended;
+      } else {
+        ranges.push(placement.fresh);
+      }
     }
     ranges.sort((a, b) => a.startGlyphId - b.startGlyphId);
   } else if (format === 2) {
@@ -180,12 +195,17 @@ export function parseClassDef(
     }
     ranges = [];
     for (let i = 0; i < glyphCount; i++) {
-      pushGlyph(
+      const placement = placeGlyph(
         ranges,
         startGlyphId + i,
         u16(bytes, classArrayOffset + i * 2),
         0,
       );
+      if (placement.extended !== undefined) {
+        ranges[ranges.length - 1] = placement.extended;
+      } else {
+        ranges.push(placement.fresh);
+      }
     }
   } else if (format === 2) {
     // Format 2: start/end ranges, each assigning one class to every glyph it spans.

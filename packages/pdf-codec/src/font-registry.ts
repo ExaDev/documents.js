@@ -41,7 +41,7 @@ export type ResolvedFace =
     };
 
 export interface FontRegistry {
-  resolve: (font: LayoutFont) => ResolvedFace;
+  resolve: (font: Readonly<LayoutFont>) => ResolvedFace;
 }
 
 function faceCacheKey(family: string, bold: boolean, italic: boolean): string {
@@ -228,7 +228,7 @@ export function createFontRegistry(
   }
 
   return {
-    resolve(font: LayoutFont): ResolvedFace {
+    resolve(font: Readonly<LayoutFont>): ResolvedFace {
       const bold = font.weight === "bold";
       const italic = font.style === "italic";
       const key = faceCacheKey(font.family, bold, italic);
@@ -246,7 +246,7 @@ export function createFontRegistry(
 // The single resolution step every caller that OPTIONALLY accepts a FontRegistry shares (measure.ts's createFontMeasurer and write.ts's writePdf, which must agree exactly on which face a given LayoutFont resolves to or a line's measured width and its drawn glyphs come from two different fonts). With a registry, its own five-step order above; with none, resolveStandardFont directly — deliberately NOT a default registry, since createFontRegistry() with no options still consults the vendored substitute table, so defaulting one in would silently start embedding Carlito for every Calibri run in a document whose caller supplied no font configuration at all.
 export function resolveFaceWithRegistry(
   registry: FontRegistry | undefined,
-  font: LayoutFont,
+  font: Readonly<LayoutFont>,
 ): ResolvedFace {
   if (registry !== undefined) {
     return registry.resolve(font);

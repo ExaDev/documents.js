@@ -5,7 +5,7 @@ function u16be(n: number): number[] {
   return [(n >> 8) & 0xff, n & 0xff];
 }
 
-function marker(code: number, payload: number[]): number[] {
+function marker(code: number, payload: readonly number[]): number[] {
   return [0xff, code, ...u16be(payload.length + 2), ...payload];
 }
 

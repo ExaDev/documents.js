@@ -386,7 +386,7 @@ function preparePngImage(
 // Verbatim re-embedding of a no-encoder filter's original stream (JBIG2, JPEG 2000): the asset's own decoded canonical never reaches the file at all — these bytes are the compressed stream as the source carried it, re-emitted under the same filter, so a pdf-to-pdf round trip pays zero generation loss for exactly the two filters this package cannot re-encode. Width/Height still come from the asset (a viewer needs them whatever the stream says). A JBIG2 image is 1-bit /DeviceGray by construction (T.88's bitmap inverted into PDF's 0-is-black convention at decode), stated explicitly; a JPEG 2000 stream's component count and sample depth are the codestream's own to state (ISO 32000-1 7.4.9: /BitsPerComponent "shall not be present", /ColorSpace optional), so neither is written. /DecodeParms with the /JBIG2Globals reference is added in place at emission, once the globals stream's own object number is known — the identical late-binding the SMask reference already uses. A source soft mask still re-emits: the decoded canonical's alpha is extracted through the ordinary PNG prepare path and rides along as a generated /SMask, since the original compressed stream does not encode it.
 function preparePassthroughImage(
   asset: LayoutImageAsset,
-  original: NonNullable<LayoutImageAsset["original"]>,
+  original: Readonly<NonNullable<LayoutImageAsset["original"]>>,
   compress: boolean,
 ): PreparedImage {
   const png = preparePngImage(base64ToBytes(asset.base64), compress);
@@ -427,7 +427,7 @@ function prepareImage(
     : preparePngImage(bytes, compress);
 }
 
-function buildLinkAnnotDict(link: LayoutLink): PdfObject {
+function buildLinkAnnotDict(link: Readonly<LayoutLink>): PdfObject {
   return pdfDict({
     Type: pdfName("Annot"),
     Subtype: pdfName("Link"),
@@ -449,7 +449,9 @@ function buildLinkAnnotDict(link: LayoutLink): PdfObject {
 }
 
 // A display destination array's view half (ISO 32000-1 Table 151) — the inverse of navigation.ts's parseDestination, spelling the target back as the direct array form so the written link needs no /Dests or /Names tree to resolve. Absent coordinates are null, exactly as a producer that omitted them would write.
-function destinationViewArray(target: LayoutDestinationTarget): PdfObject[] {
+function destinationViewArray(
+  target: Readonly<LayoutDestinationTarget>,
+): PdfObject[] {
   const n = (value: number | undefined): PdfObject =>
     value === undefined ? pdfNull() : pdfNum(value);
   if (target.kind === "xyz") {
@@ -505,7 +507,7 @@ function resolveDestinationArray(
 }
 
 function buildInternalLinkAnnotDict(
-  link: LayoutInternalLink,
+  link: Readonly<LayoutInternalLink>,
   doc: LayoutDocument,
   pageAllocs: readonly { pageNum: number }[],
 ): PdfObject {
@@ -567,7 +569,9 @@ function xrefEntry(offset: number, generation: number, inUse: boolean): string {
 }
 
 // #967 residue parse-back: the inverse of serializeObjectToText the read side's readDocumentResidue used to quarantine each row. One object from the row's text through the ordinary lexer/parser; a row that does not parse at all restores as nothing (skip, never throw — residue is opacity, not data this writer depends on).
-function parseResidueRow(residue: SourceResidue): PdfObject | undefined {
+function parseResidueRow(
+  residue: Readonly<SourceResidue>,
+): PdfObject | undefined {
   // Parse diagnostics here describe the SOURCE producer's serialisation, not this writer's output — nothing downstream can act on them, so the sink drops them on the floor.
   const reader = new ByteReader(new TextEncoder().encode(residue.xml));
   return parseValue(reader, () => undefined);
@@ -1444,7 +1448,7 @@ export function writePdf(
 
   const context: ContentWriteContext = {
     measurer,
-    resolveFont: (font: LayoutFont) => {
+    resolveFont: (font: Readonly<LayoutFont>) => {
       const resolved = resolveFaceWithRegistry(registry, font);
       if (resolved.kind === "embedded") {
         const alloc = embeddedAllocs.get(resolved.face);

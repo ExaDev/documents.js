@@ -78,7 +78,7 @@ function carlitoRegularFace(): EmbeddedFace {
   return face;
 }
 
-function textDoc(text: string, font: LayoutFont): LayoutDocument {
+function textDoc(text: string, font: Readonly<LayoutFont>): LayoutDocument {
   return {
     formatVersion: LAYOUT_FORMAT_VERSION,
     metadata: {},

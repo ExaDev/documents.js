@@ -29,9 +29,9 @@ interface IhdrFields {
 }
 
 function buildPng(
-  fields: IhdrFields,
+  fields: Readonly<IhdrFields>,
   rawScanlines: Buffer,
-  extraChunks: Buffer[] = [],
+  extraChunks: readonly Buffer[] = [],
 ): Uint8Array<ArrayBuffer> {
   const ihdr = Buffer.alloc(13);
   ihdr.writeUInt32BE(fields.width, 0);
@@ -211,7 +211,7 @@ describe("decodePng against hand-built (Node zlib) fixtures", () => {
 });
 
 describe("decodePng: bit depths and colour types the base fixtures skip", () => {
-  function rawRow(filter: number, bytes: number[]): Buffer {
+  function rawRow(filter: number, bytes: readonly number[]): Buffer {
     return Buffer.from([filter, ...bytes]);
   }
 

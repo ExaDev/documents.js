@@ -10,7 +10,7 @@ import {
 
 // Direct byte-level tests for the two container structures every CFF font is built from. The existing coverage reaches this module only through cff-probe.ts and cff-bounds.ts against whole fonts, which exercises the happy paths a real font toolchain emits and nothing else: every operand encoding's boundary values, every malformed shape the readers refuse, and the real-number nibble stream have no test that isolates them.
 
-function dictOf(...bytes: number[]): ReturnType<typeof parseCffDict> {
+function dictOf(...bytes: readonly number[]): ReturnType<typeof parseCffDict> {
   return parseCffDict(Uint8Array.from(bytes));
 }
 
