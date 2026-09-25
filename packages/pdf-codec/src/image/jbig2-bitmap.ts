@@ -11,8 +11,9 @@ export interface Jbig2Bitmap {
   readonly data: Uint8Array<ArrayBuffer>;
 }
 
-// A ceiling on how large a single bitmap this decoder will allocate, guarding against a corrupt or hostile segment header declaring an absurd region size. At one byte per pixel this caps a single allocation at 64 MiB, which still comfortably covers a 600 dpi A4 page (5100 x 6600 = 33.7 megapixels) — the largest thing a real scanned-document JBIG2 stream contains.
-export const MAX_JBIG2_BITMAP_PIXELS = 1 << 26;
+// A ceiling on how large a single bitmap this decoder will allocate, guarding against a corrupt or hostile segment header declaring an absurd region size. At one byte per pixel this caps a single allocation at 64 MiB, which still comfortably covers a 600 dpi A4 page (5100 x 6600 = 33.7 megapixels), the largest thing a real scanned-document JBIG2 stream contains.
+const MAX_JBIG2_BITMAP_PIXELS_EXPONENT = 26; // 2^26 bytes = 64 MiB, at the one byte per pixel this module stores.
+export const MAX_JBIG2_BITMAP_PIXELS = 1 << MAX_JBIG2_BITMAP_PIXELS_EXPONENT;
 
 // A subclass of Jbig2ParseError rather than a standalone error: a declared region size this large only ever comes from a corrupt or hostile segment header, which is exactly what a parse failure is.
 export class Jbig2BitmapTooLargeError extends Jbig2ParseError {
@@ -119,20 +120,26 @@ export function combineBitmap(
   }
 }
 
+const BITS_PER_BYTE = 8;
+const BYTE_INDEX_SHIFT = 3; // log2(BITS_PER_BYTE): right-shifting a bit index by this many bits gives its byte index.
+const BYTE_BIT_MASK = BITS_PER_BYTE - 1; // Masks a bit index down to its position within a byte (0-7).
+const MSB_FIRST_BIT_MASK = 0x80; // The most significant bit of a byte, the starting mask for MSB-first packing/unpacking below.
+
 // Packs a bitmap into 1 bit per pixel, most significant bit first, each row padded out to a whole number of bytes — the layout a PDF image with /BitsPerComponent 1 expects, and the same one src/image/ccitt.ts produces. `width`/`height` are the caller's own requested output size rather than the bitmap's: a region smaller than the declared image reads as 0 (white) outside itself, and a larger one is cropped.
 export function packBitmapRows(
   bitmap: Jbig2Bitmap,
   width: number,
   height: number,
 ): Uint8Array<ArrayBuffer> {
-  const bytesPerRow = Math.ceil(width / 8);
+  const bytesPerRow = Math.ceil(width / BITS_PER_BYTE);
   const out = new Uint8Array(bytesPerRow * height);
   for (let y = 0; y < height; y++) {
     const rowStart = y * bytesPerRow;
     for (let x = 0; x < width; x++) {
       if (getPixel(bitmap, x, y) === 1) {
-        out[rowStart + (x >> 3)] =
-          (out[rowStart + (x >> 3)] ?? 0) | (0x80 >> (x & 7));
+        out[rowStart + (x >> BYTE_INDEX_SHIFT)] =
+          (out[rowStart + (x >> BYTE_INDEX_SHIFT)] ?? 0) |
+          (MSB_FIRST_BIT_MASK >> (x & BYTE_BIT_MASK));
       }
     }
   }
@@ -146,12 +153,14 @@ export function unpackBitmapRows(
   height: number,
 ): Jbig2Bitmap {
   const bitmap = createBitmap(width, height);
-  const bytesPerRow = Math.ceil(width / 8);
+  const bytesPerRow = Math.ceil(width / BITS_PER_BYTE);
   for (let y = 0; y < height; y++) {
     const rowStart = y * bytesPerRow;
     for (let x = 0; x < width; x++) {
       bitmap.data[y * width + x] =
-        ((packed[rowStart + (x >> 3)] ?? 0) >> (7 - (x & 7))) & 1;
+        ((packed[rowStart + (x >> BYTE_INDEX_SHIFT)] ?? 0) >>
+          (BYTE_BIT_MASK - (x & BYTE_BIT_MASK))) &
+        1;
     }
   }
   return bitmap;
