@@ -1,3 +1,10 @@
+## [14.4.50](https://github.com/ExaDev/documents.js/compare/documents.js%4014.4.49...documents.js%4014.4.50) (2026-09-25)
+
+
+### Dependencies
+
+- Updated doc-codec to 6.1.21
+
 ## [14.4.49](https://github.com/ExaDev/documents.js/compare/documents.js%4014.4.48...documents.js%4014.4.49) (2026-09-25)
 
 
