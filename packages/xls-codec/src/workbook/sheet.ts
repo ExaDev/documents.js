@@ -59,6 +59,17 @@ import {
 import { readCfEx, type CfExTarget } from "./conditional-format-ex";
 import { readDv, type RawDataValidation } from "./data-validation";
 
+// Field sizes this reader steps over or consumes: a page break's extent and a row's column range are each 4 bytes; a column index tops out at 0xff; the Formula record's own Cell header is 6 bytes and its cached FormulaValue 8, whose bytes 6 and 7 both being 0xFF mark a tagged (string/boolean/error/shared) value rather than a plain number; cce itself is 2 bytes.
+const PAGE_BREAK_EXTENT_SIZE = 4;
+const COL_RANGE_SIZE = 4;
+const RESERVED_AND_UNUSED_SIZE = 4;
+const MAX_COLUMN = 0xff;
+const CELL_HEADER_SIZE = 6;
+const FORMULA_VALUE_SIZE = 8;
+const TAGGED_VALUE_BYTE = 6;
+const TAGGED_VALUE_MARK = 0xff;
+const CCE_SIZE = 2;
+
 // The worksheet substream ([MS-XLS] 2.1.7.20.5): the grid geometry and the cell table for one sheet. https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/f41c06f2-9057-49a1-8c3f-a4a4d211fc56
 //
 // Its record sequence is defined by that section's own ABNF, whose relevant productions are (from [MS-XLS] 2.1.7.20.6, Common Productions):
@@ -512,7 +523,7 @@ function readPageBreaks(record: RecordGroup): number[] {
   const indices: number[] = [];
   for (let index = 0; index < count; index += 1) {
     indices.push(cursor.u16());
-    cursor.skip(4); // the break's extent along the other axis
+    cursor.skip(PAGE_BREAK_EXTENT_SIZE); // the break's extent along the other axis
   }
   return indices;
 }
@@ -570,9 +581,9 @@ function readDimensions(record: RecordGroup): RawRange | undefined {
 function readRow(record: RecordGroup): RawRow {
   const cursor = new BlockCursor(record.blocks);
   const index = cursor.u16();
-  cursor.skip(4); // colMic and colMac: the row's own first and past-the-end populated column, which the cell records already say.
+  cursor.skip(COL_RANGE_SIZE); // colMic and colMac: the row's own first and past-the-end populated column, which the cell records already say.
   const heightTwips = cursor.u16();
-  cursor.skip(4); // reserved1 and unused1.
+  cursor.skip(RESERVED_AND_UNUSED_SIZE); // reserved1 and unused1.
   const flags = cursor.u8();
   const hidden = (flags & ROW_FLAG_HIDDEN) !== 0;
   // fUnsynced alone, which [MS-XLS] 2.4.221 defines as "whether the row height was manually set" — the only flag that says miyRw is a real declaration rather than a restatement of the sheet default. fGhostDirty is deliberately NOT consulted here despite also being about the row: it says the row was FORMATTED (and governs whether ixfe_val is meaningful), which is a different fact and says nothing about the height. ContentSheetRow documents an absent height as "no declared size, use the application default" rather than as a fabricated one.
@@ -595,7 +606,7 @@ function readColInfo(record: RecordGroup): RawColumn[] {
   const widthPt = columnWidthToPoints(coldx);
   const columns: RawColumn[] = [];
   // colLast is inclusive, and [MS-XLS] caps a column index at 0x00FF; a record naming a wider range is malformed, and clamping keeps a single bad record from allocating an unbounded array.
-  const end = Math.min(last, 0xff);
+  const end = Math.min(last, MAX_COLUMN);
   for (let index = first; index <= end; index += 1) {
     columns.push(widthPt > 0 ? { index, widthPt, hidden } : { index, hidden });
   }
@@ -760,7 +771,11 @@ const FORMULA_FLAGS_BYTES = 2;
 const FORMULA_CALC_CACHE_BYTES = 4;
 /** The Cell (6 bytes) and FormulaValue (8 bytes) fields readFormula has already consumed by the time it reaches cce, plus the flags and calculation-cache fields above and the cce field itself (2 bytes) — what's left of the record past `FORMULA_HEADER_BYTES + cce` is the CellParsedFormula's own rgcb trailer. */
 const FORMULA_HEADER_BYTES =
-  6 + 8 + FORMULA_FLAGS_BYTES + FORMULA_CALC_CACHE_BYTES + 2;
+  CELL_HEADER_SIZE +
+  FORMULA_VALUE_SIZE +
+  FORMULA_FLAGS_BYTES +
+  FORMULA_CALC_CACHE_BYTES +
+  CCE_SIZE;
 
 /**
  * Formula ([MS-XLS] 2.4.127): a Cell, an eight-byte FormulaValue, flags, a calculation cache, then a CellParsedFormula — a two-byte cce, that many bytes of compiled Ptg tokens ([MS-XLS] 2.5.198.3), and (whenever rgce contains a PtgArray — an inline array-constant literal like `=SUM({1,2,3})`, unrelated to whether the cell itself is CSE-array-entered) an RgbExtra trailer of whatever bytes remain in the record.
@@ -775,10 +790,12 @@ function readFormula(
 ): RawCell {
   const cursor = new BlockCursor(record.blocks);
   const header = readCellHeader(cursor);
-  const bytes = cursor.take(8);
+  const bytes = cursor.take(FORMULA_VALUE_SIZE);
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   // A byte-for-byte comparison, not a getUint16 read against 0xffff: 0xffff's own two bytes are identical (0xff, 0xff), so which byte order getUint16 is asked to use can never change this specific comparison's outcome — checking each byte directly removes the endianness argument's own unobservable boolean literal instead of leaving it in as dead configuration.
-  const tagged = view.getUint8(6) === 0xff && view.getUint8(7) === 0xff;
+  const tagged =
+    view.getUint8(TAGGED_VALUE_BYTE) === TAGGED_VALUE_MARK &&
+    view.getUint8(TAGGED_VALUE_BYTE + 1) === TAGGED_VALUE_MARK;
   const value = tagged
     ? taggedFormulaValue(view, next)
     : { kind: "number" as const, value: view.getFloat64(0, true) };
