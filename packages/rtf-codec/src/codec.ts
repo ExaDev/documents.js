@@ -7,7 +7,8 @@ import { ContentDocumentSchema, DocumentTreeSchema } from "document-schema.js";
 import { readRtf, readRtfContent } from "./read";
 import { writeRtf, writeRtfContent } from "./write";
 
-const RTF_MAGIC = [0x7b, 0x5c, 0x72, 0x74, 0x66]; // "{\rtf"
+// The <File> production's own leading bytes, derived from the literal string rather than typed out as a byte array a second time: every conforming RTF document begins '{' \rtf1, so the first five bytes are always "{\rtf".
+const RTF_MAGIC = new TextEncoder().encode("{\\rtf");
 
 function hasRtfMagic(bytes: Uint8Array): boolean {
   return RTF_MAGIC.every((byte, index) => bytes[index] === byte);
