@@ -24,6 +24,13 @@ function coordinateAt(
   return asNumber(arr[index]);
 }
 
+// Destination-array element indices (ISO 32000-1 Table 151), counting from 0 at the page element: index 1 is always the view-type name, index 2 the first view-type-specific coordinate. These name the positions specific to the /XYZ and /FitR view types below; index 2 itself (left, shared by both) needs no name since -1/0/1/2 are exempt from this rule as structurally self-evident.
+const DEST_XYZ_TOP_INDEX = 3;
+const DEST_XYZ_ZOOM_INDEX = 4;
+const DEST_FITR_BOTTOM_INDEX = 3;
+const DEST_FITR_RIGHT_INDEX = 4;
+const DEST_FITR_TOP_INDEX = 5;
+
 // [page /Type ...coordinates...] (ISO 32000-1 Table 151). The page element is an indirect reference in a real file; PDF 2.0 additionally permits a bare integer page number, so both spellings resolve.
 export function parseDestination(
   value: PdfObject | undefined,
@@ -62,10 +69,11 @@ export function parseDestination(
       pageIndex: resolvedPageIndex,
       target: {
         kind: "xyz",
+        // [page /XYZ left top zoom] (ISO 32000-1 Table 151): indices 3 and 4 are the top coordinate and zoom factor that follow the left coordinate at index 2.
         ...optionalCoords(arr, [
           ["leftPt", 2],
-          ["topPt", 3],
-          ["zoom", 4],
+          ["topPt", DEST_XYZ_TOP_INDEX],
+          ["zoom", DEST_XYZ_ZOOM_INDEX],
         ]),
       },
     };
@@ -90,11 +98,12 @@ export function parseDestination(
       pageIndex: resolvedPageIndex,
       target: {
         kind: "fitR",
+        // [page /FitR left bottom right top] (ISO 32000-1 Table 151): indices 3-5 are bottom/right/top, following the left coordinate at index 2.
         ...optionalCoords(arr, [
           ["leftPt", 2],
-          ["bottomPt", 3],
-          ["rightPt", 4],
-          ["topPt", 5],
+          ["bottomPt", DEST_FITR_BOTTOM_INDEX],
+          ["rightPt", DEST_FITR_RIGHT_INDEX],
+          ["topPt", DEST_FITR_TOP_INDEX],
         ]),
       },
     };
