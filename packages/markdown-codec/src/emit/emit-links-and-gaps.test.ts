@@ -1,6 +1,10 @@
 // The link/image-title, nested-style-ordering and diagnostic-gap suites split from emit.test.ts, sharing the doc/diagnostics harness.
 
-import type { ContentBlock, ContentDocument } from "document-schema.js";
+import type {
+  ContentBlock,
+  ContentDocument,
+  ContentTable,
+} from "document-schema.js";
 import { PAGE_SIZE_A4 } from "document-schema.js";
 import { describe, expect, it } from "vitest";
 import { DEFAULT_MARGINS } from "../defaults/defaults";
