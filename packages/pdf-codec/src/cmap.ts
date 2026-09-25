@@ -8,10 +8,13 @@ export interface ToUnicodeCMap {
   lookup: (code: number) => string | undefined;
 }
 
+const BYTE_RADIX = 256;
+const BITS_PER_BYTE = 8;
+
 function hexBytesToNumber(bytes: Uint8Array<ArrayBuffer>): number {
   let value = 0;
   for (const byte of bytes) {
-    value = value * 256 + byte;
+    value = value * BYTE_RADIX + byte;
   }
   return value;
 }
@@ -20,7 +23,7 @@ function hexBytesToNumber(bytes: Uint8Array<ArrayBuffer>): number {
 function decodeUtf16BEString(bytes: Uint8Array<ArrayBuffer>): string {
   const units: number[] = [];
   for (let i = 0; i + 1 < bytes.length; i += 2) {
-    units.push(((bytes[i] ?? 0) << 8) | (bytes[i + 1] ?? 0));
+    units.push(((bytes[i] ?? 0) << BITS_PER_BYTE) | (bytes[i + 1] ?? 0));
   }
   return String.fromCharCode(...units);
 }
@@ -138,7 +141,7 @@ function registerBfRangeSingle(
   }
   const prefix = decodeUtf16BEString(dstBytes.subarray(0, dstBytes.length - 2));
   const baseUnit =
-    ((dstBytes[dstBytes.length - 2] ?? 0) << 8) |
+    ((dstBytes[dstBytes.length - 2] ?? 0) << BITS_PER_BYTE) |
     (dstBytes[dstBytes.length - 1] ?? 0);
   for (let code = lo; code <= hi; code++) {
     map.set(code, prefix + String.fromCharCode(baseUnit + (code - lo)));
