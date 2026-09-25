@@ -20,8 +20,14 @@ export class FontFaceParseError extends Error {
 // 'ttcf' (TrueType Collection, ISO/IEC 14496-22 clause 4.1): a container for several table directories behind its own header, not the single-face file this function reads. parseSfnt already declines it (it recognises only the four single-font version tags), so it fails the same generic "not a recognised sfnt" check every other malformed input does; this peek exists purely to give that specific, actionable case its own message rather than a bare "unreadable" one.
 const SFNT_VERSION_COLLECTION = 0x74746366;
 
+// Width in bytes of the sfnt version/tag field this function peeks at offset 0, the same u32 hasBytes/u32 read below.
+const SFNT_VERSION_TAG_BYTES = 4;
+
 function isTrueTypeCollection(bytes: Uint8Array<ArrayBuffer>): boolean {
-  return hasBytes(bytes, 0, 4) && u32(bytes, 0) === SFNT_VERSION_COLLECTION;
+  return (
+    hasBytes(bytes, 0, SFNT_VERSION_TAG_BYTES) &&
+    u32(bytes, 0) === SFNT_VERSION_COLLECTION
+  );
 }
 
 // 'OS/2' fsSelection (clause 5.2.8): bit 0 ITALIC, bit 5 BOLD.
