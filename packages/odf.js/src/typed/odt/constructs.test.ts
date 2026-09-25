@@ -727,9 +727,12 @@ describe("readOdtContent: anchored draw:frames in text flow", () => {
     if (blocks[0]?.kind !== "paragraph" || blocks[1]?.kind !== "image") {
       throw new Error("expected a paragraph followed by a lifted image block");
     }
+    const expectedWidthPt = 56.7;
+    const expectedHeightPt = 28.35;
+    const precisionDigits = 0;
     expect(blocks[1].format).toBe("png");
-    expect(blocks[1].widthPt).toBeCloseTo(56.7, 0);
-    expect(blocks[1].heightPt).toBeCloseTo(28.35, 0);
+    expect(blocks[1].widthPt).toBeCloseTo(expectedWidthPt, precisionDigits);
+    expect(blocks[1].heightPt).toBeCloseTo(expectedHeightPt, precisionDigits);
   });
 
   it("contributes nothing for frames at all under frames: 'none' — the opt-out a consumer with its own frame-detection passes takes", () => {
@@ -923,8 +926,11 @@ describe("readOdtContent: anchored draw:frames in text flow", () => {
       throw new Error("expected a drawing document");
     }
     const page = embedded.document.pages[0];
-    expect(page?.size.widthPt).toBeCloseTo(226.8, 0);
-    expect(page?.size.heightPt).toBeCloseTo(141.75, 0);
+    const expectedWidthPt = 226.8;
+    const expectedHeightPt = 141.75;
+    const precisionDigits = 0;
+    expect(page?.size.widthPt).toBeCloseTo(expectedWidthPt, precisionDigits);
+    expect(page?.size.heightPt).toBeCloseTo(expectedHeightPt, precisionDigits);
     expect(page?.shapes[0]?.blocks[0]?.kind).toBe("table");
     expect(embedded.source?.format).toBe("odt");
     expect(embedded.source?.xml).toContain('<chart:chart chart:class="bar">');
@@ -993,7 +999,12 @@ describe("readOdtContent: anchored draw:frames in text flow", () => {
       kind: "number",
       value: 4,
     });
-    expect(blocks[1].frame.widthPt).toBeCloseTo(170.1, 0);
+    const expectedFrameWidthPt = 170.1;
+    const precisionDigits = 0;
+    expect(blocks[1].frame.widthPt).toBeCloseTo(
+      expectedFrameWidthPt,
+      precisionDigits,
+    );
   });
 });
 
@@ -1298,7 +1309,8 @@ describe("readOdtContent: field master declarations as a definitions table", () 
       bodyListNumId,
     ];
     // numId is an identity (list.ts's own header invariant: different text:list elements get different numIds), so all three must be pairwise distinct — two notes' bodies are different lists exactly as a note body and the main body are.
-    expect(new Set(numIds).size).toBe(3);
+    const expectedUniqueCount = 3;
+    expect(new Set(numIds).size).toBe(expectedUniqueCount);
   });
 });
 

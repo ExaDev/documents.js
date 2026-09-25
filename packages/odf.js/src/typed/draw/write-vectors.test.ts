@@ -191,15 +191,22 @@ describe("writeDrawVector: paint (vectorGraphicStyleName)", () => {
 
 describe("writeDrawVector: draw:z-index (zIndexAttrs)", () => {
   it("uses the caller's documentIndex when the vector states no ODF-spellable paintOrder", () => {
+    const documentIndex = 3;
     const state = writeState();
-    const written = writeDrawVector(RECT, state, 3);
-    expect(attr(written, "draw:z-index")).toBe("3");
+    const written = writeDrawVector(RECT, state, documentIndex);
+    expect(attr(written, "draw:z-index")).toBe(String(documentIndex));
   });
 
   it("uses the vector's own resolvable paintOrder over the caller's documentIndex", () => {
+    const documentIndex = 3;
+    const paintOrder = 5;
     const state = writeState();
-    const written = writeDrawVector({ ...RECT, paintOrder: 5 }, state, 3);
-    expect(attr(written, "draw:z-index")).toBe("5");
+    const written = writeDrawVector(
+      { ...RECT, paintOrder },
+      state,
+      documentIndex,
+    );
+    expect(attr(written, "draw:z-index")).toBe(String(paintOrder));
   });
 });
 
@@ -320,27 +327,37 @@ describe("writeDrawVector: per-kind element shape", () => {
 
 describe("writeDrawVectors", () => {
   it("writes each vector at baseIndex plus its own array position", () => {
+    const baseIndex = 5;
+    const expectedVectorCount = 2;
     const state = writeState();
-    const written = writeDrawVectors([RECT, RECT], state, 5);
-    expect(written).toHaveLength(2);
+    const written = writeDrawVectors([RECT, RECT], state, baseIndex);
+    expect(written).toHaveLength(expectedVectorCount);
     const [first, second] = written;
     if (first === undefined || second === undefined) {
       throw new Error("expected two written vectors");
     }
-    expect(attr(first, "draw:z-index")).toBe("5");
-    expect(attr(second, "draw:z-index")).toBe("6");
+    expect(attr(first, "draw:z-index")).toBe(String(baseIndex));
+    expect(attr(second, "draw:z-index")).toBe(String(baseIndex + 1));
   });
 });
 
 describe("canonicalDrawVector", () => {
   it("resolves paintOrder to documentIndex when the vector states none", () => {
-    expect(canonicalDrawVector(RECT, 7).paintOrder).toBe(7);
+    const documentIndex = 7;
+    expect(canonicalDrawVector(RECT, documentIndex).paintOrder).toBe(
+      documentIndex,
+    );
   });
 
   it("resolves paintOrder to the vector's own value when it states one", () => {
-    expect(canonicalDrawVector({ ...RECT, paintOrder: 2 }, 7).paintOrder).toBe(
-      2,
-    );
+    const documentIndex = 7;
+    const statedPaintOrder = 2;
+    expect(
+      canonicalDrawVector(
+        { ...RECT, paintOrder: statedPaintOrder },
+        documentIndex,
+      ).paintOrder,
+    ).toBe(statedPaintOrder);
   });
 
   it("collapses rotationDeg === 0 to absent, but keeps a genuine non-zero rotation", () => {
@@ -349,8 +366,9 @@ describe("canonicalDrawVector", () => {
     if (zero.kind === "line" || nonZero.kind === "line") {
       throw new Error("expected 'rect' results, not 'line'");
     }
+    const expectedRotation = 45;
     expect(zero.rotationDeg).toBeUndefined();
-    expect(nonZero.rotationDeg).toBe(45);
+    expect(nonZero.rotationDeg).toBe(expectedRotation);
   });
 
   it("omits the rotationDeg key entirely (not merely undefined) when the vector never stated one", () => {
@@ -367,8 +385,14 @@ describe("canonicalDrawVector", () => {
     if (absent.kind === "line" || stated.kind === "line") {
       throw new Error("expected 'rect' results, not 'line'");
     }
+    const rgbChannelMax = 255;
+    const quantizedRed = 230; // round(0.9 * 255)
     expect(absent.fill).toBeUndefined();
-    expect(stated.fill).toEqual({ r: 230 / 255, g: 0, b: 0 });
+    expect(stated.fill).toEqual({
+      r: quantizedRed / rgbChannelMax,
+      g: 0,
+      b: 0,
+    });
   });
 
   it("canonicalises an absent stroke style to 'solid' and leaves an absent stroke absent", () => {

@@ -263,9 +263,21 @@ describe("readOdgContent", () => {
   });
 
   it("resolves page size from the master-page -> page-layout chain, identically to readOdpContent", () => {
+    // A4 paper: 21cm x 29.7cm, converted through the standard 72pt/inch and 2.54cm/inch factors.
+    const a4WidthCm = 21;
+    const a4HeightCm = 29.7;
+    const pointsPerInch = 72;
+    const cmPerInch = 2.54;
+    const precisionDigits = 6;
     const { pages } = readOdgContent(buildFixturePackage());
-    expect(pages[0]?.size.widthPt).toBeCloseTo((21 * 72) / 2.54, 6);
-    expect(pages[0]?.size.heightPt).toBeCloseTo((29.7 * 72) / 2.54, 6);
+    expect(pages[0]?.size.widthPt).toBeCloseTo(
+      (a4WidthCm * pointsPerInch) / cmPerInch,
+      precisionDigits,
+    );
+    expect(pages[0]?.size.heightPt).toBeCloseTo(
+      (a4HeightCm * pointsPerInch) / cmPerInch,
+      precisionDigits,
+    );
   });
 
   it("falls back to A4 (LibreOffice Draw's own real default page size) when the master-page/page-layout chain does not resolve", () => {
@@ -308,11 +320,12 @@ describe("readOdgContent", () => {
 
   it("reads the polygon's draw:points geometry as a closed straight-line path", () => {
     const { pages } = readOdgContent(buildFixturePackage());
+    const expectedSegmentCount = 3;
     const polygon = pages[0]?.vectors.find(
       (v) =>
         v.kind === "path" &&
         v.subpaths[0]?.closed === true &&
-        v.subpaths[0].segments.length === 3,
+        v.subpaths[0].segments.length === expectedSegmentCount,
     );
     if (polygon?.kind !== "path") {
       throw new Error("expected the polygon path vector");

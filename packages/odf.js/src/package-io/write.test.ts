@@ -17,16 +17,36 @@ function packageOf(parts: Package["parts"]): Package {
   return { parts };
 }
 
+// A zip local file header's own fixed field layout (PKWARE APPNOTE.TXT section 4.3.7), mirroring test-support/zip.ts's own private constants.
+const LFH_SIGNATURE = 0x04034b50;
+const LFH_COMPRESSION_METHOD_OFFSET = 8;
+const LFH_COMPRESSED_SIZE_OFFSET = 18;
+const LFH_FILENAME_LENGTH_OFFSET = 26;
+const LFH_EXTRA_LENGTH_OFFSET = 28;
+const LFH_FIXED_SIZE = 30;
+const STORED_COMPRESSION_METHOD = 0;
+const DEFLATED_COMPRESSION_METHOD = 8;
+
 // Walks local file headers exactly as localFileHeaderNames does, but also returns each entry's own compression-method field (0 = stored, 8 = deflated) — what a non-mimetype part's storage mode actually is, which localFileHeaderNames itself has no need to expose.
 function localFileHeaderCompressionMethods(bytes: Uint8Array): number[] {
   const methods: number[] = [];
   let offset = 0;
-  while (offset < bytes.length && readUint32LE(bytes, offset) === 0x04034b50) {
-    methods.push(readUint16LE(bytes, offset + 8));
-    const compressedSize = readUint32LE(bytes, offset + 18);
-    const filenameLength = readUint16LE(bytes, offset + 26);
-    const extraLength = readUint16LE(bytes, offset + 28);
-    offset = offset + 30 + filenameLength + extraLength + compressedSize;
+  while (
+    offset < bytes.length &&
+    readUint32LE(bytes, offset) === LFH_SIGNATURE
+  ) {
+    methods.push(readUint16LE(bytes, offset + LFH_COMPRESSION_METHOD_OFFSET));
+    const compressedSize = readUint32LE(
+      bytes,
+      offset + LFH_COMPRESSED_SIZE_OFFSET,
+    );
+    const filenameLength = readUint16LE(
+      bytes,
+      offset + LFH_FILENAME_LENGTH_OFFSET,
+    );
+    const extraLength = readUint16LE(bytes, offset + LFH_EXTRA_LENGTH_OFFSET);
+    offset =
+      offset + LFH_FIXED_SIZE + filenameLength + extraLength + compressedSize;
   }
   return methods;
 }
@@ -84,7 +104,10 @@ describe("serializePackage", () => {
       "content.xml": { kind: "xml", nodes: [] },
     });
     const methods = localFileHeaderCompressionMethods(serializePackage(pkg));
-    expect(methods).toEqual([0, 8]);
+    expect(methods).toEqual([
+      STORED_COMPRESSION_METHOD,
+      DEFLATED_COMPRESSION_METHOD,
+    ]);
   });
 });
 

@@ -150,22 +150,27 @@ describe("mintOdfListNumId", () => {
       state,
     );
     expect(numId).toBe("ordered:list3");
-    expect(state.counter.next).toBe(4);
+    const nextAfterOneMint = 4;
+    expect(state.counter.next).toBe(nextAfterOneMint);
   });
 
   it("advances the counter by exactly one per call, regardless of resolution", () => {
     const state: OdfListIdState = { counter: { next: 1 } };
     mintOdfListNumId({ parts: {} }, el("text:list"), state);
     mintOdfListNumId({ parts: {} }, el("text:list"), state);
-    expect(state.counter.next).toBe(3);
+    const nextAfterTwoMints = 3;
+    expect(state.counter.next).toBe(nextAfterTwoMints);
   });
 });
+
+// buildOdfListStyle always emits ODF's own fixed ten-deep level ladder, regardless of how deep the source list actually nests.
+const listLevelCount = 10;
 
 describe("buildOdfListStyle", () => {
   it("builds ten levels, each one indent step deeper than the last", () => {
     const style = buildOdfListStyle("L1", "bullet");
     const levels = childrenWithTag(style, "text:list-level-style-bullet");
-    expect(levels).toHaveLength(10);
+    expect(levels).toHaveLength(listLevelCount);
     expect(attrValue(levels[0]!, "text:level")).toBe("1");
     expect(attrValue(levels[9]!, "text:level")).toBe("10");
     const props1 = childrenWithTag(
@@ -186,7 +191,7 @@ describe("buildOdfListStyle", () => {
   it("an ordered style's own levels carry the real numbering attributes", () => {
     const style = buildOdfListStyle("L1", "ordered");
     const levels = childrenWithTag(style, "text:list-level-style-number");
-    expect(levels).toHaveLength(10);
+    expect(levels).toHaveLength(listLevelCount);
     expect(attrValue(levels[0]!, "style:num-suffix")).toBe(".");
     expect(attrValue(levels[0]!, "style:num-format")).toBe("1");
   });
@@ -259,7 +264,8 @@ describe("writeOdfList", () => {
   });
 
   it("a fractional or negative level is clamped to a whole non-negative depth", () => {
-    const root = writeOdfList([entry(-5, "a")], undefined);
+    const belowZeroLevel = -5;
+    const root = writeOdfList([entry(belowZeroLevel, "a")], undefined);
     // Clamped to level 0 — a single top-level item, no nested text:list at all.
     expect(childrenWithTag(root, "text:list-item")).toHaveLength(1);
     expect(childrenWithTag(root, "text:list")).toHaveLength(0);
@@ -294,11 +300,15 @@ describe("canonicalNumId", () => {
   });
 
   it("a bullet:-prefixed incoming numId mints a bullet:-prefixed canonical label", () => {
-    expect(canonicalNumId("bullet:src", 3)).toBe("bullet:list3");
+    const bulletSourceCounter = 3;
+    expect(canonicalNumId("bullet:src", bulletSourceCounter)).toBe(
+      "bullet:list3",
+    );
   });
 
   it("an undefined incoming numId mints an unprefixed canonical label", () => {
-    expect(canonicalNumId(undefined, 4)).toBe("list4");
+    const unprefixedSourceCounter = 4;
+    expect(canonicalNumId(undefined, unprefixedSourceCounter)).toBe("list4");
   });
 });
 
@@ -336,7 +346,8 @@ describe("planListMembership / closeListPlan", () => {
     const first = planListMembership({ numId: "src-a", level: 0 }, state);
     const second = planListMembership({ numId: "src-b", level: 0 }, state);
     expect(second).not.toBe(first);
-    expect(state.cursor.next).toBe(3);
+    const nextAfterTwoPlans = 3;
+    expect(state.cursor.next).toBe(nextAfterTwoPlans);
   });
 
   it("a membership carrying no incoming numId still opens a real run of its own, keyed on the sentinel", () => {

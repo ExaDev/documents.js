@@ -583,11 +583,15 @@ describe("what the canonical form restates, and why", () => {
     if (paragraph.kind !== "paragraph") {
       throw new Error("expected a paragraph");
     }
+    const rgbChannelMax = 255;
     // 0.9 * 255 is 229.5, which rounds to 230 — the nearest value ODF's own six-hex-digit spelling can carry.
+    const quantizedR = 230;
+    const quantizedG = 128;
+    const quantizedB = 26;
     expect(paragraph.runs[0]!.color).toEqual({
-      r: 230 / 255,
-      g: 128 / 255,
-      b: 26 / 255,
+      r: quantizedR / rgbChannelMax,
+      g: quantizedG / rgbChannelMax,
+      b: quantizedB / rgbChannelMax,
     });
     expectRoundTrip(document);
   });
