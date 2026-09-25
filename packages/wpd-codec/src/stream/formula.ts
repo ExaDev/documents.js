@@ -1,6 +1,47 @@
 import { int16At, sliceAt, uint16At } from "../bytes/view";
 import { decodeWordString } from "./characters";
 
+// Column letters are base-26 over 'A'..'Z', with the running value stepped down by one each round because the alphabet has no zero digit.
+const ALPHABET_LENGTH = 26;
+const UPPERCASE_A_CHAR_CODE = 65;
+
+// A cell number in a formula is two int16s, row then column.
+const CELL_NUMBER_BYTES = 4;
+
+// The double in a floating-point constant is 8 bytes.
+const DOUBLE_BYTE_LENGTH = 8;
+
+// Codes with payloads, dispatched by the SDK's own numbering.
+const CODE_NUMBER_CONSTANT = 8;
+const CODE_STRING_CONSTANT = 9;
+const CODE_NAME_REFERENCE = 10;
+const CODE_GROUP1_FUNCTION = 12;
+const CODE_GROUP2_FUNCTION = 13;
+const CODE_NEGATION = 21;
+const CODE_CELL_REFERENCE = 25;
+const CODE_FORMULA_ERROR = 26;
+const CODE_BLOCK_REFERENCE = 27;
+const CODE_GROUP_REFERENCE = 28;
+const CODE_FLOAT_CONSTANT = 30;
+const CODE_UNARY_PLUS = 31;
+const CODE_UNARY_MINUS = 32;
+const CODE_ATTRIBUTE_ON = 41;
+const CODE_ATTRIBUTE_OFF = 42;
+const CODE_ATTRIBUTE_MASK = 43;
+const CODE_CONDITIONAL_ATTRIBUTE = 44;
+
+// Range and absolute-reference codes: 48-63 carry a two-bit absolute flag per corner cell, 64-67 the same idea in a two-bit mask.
+const RANGE_REFERENCE_CODE_FIRST = 48;
+const RANGE_REFERENCE_CODE_LAST = 63;
+const RANGE_REFERENCE_FLAG_MASK = 0x0f;
+const RANGE_FLAG_START_ROW_ABSOLUTE = 0x04;
+const RANGE_FLAG_START_COLUMN_ABSOLUTE = 0x08;
+const RANGE_FLAG_END_ROW_ABSOLUTE = 0x01;
+const RANGE_FLAG_END_COLUMN_ABSOLUTE = 0x02;
+const ABSOLUTE_REFERENCE_CODE_FIRST = 64;
+const ABSOLUTE_REFERENCE_CODE_LAST = 67;
+const ABSOLUTE_REFERENCE_FLAG_MASK = 0x03;
+
 // — Table formulas, per WPFF Table Formula Functions --
 //
 // "Table formula codes and their operation are shown below. These codes are used by New Cell Formula (function 0xD0 subfunction 0x81)." The tokenised formula this module decodes is `stream/table.ts`'s own CELL_FORMULA_SUBFUNCTION payload — already isolated from its own six-byte length framing by readEmbeddedSubfunctions, so what reaches readTableFormula here is exactly the SDK's own "<tokenized formula> x length of formula" region and nothing else.
@@ -12,150 +53,181 @@ import { decodeWordString } from "./characters";
 // https://github.com/OneWingedShark/WordPerfect/blob/master/doc/SDK_Help/FileFormats/WPFF_TableFormulas.htm
 
 // Function Number Values for Code 12 ("group 1 functions"), the SDK's own table transcribed in full — data, not interpretation, the same status this package's character-set and JUSTIFICATION tables already have.
-const GROUP1_FUNCTIONS: ReadonlyMap<number, string> = new Map([
-  [1, "MINUS"],
-  [2, "ABS"],
-  [3, "INT"],
-  [4, "SIGN"],
-  [5, "NOT"],
-  [6, "TRUE"],
-  [7, "FALSE"],
-  [8, "AND"],
-  [9, "OR"],
-  [10, "AVE"],
-  [11, "COUNT"],
-  [12, "MIN"],
-  [13, "MAX"],
-  [14, "NA"],
-  [15, "ISNA"],
-  [16, "TIME"],
-  [17, "DATE"],
-  [18, "FACT"],
-  [19, "ROW"],
-  [20, "COLUMN"],
-]);
+// The SDK's own group-1 function names in function-number order; the number each carries is its position in this list.
+const GROUP1_FUNCTION_NAMES = [
+  "MINUS",
+  "ABS",
+  "INT",
+  "SIGN",
+  "NOT",
+  "TRUE",
+  "FALSE",
+  "AND",
+  "OR",
+  "AVE",
+  "COUNT",
+  "MIN",
+  "MAX",
+  "NA",
+  "ISNA",
+  "TIME",
+  "DATE",
+  "FACT",
+  "ROW",
+  "COLUMN",
+] as const;
+const GROUP1_FUNCTIONS: ReadonlyMap<number, string> = new Map(
+  GROUP1_FUNCTION_NAMES.map((name, index) => [index + 1, name] as const),
+);
 
 // Function Number Values for Code 13 ("group 2 functions"), transcribed in full from the same table.
-const GROUP2_FUNCTIONS: ReadonlyMap<number, string> = new Map([
-  [1, "POWER"],
-  [2, "LN"],
-  [3, "LOG"],
-  [4, "SQRT"],
-  [5, "PI"],
-  [6, "EXP"],
-  [7, "SIN"],
-  [8, "COS"],
-  [9, "TAN"],
-  [10, "MOD"],
-  [11, "ASIN"],
-  [12, "ACOS"],
-  [13, "ATAN"],
-  [14, "TERM"],
-  [15, "PV"],
-  [16, "PMT"],
-  [17, "FV"],
-  [18, "NPV"],
-  [19, "LOOKUP"],
-  [20, "INDEX"],
-  [21, "ROUND"],
-  [22, "STDEV"],
-  [23, "CONCEDE"],
-  [24, "MID"],
-  [25, "LENGTH"],
-  [26, "VALUE"],
-  [27, "TEXT"],
-  [28, "MDY"],
-  [29, "MONTH"],
-  [30, "DAY"],
-  [31, "YEAR"],
-  [32, "DATETEXT"],
-  [33, "DATEVALUE"],
-  [34, "VAR"],
-  [35, "RANDOM"],
-  [36, "CURRENCY"],
-  [37, "ITERATION"],
-  [38, "ISVALUE"],
-  [39, "ISTEXT"],
-  [40, "REPLACE"],
-  [41, "RADIANS"],
-  [42, "CELL"],
-  [43, "SUBTRACT"],
-  [44, "IRR"],
-  [45, "FIND"],
-  [46, "LEFT"],
-  [47, "RIGHT"],
-  [48, "UPPER"],
-  [49, "LOWER"],
-  [50, "PROPER"],
-  [51, "CHAR"],
-  [52, "CODE"],
-  [53, "TRIM"],
-  [54, "REPEAT"],
-  [55, "BLOCK"],
-  [56, "CURSOR"],
-  [57, "DDB"],
-  [58, "SLN"],
-  [59, "SYD"],
-  [60, "RATE"],
-  [61, "STATUS"],
-  [62, "FOREACH"],
-  [63, "DEGREES"],
-  [64, "HOUR"],
-  [65, "MINUTE"],
-  [66, "SECOND"],
-  [67, "HMS"],
-  [68, "TIMETEXT"],
-  [69, "TIMEVALUE"],
-  [70, "PRODUCT"],
-  [71, "QUOTIENT"],
-  [72, "VARP"],
-  [73, "STDEVP"],
-  [74, "ATAN2"],
-  [75, "MATCH"],
-  [76, "MATCH2"],
-  [77, "LOOKUP2"],
-  [78, "LINK"],
-  [79, "ISERR"],
-  [80, "ISERR2"],
-  [81, "CHOOSE"],
-]);
+// The SDK's own group-2 function names in function-number order.
+const GROUP2_FUNCTION_NAMES = [
+  "POWER",
+  "LN",
+  "LOG",
+  "SQRT",
+  "PI",
+  "EXP",
+  "SIN",
+  "COS",
+  "TAN",
+  "MOD",
+  "ASIN",
+  "ACOS",
+  "ATAN",
+  "TERM",
+  "PV",
+  "PMT",
+  "FV",
+  "NPV",
+  "LOOKUP",
+  "INDEX",
+  "ROUND",
+  "STDEV",
+  "CONCEDE",
+  "MID",
+  "LENGTH",
+  "VALUE",
+  "TEXT",
+  "MDY",
+  "MONTH",
+  "DAY",
+  "YEAR",
+  "DATETEXT",
+  "DATEVALUE",
+  "VAR",
+  "RANDOM",
+  "CURRENCY",
+  "ITERATION",
+  "ISVALUE",
+  "ISTEXT",
+  "REPLACE",
+  "RADIANS",
+  "CELL",
+  "SUBTRACT",
+  "IRR",
+  "FIND",
+  "LEFT",
+  "RIGHT",
+  "UPPER",
+  "LOWER",
+  "PROPER",
+  "CHAR",
+  "CODE",
+  "TRIM",
+  "REPEAT",
+  "BLOCK",
+  "CURSOR",
+  "DDB",
+  "SLN",
+  "SYD",
+  "RATE",
+  "STATUS",
+  "FOREACH",
+  "DEGREES",
+  "HOUR",
+  "MINUTE",
+  "SECOND",
+  "HMS",
+  "TIMETEXT",
+  "TIMEVALUE",
+  "PRODUCT",
+  "QUOTIENT",
+  "VARP",
+  "STDEVP",
+  "ATAN2",
+  "MATCH",
+  "MATCH2",
+  "LOOKUP2",
+  "LINK",
+  "ISERR",
+  "ISERR2",
+  "CHOOSE",
+] as const;
+const GROUP2_FUNCTIONS: ReadonlyMap<number, string> = new Map(
+  GROUP2_FUNCTION_NAMES.map((name, index) => [index + 1, name] as const),
+);
 
 // Code 21's own function#, the six comparison operators.
-const COMPARE_OPERATORS: ReadonlyMap<number, string> = new Map([
-  [1, "="],
-  [2, "<>"],
-  [3, ">"],
-  [4, ">="],
-  [5, "<"],
-  [6, "<="],
-]);
+// The comparison operators in the code table's own numbering.
+const COMPARE_OPERATOR_SYMBOLS = ["=", "<>", ">", ">=", "<", "<="] as const;
+const COMPARE_OPERATORS: ReadonlyMap<number, string> = new Map(
+  COMPARE_OPERATOR_SYMBOLS.map((symbol, index) => [index + 1, symbol] as const),
+);
 
 // Every fixed-symbol single-byte code: the opcode is the whole token, and its text never depends on anything else in the stream.
+// The SDK's own fixed-symbol code numbers. The numbering is not contiguous: codes between these belong to constructs with payloads, dispatched below.
+const CODE_PLUS = 1;
+const CODE_MINUS = 2;
+const CODE_TIMES = 3;
+const CODE_SLASH = 4;
+const CODE_MINUS_5 = 5;
+const CODE_PERCENT = 6;
+const CODE_SUM = 7;
+const CODE_CARET = 11;
+const CODE_PERCENT_15 = 15;
+const CODE_NOT = 16;
+const CODE_AMPERSAND = 17;
+const CODE_BAR = 18;
+const CODE_CARET_CARET = 19;
+const CODE_IF = 20;
+const CODE_COMMA = 22;
+const CODE_LPAREN = 23;
+const CODE_RPAREN = 24;
+const CODE_NOT_EQUAL = 29;
+const CODE_ZERO = 35;
+const CODE_LBRACE = 36;
+const CODE_RBRACE = 37;
+const CODE_NOT_38 = 38;
+const CODE_LT = 39;
+const CODE_GT = 40;
+
 const SYMBOL_CODES: ReadonlyMap<number, string> = new Map([
-  [1, "+"],
-  [2, "-"],
-  [3, "*"],
-  [4, "/"],
-  [5, "-"],
-  [6, "%"],
-  [7, "SUM"],
-  [11, "^"],
-  [15, "%"],
-  [16, "!"],
-  [17, "&"],
-  [18, "|"],
-  [19, "^^"],
-  [20, "IF"],
-  [22, ","],
-  [23, "("],
-  [24, ")"],
-  [29, "!="],
-  [35, "0"],
-  [36, "{"],
-  [37, "}"],
-  [38, "!"],
-  [39, "<"],
-  [40, ">"],
+  [CODE_PLUS, "+"],
+  [CODE_MINUS_5, "-"],
+  [CODE_TIMES, "*"],
+  [CODE_SLASH, "/"],
+  [CODE_MINUS, "-"],
+  [CODE_PERCENT_15, "%"],
+  [CODE_SUM, "SUM"],
+  [CODE_CARET, "^"],
+  [CODE_PERCENT, "%"],
+  [CODE_NOT_38, "!"],
+  [CODE_AMPERSAND, "&"],
+  [CODE_BAR, "|"],
+  [CODE_CARET_CARET, "^^"],
+  [CODE_IF, "IF"],
+  [CODE_COMMA, ","],
+  [CODE_LPAREN, "("],
+  [CODE_RPAREN, ")"],
+  [CODE_NOT_EQUAL, "!="],
+  [CODE_ZERO, "0"],
+  [CODE_LBRACE, "{"],
+  [CODE_RBRACE, "}"],
+  [CODE_NOT, "!"],
+  [CODE_LT, "<"],
+  [CODE_GT, ">"],
 ]);
 
 // Column letters follow the same base-26 convention every spreadsheet-style cell reference uses (A, B, ..., Z, AA, ...) — a reasonable, defensible choice for rendering WordPerfect's own (row, column) pair as text, not a value the mirrored SDK pages state outright. Absolute references are marked with a leading "$" on the affected component, the same convention.
@@ -163,8 +235,10 @@ function columnLetters(column: number): string {
   let value = column;
   let letters = "";
   do {
-    letters = String.fromCharCode(65 + (value % 26)) + letters;
-    value = Math.floor(value / 26) - 1;
+    letters =
+      String.fromCharCode(UPPERCASE_A_CHAR_CODE + (value % ALPHABET_LENGTH)) +
+      letters;
+    value = Math.floor(value / ALPHABET_LENGTH) - 1;
   } while (value >= 0);
   return letters;
 }
@@ -220,7 +294,7 @@ function skipLengthPrefixedByteString(cursor: FormulaCursor): void {
 function readCellNumber(
   cursor: FormulaCursor,
 ): { row: number; column: number } | undefined {
-  if (cursor.offset + 4 > cursor.bytes.length) {
+  if (cursor.offset + CELL_NUMBER_BYTES > cursor.bytes.length) {
     return undefined;
   }
   const row = int16At(cursor.bytes, cursor.offset);
@@ -242,18 +316,18 @@ function readToken(cursor: FormulaCursor): string | undefined {
   }
 
   switch (code) {
-    case 8: // number constant
-    case 9: // string constant
-    case 10: // name reference
-    case 26: {
+    case CODE_NUMBER_CONSTANT: // number constant
+    case CODE_STRING_CONSTANT: // string constant
+    case CODE_NAME_REFERENCE: // name reference
+    case CODE_FORMULA_ERROR: {
       // formula error
       const text = readLengthPrefixedWordString(cursor);
       if (text === undefined) {
         return undefined;
       }
-      return code === 9 ? `"${text}"` : text;
+      return code === CODE_STRING_CONSTANT ? `"${text}"` : text;
     }
-    case 12: {
+    case CODE_GROUP1_FUNCTION: {
       const functionNumber = cursor.bytes[cursor.offset];
       cursor.offset += 1;
       const name =
@@ -262,7 +336,7 @@ function readToken(cursor: FormulaCursor): string | undefined {
           : GROUP1_FUNCTIONS.get(functionNumber);
       return name;
     }
-    case 13: {
+    case CODE_GROUP2_FUNCTION: {
       const functionNumber = cursor.bytes[cursor.offset];
       cursor.offset += 1;
       const name =
@@ -271,14 +345,14 @@ function readToken(cursor: FormulaCursor): string | undefined {
           : GROUP2_FUNCTIONS.get(functionNumber);
       return name;
     }
-    case 21: {
+    case CODE_NEGATION: {
       const functionNumber = cursor.bytes[cursor.offset];
       cursor.offset += 1;
       return functionNumber === undefined
         ? undefined
         : COMPARE_OPERATORS.get(functionNumber);
     }
-    case 25: {
+    case CODE_CELL_REFERENCE: {
       // space(s): [space#], a 16-bit count of literal spaces.
       if (cursor.offset + 2 > cursor.bytes.length) {
         return undefined;
@@ -287,14 +361,14 @@ function readToken(cursor: FormulaCursor): string | undefined {
       cursor.offset += 2;
       return " ".repeat(count);
     }
-    case 27: {
+    case CODE_BLOCK_REFERENCE: {
       // cell reference (documented "not used", supported anyway for completeness): no absolute-reference flags of its own.
       const cell = readCellNumber(cursor);
       return cell === undefined
         ? undefined
         : cellReferenceText(cell.row, cell.column, false, false);
     }
-    case 28: {
+    case CODE_GROUP_REFERENCE: {
       // range reference (documented "not used"): two plain cell references joined by ":". readCellNumber's own insufficient-bytes check returns before advancing cursor.offset, so always attempting the second read even when the first failed is safe — it reads from the identical position and fails identically.
       const start = readCellNumber(cursor);
       const end = readCellNumber(cursor);
@@ -312,24 +386,28 @@ function readToken(cursor: FormulaCursor): string | undefined {
         ? undefined
         : `${startText}:${endText}`;
     }
-    case 30: {
+    case CODE_FLOAT_CONSTANT: {
       // floating point constant: an 8-byte double, then its own byte-string spelling. The double is authoritative; the string is the user's own typed spelling and is skipped past rather than re-decoded, since JavaScript's own number-to-string conversion already gives a faithful textual value.
       try {
-        const doubleBytes = sliceAt(cursor.bytes, cursor.offset, 8);
+        const doubleBytes = sliceAt(
+          cursor.bytes,
+          cursor.offset,
+          DOUBLE_BYTE_LENGTH,
+        );
         const view = new DataView(
           doubleBytes.buffer,
           doubleBytes.byteOffset,
-          8,
+          DOUBLE_BYTE_LENGTH,
         );
         const value = view.getFloat64(0, true);
-        cursor.offset += 8;
+        cursor.offset += DOUBLE_BYTE_LENGTH;
         skipLengthPrefixedByteString(cursor);
         return String(value);
       } catch {
         return undefined;
       }
     }
-    case 31: {
+    case CODE_UNARY_PLUS: {
       // user argument reference: [argument number].
       if (cursor.offset + 2 > cursor.bytes.length) {
         return undefined;
@@ -338,24 +416,27 @@ function readToken(cursor: FormulaCursor): string | undefined {
       cursor.offset += 2;
       return `ARG${argumentNumber}`;
     }
-    case 32: {
+    case CODE_UNARY_MINUS: {
       // user function call: the function's own name, verbatim.
       return readLengthPrefixedWordString(cursor);
     }
-    case 41:
-    case 42:
-    case 43: {
+    case CODE_ATTRIBUTE_ON:
+    case CODE_ATTRIBUTE_OFF:
+    case CODE_ATTRIBUTE_MASK: {
       // attribute on/off and the total attribute mask: formatting markers inside the formula's own displayed spelling, contributing no text to its computed meaning.
       cursor.offset += 2;
       return "";
     }
-    case 44:
+    case CODE_CONDITIONAL_ATTRIBUTE:
       // conditional attribute: no payload beyond the code itself.
       return "";
     default: {
-      if (code >= 48 && code <= 63) {
+      if (
+        code >= RANGE_REFERENCE_CODE_FIRST &&
+        code <= RANGE_REFERENCE_CODE_LAST
+      ) {
         // range reference, absolute-flag bits per the SDK's own NOTE: bit0/1 on the bottom-right cell, bit2/3 on the top-left cell. Codes in this range share a fixed high nibble, so their own low 4 bits (code & 0x0f) are exactly code - 48 — a mask on the bits this flags value is ever actually read through, not an offsetting subtraction.
-        const flags = code & 0x0f;
+        const flags = code & RANGE_REFERENCE_FLAG_MASK;
         // readCellNumber's own insufficient-bytes check returns before advancing cursor.offset, so always attempting the second read even when the first failed is safe — it reads from the identical position and fails identically.
         const start = readCellNumber(cursor);
         const end = readCellNumber(cursor);
@@ -365,22 +446,25 @@ function readToken(cursor: FormulaCursor): string | undefined {
         const startText = cellReferenceText(
           start.row,
           start.column,
-          (flags & 0x04) !== 0,
-          (flags & 0x08) !== 0,
+          (flags & RANGE_FLAG_START_ROW_ABSOLUTE) !== 0,
+          (flags & RANGE_FLAG_START_COLUMN_ABSOLUTE) !== 0,
         );
         const endText = cellReferenceText(
           end.row,
           end.column,
-          (flags & 0x01) !== 0,
-          (flags & 0x02) !== 0,
+          (flags & RANGE_FLAG_END_ROW_ABSOLUTE) !== 0,
+          (flags & RANGE_FLAG_END_COLUMN_ABSOLUTE) !== 0,
         );
         return startText === undefined || endText === undefined
           ? undefined
           : `${startText}:${endText}`;
       }
-      if (code >= 64 && code <= 67) {
+      if (
+        code >= ABSOLUTE_REFERENCE_CODE_FIRST &&
+        code <= ABSOLUTE_REFERENCE_CODE_LAST
+      ) {
         // cell reference, absolute-flag bits per the same NOTE: bit0 column, bit1 row. Codes in this range share a fixed high bit pattern, so their own low 2 bits (code & 0x03) are exactly code - 64 — a mask on the bits this flags value is ever actually read through, not an offsetting subtraction.
-        const flags = code & 0x03;
+        const flags = code & ABSOLUTE_REFERENCE_FLAG_MASK;
         const cell = readCellNumber(cursor);
         return cell === undefined
           ? undefined
