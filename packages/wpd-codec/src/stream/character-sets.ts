@@ -47,23 +47,45 @@ function buildCharacterSet(
   return map;
 }
 
-// The complete set of WordPerfect 6.x's own named character sets (its character-map dialog offers exactly these fourteen, per libwpd's own WP6FileStructure.h numbering), keyed by the character-set byte the Extended Character function and every WP word string carry. Character set 0 (ASCII) is not here: it is handled directly in decodeWpCharacter, since it is documented by the SDK itself rather than transcribed from libwpd.
+// libwpd's own WP6FileStructure.h numbering for each of WordPerfect 6.x's fourteen named character sets, the character-set byte the Extended Character function and every WP word string carry. Character set 0 (ASCII) has no constant here: it is handled directly in decodeWpCharacter, since it is documented by the SDK itself rather than transcribed from libwpd.
+const CHARACTER_SET_MULTINATIONAL = 1;
+const CHARACTER_SET_PHONETIC = 2;
+const CHARACTER_SET_BOX_DRAWING = 3;
+const CHARACTER_SET_TYPOGRAPHIC = 4;
+const CHARACTER_SET_ICONIC = 5;
+const CHARACTER_SET_MATH_SCIENTIFIC = 6;
+const CHARACTER_SET_MATH_SCIENTIFIC_EXTENDED = 7;
+const CHARACTER_SET_GREEK = 8;
+const CHARACTER_SET_HEBREW = 9;
+const CHARACTER_SET_CYRILLIC = 10;
+const CHARACTER_SET_JAPANESE = 11;
+const CHARACTER_SET_TIBETAN = 12;
+const CHARACTER_SET_ARABIC = 13;
+const CHARACTER_SET_ARABIC_SCRIPT = 14;
+
+// The complete set of WordPerfect 6.x's own named character sets (its character-map dialog offers exactly these fourteen).
 export const WP6_CHARACTER_SETS: ReadonlyMap<
   number,
   ReadonlyMap<number, string>
 > = new Map([
-  [1, buildCharacterSet(MULTINATIONAL_1, MULTINATIONAL_1_SEQUENCES)],
-  [2, buildCharacterSet(PHONETIC_2)],
-  [3, buildCharacterSet(BOX_DRAWING_3)],
-  [4, buildCharacterSet(TYPOGRAPHIC_4)],
-  [5, buildCharacterSet(ICONIC_5)],
-  [6, buildCharacterSet(MATH_SCIENTIFIC_6)],
-  [7, buildCharacterSet(MATH_SCIENTIFIC_EXTENDED_7)],
-  [8, buildCharacterSet(GREEK_8)],
-  [9, buildCharacterSet(HEBREW_9)],
-  [10, buildCharacterSet(CYRILLIC_10)],
-  [11, buildCharacterSet(JAPANESE_11)],
-  [12, buildCharacterSet(TIBETAN_12, TIBETAN_12_SEQUENCES)],
-  [13, buildCharacterSet(ARABIC_13)],
-  [14, buildCharacterSet(ARABIC_SCRIPT_14)],
+  [
+    CHARACTER_SET_MULTINATIONAL,
+    buildCharacterSet(MULTINATIONAL_1, MULTINATIONAL_1_SEQUENCES),
+  ],
+  [CHARACTER_SET_PHONETIC, buildCharacterSet(PHONETIC_2)],
+  [CHARACTER_SET_BOX_DRAWING, buildCharacterSet(BOX_DRAWING_3)],
+  [CHARACTER_SET_TYPOGRAPHIC, buildCharacterSet(TYPOGRAPHIC_4)],
+  [CHARACTER_SET_ICONIC, buildCharacterSet(ICONIC_5)],
+  [CHARACTER_SET_MATH_SCIENTIFIC, buildCharacterSet(MATH_SCIENTIFIC_6)],
+  [
+    CHARACTER_SET_MATH_SCIENTIFIC_EXTENDED,
+    buildCharacterSet(MATH_SCIENTIFIC_EXTENDED_7),
+  ],
+  [CHARACTER_SET_GREEK, buildCharacterSet(GREEK_8)],
+  [CHARACTER_SET_HEBREW, buildCharacterSet(HEBREW_9)],
+  [CHARACTER_SET_CYRILLIC, buildCharacterSet(CYRILLIC_10)],
+  [CHARACTER_SET_JAPANESE, buildCharacterSet(JAPANESE_11)],
+  [CHARACTER_SET_TIBETAN, buildCharacterSet(TIBETAN_12, TIBETAN_12_SEQUENCES)],
+  [CHARACTER_SET_ARABIC, buildCharacterSet(ARABIC_13)],
+  [CHARACTER_SET_ARABIC_SCRIPT, buildCharacterSet(ARABIC_SCRIPT_14)],
 ]);

@@ -160,6 +160,14 @@ function boundingFrame(points: readonly { xPt: number; yPt: number }[]): Box {
   return { xPt: minX, yPt: minY, widthPt: maxX - minX, heightPt: maxY - minY };
 }
 
+// A WPG rectangle's own six consecutive coordinate fields: lower-left x/y, upper-right x/y, then the corner radii x/y.
+const RECTANGLE_FIELD_COUNT = 6;
+const RECTANGLE_YLL_FIELD = 1;
+const RECTANGLE_XUR_FIELD = 2;
+const RECTANGLE_YUR_FIELD = 3;
+const RECTANGLE_RX_FIELD = 4;
+const RECTANGLE_RY_FIELD = 5;
+
 function readWpgRectangle(
   data: Uint8Array,
   geometry: WpgGeometry,
@@ -169,33 +177,33 @@ function readWpgRectangle(
   state: WpgRenditionState,
 ): ContentVector | undefined {
   const coordinateSize = geometry.coordinateSize;
-  if (geometryAt + coordinateSize * 6 > data.length) {
+  if (geometryAt + coordinateSize * RECTANGLE_FIELD_COUNT > data.length) {
     return undefined;
   }
   const xll = coordinateAt(data, geometryAt, geometry.doublePrecision);
   const yll = coordinateAt(
     data,
-    geometryAt + coordinateSize,
+    geometryAt + coordinateSize * RECTANGLE_YLL_FIELD,
     geometry.doublePrecision,
   );
   const xur = coordinateAt(
     data,
-    geometryAt + coordinateSize * 2,
+    geometryAt + coordinateSize * RECTANGLE_XUR_FIELD,
     geometry.doublePrecision,
   );
   const yur = coordinateAt(
     data,
-    geometryAt + coordinateSize * 3,
+    geometryAt + coordinateSize * RECTANGLE_YUR_FIELD,
     geometry.doublePrecision,
   );
   const rx = coordinateAt(
     data,
-    geometryAt + coordinateSize * 4,
+    geometryAt + coordinateSize * RECTANGLE_RX_FIELD,
     geometry.doublePrecision,
   );
   const ry = coordinateAt(
     data,
-    geometryAt + coordinateSize * 5,
+    geometryAt + coordinateSize * RECTANGLE_RY_FIELD,
     geometry.doublePrecision,
   );
   const frame = frameFromCorners(geometry, xll, yll, xur, yur);
@@ -278,6 +286,17 @@ function readWpgRectangle(
   };
 }
 
+// An Arc record's own eight consecutive coordinate fields: centre x/y, radius x/y, initial-endpoint x/y, terminal-endpoint x/y, followed by one rotation-angle byte.
+const ARC_FIELD_COUNT = 8;
+const ARC_CY_FIELD = 1;
+const ARC_RX_FIELD = 2;
+const ARC_RY_FIELD = 3;
+const ARC_IX_FIELD = 4;
+const ARC_IY_FIELD = 5;
+const ARC_EX_FIELD = 6;
+const ARC_EY_FIELD = 7;
+const ARC_ROTATION_ANGLE_SIZE = 1;
+
 // An Arc record whose initial and terminal endpoint offsets are identical: "Identical endpoint coordinates define a full ellipse or circle" — the only arc spelling this decoder lifts, since a partial elliptical arc has no exact segment shape in the shared path model (whose cubics would approximate, not carry, it). Any other arc is refused and named.
 function readWpgFullEllipse(
   data: Uint8Array,
@@ -288,43 +307,46 @@ function readWpgFullEllipse(
   state: WpgRenditionState,
 ): ContentVector | undefined {
   const coordinateSize = geometry.coordinateSize;
-  if (geometryAt + coordinateSize * 8 + 1 > data.length) {
+  if (
+    geometryAt + coordinateSize * ARC_FIELD_COUNT + ARC_ROTATION_ANGLE_SIZE >
+    data.length
+  ) {
     return undefined;
   }
   const cx = coordinateAt(data, geometryAt, geometry.doublePrecision);
   const cy = coordinateAt(
     data,
-    geometryAt + coordinateSize,
+    geometryAt + coordinateSize * ARC_CY_FIELD,
     geometry.doublePrecision,
   );
   const rx = coordinateAt(
     data,
-    geometryAt + coordinateSize * 2,
+    geometryAt + coordinateSize * ARC_RX_FIELD,
     geometry.doublePrecision,
   );
   const ry = coordinateAt(
     data,
-    geometryAt + coordinateSize * 3,
+    geometryAt + coordinateSize * ARC_RY_FIELD,
     geometry.doublePrecision,
   );
   const ix = coordinateAt(
     data,
-    geometryAt + coordinateSize * 4,
+    geometryAt + coordinateSize * ARC_IX_FIELD,
     geometry.doublePrecision,
   );
   const iy = coordinateAt(
     data,
-    geometryAt + coordinateSize * 5,
+    geometryAt + coordinateSize * ARC_IY_FIELD,
     geometry.doublePrecision,
   );
   const ex = coordinateAt(
     data,
-    geometryAt + coordinateSize * 6,
+    geometryAt + coordinateSize * ARC_EX_FIELD,
     geometry.doublePrecision,
   );
   const ey = coordinateAt(
     data,
-    geometryAt + coordinateSize * 7,
+    geometryAt + coordinateSize * ARC_EY_FIELD,
     geometry.doublePrecision,
   );
   if (ix !== ex || iy !== ey) {
