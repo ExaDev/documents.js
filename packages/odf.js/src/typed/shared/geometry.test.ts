@@ -9,15 +9,27 @@ import {
 
 // Fixtures below marked "real LibreOffice output" are copied verbatim from styles.xml's style:page-layout-properties (the ja_ott_normal.ott template) and a Writer image-frame draw:custom-shape (Modern_business_letter_serif.ott's header) — both under /Applications/LibreOffice.app/Contents/Resources/template/**, LibreOffice 26.2.5.2.
 
+const POINTS_PER_INCH = 72;
+const CM_PER_INCH = 2.54;
+const CM_CONVERSION_PRECISION_DIGITS = 6;
+
 describe("parsePageSize", () => {
   it("parses fo:page-width/fo:page-height (real LibreOffice output, A4 portrait)", () => {
+    const pageWidthCm = 21.0;
+    const pageHeightCm = 29.7;
     const element = el("style:page-layout-properties", {
       "fo:page-width": "21.0cm",
       "fo:page-height": "29.7cm",
     });
     const size = parsePageSize(element);
-    expect(size?.widthPt).toBeCloseTo((21.0 * 72) / 2.54, 6);
-    expect(size?.heightPt).toBeCloseTo((29.7 * 72) / 2.54, 6);
+    expect(size?.widthPt).toBeCloseTo(
+      (pageWidthCm * POINTS_PER_INCH) / CM_PER_INCH,
+      CM_CONVERSION_PRECISION_DIGITS,
+    );
+    expect(size?.heightPt).toBeCloseTo(
+      (pageHeightCm * POINTS_PER_INCH) / CM_PER_INCH,
+      CM_CONVERSION_PRECISION_DIGITS,
+    );
   });
 
   it("parses an exact pt-based page size with no rounding drift", () => {
@@ -56,6 +68,8 @@ describe("parsePageSize", () => {
 
 describe("parseMargins", () => {
   it("parses all four margins (real LibreOffice output, Mpm1 page layout)", () => {
+    const topBottomRightMarginCm = 2;
+    const leftMarginCm = 4.5;
     const element = el("style:page-layout-properties", {
       "fo:margin-top": "2cm",
       "fo:margin-bottom": "2cm",
@@ -63,10 +77,22 @@ describe("parseMargins", () => {
       "fo:margin-right": "2cm",
     });
     const margins = parseMargins(element);
-    expect(margins?.topPt).toBeCloseTo((2 * 72) / 2.54, 6);
-    expect(margins?.bottomPt).toBeCloseTo((2 * 72) / 2.54, 6);
-    expect(margins?.leftPt).toBeCloseTo((4.5 * 72) / 2.54, 6);
-    expect(margins?.rightPt).toBeCloseTo((2 * 72) / 2.54, 6);
+    expect(margins?.topPt).toBeCloseTo(
+      (topBottomRightMarginCm * POINTS_PER_INCH) / CM_PER_INCH,
+      CM_CONVERSION_PRECISION_DIGITS,
+    );
+    expect(margins?.bottomPt).toBeCloseTo(
+      (topBottomRightMarginCm * POINTS_PER_INCH) / CM_PER_INCH,
+      CM_CONVERSION_PRECISION_DIGITS,
+    );
+    expect(margins?.leftPt).toBeCloseTo(
+      (leftMarginCm * POINTS_PER_INCH) / CM_PER_INCH,
+      CM_CONVERSION_PRECISION_DIGITS,
+    );
+    expect(margins?.rightPt).toBeCloseTo(
+      (topBottomRightMarginCm * POINTS_PER_INCH) / CM_PER_INCH,
+      CM_CONVERSION_PRECISION_DIGITS,
+    );
   });
 
   it("parses exact pt-based margins with no rounding drift", () => {
@@ -136,6 +162,10 @@ describe("parseMargins", () => {
 
 describe("parseBox", () => {
   it("parses svg:x/svg:y/svg:width/svg:height (real LibreOffice output, a Writer header custom-shape frame)", () => {
+    const xCm = -3.946;
+    const yCm = -0.707;
+    const widthCm = 3.539;
+    const heightCm = 27.5;
     const element = el("draw:custom-shape", {
       "svg:x": "-3.946cm",
       "svg:y": "-0.707cm",
@@ -143,10 +173,22 @@ describe("parseBox", () => {
       "svg:height": "27.5cm",
     });
     const box = parseBox(element);
-    expect(box?.xPt).toBeCloseTo((-3.946 * 72) / 2.54, 6);
-    expect(box?.yPt).toBeCloseTo((-0.707 * 72) / 2.54, 6);
-    expect(box?.widthPt).toBeCloseTo((3.539 * 72) / 2.54, 6);
-    expect(box?.heightPt).toBeCloseTo((27.5 * 72) / 2.54, 6);
+    expect(box?.xPt).toBeCloseTo(
+      (xCm * POINTS_PER_INCH) / CM_PER_INCH,
+      CM_CONVERSION_PRECISION_DIGITS,
+    );
+    expect(box?.yPt).toBeCloseTo(
+      (yCm * POINTS_PER_INCH) / CM_PER_INCH,
+      CM_CONVERSION_PRECISION_DIGITS,
+    );
+    expect(box?.widthPt).toBeCloseTo(
+      (widthCm * POINTS_PER_INCH) / CM_PER_INCH,
+      CM_CONVERSION_PRECISION_DIGITS,
+    );
+    expect(box?.heightPt).toBeCloseTo(
+      (heightCm * POINTS_PER_INCH) / CM_PER_INCH,
+      CM_CONVERSION_PRECISION_DIGITS,
+    );
   });
 
   it("parses an exact pt-based box with no rounding drift", () => {
@@ -216,6 +258,10 @@ describe("parseBox", () => {
 
 describe("parseLinePoints", () => {
   it("parses svg:x1/y1/x2/y2 (real LibreOffice draw:line output) into from/to points", () => {
+    const x1Cm = 9;
+    const y1Cm = 1;
+    const x2Cm = 13;
+    const y2Cm = 4;
     const element = el("draw:line", {
       "svg:x1": "9cm",
       "svg:y1": "1cm",
@@ -223,10 +269,22 @@ describe("parseLinePoints", () => {
       "svg:y2": "4cm",
     });
     const points = parseLinePoints(element);
-    expect(points?.from.xPt).toBeCloseTo((9 * 72) / 2.54, 6);
-    expect(points?.from.yPt).toBeCloseTo((1 * 72) / 2.54, 6);
-    expect(points?.to.xPt).toBeCloseTo((13 * 72) / 2.54, 6);
-    expect(points?.to.yPt).toBeCloseTo((4 * 72) / 2.54, 6);
+    expect(points?.from.xPt).toBeCloseTo(
+      (x1Cm * POINTS_PER_INCH) / CM_PER_INCH,
+      CM_CONVERSION_PRECISION_DIGITS,
+    );
+    expect(points?.from.yPt).toBeCloseTo(
+      (y1Cm * POINTS_PER_INCH) / CM_PER_INCH,
+      CM_CONVERSION_PRECISION_DIGITS,
+    );
+    expect(points?.to.xPt).toBeCloseTo(
+      (x2Cm * POINTS_PER_INCH) / CM_PER_INCH,
+      CM_CONVERSION_PRECISION_DIGITS,
+    );
+    expect(points?.to.yPt).toBeCloseTo(
+      (y2Cm * POINTS_PER_INCH) / CM_PER_INCH,
+      CM_CONVERSION_PRECISION_DIGITS,
+    );
   });
 
   it("parses an exact pt-based line with no rounding drift", () => {
