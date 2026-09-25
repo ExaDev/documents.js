@@ -1,3 +1,11 @@
+## [14.4.41](https://github.com/ExaDev/documents.js/compare/documents.js%4014.4.40...documents.js%4014.4.41) (2026-09-25)
+
+### Tests
+
+* **documents.js:** close MathML-to-OMML write gaps in switch dispatch, limits, and semantics ([b9f6939](https://github.com/ExaDev/documents.js/commit/b9f693968c2cadcb2636c01412c72aae3755d734))
+* **documents.js:** cover ods column/row style writers directly, closing every mutation gap ([bba202c](https://github.com/ExaDev/documents.js/commit/bba202c10f2b41a1dc3ed1573be444b9f31f8b05))
+* **documents.js:** pin buildInlineDrawing's w:drawing structure and nextDrawingId's scan rules ([abb9229](https://github.com/ExaDev/documents.js/commit/abb92291a5c9e4679ddc69e37a1dce2437887ad2))
+
 ## [14.4.40](https://github.com/ExaDev/documents.js/compare/documents.js%4014.4.39...documents.js%4014.4.40) (2026-09-25)
 
 
