@@ -1,4 +1,7 @@
 // Every failure this package raises is a subclass of WpdFormatError, so a caller can catch one type and still discriminate on the specific cause. Nothing here is recoverable-by-fallback: a WordPerfect file whose prefix or function stream does not conform is malformed input, and returning a partial document that looks complete would hide exactly the corruption the caller needs to see.
+
+const HEX_RADIX = 16;
+
 export class WpdFormatError extends Error {
   constructor(message: string) {
     super(message);
@@ -30,7 +33,7 @@ export class WpdWrongPasswordError extends WpdFormatError {
     readonly passwordChecksum: number,
   ) {
     super(
-      `The header's encryption word (0x${headerEncryptionWord.toString(16)}) does not match this password's checksum (0x${passwordChecksum.toString(16)}): either the password is wrong, or the file uses the enhanced encryption mode (WordPerfect 9 and later), which this reader does not support.`,
+      `The header's encryption word (0x${headerEncryptionWord.toString(HEX_RADIX)}) does not match this password's checksum (0x${passwordChecksum.toString(HEX_RADIX)}): either the password is wrong, or the file uses the enhanced encryption mode (WordPerfect 9 and later), which this reader does not support.`,
     );
     this.name = "WpdWrongPasswordError";
   }
