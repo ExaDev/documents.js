@@ -8,12 +8,18 @@ import { pdfDict, pdfStream } from "./objects";
 // Adobe's CMap syntax caps a single bfchar block at 100 entries (Adobe Technical Note #5014, and the same limit restated for the PDF-embedded case in #5411). A subsetted text face routinely exceeds that — a page of mixed-case prose with punctuation is already close to it — so entries are emitted in blocks of at most this many rather than as one oversized block a strict consumer is entitled to reject.
 const MAX_BFCHAR_ENTRIES_PER_BLOCK = 100;
 
+const HEX_RADIX = 16; // Base for the hexadecimal code/code-unit spellings the bfchar syntax uses throughout.
+const UTF16_HEX_DIGIT_WIDTH = 4; // Four hex digits per 16-bit UTF-16BE code unit, so every <hhhh> token in the CMap is a fixed width.
+
 // A code point above U+FFFF (every Mathematical Alphanumeric Symbols character this family's own mathvariant mapping produces, for instance) needs a genuine UTF-16BE surrogate pair as a bfchar destination — JS's String.fromCodePoint + charCodeAt already performs exactly that encoding, so this reuses it rather than hand-rolling the surrogate arithmetic.
 function codePointToUtf16BEHex(codePoint: number): string {
   const text = String.fromCodePoint(codePoint);
   let hex = "";
   for (let i = 0; i < text.length; i++) {
-    hex += text.charCodeAt(i).toString(16).padStart(4, "0");
+    hex += text
+      .charCodeAt(i)
+      .toString(HEX_RADIX)
+      .padStart(UTF16_HEX_DIGIT_WIDTH, "0");
   }
   return hex;
 }
@@ -54,7 +60,7 @@ export function buildToUnicodeCMap(
     lines.push(`${block.length} beginbfchar`);
     for (const [code, sequence] of block) {
       lines.push(
-        `<${code.toString(16).padStart(4, "0")}> <${sequenceToUtf16BEHex(sequence)}>`,
+        `<${code.toString(HEX_RADIX).padStart(UTF16_HEX_DIGIT_WIDTH, "0")}> <${sequenceToUtf16BEHex(sequence)}>`,
       );
     }
     lines.push("endbfchar");

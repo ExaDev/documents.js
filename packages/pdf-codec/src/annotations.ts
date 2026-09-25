@@ -106,6 +106,9 @@ function annotString(annot: PdfDict, key: string): string | undefined {
 }
 
 // The markup family's /QuadPoints (ISO 32000-1 Table 174): a flat run of quadrilaterals, eight coordinates each, each quad's four corners transformed through the page matrix so a consumer matches them against recovered items in one space.
+const QUAD_POINT_COORDINATES_PER_QUAD = 8; // Four corners times two coordinates (x, y) each.
+const QUAD_POINT_LAST_CORNER_INDEX = 3; // Zero-based index of the fourth and final corner of a quad.
+
 function markupFields(
   annot: PdfDict,
   pageMatrix: Matrix,
@@ -113,20 +116,25 @@ function markupFields(
   const quadPoints = asArray(dictGet(annot, "QuadPoints"));
   if (
     quadPoints === undefined ||
-    quadPoints.length < 8 ||
-    quadPoints.length % 8 !== 0
+    quadPoints.length < QUAD_POINT_COORDINATES_PER_QUAD ||
+    quadPoints.length % QUAD_POINT_COORDINATES_PER_QUAD !== 0
   ) {
     return {};
   }
   const quads: LayoutAnnotationQuad[] = [];
-  for (let i = 0; i < quadPoints.length; i += 8) {
+  for (let i = 0; i < quadPoints.length; i += QUAD_POINT_COORDINATES_PER_QUAD) {
     const corner = (index: number): { xPt: number; yPt: number } => {
       const x = asNumber(quadPoints[i + index * 2]) ?? 0;
       const y = asNumber(quadPoints[i + index * 2 + 1]) ?? 0;
       const transformed = applyMatrix(pageMatrix, { x, y });
       return { xPt: transformed.x, yPt: transformed.y };
     };
-    quads.push([corner(0), corner(1), corner(2), corner(3)]);
+    quads.push([
+      corner(0),
+      corner(1),
+      corner(2),
+      corner(QUAD_POINT_LAST_CORNER_INDEX),
+    ]);
   }
   return { quads };
 }
