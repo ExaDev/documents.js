@@ -8,7 +8,8 @@ import { ODF_NAMESPACES } from "../ns";
 import { ODF_MEDIA_TYPES } from "../media-type";
 import { writeMimetype, readMimetype } from "../mimetype";
 import { base64ToBytes } from "byte-codec";
-import { transformOoo1Package, transformToOoo1Package } from "./transform";
+import { transformOoo1Package } from "./transform";
+import { transformToOoo1Package } from "./transform-reverse";
 
 const OOO_XMLNS = [
   `xmlns:office="http://openoffice.org/2000/office"`,
