@@ -12,6 +12,13 @@ import { writeXLUnicodeStringNoCch } from "../biff/string-writer";
 import { BiffWriteError } from "../biff/write-errors";
 import type { RecordGroup } from "../biff/substreams";
 
+// The reserved4-7 block, the built-in name id for Print_Area, and the one-byte cch ceiling on a user-defined name.
+const RESERVED4_TO_7_SIZE = 4;
+// PtgArea3d's own reference-class opcode, the token a defined name's area reference writes.
+const PTG_AREA3D_REFERENCE_CLASS = 0x3b;
+const MIN_DEFINED_NAME_LENGTH = 1;
+const MAX_DEFINED_NAME_LENGTH = 0xff;
+
 // A workbook's own defined names, as the Lbl records ([MS-XLS] 2.4.150, https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/d148e898-4504-4841-a793-ee85f3ea9eef) of its globals substream carry them — one record per name, each scoped either to the whole workbook (itab 0) or to one sheet (a non-zero itab, a one-based index into the BoundSheet8 collection). The workbook/ half of the module: content.ts maps these onto document-schema.js's own document-level `names` array, translating that BoundSheet8 scope into the document's own sheets-array index.
 //
 // The read half lives here and the write half below in the same module, so the one record layout and the one built-in-name table have the one home — the discipline print-names.ts already draws for the two built-in print names, which this module deliberately does NOT touch: _xlnm.Print_Area and _xlnm.Print_Titles are print-settings facts that print-names.ts reads onto ContentSheetPrintSettings and writes back from there, so surfacing them as document-level names too would state one fact twice and write one Lbl record twice.
@@ -87,7 +94,7 @@ function readLblRecord(
     const cce = cursor.u16();
     cursor.skip(2); // reserved3
     const itab = cursor.u16();
-    cursor.skip(4); // reserved4 through reserved7
+    cursor.skip(RESERVED4_TO_7_SIZE); // reserved4 through reserved7
     let name: string;
     if (isBuiltin) {
       // A built-in name's Name field is that string holding exactly one character whose code unit IS the built-in index ([MS-XLS] 2.4.150: "Each built-in name has a zero-based index value associated with it. A built-in name or its index value MUST be used for this field."), so cch is 1 and the character is read rather than the spelled-out name.
@@ -212,7 +219,7 @@ function writeArea3dToken(
     (corner.columnAbsolute ? 0 : COLUMN_RELATIVE_BIT) |
     (corner.rowAbsolute ? 0 : ROW_RELATIVE_BIT);
   return new RecordBuilder()
-    .u8(0x3b)
+    .u8(PTG_AREA3D_REFERENCE_CLASS)
     .u16(ixti)
     .u16(first.row)
     .u16(last.row)
@@ -277,7 +284,10 @@ function builtinIndexOf(name: string): number {
 
 /** A user-defined name must fit the record's own one-byte cch and must not be shaped like a cell reference, the one restriction of [MS-XLS] 2.5.295's own name grammar a writer can enforce without guessing at Excel's full validity table. */
 function validateUserName(name: string): void {
-  if (name.length < 1 || name.length > 0xff) {
+  if (
+    name.length < MIN_DEFINED_NAME_LENGTH ||
+    name.length > MAX_DEFINED_NAME_LENGTH
+  ) {
     throw new BiffWriteError(
       `xls-codec cannot write a defined name of ${name.length} characters: Lbl's own cch field is one byte, so a name must be 1-255 UTF-16 code units`,
     );

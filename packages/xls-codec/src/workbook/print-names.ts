@@ -9,6 +9,10 @@ import { RECORD_LBL } from "../biff/record-types";
 import { writeRecord } from "../biff/record-writer";
 import type { RecordGroup } from "../biff/substreams";
 
+// The reserved4-7 block, and a row/column word's low 14 bits, the column field beneath its two relative-reference flags.
+const RESERVED4_TO_7_SIZE = 4;
+const COLUMN_FIELD_MASK = 0x3fff;
+
 // A sheet's print RANGE and its repeated header rows/columns are not in the worksheet substream at all. BIFF8 keeps them in the globals substream, as ordinary defined names ([MS-XLS] 2.4.150's Lbl record) that happen to carry a built-in name index rather than a user-typed name: Print_Area (index 0x06) for the range that prints, Print_Titles (index 0x07) for the bands repeated on every page. Both are LOCAL names — scoped to one sheet through Lbl's own itab, a one-based index into the BoundSheet8 collection — which is what lets a workbook carry a different print area per sheet.
 //
 // This module is both directions of exactly those two names, and nothing else: no other defined name is read (a user-defined name has nowhere to land in document-schema.js's spreadsheet model) or written. It sits in workbook/ rather than biff/ because a print name is a workbook-level fact keyed by sheet, which is what globals.ts reads and globals-writer.ts writes.
@@ -117,7 +121,7 @@ function readLbl(record: RecordGroup): ParsedLbl | undefined {
   const cce = cursor.u16();
   cursor.skip(2); // reserved3
   const itab = cursor.u16();
-  cursor.skip(4); // reserved4 through reserved7
+  cursor.skip(RESERVED4_TO_7_SIZE); // reserved4 through reserved7
   // XLUnicodeStringNoCch ([MS-XLS] 2.5.296): a flags byte then the characters, the count coming from the record's own cch above. A built-in name is one compressed character, so anything else is a name this reader does not resolve.
   const highByte = (cursor.u8() & 0x01) !== 0;
   if (cch !== 1 || highByte) {
@@ -165,7 +169,7 @@ function parsePrintAreas(rgce: Uint8Array<ArrayBuffer>): RawArea[] | undefined {
       case PTG_REF3D_ARRAY: {
         cursor.skip(2); // ixti, as above
         const row = cursor.u16();
-        const column = cursor.u16() & 0x3fff;
+        const column = cursor.u16() & COLUMN_FIELD_MASK;
         areas.push({
           rowFirst: row,
           rowLast: row,
@@ -199,8 +203,8 @@ function parsePrintAreas(rgce: Uint8Array<ArrayBuffer>): RawArea[] | undefined {
 function readArea(cursor: BlockCursor): RawArea {
   const rowFirst = cursor.u16();
   const rowLast = cursor.u16();
-  const columnFirst = cursor.u16() & 0x3fff;
-  const columnLast = cursor.u16() & 0x3fff;
+  const columnFirst = cursor.u16() & COLUMN_FIELD_MASK;
+  const columnLast = cursor.u16() & COLUMN_FIELD_MASK;
   return { rowFirst, rowLast, columnFirst, columnLast };
 }
 
