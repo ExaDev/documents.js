@@ -10,13 +10,38 @@ function packageWithOnePart(bytes: Uint8Array<ArrayBuffer>) {
   return parsePackage(zipBytes);
 }
 
+// Mirrors read.ts's own private byte constants, since looksLikeXml's classification is exercised only indirectly here (see the file-level comment above).
+const UTF8_BOM_BYTE_1 = 0xef;
+const UTF8_BOM_BYTE_2 = 0xbb;
+const UTF8_BOM_BYTE_3 = 0xbf;
+const ASCII_SPACE = 0x20;
+const ASCII_TAB = 0x09;
+const ASCII_LF = 0x0a;
+const ASCII_CR = 0x0d;
+const ASCII_LESS_THAN_MINUS_ONE = 0x3b; // ';', one below '<' (0x3c)
+const ASCII_LESS_THAN_PLUS_ONE = 0x3d; // '=', one above '<' (0x3c)
+const ARBITRARY_BYTE = 0x00;
+
 describe("hasUtf8Bom", () => {
   it("recognises the exact three-byte BOM", () => {
-    expect(hasUtf8Bom(new Uint8Array([0xef, 0xbb, 0xbf]))).toBe(true);
+    expect(
+      hasUtf8Bom(
+        new Uint8Array([UTF8_BOM_BYTE_1, UTF8_BOM_BYTE_2, UTF8_BOM_BYTE_3]),
+      ),
+    ).toBe(true);
   });
 
   it("recognises a BOM followed by more bytes", () => {
-    expect(hasUtf8Bom(new Uint8Array([0xef, 0xbb, 0xbf, 0x00]))).toBe(true);
+    expect(
+      hasUtf8Bom(
+        new Uint8Array([
+          UTF8_BOM_BYTE_1,
+          UTF8_BOM_BYTE_2,
+          UTF8_BOM_BYTE_3,
+          ARBITRARY_BYTE,
+        ]),
+      ),
+    ).toBe(true);
   });
 
   it("rejects an empty array", () => {
@@ -24,20 +49,34 @@ describe("hasUtf8Bom", () => {
   });
 
   it("rejects an array shorter than the BOM even when every present byte matches", () => {
-    expect(hasUtf8Bom(new Uint8Array([0xef]))).toBe(false);
-    expect(hasUtf8Bom(new Uint8Array([0xef, 0xbb]))).toBe(false);
+    expect(hasUtf8Bom(new Uint8Array([UTF8_BOM_BYTE_1]))).toBe(false);
+    expect(hasUtf8Bom(new Uint8Array([UTF8_BOM_BYTE_1, UTF8_BOM_BYTE_2]))).toBe(
+      false,
+    );
   });
 
   it("rejects a full-length array whose first byte doesn't match", () => {
-    expect(hasUtf8Bom(new Uint8Array([0x00, 0xbb, 0xbf]))).toBe(false);
+    expect(
+      hasUtf8Bom(
+        new Uint8Array([ARBITRARY_BYTE, UTF8_BOM_BYTE_2, UTF8_BOM_BYTE_3]),
+      ),
+    ).toBe(false);
   });
 
   it("rejects a full-length array whose second byte doesn't match", () => {
-    expect(hasUtf8Bom(new Uint8Array([0xef, 0x00, 0xbf]))).toBe(false);
+    expect(
+      hasUtf8Bom(
+        new Uint8Array([UTF8_BOM_BYTE_1, ARBITRARY_BYTE, UTF8_BOM_BYTE_3]),
+      ),
+    ).toBe(false);
   });
 
   it("rejects a full-length array whose third byte doesn't match", () => {
-    expect(hasUtf8Bom(new Uint8Array([0xef, 0xbb, 0x00]))).toBe(false);
+    expect(
+      hasUtf8Bom(
+        new Uint8Array([UTF8_BOM_BYTE_1, UTF8_BOM_BYTE_2, ARBITRARY_BYTE]),
+      ),
+    ).toBe(false);
   });
 });
 
@@ -53,15 +92,17 @@ describe("parsePackage: XML vs binary part classification", () => {
   });
 
   it("classifies a part that is entirely whitespace as binary — the loop runs to completion without ever finding a non-whitespace byte", () => {
-    const pkg = packageWithOnePart(new Uint8Array([0x20, 0x09, 0x0a, 0x0d]));
+    const pkg = packageWithOnePart(
+      new Uint8Array([ASCII_SPACE, ASCII_TAB, ASCII_LF, ASCII_CR]),
+    );
     expect(pkg.parts.part?.kind).toBe("binary");
   });
 
   it("skips a leading UTF-8 BOM before checking for '<'", () => {
     const bomThenXml = new Uint8Array([
-      0xef,
-      0xbb,
-      0xbf,
+      UTF8_BOM_BYTE_1,
+      UTF8_BOM_BYTE_2,
+      UTF8_BOM_BYTE_3,
       ...new TextEncoder().encode("<a/>"),
     ]);
     const pkg = packageWithOnePart(bomThenXml);
@@ -69,7 +110,9 @@ describe("parsePackage: XML vs binary part classification", () => {
   });
 
   it("classifies a lone BOM with nothing after it as binary, not xml", () => {
-    const pkg = packageWithOnePart(new Uint8Array([0xef, 0xbb, 0xbf]));
+    const pkg = packageWithOnePart(
+      new Uint8Array([UTF8_BOM_BYTE_1, UTF8_BOM_BYTE_2, UTF8_BOM_BYTE_3]),
+    );
     expect(pkg.parts.part?.kind).toBe("binary");
   });
 
@@ -80,19 +123,26 @@ describe("parsePackage: XML vs binary part classification", () => {
   });
 
   it("treats a byte immediately adjacent to each whitespace value as non-whitespace, ending the scan on it", () => {
-    // 0x1f is one below space (0x20); 0x08 is one below tab (0x09); 0x0b is one above LF (0x0a); 0x0e is one above CR (0x0d). None of these may be mistaken for the whitespace byte beside it.
-    for (const nonWhitespace of [0x1f, 0x08, 0x0b, 0x0e]) {
+    // One below space, one below tab, one above LF, one above CR. None of these may be mistaken for the whitespace byte beside it.
+    const belowSpace = ASCII_SPACE - 1;
+    const belowTab = ASCII_TAB - 1;
+    const aboveLf = ASCII_LF + 1;
+    const aboveCr = ASCII_CR + 1;
+    const hexRadix = 16;
+    for (const nonWhitespace of [belowSpace, belowTab, aboveLf, aboveCr]) {
       const pkg = packageWithOnePart(new Uint8Array([nonWhitespace]));
-      expect(pkg.parts.part?.kind, `byte 0x${nonWhitespace.toString(16)}`).toBe(
-        "binary",
-      );
+      expect(
+        pkg.parts.part?.kind,
+        `byte 0x${nonWhitespace.toString(hexRadix)}`,
+      ).toBe("binary");
     }
   });
 
   it("classifies real binary content (a PNG magic number) as binary, storing it losslessly as base64", () => {
-    const bytes = new Uint8Array([
-      0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
-    ]);
+    // The real 8-byte PNG signature (ISO/IEC 15948 5.2), derived from its own ASCII/control-character reading.
+    const bytes = new Uint8Array(
+      Array.from("\x89PNG\r\n\x1a\n", (c) => c.charCodeAt(0)),
+    );
     const pkg = packageWithOnePart(bytes);
     const part = pkg.parts.part;
     expect(part?.kind).toBe("binary");
@@ -101,13 +151,13 @@ describe("parsePackage: XML vs binary part classification", () => {
     }
   });
 
-  it("treats the byte one above '<' (0x3d, '=') as not xml", () => {
-    const pkg = packageWithOnePart(new Uint8Array([0x3d]));
+  it("treats the byte one above '<' ('=') as not xml", () => {
+    const pkg = packageWithOnePart(new Uint8Array([ASCII_LESS_THAN_PLUS_ONE]));
     expect(pkg.parts.part?.kind).toBe("binary");
   });
 
-  it("treats the byte one below '<' (0x3b, ';') as not xml", () => {
-    const pkg = packageWithOnePart(new Uint8Array([0x3b]));
+  it("treats the byte one below '<' (';') as not xml", () => {
+    const pkg = packageWithOnePart(new Uint8Array([ASCII_LESS_THAN_MINUS_ONE]));
     expect(pkg.parts.part?.kind).toBe("binary");
   });
 
@@ -121,9 +171,10 @@ describe("parsePackage: XML vs binary part classification", () => {
 
 describe("parsePackage: routes multiple parts independently", () => {
   it("classifies each part in a multi-part package on its own merits, keyed by its own path", () => {
+    const binaryContentBytes = Array.from({ length: 3 }, (_, i) => i + 1);
     const zipBytes = zipPackage([
       ["a.xml", { bytes: new TextEncoder().encode("<a/>") }],
-      ["b.bin", { bytes: new Uint8Array([1, 2, 3]) }],
+      ["b.bin", { bytes: new Uint8Array(binaryContentBytes) }],
     ]);
     const pkg = parsePackage(zipBytes);
     expect(pkg.parts["a.xml"]?.kind).toBe("xml");
