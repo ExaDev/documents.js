@@ -1,11 +1,23 @@
 // PDF scalar-text decoding: the two boundary decoders that turn a PdfObject's raw bytes into a JavaScript value where the interpretation is fixed by the format rather than by context — PDF strings (BOM-marked UTF-16BE vs the byte-per-character PDFDocEncoding approximation) and PDF dates (ISO 32000-1 7.9.4's "D:YYYYMMDDHHmmSSOHH'mm'" profile). Split out of read.ts so the other read-side modules (names-tree keys, outline titles, annotation contents, form-field values) share one definition instead of each re-deriving it; read.ts re-exports both to keep the pdf-codec/read entry's surface unchanged.
 
+// The two-byte byte-order mark that opens a UTF-16BE PDF string (ISO 32000-1 7.9.2.2).
+const UTF16BE_BOM_BYTE_0 = 0xfe;
+const UTF16BE_BOM_BYTE_1 = 0xff;
+// Bit width of one byte, the shift needed to place a UTF-16BE code unit's high byte above its low byte.
+const BITS_PER_BYTE = 8;
+
 // Our own writer always emits UTF-16BE-with-BOM (write.ts's textToPdfString); a third-party producer's plain-ASCII PDFDocEncoding is approximated as a direct byte-per-character (Latin-1-ish) decode, correct for the overwhelming common ASCII-only case.
 export function decodePdfString(bytes: Uint8Array<ArrayBuffer>): string {
-  if (bytes.length >= 2 && bytes[0] === 0xfe && bytes[1] === 0xff) {
+  if (
+    bytes.length >= 2 &&
+    bytes[0] === UTF16BE_BOM_BYTE_0 &&
+    bytes[1] === UTF16BE_BOM_BYTE_1
+  ) {
     let out = "";
     for (let i = 2; i + 1 < bytes.length; i += 2) {
-      out += String.fromCharCode(((bytes[i] ?? 0) << 8) | (bytes[i + 1] ?? 0));
+      out += String.fromCharCode(
+        ((bytes[i] ?? 0) << BITS_PER_BYTE) | (bytes[i + 1] ?? 0),
+      );
     }
     return out;
   }
