@@ -4,12 +4,41 @@ import { ByteWriter, concatBytes } from "../bytes/writer";
 import type { RawImage } from "./png-decode";
 import { filterScanlines } from "./png-filter";
 
+// The eight-byte PNG signature (PNG spec section 5.2): a high-bit-set byte to catch 7-bit transmission, the ASCII text "PNG", a CRLF pair to detect line-ending translation, a DOS end-of-file marker to detect ASCII-mode truncation, and a final LF to detect CR stripping.
+const PNG_SIG_HIGH_BIT_MARKER = 0x89;
+const PNG_SIG_P = 0x50;
+const PNG_SIG_N = 0x4e;
+const PNG_SIG_G = 0x47;
+const PNG_SIG_CR = 0x0d;
+const PNG_SIG_LF = 0x0a;
+const PNG_SIG_DOS_EOF = 0x1a;
 const PNG_SIGNATURE = new Uint8Array([
-  0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
+  PNG_SIG_HIGH_BIT_MARKER,
+  PNG_SIG_P,
+  PNG_SIG_N,
+  PNG_SIG_G,
+  PNG_SIG_CR,
+  PNG_SIG_LF,
+  PNG_SIG_DOS_EOF,
+  PNG_SIG_LF,
 ]);
 
 // PNG colour type 3 (indexed/palette) cannot address more entries than this — one palette index per byte, per the PNG spec's own 8-bit-depth ceiling for colour type 3.
 const MAX_PALETTE_ENTRIES = 256;
+const BYTES_PER_UINT32 = 4;
+const IHDR_BYTE_LENGTH = 13;
+const IHDR_HEIGHT_OFFSET = 4;
+const PNG_BIT_DEPTH_8 = 8;
+const PNG_COLOR_TYPE_GRAY = 0;
+const PNG_COLOR_TYPE_RGB = 2;
+const PNG_COLOR_TYPE_INDEXED = 3;
+const PNG_COLOR_TYPE_GRAY_ALPHA = 4;
+const PNG_COLOR_TYPE_RGBA = 6;
+const RGB_CHANNELS = 3;
+const OPAQUE_ALPHA = 255;
+const GREEN_SHIFT = 8;
+const BLUE_SHIFT = 16;
+const ALPHA_SHIFT = 24;
 
 // The PNG spec's IHDR width/height fields are each a 'PNG four-byte unsigned integer', a datatype the spec (section 3, Terms and definitions) itself defines as "limited to the range 0 to 2^31-1 ... in order to accommodate languages that have difficulty with unsigned four-byte values" — so 2^31 and above has no valid encoding, the same way zero, a fraction, or NaN doesn't.
 export const PNG_MAX_DIMENSION = 0x7fffffff;
@@ -28,7 +57,7 @@ export interface PngEncodeOptions {
 }
 
 function u32be(value: number): Uint8Array<ArrayBuffer> {
-  const bytes = new Uint8Array(4);
+  const bytes = new Uint8Array(BYTES_PER_UINT32);
   new DataView(bytes.buffer).setUint32(0, value);
   return bytes;
 }
@@ -51,11 +80,11 @@ function writeIhdr(
   height: number,
   colorType: number,
 ): void {
-  const ihdr = new Uint8Array(13);
+  const ihdr = new Uint8Array(IHDR_BYTE_LENGTH);
   const ihdrView = new DataView(ihdr.buffer);
   ihdrView.setUint32(0, width);
-  ihdrView.setUint32(4, height);
-  ihdr[8] = 8; // bit depth: always 8, since RawImage is always 8 bits per channel (including palette indices, which this encoder never packs below 8 bits)
+  ihdrView.setUint32(IHDR_HEIGHT_OFFSET, height);
+  ihdr[8] = PNG_BIT_DEPTH_8; // bit depth: always 8, since RawImage is always 8 bits per channel (including palette indices, which this encoder never packs below 8 bits)
   ihdr[9] = colorType;
   ihdr[10] = 0; // compression method: always 0 (deflate)
   ihdr[11] = 0; // filter method: always 0 (the five-filter adaptive scheme)
@@ -66,9 +95,11 @@ function writeIhdr(
 // IHDR colour type for the truecolour/greyscale path: 0 gray, 2 truecolor(RGB), 4 gray+alpha, 6 truecolor+alpha(RGBA). RawImage's channels/alpha combination maps onto these four. Colour type 3 (indexed/palette) is never chosen here — it is only ever emitted by detectPalette below, and only for a channels === 3 image whose actual pixels reduce to a small enough palette.
 function colorTypeFor(image: RawImage): number {
   if (image.channels === 1) {
-    return image.alpha === undefined ? 0 : 4;
+    return image.alpha === undefined
+      ? PNG_COLOR_TYPE_GRAY
+      : PNG_COLOR_TYPE_GRAY_ALPHA;
   }
-  return image.alpha === undefined ? 2 : 6;
+  return image.alpha === undefined ? PNG_COLOR_TYPE_RGB : PNG_COLOR_TYPE_RGBA;
 }
 
 interface PaletteEncoding {
@@ -87,14 +118,14 @@ function detectPalette(image: RawImage): PaletteEncoding | undefined {
   const paletteAlpha: number[] = [];
 
   for (let i = 0; i < pixelCount; i++) {
-    const base = i * 3;
+    const base = i * RGB_CHANNELS;
     // `?? 0` rather than `!`: mirrors what writeTruecolorPng's own behaviour already implies for a data or alpha plane shorter than width*height(*channels) — writing an out-of-range `undefined` sample into that function's Uint8Array coerces it to 0 via ToUint8(ToNumber(undefined)), so a short buffer there already degrades to a per-pixel 0, never a thrown error. Without the same default here, the same missing sample would instead feed `undefined` into the arithmetic below, producing NaN and colliding every such pixel onto one arbitrary shared palette entry regardless of its real RGB — so encodePng's choice between the indexed and truecolour candidates would silently change what a short-buffered image decodes back to. Explicitly matching the default keeps that choice purely a size optimisation, never a content one.
     const r = data[base] ?? 0;
     const g = data[base + 1] ?? 0;
     const b = data[base + 2] ?? 0;
-    const a = alpha === undefined ? 255 : (alpha[i] ?? 0);
+    const a = alpha === undefined ? OPAQUE_ALPHA : (alpha[i] ?? 0);
     // A packed bitfield (each 0..255 sample in its own byte lane) rather than a sum of scaled terms: since r/g/b/a each occupy a disjoint, non-overlapping 8-bit lane of the 32-bit key, the packing is a bijection by construction, with no arithmetic identity between the lanes for a mutation to preserve.
-    const key = r | (g << 8) | (b << 16) | (a << 24);
+    const key = r | (g << GREEN_SHIFT) | (b << BLUE_SHIFT) | (a << ALPHA_SHIFT);
 
     let index = colorToIndex.get(key);
     if (index === undefined) {
@@ -115,7 +146,7 @@ function detectPalette(image: RawImage): PaletteEncoding | undefined {
   }
   // A tRNS chunk is written whenever the source image carried an alpha plane at all, regardless of whether every value turns out opaque — matching how colour types 4/6 always carry their alpha plane regardless of its actual values, so `image.alpha !== undefined` round-trips back to a defined (if all-255) alpha array rather than silently vanishing. Trailing fully-opaque entries are trimmed from the written chunk: decodePng already treats a palette index at or beyond the tRNS chunk's length as fully opaque, so this keeps the chunk minimal without losing information. The trim never goes below one entry — a zero-length tRNS chunk is not a valid PNG chunk (strict decoders including libpng reject it outright), whereas a single-entry chunk validly states that one alpha value and lets every other palette entry default to 255, which is exactly what the fully-opaque case needs.
   let trnsLength = paletteAlpha.length;
-  while (trnsLength > 1 && paletteAlpha[trnsLength - 1] === 255) {
+  while (trnsLength > 1 && paletteAlpha[trnsLength - 1] === OPAQUE_ALPHA) {
     trnsLength--;
   }
   return {
@@ -143,7 +174,7 @@ function writeIndexedPng(
   encoding: PaletteEncoding,
   options: PngEncodeOptions,
 ): void {
-  writeIhdr(writer, width, height, 3);
+  writeIhdr(writer, width, height, PNG_COLOR_TYPE_INDEXED);
   writeChunk(writer, "PLTE", encoding.palette);
   if (encoding.trns !== undefined) {
     writeChunk(writer, "tRNS", encoding.trns);
@@ -216,7 +247,7 @@ export function encodePng(
   }
 
   const paletteEncoding =
-    image.channels === 3 ? detectPalette(image) : undefined;
+    image.channels === RGB_CHANNELS ? detectPalette(image) : undefined;
 
   if (paletteEncoding === undefined) {
     return buildPng((writer) => {

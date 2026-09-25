@@ -2,6 +2,9 @@
 const CRC32_POLYNOMIAL = 0xedb88320;
 const BYTE_VALUES = 256;
 const BITS_PER_BYTE = 8;
+const BYTE_MASK = 0xff;
+// The standard CRC32 init value and final XOR mask, both all-ones for a 32-bit register.
+const CRC32_ALL_ONES = 0xffffffff;
 
 const CRC32_TABLE: Uint32Array = (() => {
   const table = new Uint32Array(BYTE_VALUES);
@@ -16,9 +19,9 @@ const CRC32_TABLE: Uint32Array = (() => {
 })();
 
 export function crc32(bytes: Uint8Array<ArrayBuffer>): number {
-  let crc = 0xffffffff;
+  let crc = CRC32_ALL_ONES;
   for (const byte of bytes) {
-    crc = CRC32_TABLE[(crc ^ byte) & 0xff]! ^ (crc >>> 8);
+    crc = CRC32_TABLE[(crc ^ byte) & BYTE_MASK]! ^ (crc >>> BITS_PER_BYTE);
   }
-  return (crc ^ 0xffffffff) >>> 0;
+  return (crc ^ CRC32_ALL_ONES) >>> 0;
 }

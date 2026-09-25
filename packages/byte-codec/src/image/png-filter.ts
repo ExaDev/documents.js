@@ -1,6 +1,14 @@
 // The five PNG scanline (un)filters (PNG spec section 9.2), shared by the PDF cross-reference stream predictor path (src/pdf/predictors.ts): xref streams are almost always /Predictor 12, which is exactly PNG's "Up" filter applied to fixed-width rows, so this module sits on the critical path for reading modern PDFs, not just for PNG images.
 export type PngFilterType = 0 | 1 | 2 | 3 | 4; // None, Sub, Up, Average, Paeth
 
+const PNG_FILTER_NONE = 0;
+const PNG_FILTER_SUB = 1;
+const PNG_FILTER_UP = 2;
+const PNG_FILTER_AVERAGE = 3;
+const PNG_FILTER_PAETH = 4;
+const BYTE_MASK = 0xff;
+const BYTE_MODULUS = 256;
+
 function paethPredictor(a: number, b: number, c: number): number {
   const p = a + b - c;
   const pa = Math.abs(p - a);
@@ -20,7 +28,11 @@ function paethPredictor(a: number, b: number, c: number): number {
 // The value a filter type predicts from the left (a), above (b), and above-left (c) samples — added back in during unfiltering, or subtracted out during filtering. Returning a value from a pure function (rather than assigning inside a switch) sidesteps having to prove a switch over a literal union is exhaustive to a variable declared without an initialiser.
 function isPngFilterType(value: number): value is PngFilterType {
   return (
-    value === 0 || value === 1 || value === 2 || value === 3 || value === 4
+    value === PNG_FILTER_NONE ||
+    value === PNG_FILTER_SUB ||
+    value === PNG_FILTER_UP ||
+    value === PNG_FILTER_AVERAGE ||
+    value === PNG_FILTER_PAETH
   );
 }
 
@@ -30,16 +42,16 @@ function predictorValue(
   b: number,
   c: number,
 ): number {
-  if (filterType === 1) {
+  if (filterType === PNG_FILTER_SUB) {
     return a;
   }
-  if (filterType === 2) {
+  if (filterType === PNG_FILTER_UP) {
     return b;
   }
-  if (filterType === 3) {
+  if (filterType === PNG_FILTER_AVERAGE) {
     return Math.floor((a + b) / 2);
   }
-  if (filterType === 4) {
+  if (filterType === PNG_FILTER_PAETH) {
     return paethPredictor(a, b, c);
   }
   return 0; // None
@@ -79,7 +91,7 @@ export function unfilterScanlines(
             ? out[prevOutRowStart + x - bpp]!
             : 0;
         out[outRowStart + x] =
-          (raw + predictorValue(filterByte, a, b, c)) & 0xff;
+          (raw + predictorValue(filterByte, a, b, c)) & BYTE_MASK;
       });
   }
   return out;
@@ -96,51 +108,57 @@ function filterRowInto(
   let sum = 0;
   // Each callback walks `target`'s own exact-length window through the typed array's forEach rather than a manually bounded for loop, so there is no separate loop-bound comparison whose own boundary could ever be observed through it.
   switch (filterType) {
-    case 1:
+    case PNG_FILTER_SUB:
       target.forEach((_byte, x) => {
-        const filtered = (current[x + bpp]! - current[x]!) & 0xff;
+        const filtered = (current[x + bpp]! - current[x]!) & BYTE_MASK;
         target[x] = filtered;
-        sum += Math.min(filtered, 256 - filtered);
+        sum += Math.min(filtered, BYTE_MODULUS - filtered);
       });
       break;
-    case 2:
+    case PNG_FILTER_UP:
       target.forEach((_byte, x) => {
-        const filtered = (current[x + bpp]! - previous[x + bpp]!) & 0xff;
+        const filtered = (current[x + bpp]! - previous[x + bpp]!) & BYTE_MASK;
         target[x] = filtered;
-        sum += Math.min(filtered, 256 - filtered);
+        sum += Math.min(filtered, BYTE_MODULUS - filtered);
       });
       break;
-    case 3:
+    case PNG_FILTER_AVERAGE:
       target.forEach((_byte, x) => {
         const filtered =
           (current[x + bpp]! -
             Math.floor((current[x]! + previous[x + bpp]!) / 2)) &
-          0xff;
+          BYTE_MASK;
         target[x] = filtered;
-        sum += Math.min(filtered, 256 - filtered);
+        sum += Math.min(filtered, BYTE_MODULUS - filtered);
       });
       break;
-    case 4:
+    case PNG_FILTER_PAETH:
       target.forEach((_byte, x) => {
         const filtered =
           (current[x + bpp]! -
             paethPredictor(current[x]!, previous[x + bpp]!, previous[x]!)) &
-          0xff;
+          BYTE_MASK;
         target[x] = filtered;
-        sum += Math.min(filtered, 256 - filtered);
+        sum += Math.min(filtered, BYTE_MODULUS - filtered);
       });
       break;
-    case 0:
+    case PNG_FILTER_NONE:
       target.forEach((_byte, x) => {
         const filtered = current[x + bpp]!;
         target[x] = filtered;
-        sum += Math.min(filtered, 256 - filtered);
+        sum += Math.min(filtered, BYTE_MODULUS - filtered);
       });
   }
   return sum;
 }
 
-const ALL_FILTER_TYPES: readonly PngFilterType[] = [0, 1, 2, 3, 4];
+const ALL_FILTER_TYPES: readonly PngFilterType[] = [
+  PNG_FILTER_NONE,
+  PNG_FILTER_SUB,
+  PNG_FILTER_UP,
+  PNG_FILTER_AVERAGE,
+  PNG_FILTER_PAETH,
+];
 
 // Filters raw (unfiltered) pixel bytes into PNG's per-scanline IDAT payload shape. `strategy: 'none'` always emits filter type 0 (useful for deterministic, human-auditable test output); `'adaptive'` (the default) picks, per row, whichever of the five filters minimises the sum of the filtered bytes' absolute values interpreted as signed — the heuristic the PNG spec itself recommends.
 export function filterScanlines(
@@ -158,11 +176,11 @@ export function filterScanlines(
   let candidate = new Uint8Array(bytesPerRow);
   let best = new Uint8Array(bytesPerRow);
   const filterTypes: readonly PngFilterType[] =
-    strategy === "none" ? [0] : ALL_FILTER_TYPES;
+    strategy === "none" ? [PNG_FILTER_NONE] : ALL_FILTER_TYPES;
 
   Array.from({ length: height }).forEach((_row, y) => {
     current.set(raw.subarray(y * bytesPerRow, (y + 1) * bytesPerRow), bpp);
-    let bestType: PngFilterType = 0;
+    let bestType: PngFilterType = PNG_FILTER_NONE;
     let bestSum = Number.POSITIVE_INFINITY;
     for (const filterType of filterTypes) {
       const sum = filterRowInto(current, previous, bpp, filterType, candidate);
