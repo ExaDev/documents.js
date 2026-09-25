@@ -1,4 +1,14 @@
 // SVG transform parsing and affine composition. SVG models every transform attribute (and the viewBox -> viewport map, and the group nesting rule) as one 2x3 affine matrix applied to user-space column vectors: x' = a*x + c*y + e, y' = b*x + d*y + f — the identical parameterisation CSS transforms and PDF's cm operator use, and the reason a composition of any number of SVG transforms stays exactly one matrix rather than a tree of closures.
+// Pi radians expressed in degrees: the degrees-to-radians and radians-to-degrees conversion factor.
+const PI_RADIANS_IN_DEGREES = 180;
+
+// How far apart the squared axis scales of a similarity may be before the matrix stops counting as one.
+const SIMILARITY_AXIS_TOLERANCE = 1e-9;
+
+// The transform grammar's own argument counts: rotate takes an angle alone or an angle plus a rotation centre, matrix takes its six components.
+const ROTATE_WITH_CENTRE_ARGUMENT_COUNT = 3;
+const MATRIX_ARGUMENT_COUNT = 6;
+
 export interface AffineMatrix {
   readonly a: number;
   readonly b: number;
@@ -68,12 +78,15 @@ export function isNonReflectingSimilarity(m: AffineMatrix): boolean {
   if (m.a * m.d - m.b * m.c < 0) {
     return false;
   }
-  return Math.abs(m.a * m.a + m.b * m.b - (m.c * m.c + m.d * m.d)) < 1e-9;
+  return (
+    Math.abs(m.a * m.a + m.b * m.b - (m.c * m.c + m.d * m.d)) <
+    SIMILARITY_AXIS_TOLERANCE
+  );
 }
 
 // The rotation angle of a non-reflecting similarity, in degrees clockwise on screen (SVG's own convention, y-down), which is exactly the sign convention ContentVector.rotationDeg already carries for the drawing variant. atan2(b, a) reads the angle straight off the matrix's first column; the caller is responsible for having classified m as a non-reflecting similarity first, since for a general matrix this quantity is not the rotation of anything.
 export function similarityRotationDeg(m: AffineMatrix): number {
-  return (Math.atan2(m.b, m.a) * 180) / Math.PI;
+  return (Math.atan2(m.b, m.a) * PI_RADIANS_IN_DEGREES) / Math.PI;
 }
 
 // The transform attribute grammar: a whitespace/comma-separated list of function calls translate(tx [ty]), scale(sx [sy]), rotate(angle [cx cy]), skewX(a), skewY(a), matrix(a b c d e f), applied LEFT TO RIGHT in list order — which is the composition order composeMatrices(outer, inner) with each list entry as the new outer. Numbers reuse the shared SVG number grammar; function names are case-sensitive per the spec. Returns undefined for any malformed list (an unknown function, a bad argument count, a non-finite number) rather than a partial parse — a half-applied transform would silently misplace every descendant.
@@ -140,10 +153,13 @@ function matrixFromFunction(
       return { a: sx, b: 0, c: 0, d: sy, e: 0, f: 0 };
     }
     case "rotate": {
-      if (args.length !== 1 && args.length !== 3) {
+      if (
+        args.length !== 1 &&
+        args.length !== ROTATE_WITH_CENTRE_ARGUMENT_COUNT
+      ) {
         return undefined;
       }
-      const radians = (args[0]! * Math.PI) / 180;
+      const radians = (args[0]! * Math.PI) / PI_RADIANS_IN_DEGREES;
       const cos = Math.cos(radians);
       const sin = Math.sin(radians);
       const rotation: AffineMatrix = {
@@ -172,7 +188,7 @@ function matrixFromFunction(
       return {
         a: 1,
         b: 0,
-        c: Math.tan((args[0]! * Math.PI) / 180),
+        c: Math.tan((args[0]! * Math.PI) / PI_RADIANS_IN_DEGREES),
         d: 1,
         e: 0,
         f: 0,
@@ -183,14 +199,14 @@ function matrixFromFunction(
       }
       return {
         a: 1,
-        b: Math.tan((args[0]! * Math.PI) / 180),
+        b: Math.tan((args[0]! * Math.PI) / PI_RADIANS_IN_DEGREES),
         c: 0,
         d: 1,
         e: 0,
         f: 0,
       };
     case "matrix":
-      if (args.length !== 6) {
+      if (args.length !== MATRIX_ARGUMENT_COUNT) {
         return undefined;
       }
       return {
