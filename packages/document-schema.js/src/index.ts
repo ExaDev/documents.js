@@ -18,6 +18,10 @@ export * from "./package";
 export type * from "./codec";
 export * from "./schema-io";
 export * from "./content-json-schema-defs";
+export {
+  EMBEDDED_OBJECT_KINDS,
+  CONTENT_DOCUMENT_URI,
+} from "./json-schema-defs-shared";
 export type * from "./text-layout";
 export type * from "./font-port";
 export type * from "./math-layout";

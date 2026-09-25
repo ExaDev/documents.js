@@ -70,12 +70,12 @@ import {
   ContentVectorSchema,
 } from "./content-drawing";
 
+import { CONTENT_DEFS } from "./content-json-schema-defs";
 import {
-  CONTENT_DEFS,
   CONTENT_DOCUMENT_URI,
   EMBEDDED_OBJECT_KINDS,
   MAX_SAFE_INTEGER,
-} from "./content-json-schema-defs";
+} from "./json-schema-defs-shared";
 import {
   AnchorDescriptorSchema,
   ConstructDescriptorSchema,
