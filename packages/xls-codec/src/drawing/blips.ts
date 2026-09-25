@@ -20,19 +20,41 @@ export interface BlipImage {
 }
 
 const RGB_UID_SIZE = 16;
+// The remaining FBSE fixed fields' own sizes, in declaration order.
+const BT_WIN32_SIZE = 1;
+const BT_MAC_OS_SIZE = 1;
+const TAG_WORD_SIZE = 2;
+const SIZE_FIELD_SIZE = 4;
+const CREF_SIZE = 4;
+const FO_DELAY_SIZE = 4;
+const UNUSED_FIELD_SIZE = 1;
+const UNUSED_FIELD_COUNT_AFTER_FODELAY = 4;
 const BLIP_TAG_SIZE = 1;
 
 /** [MS-ODRAW] OfficeArtFBSE's own fixed fields up to and including unused3, before the optional nameData and the nested embedded blip — btWin32(1) + btMacOS(1) + rgbUid(16) + tag(2) + size(4) + cRef(4) + foDelay(4) + unused1(1) + cbName(1) + unused2(1) + unused3(1). */
-const BSE_FIXED_SIZE = 1 + 1 + RGB_UID_SIZE + 2 + 4 + 4 + 4 + 1 + 1 + 1 + 1;
+const BSE_FIXED_SIZE =
+  BT_WIN32_SIZE +
+  BT_MAC_OS_SIZE +
+  RGB_UID_SIZE +
+  TAG_WORD_SIZE +
+  SIZE_FIELD_SIZE +
+  CREF_SIZE +
+  FO_DELAY_SIZE +
+  UNUSED_FIELD_SIZE * UNUSED_FIELD_COUNT_AFTER_FODELAY;
 
 /** A Blip record's own recInstance, mapped to how many 16-byte rgbUid fields precede its `tag` byte and the raw file bytes — one UID for a blip embedded once, two when [MS-ODRAW] also records a second, "printer" representation's own hash. Only PNG/JPEG instances are named: every other blip type resolves to no image at all (see readBlipImage), so its own UID count is never needed. */
+// Each blip type's recInstance: PNG v1, PNG v2, JPEG RGB v1, JPEG RGB v2, JPEG CMYK v1, JPEG CMYK v2, and the v2 spelling of each is the v1 one plus one.
+const BLIP_PNG_V1 = 0x6e0;
+const BLIP_JPEG_RGB_V1 = 0x46a;
+const BLIP_JPEG_CMYK_V1 = 0x6e2;
+const V2_INSTANCE_OFFSET = 1;
 const BLIP_UID_COUNTS: ReadonlyMap<number, number> = new Map([
-  [0x6e0, 1], // PNG, 1 UID
-  [0x6e1, 2], // PNG, 2 UIDs
-  [0x46a, 1], // JPEG (RGB), 1 UID
-  [0x46b, 2], // JPEG (RGB), 2 UIDs
-  [0x6e2, 1], // JPEG (CMYK), 1 UID
-  [0x6e3, 2], // JPEG (CMYK), 2 UIDs
+  [BLIP_PNG_V1, 1],
+  [BLIP_PNG_V1 + V2_INSTANCE_OFFSET, 2],
+  [BLIP_JPEG_RGB_V1, 1],
+  [BLIP_JPEG_RGB_V1 + V2_INSTANCE_OFFSET, 2],
+  [BLIP_JPEG_CMYK_V1, 1],
+  [BLIP_JPEG_CMYK_V1 + V2_INSTANCE_OFFSET, 2],
 ]);
 
 /** Reads every BSE entry the workbook's own drawing-group Escher stream declares, keyed by its 1-based position in the Blip Store array — the same index a picture shape's `pib` property names. A BSE this reader cannot turn into a real image (no embedded blip, or a blip type document-schema.js's ContentImageBlockSchema has no lossless slot for — DIB, EMF, WMF, PICT, TIFF) is simply absent from the map, exactly like any other unsupported construct elsewhere in this package: a picture shape whose `pib` resolves to one of these is recognised as a picture but produces no ContentSheetImage, rather than a fabricated or mistranscoded one. */
@@ -75,9 +97,9 @@ function readBseImage(data: Uint8Array<ArrayBuffer>): BlipImage | undefined {
     cursor.skip(1); // btMacOS
     cursor.skip(RGB_UID_SIZE); // rgbUid
     cursor.skip(2); // tag
-    cursor.skip(4); // size
-    cursor.skip(4); // cRef
-    cursor.skip(4); // foDelay
+    cursor.skip(SIZE_FIELD_SIZE); // size
+    cursor.skip(SIZE_FIELD_SIZE); // cRef
+    cursor.skip(SIZE_FIELD_SIZE); // foDelay
     cursor.skip(1); // unused1
     // cbName (a u8) is never negative, so it already IS the exact skip count with no separate zero-floor needed. unused2/unused3 are never skipped past: embeddedStart below is computed from BSE_FIXED_SIZE and cbName alone, not from the cursor's own position, so nothing ever reads through the cursor again after this line.
     cbName = cursor.u8();
