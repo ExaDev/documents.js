@@ -327,6 +327,7 @@ export interface ObjectDataState {
 }
 
 export const OBJECT_DATA_HEX_DIGITS = "0123456789abcdef";
+const HEX_RADIX = 16;
 
 // Decodes a run of #SDATA hex-digit text directly into `objectData.bytes`, in place, preserving its actual position relative to any \binN/\'hh bytes already appended or still to come — the streaming counterpart of base64.ts's own hexToBytes, which only ever sees one destination's payload as a single already-concatenated string. Behaves identically to hexToBytes otherwise: a non-hex character (RTF's own recommended line-wrapping whitespace) is skipped rather than rejected, and a digit left unpaired at the very end of the whole destination is simply dropped, half a byte not being a byte.
 export function appendObjectDataHexText(
@@ -343,7 +344,7 @@ export function appendObjectDataHexText(
       high = value;
       continue;
     }
-    objectData.bytes.push(high * 16 + value);
+    objectData.bytes.push(high * HEX_RADIX + value);
     high = undefined;
   }
   objectData.pendingHexNibble = high;

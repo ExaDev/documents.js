@@ -29,6 +29,9 @@ import {
 } from "./units";
 
 const RGB_MAX = 255;
+// The unsigned 16-bit fold-back for a negative \uN parameter: "Unicode values greater than 32767 are expressed as negative numbers", so a negative code reads back by adding one full 16-bit range, the inverse of write-text.ts's own escapeText fold-down.
+const UINT16_RANGE = 0x10000;
+const SEMICOLON_BYTE = 0x3b; // A table entry's text is terminated by a semicolon in every production that has one.
 
 // The \fontfamily production's own eight keywords, minus their \f prefix — the value carried through to a font entry so a consumer can substitute sensibly when the exact face is unavailable, which is the whole reason the spec gives for the family existing ("RTF also supports font families so that applications can attempt to intelligently choose fonts if the exact font is not present on the reading system").
 const FONT_FAMILIES: ReadonlySet<string> = new Set([
@@ -186,7 +189,7 @@ function collectPlainText(
       flush();
       const code = token.param;
       if (code !== undefined) {
-        out += String.fromCodePoint(code < 0 ? code + 0x1_00_00 : code);
+        out += String.fromCodePoint(code < 0 ? code + UINT16_RANGE : code);
       }
     }
   }
@@ -314,7 +317,7 @@ function parseColorTable(
     }
     if (token.kind === "text") {
       for (const byte of token.bytes) {
-        if (byte === 0x3b) {
+        if (byte === SEMICOLON_BYTE) {
           finishEntry();
         }
       }
