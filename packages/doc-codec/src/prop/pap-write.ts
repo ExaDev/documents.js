@@ -1,6 +1,10 @@
 import type { Alignment, ContentParagraph } from "document-schema.js";
 import { DocFormatError } from "../errors";
 
+// Little-endian byte assembly: each byte's own place value is 8 bits.
+const U8_MASK = 0xff;
+const BITS_PER_BYTE = 8;
+
 // The inverse of pap.ts's applyParagraphSprms: a ContentParagraph's direct paragraph formatting to a PapxInFkp grpprl. Each property emits the LOGICAL sprm pap.ts reads (sprmPJc rather than sprmPJc80, sprmPDxaLeft rather than sprmPDxaLeft80) — the "80" spellings exist for pre-2000 producers this package has no reason to imitate, and pap.ts's own last-Prl-wins fold means writing only the logical form round-trips exactly.
 //
 // Opcodes are restated as local constants rather than imported from pap.ts, for the same reason chp-write.ts restates chp.ts's: this module's exports are coupled to the specification's own opcode table, not to a sibling module's private switch-case names.
@@ -51,7 +55,11 @@ function pushSprm(
   opcode: number,
   operand: readonly number[],
 ): void {
-  sink.bytes.push(opcode & 0xff, (opcode >> 8) & 0xff, ...operand);
+  sink.bytes.push(
+    opcode & U8_MASK,
+    (opcode >> BITS_PER_BYTE) & U8_MASK,
+    ...operand,
+  );
 }
 
 function int16(value: number, what: string): number[] {
@@ -62,7 +70,7 @@ function int16(value: number, what: string): number[] {
     );
   }
   // No separate "add 0x10000 for a negative value" conversion: & and >> operate on the 32-bit two's complement form already, which for any value in MIN_INT16..MAX_INT16 has exactly the same low 16 bits as its unsigned 16-bit equivalent — rounded & 0xff and (rounded >> 8) & 0xff already read the right two bytes whether rounded is negative or not.
-  return [rounded & 0xff, (rounded >> 8) & 0xff];
+  return [rounded & U8_MASK, (rounded >> BITS_PER_BYTE) & U8_MASK];
 }
 
 function uint16(value: number, what: string): number[] {
@@ -72,7 +80,7 @@ function uint16(value: number, what: string): number[] {
       `${what} is ${rounded} twips, outside the 0..${MAX_UINT16} range an unsigned 2-byte sprm operand can hold`,
     );
   }
-  return [rounded & 0xff, (rounded >> 8) & 0xff];
+  return [rounded & U8_MASK, (rounded >> BITS_PER_BYTE) & U8_MASK];
 }
 
 function pointsToTwips(pt: number): number {
@@ -154,8 +162,8 @@ export function encodeParagraphGrpprl(
     }
     // Written directly rather than through int16: the range check just above already guarantees dyaLine is 0..LSPD_MAX_MULTIPLE_DYA_LINE (0x7bc0), comfortably inside int16's own -32768..32767, so int16's own error path — and the label it would report — could never actually fire for this call.
     pushSprm({ bytes }, SPRM_P_DYA_LINE, [
-      dyaLine & 0xff,
-      (dyaLine >> 8) & 0xff,
+      dyaLine & U8_MASK,
+      (dyaLine >> BITS_PER_BYTE) & U8_MASK,
       0x01,
       0x00, // fMultLinespace = 1: the multiplier form.
     ]);

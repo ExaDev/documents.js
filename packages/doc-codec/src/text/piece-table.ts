@@ -8,6 +8,12 @@ import {
 import { DocFormatError } from "../errors";
 import { parsePlc } from "../plc";
 
+// Clx element shapes: a Prc is clxt(1) plus cbGrpprl(2) before its payload; a Pcdt is clxt(1) plus lcb(4) before the PlcPcd; and a Pcd's Prm sits at byte 6.
+const HEX_RADIX = 16;
+const PRC_HEADER_BYTES = 3;
+const PCDT_HEADER_BYTES = 5;
+const PCD_PRM_OFFSET = 6;
+
 // The piece table, [MS-DOC] 2.8.35 and 2.9.6 — the mechanism the entire format hangs on. A .doc's logical text is not one contiguous run of bytes: it is assembled from pieces, each naming a byte range of the WordDocument stream and the character positions that range supplies. Every other structure in the format addresses text by character position (CP), and a CP only becomes a byte offset by passing through this table, so a piece table read wrongly does not fail — it yields a document of real characters in the wrong order, from the wrong places, at the wrong sizes.
 //
 // Two details carry most of the risk, and both are encoded in one 32-bit field (FcCompressed, [MS-DOC] 2.8.25). The low 30 bits are a byte offset. Bit 30 says whether the piece's text is 16-bit (the flag clear, offset used as-is, two bytes per character) or 8-bit (the flag set, the REAL offset being that value halved, one byte per character). Halving is easy to forget and produces text from a plausible-looking but wrong place in the stream; the spec's own worked example makes the point directly — "Because fCompressed is 1, the actual offset is fc/2, or 0x00000400" — and is reproduced verbatim in this module's tests.
@@ -55,7 +61,7 @@ export function parseClx(clx: Uint8Array): PieceTable {
     if (clxt === CLXT_PCDT) break;
     if (clxt !== CLXT_PRC) {
       throw new DocFormatError(
-        `Clx element at offset ${cursor} begins with clxt 0x${clxt.toString(16).padStart(2, "0")}, which is neither a Prc (0x01) nor the Pcdt (0x02)`,
+        `Clx element at offset ${cursor} begins with clxt 0x${clxt.toString(HEX_RADIX).padStart(2, "0")}, which is neither a Prc (0x01) nor the Pcdt (0x02)`,
       );
     }
     const cbGrpprl = readInt16LE(clx, cursor + 1);
@@ -64,16 +70,16 @@ export function parseClx(clx: Uint8Array): PieceTable {
         `Clx Prc at offset ${cursor} declares cbGrpprl ${cbGrpprl}, outside the 0..0x3FA2 range [MS-DOC] permits`,
       );
     }
-    cursor += 3 + cbGrpprl;
+    cursor += PRC_HEADER_BYTES + cbGrpprl;
     if (cursor > clx.length) {
       throw new DocFormatError(
-        `Clx Prc at offset ${cursor - 3 - cbGrpprl} declares a ${cbGrpprl}-byte GrpPrl that runs past the end of the ${clx.length}-byte Clx`,
+        `Clx Prc at offset ${cursor - PRC_HEADER_BYTES - cbGrpprl} declares a ${cbGrpprl}-byte GrpPrl that runs past the end of the ${clx.length}-byte Clx`,
       );
     }
   }
 
   const lcb = readUint32LE(clx, cursor + 1);
-  const plcPcd = slice(clx, cursor + 5, lcb, "Clx Pcdt PlcPcd");
+  const plcPcd = slice(clx, cursor + PCDT_HEADER_BYTES, lcb, "Clx Pcdt PlcPcd");
   const plc = parsePlc(plcPcd, PCD_SIZE, "PlcPcd");
 
   const pieces: Piece[] = [];
@@ -89,7 +95,7 @@ export function parseClx(clx: Uint8Array): PieceTable {
       fc: fcCompressed & FC_MASK,
       compressed: (fcCompressed & FC_COMPRESSED_BIT) !== 0,
       noParaLast: (bits & 0x0001) !== 0,
-      prm: readUint16LE(element, 6),
+      prm: readUint16LE(element, PCD_PRM_OFFSET),
     });
   }
 

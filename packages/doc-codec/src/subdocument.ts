@@ -9,6 +9,8 @@ import {
 import { readTextRange } from "./text/characters";
 import type { PieceTable } from "./text/piece-table";
 
+const CP_ENTRY_BYTES = 4;
+
 // The document-stream range every non-main-document story (a footnote, an endnote, a comment, a header/footer slot) is read through: [MS-DOC] 2.4.1's own subdocument model has the main document, the footnote document, the header document, the comment (annotation) document, the endnote document, and the textbox documents concatenated one after another in a single logical CP space, each subdocument itself divided into individual stories by a boundary plex of its own — PlcffndTxt for footnotes, PlcfandTxt for comments, PlcfendTxt for endnotes, Plcfhdd for headers/footers. Every one of those four plexes shares the identical shape ([MS-DOC]'s own words, repeated on each of their own pages): "Each CP except the last two specifies the beginning of a story ... The second-to-last CP only ends the last story ... The last CP is undefined and MUST be ignored." That is what lets one function read all four: `boundaryFc`/`boundaryLcb` locate the plex, `subdocStartCp`/`subdocLength` locate the subdocument's own slice of the WordDocument stream's logical text, and the trailing "ignored" slot every one of these plexes carries is dropped here once, rather than by each of notes.ts/headers-footers.ts separately. A story's own trailing guard mark is dropped here too when the story ends in a bare empty paragraph — see endsWithGuardParagraph below for the two real spellings that rule has to hold.
 
 // Reads one story plex's own aCP array, leniently where a genuine Word 97 producer is lenient. [MS-DOC]'s own pages for PlcffndTxt/PlcfandTxt/PlcfendTxt/Plcfhdd state each CP "MUST be greater than or equal to 0 and less than" the subdocument's own length, and the shared PLC container (plc.ts) enforces ascending keys for every PLC in the format — but a genuine Word 97-authored file writes placeholder CPs that break both rules in its Plcfhdd when a document carries (mostly) no headers at all: -1 entries mid-array and a CP past the subdocument's own end, with ccpHdd itself just 1. Word's own writers predate the published specification's tightening, and a real, independent [MS-DOC] implementation (LibreOffice 26.8.0.3) opens the identical bytes with no header content and no error. Rather than refuse such a document outright, an out-of-range key snaps to its predecessor — stating an empty story through the same "beginning CP has the same value as the next CP" semantics the specification itself defines, without moving any later key, so one placeholder cannot swallow the stories after it. A key that merely descends below its in-range predecessor is raised to it, the identical empty-story spelling. An ascending, in-range plex passes through value-for-value unchanged, so a conformant file reads exactly as before.
@@ -18,13 +20,13 @@ function readStoryPlexKeys(
   what: string,
 ): readonly number[] {
   // No separate bytes.length < 4 clause: this function's own caller already returns early for boundaryLcb <= 0, so bytes.length here is always at least 1 — and every whole number from 1 to 3 already fails bytes.length % 4 === 0 on its own, so the whole-number check below already refuses anything under 4 bytes without a separate bound to say so.
-  if (bytes.length % 4 !== 0) {
+  if (bytes.length % CP_ENTRY_BYTES !== 0) {
     throw new DocFormatError(
       `${what} is ${bytes.length} bytes, which does not yield a whole number of 4-byte keys`,
     );
   }
   const keys: number[] = [];
-  for (let offset = 0; offset < bytes.length; offset += 4) {
+  for (let offset = 0; offset < bytes.length; offset += CP_ENTRY_BYTES) {
     const raw = readInt32LE(bytes, offset);
     const previous = keys[keys.length - 1] ?? 0;
     // A negative raw never needs its own clause: previous is never itself negative (0 to start, or a prior iteration's own previous/Math.max result, both non-negative), so Math.max(raw, previous) already picks previous whenever raw < 0 — checking it explicitly would only ever restate what the fallback below already does.

@@ -1,6 +1,9 @@
 import { readUint32LE } from "./bytes";
 import { DocFormatError } from "./errors";
 
+// A Plc's cp keys are 4-byte entries, one more than the data elements that follow them.
+const CP_ENTRY_BYTES = 4;
+
 // The PLC ("PLex of Cps"), [MS-DOC] 2.2.2 — the one container shape that carries almost every mapping in the format: an array of 4-byte keys followed by an array of fixed-size data elements, with exactly one more key than element, so key[i] and key[i+1] bracket the range element i describes. The keys are character positions in PlcPcd and byte offsets in PlcBteChpx/PlcBtePapx ("Where most PLCs map CPs to data, the PlcBteChpx maps stream offsets to data instead"), but the layout and the element-count arithmetic are identical, so one parser serves both rather than each caller re-deriving the split point.
 //
 // The element count is not stored: it is derived from the PLC's total size, which is why every caller must pass a size the FIB declared rather than the whole stream. [MS-DOC] 2.2.2 gives the derivation directly — n = (cbPlc - 4) / (4 + cbData), and "the preceding expression MUST yield a whole number for n". A size that does not is a corrupt file, not a variant, so it throws rather than rounding: rounding would silently shift every element's boundary and produce plausible-looking wrong text.
@@ -25,12 +28,13 @@ export function parsePlc(
       `${what} was parsed with an element size of ${elementSize}, which is not a non-negative integer`,
     );
   }
-  if (bytes.length < 4) {
+  if (bytes.length < CP_ENTRY_BYTES) {
     throw new DocFormatError(
       `${what} is ${bytes.length} bytes, too short to hold even the single terminating CP every PLC ends with`,
     );
   }
-  const count = (bytes.length - 4) / (4 + elementSize);
+  const count =
+    (bytes.length - CP_ENTRY_BYTES) / (CP_ENTRY_BYTES + elementSize);
   if (!Number.isInteger(count)) {
     throw new DocFormatError(
       `${what} is ${bytes.length} bytes, which does not yield a whole number of ${elementSize}-byte data elements: (${bytes.length} - 4) / (4 + ${elementSize}) = ${count}`,
@@ -39,7 +43,7 @@ export function parsePlc(
 
   const keys: number[] = [];
   for (let index = 0; index <= count; index += 1) {
-    const key = readUint32LE(bytes, index * 4);
+    const key = readUint32LE(bytes, index * CP_ENTRY_BYTES);
     const previous = keys[index - 1];
     // "The CPs MUST appear in ascending order" ([MS-DOC] 2.2.2). Enforced rather than assumed because every lookup below is a binary search that would return an arbitrary index on unsorted keys instead of failing — the silent-wrong-answer case this package exists to avoid.
     if (previous !== undefined && key < previous) {
@@ -50,7 +54,7 @@ export function parsePlc(
     keys.push(key);
   }
 
-  const dataStart = (count + 1) * 4;
+  const dataStart = (count + 1) * CP_ENTRY_BYTES;
   return {
     keys,
     count,

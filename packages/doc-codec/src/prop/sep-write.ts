@@ -1,6 +1,16 @@
 import type { ContentSection } from "document-schema.js";
 import { DocFormatError } from "../errors";
 
+// Little-endian byte assembly: each byte's own place value is 8 bits.
+const U8_MASK = 0xff;
+const BITS_PER_BYTE = 8;
+// A PlcfSed's cp keys are 4-byte entries, each sed is 12 bytes, and sed.fcMpr's ignored no-file offset is -1 as a u32.
+const CP_ENTRY_BYTES = 4;
+const SEPX_ENTRY_BYTES = 12;
+const SED_FN_MPR_OFFSET = 6;
+const SED_FC_MPR_OFFSET = 8;
+const NO_FILE_OFFSET = 0xffffffff;
+
 // The inverse of sep.ts's applySectionSprms: a ContentSection's pageSize/margins to a Sepx grpprl. Every margin is written in the positive, minimum-margin form of its YAS operand (see sep.ts's own marginFromYas comment) — the same form the specification's own worked example uses, and the one a plain point value naturally maps to, since this writer has no header/footer geometry to grow a minimum margin against.
 
 /** sprmSXaPage / sprmSYaPage: unsigned 2-byte twips, each constrained to [MS-DOC]'s own [144, 31680] page-dimension range. */
@@ -32,7 +42,11 @@ function pushSprm(
   opcode: number,
   operand: readonly number[],
 ): void {
-  sink.bytes.push(opcode & 0xff, (opcode >> 8) & 0xff, ...operand);
+  sink.bytes.push(
+    opcode & U8_MASK,
+    (opcode >> BITS_PER_BYTE) & U8_MASK,
+    ...operand,
+  );
 }
 
 function pointsToTwips(pt: number): number {
@@ -50,7 +64,7 @@ function uint16(
       `${what} is ${value} twips, outside the ${min}..${max} range its sprm operand can hold`,
     );
   }
-  return [value & 0xff, (value >> 8) & 0xff];
+  return [value & U8_MASK, (value >> BITS_PER_BYTE) & U8_MASK];
 }
 
 // Builds the Sepx grpprl for one section's page size and margins — both required fields of ContentSection (document-schema.js), so this always emits all six sprms.
@@ -141,19 +155,19 @@ export function buildPlcfSed(
     );
   }
   const keys = [...startCps, ccpText];
-  const keyBytes = keys.length * 4;
-  const bytes = new Uint8Array(keyBytes + fcSepxList.length * 12);
+  const keyBytes = keys.length * CP_ENTRY_BYTES;
+  const bytes = new Uint8Array(keyBytes + fcSepxList.length * SEPX_ENTRY_BYTES);
   const view = new DataView(bytes.buffer);
   keys.forEach((cp, index) => {
-    view.setUint32(index * 4, cp, true);
+    view.setUint32(index * CP_ENTRY_BYTES, cp, true);
   });
   fcSepxList.forEach((fcSepx, index) => {
-    const base = keyBytes + index * 12;
+    const base = keyBytes + index * SEPX_ENTRY_BYTES;
     // sed.fn is always this constant 0 — and `bytes` is a fresh, zero-initialised Uint8Array no earlier write in this loop ever touches at this offset, so there is nothing to actually write here; a real setUint16(base, 0) call would be a genuine no-op.
     view.setUint32(base + 2, fcSepx, true); // sed.fcSepx.
-    view.setUint16(base + 6, 0); // sed.fnMpr — ignored.
+    view.setUint16(base + SED_FN_MPR_OFFSET, 0); // sed.fnMpr
     // 0xffffffff's own four bytes are identical (0xff each), so fcMpr's own endianness is equally moot.
-    view.setUint32(base + 8, 0xffffffff); // sed.fcMpr — ignored.
+    view.setUint32(base + SED_FC_MPR_OFFSET, NO_FILE_OFFSET); // sed.fcMpr
   });
   return bytes;
 }

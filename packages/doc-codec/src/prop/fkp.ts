@@ -2,6 +2,10 @@ import { readUint16LE, readUint32LE, readUint8, slice } from "../bytes";
 import { DocFormatError } from "../errors";
 import { findLargestAtMost, parsePlc, type Plc } from "../plc";
 
+// An FKP's rgfc array is 4-byte fc entries; hex prints a field the way [MS-DOC]'s own tables do.
+const FC_ENTRY_BYTES = 4;
+const HEX_RADIX = 16;
+
 // The formatted disk page (FKP), [MS-DOC] 2.9.23 and 2.9.175 — how a .doc stores character and paragraph formatting as sparse exceptions rather than per-character state. Text is divided into runs of identical formatting; each run's properties live in one 512-byte page, and a bin table maps a byte offset in the WordDocument stream to the page holding the properties for the text there.
 //
 // Three details in the page layout are easy to get wrong and produce plausible-looking wrong formatting rather than an error:
@@ -53,7 +57,7 @@ function checkPage(page: Uint8Array, what: string): void {
 function readRgfc(page: Uint8Array, count: number): number[] {
   const rgfc: number[] = [];
   for (let index = 0; index <= count; index += 1) {
-    rgfc.push(readUint32LE(page, index * 4));
+    rgfc.push(readUint32LE(page, index * FC_ENTRY_BYTES));
   }
   return rgfc;
 }
@@ -64,11 +68,11 @@ export function parseChpxFkp(page: Uint8Array): ChpxFkp {
   if (crun < 1 || crun > MAX_CRUN) {
     throw new DocFormatError(
       // No .toUpperCase() on MAX_CRUN's own hex digits, unlike MAX_CPARA's message below: 0x65's digits are both plain numerals, so upper/lower-casing them is a genuine no-op for this fixed constant, not a stylistic omission.
-      `ChpxFkp declares crun ${crun}, outside the 0x01..0x${MAX_CRUN.toString(16)} range [MS-DOC] permits`,
+      `ChpxFkp declares crun ${crun}, outside the 0x01..0x${MAX_CRUN.toString(HEX_RADIX)} range [MS-DOC] permits`,
     );
   }
   const rgfc = readRgfc(page, crun);
-  const rgbStart = (crun + 1) * 4;
+  const rgbStart = (crun + 1) * FC_ENTRY_BYTES;
   return {
     rgfc,
     grpprl(index: number): Uint8Array | undefined {
@@ -91,11 +95,11 @@ export function parsePapxFkp(page: Uint8Array): PapxFkp {
   const cpara = readUint8(page, FKP_PAGE_SIZE - 1);
   if (cpara < 1 || cpara > MAX_CPARA) {
     throw new DocFormatError(
-      `PapxFkp declares cpara ${cpara}, outside the 0x01..0x${MAX_CPARA.toString(16).toUpperCase()} range [MS-DOC] permits`,
+      `PapxFkp declares cpara ${cpara}, outside the 0x01..0x${MAX_CPARA.toString(HEX_RADIX).toUpperCase()} range [MS-DOC] permits`,
     );
   }
   const rgfc = readRgfc(page, cpara);
-  const rgbxStart = (cpara + 1) * 4;
+  const rgbxStart = (cpara + 1) * FC_ENTRY_BYTES;
   return {
     rgfc,
     papx(index: number): PapxRecord | undefined {
@@ -169,7 +173,7 @@ export class PropertyBinTable {
 
   constructor(wordDocument: Uint8Array, plc: Uint8Array, what: string) {
     this.#wordDocument = wordDocument;
-    this.#plc = parsePlc(plc, 4, what);
+    this.#plc = parsePlc(plc, FC_ENTRY_BYTES, what);
   }
 
   /** Resolves `fc` to the bin table entry covering it, or undefined when `fc` falls outside every entry. Reads the page number through `Plc.element`, whose own bounds check is what actually guards this index — `findLargestAtMost` never returns the PLC's own final (terminating) key, so `index` is always one `element` already accepts, and a second "is this page number missing" check here would have no input that could ever trigger it. */

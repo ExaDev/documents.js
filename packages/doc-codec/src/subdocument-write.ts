@@ -13,6 +13,8 @@ import {
   type WriteWarning,
 } from "./table/write";
 
+const CP_ENTRY_BYTES = 4;
+
 // The inverse of subdocument.ts's readSubdocumentStories: the footnote, header, comment, and endnote subdocuments readDocContent resolves from PlcffndTxt/PlcfHdd/PlcfandTxt/PlcfendTxt, written back as genuine subdocument text plus genuine boundary plexes. Every layout fact here is [MS-DOC]'s own, each confirmed against a real producer's bytes (a LibreOffice-authored .doc) before being implemented rather than derived from the specification alone: a subdocument's stories are concatenated in plex order, each non-empty story's own span ends with its content's final paragraph mark plus the one guard mark [MS-DOC]'s Headers page mandates ("If a story is non-empty, it MUST end with a paragraph mark that serves as a guard between stories. This paragraph mark is not considered part of the story contents"), the subdocument carries exactly one further paragraph mark beyond the last story's end — which is what makes each plex's own "The second-to-last CP only ends the last story and MUST be equal to FibRgLw97.ccp<subdocument> minus 1" satisfiable at all — and the last, "undefined and MUST be ignored", CP is written as the subdocument's own length (a value inside that "ignored" contract; the real producer captured for this design wrote ccp+1 there instead, which the reader ignores identically).
 //
 // What this writer deliberately does NOT write for notes is the reference side: PlcffndRef/PlcfandRef/PlcfendRef and the U+0002/U+0005 reference characters in the main document. The model this writer consumes carries no reference positions — the reader drops the reference anchors entirely and reads note BODIES keyed by document-order ordinals — so there is nothing to write references FROM, and a note story written without a reference is honestly unreferenced content rather than a fake live footnote. The header document's six leading separator stories are written as genuine empty stories (zero-width, [MS-DOC]'s own "the story is considered empty" spelling), matching that they are not modelled on either side.
@@ -48,10 +50,10 @@ export function paragraphCharacters(paragraph: WriteParagraph): number {
 
 /** A CP-only plex (element size 0, [MS-DOC] 2.2.2's own "the data thus has a size of 0 bytes" shape PlcffndTxt/PlcfandTxt/PlcfendTxt/PlcfHdd all share): just the aCP array, one 4-byte little-endian value per key. */
 function buildCpOnlyPlex(keys: readonly number[]): Uint8Array<ArrayBuffer> {
-  const bytes = new Uint8Array(keys.length * 4);
+  const bytes = new Uint8Array(keys.length * CP_ENTRY_BYTES);
   const view = new DataView(bytes.buffer);
   keys.forEach((key, index) => {
-    view.setUint32(index * 4, key, true);
+    view.setUint32(index * CP_ENTRY_BYTES, key, true);
   });
   return bytes;
 }
