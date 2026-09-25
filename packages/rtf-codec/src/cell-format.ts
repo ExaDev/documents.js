@@ -19,32 +19,43 @@ import type {
 import { unrecognizedFillKind } from "document-schema.js";
 import { twipsToPoints, pointsToTwips } from "./units";
 
+// This module's own internal shading-percent scale runs 0-100, matching resolveCellFill/nearestPercentType's own domain; RTF's \clshdngN is instead 0-10000, "hundredths of a percent" — every conversion between the two scales divides or multiplies by this same value.
+const FULL_PERCENT = 100;
+
 // Every percentN member ContentCellPatternTypeSchema defines, ascending — the discrete steps RTF's own continuous \clshdngN percentage (0-10000, i.e. 0-100% in hundredths) snaps onto, since the schema states a two-colour pattern fill only as one of these named densities, never an arbitrary float. A real producer overwhelmingly writes one of these exact values already (5/10/25/50/75/... are the common Word UI presets), so the snap is exact for the common case and a defensible nearest-match for the rare exact value this vocabulary has no member for.
-const PERCENT_STEPS: readonly [number, ContentCellPatternType][] = [
-  [5, "percent5"],
-  [10, "percent10"],
-  [12, "percent12"],
-  [15, "percent15"],
-  [20, "percent20"],
-  [25, "percent25"],
-  [30, "percent30"],
-  [35, "percent35"],
-  [37, "percent37"],
-  [40, "percent40"],
-  [45, "percent45"],
-  [50, "percent50"],
-  [55, "percent55"],
-  [60, "percent60"],
-  [62, "percent62"],
-  [65, "percent65"],
-  [70, "percent70"],
-  [75, "percent75"],
-  [80, "percent80"],
-  [85, "percent85"],
-  [87, "percent87"],
-  [90, "percent90"],
-  [95, "percent95"],
+//
+// Listed once, as the type names themselves — PERCENT_STEPS below derives each numeric step from its own "percentN" label (Number() of the digits after the "percent" prefix) rather than typing the same integer twice, once bare and once embedded in the string, where the two could drift apart.
+const PERCENT_TYPES: readonly ContentCellPatternType[] = [
+  "percent5",
+  "percent10",
+  "percent12",
+  "percent15",
+  "percent20",
+  "percent25",
+  "percent30",
+  "percent35",
+  "percent37",
+  "percent40",
+  "percent45",
+  "percent50",
+  "percent55",
+  "percent60",
+  "percent62",
+  "percent65",
+  "percent70",
+  "percent75",
+  "percent80",
+  "percent85",
+  "percent87",
+  "percent90",
+  "percent95",
 ];
+const PERCENT_PREFIX = "percent";
+const PERCENT_STEPS: readonly [number, ContentCellPatternType][] =
+  PERCENT_TYPES.map((type) => [
+    Number(type.slice(PERCENT_PREFIX.length)),
+    type,
+  ]);
 
 // The nearest percentN member to an arbitrary 0-100 shading percentage.
 function nearestPercentType(percent: number): ContentCellPatternType {
@@ -195,7 +206,8 @@ export function applyCellDefinitionControlWord(
       return true;
     case "clshdng":
       // "N is defined in hundredths of a percent, from 0 to 10000" — divided down to the same 0-100 scale nearestPercentType and resolveCellFill both work in.
-      cell.shadingPercent = param === undefined ? undefined : param / 100;
+      cell.shadingPercent =
+        param === undefined ? undefined : param / FULL_PERCENT;
       return true;
     // The <cellalign> member of the <celldef> (RTF 1.9.1, "Table Definitions"): "\clvertalc Text is centered vertically in cell" / "\clvertalb Text is bottom-aligned in cell". \clvertalt ("Text is top-aligned in cell (the default)") is handled by leaving the field undefined — see PendingCell.verticalAlign's own comment for why the default's explicit spelling collapses into the absence that already means it.
     case "clvertalc":
@@ -277,7 +289,7 @@ export function resolveCellFill(
     pending.foregroundIndex === undefined
       ? undefined
       : colorAt(pending.foregroundIndex);
-  if (shading >= 100) {
+  if (shading >= FULL_PERCENT) {
     return foregroundColor === undefined
       ? undefined
       : { kind: "solid", color: foregroundColor };
@@ -353,7 +365,7 @@ export function cellFillControlWords(
         (foregroundIndex === undefined
           ? ""
           : `\\clcfpat${String(foregroundIndex)}`) +
-        `\\clshdng${String(percent * 100)}`
+        `\\clshdng${String(percent * FULL_PERCENT)}`
       );
     }
     default:
