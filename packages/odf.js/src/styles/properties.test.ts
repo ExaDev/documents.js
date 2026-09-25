@@ -16,17 +16,30 @@ import {
 
 describe("parseLength", () => {
   it("parses every ODF length unit into points", () => {
-    expect(parseLength("12pt")).toBe(12);
-    expect(parseLength("1in")).toBe(72);
-    expect(parseLength("1pc")).toBe(12);
-    expect(parseLength("100px")).toBe(75);
-    expect(parseLength("2.54cm")).toBeCloseTo(72, 10);
-    expect(parseLength("25.4mm")).toBeCloseTo(72, 10);
+    const pointsPerPoint = 12;
+    const pointsPerInch = 72;
+    const pointsPerPica = 12;
+    const pointsPerHundredPixels = 75;
+    const conversionPrecisionDigits = 10;
+    expect(parseLength("12pt")).toBe(pointsPerPoint);
+    expect(parseLength("1in")).toBe(pointsPerInch);
+    expect(parseLength("1pc")).toBe(pointsPerPica);
+    expect(parseLength("100px")).toBe(pointsPerHundredPixels);
+    expect(parseLength("2.54cm")).toBeCloseTo(
+      pointsPerInch,
+      conversionPrecisionDigits,
+    );
+    expect(parseLength("25.4mm")).toBeCloseTo(
+      pointsPerInch,
+      conversionPrecisionDigits,
+    );
   });
 
   it("parses negative and fractional lengths", () => {
-    expect(parseLength("-0.5pt")).toBe(-0.5);
-    expect(parseLength(".5pt")).toBe(0.5);
+    const negativeHalfPointPt = -0.5;
+    const halfPointPt = 0.5;
+    expect(parseLength("-0.5pt")).toBe(negativeHalfPointPt);
+    expect(parseLength(".5pt")).toBe(halfPointPt);
   });
 
   it("returns undefined for a malformed or unitless length", () => {
@@ -38,20 +51,39 @@ describe("parseLength", () => {
 
   it("round-trips real LibreOffice cm-based margins to the same points formatPt would produce for the CSS source value", () => {
     // The fixture's CSS source was margin-top:12pt/margin-bottom:6pt/text-indent:18pt; LibreOffice re-expressed them in cm.
-    expect(parseLength("0.423cm")).toBeCloseTo(12, 1);
-    expect(parseLength("0.212cm")).toBeCloseTo(6, 1);
-    expect(parseLength("0.635cm")).toBeCloseTo(18, 1);
+    const marginTopPt = 12;
+    const marginBottomPt = 6;
+    const textIndentPt = 18;
+    const roundTripPrecisionDigits = 1;
+    expect(parseLength("0.423cm")).toBeCloseTo(
+      marginTopPt,
+      roundTripPrecisionDigits,
+    );
+    expect(parseLength("0.212cm")).toBeCloseTo(
+      marginBottomPt,
+      roundTripPrecisionDigits,
+    );
+    expect(parseLength("0.635cm")).toBeCloseTo(
+      textIndentPt,
+      roundTripPrecisionDigits,
+    );
   });
 });
 
 describe("formatPt / formatPercentageMultiplier", () => {
   it('formats a point value with a bare "pt" suffix', () => {
-    expect(formatPt(12)).toBe("12pt");
-    expect(formatPt(-4.5)).toBe("-4.5pt");
+    const somePt = 12;
+    const negativePt = -4.5;
+    expect(formatPt(somePt)).toBe(`${somePt}pt`);
+    expect(formatPt(negativePt)).toBe(`${negativePt}pt`);
   });
 
   it("formats a line-spacing multiplier as a percentage", () => {
-    expect(formatPercentageMultiplier(1.5)).toBe("150%");
+    const lineSpacingMultiplier = 1.5;
+    const percentScale = 100;
+    expect(formatPercentageMultiplier(lineSpacingMultiplier)).toBe(
+      `${lineSpacingMultiplier * percentScale}%`,
+    );
     expect(formatPercentageMultiplier(1)).toBe("100%");
   });
 });
@@ -125,9 +157,10 @@ describe("parseTextProperties", () => {
       "fo:font-size": "18pt",
     });
     // style:font-name is deliberately not modelled (see the top-of-file note in properties.ts on fo:font-family vs style:font-name), so this real-world snippet also exercises hasUnknown.
+    const expectedFontSizePt = 18;
     const result = parseTextProperties(element);
     expect(result.properties.color).toEqual({ r: 1, g: 0, b: 0 });
-    expect(result.properties.sizePt).toBe(18);
+    expect(result.properties.sizePt).toBe(expectedFontSizePt);
     expect(result.hasUnknown).toBe(true);
   });
 
@@ -330,11 +363,25 @@ describe("parseParagraphProperties", () => {
       "style:auto-text-indent": "false",
     });
     const result = parseParagraphProperties(element);
+    const expectedLineSpacing = 1.5;
+    const expectedSpacingBeforePt = 12;
+    const expectedSpacingAfterPt = 6;
+    const expectedIndentFirstLinePt = 18;
+    const roundTripPrecisionDigits = 1;
     expect(result.properties.alignment).toBe("right");
-    expect(result.properties.lineSpacing).toBe(1.5);
-    expect(result.properties.spacingBeforePt).toBeCloseTo(12, 1);
-    expect(result.properties.spacingAfterPt).toBeCloseTo(6, 1);
-    expect(result.properties.indentFirstLinePt).toBeCloseTo(18, 1);
+    expect(result.properties.lineSpacing).toBe(expectedLineSpacing);
+    expect(result.properties.spacingBeforePt).toBeCloseTo(
+      expectedSpacingBeforePt,
+      roundTripPrecisionDigits,
+    );
+    expect(result.properties.spacingAfterPt).toBeCloseTo(
+      expectedSpacingAfterPt,
+      roundTripPrecisionDigits,
+    );
+    expect(result.properties.indentFirstLinePt).toBeCloseTo(
+      expectedIndentFirstLinePt,
+      roundTripPrecisionDigits,
+    );
     // fo:margin-right has no corresponding field in this model at all — unmodelled, so hasUnknown regardless of the other three siblings.
     expect(result.hasUnknown).toBe(true);
   });
