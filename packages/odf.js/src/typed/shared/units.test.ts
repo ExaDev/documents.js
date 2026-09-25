@@ -10,28 +10,57 @@ import {
 
 // The cm-based fixtures below ("real LibreOffice output") are copied verbatim from a real style:paragraph-properties element produced by `soffice --headless --convert-to odt` (LibreOffice 26.2.5.2), the same fixture referenced by src/styles/properties.test.ts — see that file's own top-of-file note.
 
+const CONVERSION_PRECISION_DIGITS = 10;
+const ROUND_TRIP_PRECISION_DIGITS = 1;
+
 describe("parseOdfLength", () => {
   it("parses every ODF length unit into points", () => {
-    expect(parseOdfLength("12pt")).toBe(12);
-    expect(parseOdfLength("1in")).toBe(72);
-    expect(parseOdfLength("1pc")).toBe(12); // pica — the unit most likely to be misremembered; 1pc = 12pt, not 6pt or 10pt.
-    expect(parseOdfLength("2pc")).toBe(24);
-    expect(parseOdfLength("100px")).toBe(75); // CSS reference pixel: 96px = 1in = 72pt.
-    expect(parseOdfLength("96px")).toBe(72);
-    expect(parseOdfLength("2.54cm")).toBeCloseTo(72, 10);
-    expect(parseOdfLength("25.4mm")).toBeCloseTo(72, 10);
+    const pointsPerPoint = 12;
+    const pointsPerInch = 72;
+    const pointsPerPica = 12; // the unit most likely to be misremembered; 1pc = 12pt, not 6pt or 10pt.
+    const pointsPerTwoPica = 24;
+    const pointsPerHundredPixels = 75; // CSS reference pixel: 96px = 1in = 72pt.
+    const pointsPerNinetySixPixels = 72;
+    expect(parseOdfLength("12pt")).toBe(pointsPerPoint);
+    expect(parseOdfLength("1in")).toBe(pointsPerInch);
+    expect(parseOdfLength("1pc")).toBe(pointsPerPica);
+    expect(parseOdfLength("2pc")).toBe(pointsPerTwoPica);
+    expect(parseOdfLength("100px")).toBe(pointsPerHundredPixels);
+    expect(parseOdfLength("96px")).toBe(pointsPerNinetySixPixels);
+    expect(parseOdfLength("2.54cm")).toBeCloseTo(
+      pointsPerInch,
+      CONVERSION_PRECISION_DIGITS,
+    );
+    expect(parseOdfLength("25.4mm")).toBeCloseTo(
+      pointsPerInch,
+      CONVERSION_PRECISION_DIGITS,
+    );
   });
 
   it("parses negative and fractional lengths", () => {
-    expect(parseOdfLength("-0.5pt")).toBe(-0.5);
-    expect(parseOdfLength(".5pt")).toBe(0.5);
+    const negativeHalfPointPt = -0.5;
+    const halfPointPt = 0.5;
+    expect(parseOdfLength("-0.5pt")).toBe(negativeHalfPointPt);
+    expect(parseOdfLength(".5pt")).toBe(halfPointPt);
   });
 
   it("parses real LibreOffice cm-based margins to the points the original pt-based CSS source specified", () => {
     // Fixture's CSS source was margin-top:12pt / margin-bottom:6pt / text-indent:18pt; LibreOffice re-expressed them in cm on round trip.
-    expect(parseOdfLength("0.423cm")).toBeCloseTo(12, 1);
-    expect(parseOdfLength("0.212cm")).toBeCloseTo(6, 1);
-    expect(parseOdfLength("0.635cm")).toBeCloseTo(18, 1);
+    const marginTopPt = 12;
+    const marginBottomPt = 6;
+    const textIndentPt = 18;
+    expect(parseOdfLength("0.423cm")).toBeCloseTo(
+      marginTopPt,
+      ROUND_TRIP_PRECISION_DIGITS,
+    );
+    expect(parseOdfLength("0.212cm")).toBeCloseTo(
+      marginBottomPt,
+      ROUND_TRIP_PRECISION_DIGITS,
+    );
+    expect(parseOdfLength("0.635cm")).toBeCloseTo(
+      textIndentPt,
+      ROUND_TRIP_PRECISION_DIGITS,
+    );
   });
 
   it("returns undefined for a malformed or unitless length", () => {
@@ -107,25 +136,41 @@ describe("expandExponential", () => {
 
 describe("parseOdfAngleDeg", () => {
   it("a bare number with no unit suffix is already degrees", () => {
-    expect(parseOdfAngleDeg("90")).toBe(90);
-    expect(parseOdfAngleDeg("-45")).toBe(-45);
-    expect(parseOdfAngleDeg("0.5")).toBe(0.5);
-    expect(parseOdfAngleDeg(".5")).toBe(0.5);
+    const rightAngleDeg = 90;
+    const negativeAngleDeg = -45;
+    const halfDeg = 0.5;
+    expect(parseOdfAngleDeg("90")).toBe(rightAngleDeg);
+    expect(parseOdfAngleDeg("-45")).toBe(negativeAngleDeg);
+    expect(parseOdfAngleDeg("0.5")).toBe(halfDeg);
+    expect(parseOdfAngleDeg(".5")).toBe(halfDeg);
   });
 
   it('an explicit "deg" suffix is a no-op conversion', () => {
-    expect(parseOdfAngleDeg("90deg")).toBe(90);
+    const rightAngleDeg = 90;
+    expect(parseOdfAngleDeg("90deg")).toBe(rightAngleDeg);
   });
 
   it("converts grad to degrees: 400 grad is a full turn, matching 360 degrees", () => {
-    expect(parseOdfAngleDeg("400grad")).toBe(360);
-    expect(parseOdfAngleDeg("200grad")).toBe(180);
-    expect(parseOdfAngleDeg("100grad")).toBe(90);
+    const fullTurnDeg = 360;
+    const halfTurnDeg = 180;
+    const quarterTurnDeg = 90;
+    expect(parseOdfAngleDeg("400grad")).toBe(fullTurnDeg);
+    expect(parseOdfAngleDeg("200grad")).toBe(halfTurnDeg);
+    expect(parseOdfAngleDeg("100grad")).toBe(quarterTurnDeg);
   });
 
   it("converts rad to degrees: pi radians is a half turn, matching 180 degrees", () => {
-    expect(parseOdfAngleDeg(`${Math.PI}rad`)).toBeCloseTo(180, 9);
-    expect(parseOdfAngleDeg(`${Math.PI / 2}rad`)).toBeCloseTo(90, 9);
+    const halfTurnDeg = 180;
+    const quarterTurnDeg = 90;
+    const radPrecisionDigits = 9;
+    expect(parseOdfAngleDeg(`${Math.PI}rad`)).toBeCloseTo(
+      halfTurnDeg,
+      radPrecisionDigits,
+    );
+    expect(parseOdfAngleDeg(`${Math.PI / 2}rad`)).toBeCloseTo(
+      quarterTurnDeg,
+      radPrecisionDigits,
+    );
   });
 
   it("returns undefined for a malformed angle", () => {
@@ -137,29 +182,56 @@ describe("parseOdfAngleDeg", () => {
 
 describe("formatOdfLength", () => {
   it('defaults to "pt" when no unit is given', () => {
-    expect(formatOdfLength(12)).toBe("12pt");
-    expect(formatOdfLength(-4.5)).toBe("-4.5pt");
+    const somePt = 12;
+    const negativePt = -4.5;
+    expect(formatOdfLength(somePt)).toBe(`${somePt}pt`);
+    expect(formatOdfLength(negativePt)).toBe(`${negativePt}pt`);
   });
 
   it("formats every unit, each round-tripping back through parseOdfLength to the original point value", () => {
+    const pointsPerInch = 72;
+    const roundTripPrecisionDigits = 9;
     for (const unit of ["cm", "mm", "in", "pt", "pc", "px"] as const) {
-      const formatted = formatOdfLength(72, unit);
+      const formatted = formatOdfLength(pointsPerInch, unit);
       expect(formatted.endsWith(unit)).toBe(true);
-      expect(parseOdfLength(formatted)).toBeCloseTo(72, 9);
+      expect(parseOdfLength(formatted)).toBeCloseTo(
+        pointsPerInch,
+        roundTripPrecisionDigits,
+      );
     }
   });
 
   it("formats a known exact value per unit", () => {
-    expect(formatOdfLength(72, "in")).toBe("1in");
-    expect(formatOdfLength(12, "pc")).toBe("1pc");
-    expect(formatOdfLength(72, "px")).toBe("96px");
+    const pointsPerInch = 72;
+    const pointsPerPica = 12;
+    expect(formatOdfLength(pointsPerInch, "in")).toBe("1in");
+    expect(formatOdfLength(pointsPerPica, "pc")).toBe("1pc");
+    expect(formatOdfLength(pointsPerInch, "px")).toBe("96px");
   });
 });
 
 // The ODF `length` datatype has no exponent form (see units.ts's own LENGTH_PATTERN and the OASIS grammar it encodes), but JavaScript's own Number-to-string switches into one below 1e-6 and at/above 1e21. A length that came out as "-7.1e-15pt" was therefore spec-invalid ODF that this package's own reader silently rejected — parseOdfTransform drops a translate() whose components don't parse, and parseBox returns undefined for an unrotated frame's own svg:x/svg:y, taking the whole shape with it. See typed/odp/write-round-trip.test.ts's own near-origin rotation sweep for the end-to-end statement of that failure.
 describe("formatOdfLength: fixed-point decimal only, never exponent notation", () => {
+  // Each value pins a distinct boundary of JS's own exponent-notation switchover: just below/above the 1e-6 lower threshold, deep sub-normal magnitudes down to Number.MIN_VALUE, and just at/above the 1e21 upper threshold.
+  const JUST_BELOW_LOWER_THRESHOLD = 1e-7;
+  const FRACTIONAL_BELOW_LOWER_THRESHOLD = 5.5e-8;
+  const DEEP_SUBNORMAL_MAGNITUDE = 1e-15;
+  const NEGATIVE_DEEP_SUBNORMAL_MAGNITUDE = -7.1e-15;
+  const VERY_DEEP_SUBNORMAL_MAGNITUDE = 1.05e-20;
+  const MINIMUM_DOUBLE_MAGNITUDE = 5e-324;
+  const JUST_AT_UPPER_THRESHOLD = 1e21;
+  const NEGATIVE_ABOVE_UPPER_THRESHOLD = -1.2345e22;
+  const FAR_ABOVE_UPPER_THRESHOLD = 1e300;
   const EXPONENT_MAGNITUDES = [
-    1e-7, 5.5e-8, 1e-15, -7.1e-15, 1.05e-20, 5e-324, 1e21, -1.2345e22, 1e300,
+    JUST_BELOW_LOWER_THRESHOLD,
+    FRACTIONAL_BELOW_LOWER_THRESHOLD,
+    DEEP_SUBNORMAL_MAGNITUDE,
+    NEGATIVE_DEEP_SUBNORMAL_MAGNITUDE,
+    VERY_DEEP_SUBNORMAL_MAGNITUDE,
+    MINIMUM_DOUBLE_MAGNITUDE,
+    JUST_AT_UPPER_THRESHOLD,
+    NEGATIVE_ABOVE_UPPER_THRESHOLD,
+    FAR_ABOVE_UPPER_THRESHOLD,
   ];
 
   it.each(EXPONENT_MAGNITUDES)(
@@ -172,11 +244,15 @@ describe("formatOdfLength: fixed-point decimal only, never exponent notation", (
   );
 
   it("leaves the plain-stringification spelling of an ordinary value untouched, trailing zeros included (there are none to trim)", () => {
+    const somePt = 12;
+    const negativePt = -4.5;
+    const justAtLowerThreshold = 0.000001;
+    const justBelowLowerThreshold = 1e-7;
     expect(formatOdfLength(0)).toBe("0pt");
-    expect(formatOdfLength(12)).toBe("12pt");
-    expect(formatOdfLength(-4.5)).toBe("-4.5pt");
-    expect(formatOdfLength(0.000001)).toBe("0.000001pt");
-    expect(formatOdfLength(1e-7)).toBe("0.0000001pt");
+    expect(formatOdfLength(somePt)).toBe(`${somePt}pt`);
+    expect(formatOdfLength(negativePt)).toBe(`${negativePt}pt`);
+    expect(formatOdfLength(justAtLowerThreshold)).toBe("0.000001pt");
+    expect(formatOdfLength(justBelowLowerThreshold)).toBe("0.0000001pt");
   });
 
   it("never emits an exponent for any translate() component the rotation inverse can produce, across a full turn of angles and several frames including ones at the page origin", () => {
@@ -186,8 +262,11 @@ describe("formatOdfLength: fixed-point decimal only, never exponent notation", (
       { xPt: 0.001, yPt: 0.001, widthPt: 200, heightPt: 80 },
       { xPt: -5, yPt: 3, widthPt: 40, heightPt: 40 },
     ];
-    for (let deg = -360; deg <= 360; deg += 0.5) {
-      const angleRad = (-deg * Math.PI) / 180;
+    const fullTurnDeg = 360;
+    const degreesPerHalfTurn = 180;
+    const sweepStepDeg = 0.5;
+    for (let deg = -fullTurnDeg; deg <= fullTurnDeg; deg += sweepStepDeg) {
+      const angleRad = (-deg * Math.PI) / degreesPerHalfTurn;
       for (const frame of frames) {
         // typed/draw/write-shapes.ts's own frameGeometryAttrs, restated here so this file tests the FORMATTER against the real value distribution rather than importing the shape writer into a units test.
         const halfWidthPt = frame.widthPt / 2;
