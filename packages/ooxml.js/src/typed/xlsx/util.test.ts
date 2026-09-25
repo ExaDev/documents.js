@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { PAGE_SIZE_A4, PAGE_SIZE_LETTER } from "document-schema.js";
 import {
+  PAPER_SIZE_TOLERANCE_PT,
   pageSizeToPaperSizeCode,
   paperSizeCodeToPageSize,
   parseUniversalMeasureToPt,
@@ -8,6 +9,12 @@ import {
   readXmlBool,
   writeXmlBool,
 } from "./util";
+
+// One inch in points (the universal-measure round-trip fixture value below), and the number of decimal places toBeCloseTo checks each conversion's agreement to.
+const ONE_INCH_IN_PT = 72;
+const CLOSE_TO_PRECISION_DIGITS = 9;
+// How far outside PAPER_SIZE_TOLERANCE_PT a fixture dimension is deliberately pushed to prove the tolerance check actually rejects a genuinely different page size, not just a drifted one.
+const OUTSIDE_TOLERANCE_PT = 50;
 
 describe("readXmlBool / writeXmlBool", () => {
   it("accepts both spec-legal xsd:boolean spellings", () => {
@@ -33,12 +40,27 @@ describe("readXmlBool / writeXmlBool", () => {
 
 describe("parseUniversalMeasureToPt", () => {
   it("parses every supported unit suffix", () => {
-    expect(parseUniversalMeasureToPt("72pt")).toBe(72);
-    expect(parseUniversalMeasureToPt("1in")).toBeCloseTo(72, 9);
-    expect(parseUniversalMeasureToPt("2.54cm")).toBeCloseTo(72, 9);
-    expect(parseUniversalMeasureToPt("25.4mm")).toBeCloseTo(72, 9);
-    expect(parseUniversalMeasureToPt("6pc")).toBeCloseTo(72, 9);
-    expect(parseUniversalMeasureToPt("6pi")).toBeCloseTo(72, 9);
+    expect(parseUniversalMeasureToPt("72pt")).toBe(ONE_INCH_IN_PT);
+    expect(parseUniversalMeasureToPt("1in")).toBeCloseTo(
+      ONE_INCH_IN_PT,
+      CLOSE_TO_PRECISION_DIGITS,
+    );
+    expect(parseUniversalMeasureToPt("2.54cm")).toBeCloseTo(
+      ONE_INCH_IN_PT,
+      CLOSE_TO_PRECISION_DIGITS,
+    );
+    expect(parseUniversalMeasureToPt("25.4mm")).toBeCloseTo(
+      ONE_INCH_IN_PT,
+      CLOSE_TO_PRECISION_DIGITS,
+    );
+    expect(parseUniversalMeasureToPt("6pc")).toBeCloseTo(
+      ONE_INCH_IN_PT,
+      CLOSE_TO_PRECISION_DIGITS,
+    );
+    expect(parseUniversalMeasureToPt("6pi")).toBeCloseTo(
+      ONE_INCH_IN_PT,
+      CLOSE_TO_PRECISION_DIGITS,
+    );
   });
 
   it("rejects a malformed or unsupported-unit value", () => {
@@ -48,13 +70,13 @@ describe("parseUniversalMeasureToPt", () => {
   });
 
   it("tolerates surrounding whitespace", () => {
-    expect(parseUniversalMeasureToPt(" 72pt ")).toBe(72);
+    expect(parseUniversalMeasureToPt(" 72pt ")).toBe(ONE_INCH_IN_PT);
   });
 });
 
 describe("ptToUniversalMeasure", () => {
   it("formats as a centimetre-suffixed string to two decimal places", () => {
-    expect(ptToUniversalMeasure(72)).toBe("2.54cm");
+    expect(ptToUniversalMeasure(ONE_INCH_IN_PT)).toBe("2.54cm");
   });
 
   it("round-trips back through parseUniversalMeasureToPt within rounding tolerance", () => {
@@ -87,10 +109,11 @@ describe("paperSizeCodeToPageSize / pageSizeToPaperSizeCode", () => {
   });
 
   it("tolerates a page size within half a point of a known constant (real-world floating-point drift)", () => {
+    const WITHIN_TOLERANCE_DRIFT_PT = 0.1;
     expect(
       pageSizeToPaperSizeCode({
-        widthPt: PAGE_SIZE_A4.widthPt + 0.1,
-        heightPt: PAGE_SIZE_A4.heightPt - 0.1,
+        widthPt: PAGE_SIZE_A4.widthPt + WITHIN_TOLERANCE_DRIFT_PT,
+        heightPt: PAGE_SIZE_A4.heightPt - WITHIN_TOLERANCE_DRIFT_PT,
       }),
     ).toBe("9");
   });
@@ -98,7 +121,7 @@ describe("paperSizeCodeToPageSize / pageSizeToPaperSizeCode", () => {
   it("tolerates a difference of EXACTLY the half-point boundary, not just short of it", () => {
     expect(
       pageSizeToPaperSizeCode({
-        widthPt: PAGE_SIZE_LETTER.widthPt + 0.5,
+        widthPt: PAGE_SIZE_LETTER.widthPt + PAPER_SIZE_TOLERANCE_PT,
         heightPt: PAGE_SIZE_LETTER.heightPt,
       }),
     ).toBe("1");
@@ -108,7 +131,7 @@ describe("paperSizeCodeToPageSize / pageSizeToPaperSizeCode", () => {
     expect(
       pageSizeToPaperSizeCode({
         widthPt: PAGE_SIZE_LETTER.widthPt,
-        heightPt: PAGE_SIZE_LETTER.heightPt + 50,
+        heightPt: PAGE_SIZE_LETTER.heightPt + OUTSIDE_TOLERANCE_PT,
       }),
     ).toBeUndefined();
   });
@@ -116,7 +139,7 @@ describe("paperSizeCodeToPageSize / pageSizeToPaperSizeCode", () => {
   it("rejects a page size matching Letter's height but not its width, proving both dimensions are checked", () => {
     expect(
       pageSizeToPaperSizeCode({
-        widthPt: PAGE_SIZE_LETTER.widthPt + 50,
+        widthPt: PAGE_SIZE_LETTER.widthPt + OUTSIDE_TOLERANCE_PT,
         heightPt: PAGE_SIZE_LETTER.heightPt,
       }),
     ).toBeUndefined();
@@ -126,7 +149,7 @@ describe("paperSizeCodeToPageSize / pageSizeToPaperSizeCode", () => {
     expect(
       pageSizeToPaperSizeCode({
         widthPt: PAGE_SIZE_A4.widthPt,
-        heightPt: PAGE_SIZE_A4.heightPt + 50,
+        heightPt: PAGE_SIZE_A4.heightPt + OUTSIDE_TOLERANCE_PT,
       }),
     ).toBeUndefined();
   });
@@ -134,7 +157,7 @@ describe("paperSizeCodeToPageSize / pageSizeToPaperSizeCode", () => {
   it("rejects a page size matching A4's height but not its width, proving both dimensions are checked", () => {
     expect(
       pageSizeToPaperSizeCode({
-        widthPt: PAGE_SIZE_A4.widthPt + 50,
+        widthPt: PAGE_SIZE_A4.widthPt + OUTSIDE_TOLERANCE_PT,
         heightPt: PAGE_SIZE_A4.heightPt,
       }),
     ).toBeUndefined();

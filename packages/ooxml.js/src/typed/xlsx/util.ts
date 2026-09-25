@@ -63,8 +63,8 @@ export function paperSizeCodeToPageSize(code: string): PageSize | undefined {
   return PAPER_SIZE_BY_CODE[code];
 }
 
-// The write-side inverse: a page size within half a point of a known constant writes that constant's own paper code (so a round-tripped Letter/A4 page size doesn't drift into an explicit paperWidth/paperHeight pair); anything else returns undefined, telling the caller to write explicit paperWidth/paperHeight instead.
-const PAPER_SIZE_TOLERANCE_PT = 0.5;
+// The write-side inverse: a page size within half a point of a known constant writes that constant's own paper code (so a round-tripped Letter/A4 page size doesn't drift into an explicit paperWidth/paperHeight pair); anything else returns undefined, telling the caller to write explicit paperWidth/paperHeight instead. Exported so util.test.ts can assert against this same tolerance rather than re-deriving it.
+export const PAPER_SIZE_TOLERANCE_PT = 0.5;
 
 function approximatelyEquals(a: number, b: number): boolean {
   return Math.abs(a - b) <= PAPER_SIZE_TOLERANCE_PT;
