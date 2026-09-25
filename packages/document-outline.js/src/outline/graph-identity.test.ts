@@ -76,8 +76,9 @@ describe("content-addressed deduplication", () => {
     ]);
     expectSchemaValid(docA, "docA");
     expectSchemaValid(docB, "docB");
+    const expectedSectionCount = 3; // the shared one plus each document's own final section
     const sections = graph.nodes.filter((node) => node.kind === "section");
-    expect(sections).toHaveLength(3); // the shared one plus each document's own final section
+    expect(sections).toHaveLength(expectedSectionCount);
     const shared = sections.find((section) =>
       graph.edges.some(
         (edge) =>
@@ -105,9 +106,10 @@ describe("content-addressed deduplication", () => {
       { from: "b", orderKey: orderKeys.orderKeyForIndex(1) },
     ]);
     // Every descendant of the shared section is also emitted exactly once: the heading anchor, two paragraphs, and each document's own leaf.
+    const expectedParagraphCount = 5;
     expect(
       graph.nodes.filter((node) => node.kind === "paragraph"),
-    ).toHaveLength(5);
+    ).toHaveLength(expectedParagraphCount);
   });
 
   it("deduplicates repeated content within one document: one node, one edge per position", () => {
@@ -253,9 +255,10 @@ describe("factoring and node identity", () => {
       unfactoredGraph.nodes.filter((node) => node.kind === "styleEntry"),
     ).toHaveLength(0);
     // The recurring tuple is hoisted onto the first section's own ref (1 STYLED_BY edge), and both styled paragraphs — now bare, non-anchor leaves under that styled section — inherit the chain too (#660): one edge each, 3 in total, all resolving to the same shared style entry.
+    const expectedStyledByCount = 3;
     expect(
       factoredGraph.edges.filter((edge) => edge.kind === "STYLED_BY"),
-    ).toHaveLength(3);
+    ).toHaveLength(expectedStyledByCount);
     expect(
       unfactoredGraph.edges.filter((edge) => edge.kind === "STYLED_BY"),
     ).toHaveLength(0);
@@ -290,7 +293,8 @@ describe("order keys (#660)", () => {
       .filter((edge) => edge.kind === "CONTAINS" && edge.from === section.id)
       .map((edge) => edge.orderKey)
       .sort();
-    expect(keys).toHaveLength(3);
+    const expectedKeyCount = 3;
+    expect(keys).toHaveLength(expectedKeyCount);
     // Equal-width lexicographic sort is numeric sort: the minted keys sort in document order and leave room between each adjacent pair for a consumer-side insert that touches no sibling edge.
     expect(keys[0]! < keys[1]!).toBe(true);
     expect(keys[1]! < keys[2]!).toBe(true);
@@ -313,7 +317,8 @@ describe("order keys (#660)", () => {
     // Nested midpoints keep landing in the shrinking interval until the digits run out — the documented rebalance signal, not a silent duplicate.
     let low = first;
     let landed = true;
-    for (let i = 0; i < 10_000 && landed; i += 1) {
+    const iterationSafetyBound = 10_000;
+    for (let i = 0; i < iterationSafetyBound && landed; i += 1) {
       try {
         const next = orderKeyBetween(low, mid);
         if (!(low < next && next < mid))
@@ -328,7 +333,8 @@ describe("order keys (#660)", () => {
 
   it("renumberedOrderKeys re-mints a fresh, roomy sibling list (the rebalance operation)", () => {
     const { orderKeyForIndex, renumberedOrderKeys } = orderKeys;
-    expect(renumberedOrderKeys(3)).toEqual([
+    const rebalanceSiblingCount = 3;
+    expect(renumberedOrderKeys(rebalanceSiblingCount)).toEqual([
       orderKeyForIndex(0),
       orderKeyForIndex(1),
       orderKeyForIndex(2),
@@ -468,7 +474,8 @@ describe("project() entry-node ordering", () => {
     const entryIds = graph.nodes
       .filter((node) => node.kind === "styleEntry")
       .map((node) => node.id);
-    expect(entryIds).toHaveLength(3);
+    const expectedEntryCount = 3;
+    expect(entryIds).toHaveLength(expectedEntryCount);
     // A default (string) sort is exactly the ascending order pendingEntryNodes.sort's own comparator must produce — if the real comparator were flipped, tied at 0 unconditionally, or otherwise wrong, entryIds would not already come out matching its own re-sorted copy.
     expect(entryIds).toEqual([...entryIds].sort());
   });

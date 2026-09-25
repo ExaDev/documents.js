@@ -365,9 +365,12 @@ describe("write API: insertNode / insertEdge (#935)", () => {
     const rebalanced = result.edges.filter(
       (edge) => edge.from === "doc" && edge.kind === "PROPERTY",
     );
-    expect(rebalanced).toHaveLength(3);
+    const expectedRebalancedCount = 3;
+    expect(rebalanced).toHaveLength(expectedRebalancedCount);
     // The tie is gone — every sibling now sorts uniquely.
-    expect(new Set(rebalanced.map((edge) => edge.orderKey)).size).toBe(3);
+    expect(new Set(rebalanced.map((edge) => edge.orderKey)).size).toBe(
+      expectedRebalancedCount,
+    );
     const ordered = [...rebalanced].sort((x, y) =>
       x.orderKey < y.orderKey ? -1 : 1,
     );
@@ -504,7 +507,13 @@ describe("named error classes: identity and message text", () => {
   });
 
   it("AmbiguousSiblingError", () => {
-    const error = new AmbiguousSiblingError("from1", "CONTAINS", "sib1", 3);
+    const ambiguousEdgeCount = 3;
+    const error = new AmbiguousSiblingError(
+      "from1",
+      "CONTAINS",
+      "sib1",
+      ambiguousEdgeCount,
+    );
     expect(error.name).toBe("AmbiguousSiblingError");
     expect(error.message).toBe(
       'insertEdge: sibling "sib1" names 3 existing CONTAINS edges from "from1", not exactly one — before/after has no single position to resolve against',
@@ -613,18 +622,27 @@ describe("boundedOrderKey", () => {
 });
 
 describe("dpAt", () => {
+  // Arbitrary DP row content, distinct enough per position to catch an off-by-one read.
+  const dpRowStep = 10;
+  const dpRow = Array.from(
+    { length: 3 },
+    (_, index) => (index + 1) * dpRowStep,
+  );
+
   it("returns the value at a valid index", () => {
-    expect(dpAt([10, 20, 30], 1)).toBe(20);
+    const validIndex = 1;
+    expect(dpAt(dpRow, validIndex)).toBe(dpRow[validIndex]);
   });
 
   it("throws with the exact out-of-bounds message for an index past the row's length", () => {
-    expect(() => dpAt([10, 20, 30], 3)).toThrow(
+    const outOfBoundsIndex = dpRow.length;
+    expect(() => dpAt(dpRow, outOfBoundsIndex)).toThrow(
       "reconcileChildren: dp lookup index 3 out of bounds (0..2)",
     );
   });
 
   it("throws with the exact out-of-bounds message for a negative index", () => {
-    expect(() => dpAt([10, 20, 30], -1)).toThrow(
+    expect(() => dpAt(dpRow, -1)).toThrow(
       "reconcileChildren: dp lookup index -1 out of bounds (0..2)",
     );
   });
