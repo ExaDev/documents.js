@@ -1,4 +1,18 @@
-const ASCII_WHITESPACE_BYTES = new Set([0x00, 0x09, 0x0a, 0x0c, 0x0d, 0x20]);
+// The six ASCII whitespace byte values PDF's own tokenizing grammar recognizes as whitespace (ISO 32000-1 Table 1): NUL, HORIZONTAL TAB, LINE FEED, FORM FEED, CARRIAGE RETURN, and SPACE.
+const WHITESPACE_NUL = 0x00;
+const WHITESPACE_TAB = 0x09;
+const WHITESPACE_LF = 0x0a;
+const WHITESPACE_FF = 0x0c;
+const WHITESPACE_CR = 0x0d;
+const WHITESPACE_SPACE = 0x20;
+const ASCII_WHITESPACE_BYTES = new Set([
+  WHITESPACE_NUL,
+  WHITESPACE_TAB,
+  WHITESPACE_LF,
+  WHITESPACE_FF,
+  WHITESPACE_CR,
+  WHITESPACE_SPACE,
+]);
 
 export function isAsciiWhitespace(byte: number | undefined): boolean {
   return byte !== undefined && ASCII_WHITESPACE_BYTES.has(byte);
