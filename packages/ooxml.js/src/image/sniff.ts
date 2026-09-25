@@ -1,15 +1,58 @@
 export type ImageFormat = "png" | "jpeg" | "gif" | "svg";
 
-const PNG_SIGNATURE: readonly number[] = [
-  0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
+// The PNG signature ([PNG] 12.12): a high-bit byte (catches transmission through a 7-bit-clean channel), the ASCII text "PNG", a CRLF pair (catches CR/LF translation), a DOS end-of-file marker (catches text-mode transfer that stops at Ctrl-Z), and a final LF (catches LF-to-CRLF translation) — each byte in the signature exists to catch one specific corruption a naive file transfer could introduce.
+const PNG_SIGNATURE_HIGH_BIT_BYTE = 0x89;
+const PNG_SIGNATURE_P = 0x50;
+const PNG_SIGNATURE_N = 0x4e;
+const PNG_SIGNATURE_G = 0x47;
+const PNG_SIGNATURE_CR = 0x0d;
+const PNG_SIGNATURE_LF = 0x0a;
+const PNG_SIGNATURE_DOS_EOF = 0x1a;
+
+// Exported so a fixture elsewhere in this package (round-trip.test.ts's own minimal PNG payload) can build a real PNG signature instead of re-deriving it, mirroring the same COMPOUND_FILE_MAGIC precedent archive-codec's own cfb/detect.ts exports.
+export const PNG_SIGNATURE: readonly number[] = [
+  PNG_SIGNATURE_HIGH_BIT_BYTE,
+  PNG_SIGNATURE_P,
+  PNG_SIGNATURE_N,
+  PNG_SIGNATURE_G,
+  PNG_SIGNATURE_CR,
+  PNG_SIGNATURE_LF,
+  PNG_SIGNATURE_DOS_EOF,
+  PNG_SIGNATURE_LF,
 ];
-const JPEG_SIGNATURE: readonly number[] = [0xff, 0xd8, 0xff];
-// GIF87a and GIF89a are the only two header versions the format ever defined.
+
+// The JPEG/JFIF signature: every JPEG marker starts with an 0xFF prefix byte, and SOI (Start Of Image, 0xD8) is always the file's first marker.
+const JPEG_MARKER_PREFIX = 0xff;
+const JPEG_SOI_MARKER = 0xd8;
+const JPEG_SIGNATURE: readonly number[] = [
+  JPEG_MARKER_PREFIX,
+  JPEG_SOI_MARKER,
+  JPEG_MARKER_PREFIX,
+];
+
+// GIF87a and GIF89a are the only two header versions the format ever defined — both spell out "GIF8" followed by a two-ASCII-digit version and a trailing "a".
+const GIF_SIGNATURE_G = 0x47;
+const GIF_SIGNATURE_I = 0x49;
+const GIF_SIGNATURE_F = 0x46;
+const GIF_SIGNATURE_8 = 0x38;
+const GIF_SIGNATURE_VERSION_87 = 0x37; // ASCII '7'.
+const GIF_SIGNATURE_VERSION_89 = 0x39; // ASCII '9'.
+const GIF_SIGNATURE_A = 0x61;
 const GIF87A_SIGNATURE: readonly number[] = [
-  0x47, 0x49, 0x46, 0x38, 0x37, 0x61,
+  GIF_SIGNATURE_G,
+  GIF_SIGNATURE_I,
+  GIF_SIGNATURE_F,
+  GIF_SIGNATURE_8,
+  GIF_SIGNATURE_VERSION_87,
+  GIF_SIGNATURE_A,
 ];
 const GIF89A_SIGNATURE: readonly number[] = [
-  0x47, 0x49, 0x46, 0x38, 0x39, 0x61,
+  GIF_SIGNATURE_G,
+  GIF_SIGNATURE_I,
+  GIF_SIGNATURE_F,
+  GIF_SIGNATURE_8,
+  GIF_SIGNATURE_VERSION_89,
+  GIF_SIGNATURE_A,
 ];
 
 // No separate length guard needed: bytes[i] is `undefined` for any index at or past bytes.length (an out-of-range read never throws), and undefined can never equal a real signature byte value — so bytes shorter than the signature already fail this loop's own comparison at the first index past their own end.

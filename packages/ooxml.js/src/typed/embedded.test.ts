@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  COMPOUND_FILE_MAGIC,
   MAX_WALK_DEPTH,
   writeCompoundFile,
   writeOlePackage,
@@ -134,9 +135,15 @@ describe("readEmbeddedOoxmlPayload", () => {
   });
 
   it("returns undefined for a non-ZIP payload (the classic OLE compound file)", () => {
-    // The OLE/CFB magic bytes — the legacy .bin spelling of an embedded object, which no reader in this ecosystem decodes.
+    // The genuine OLE/CFB magic (archive-codec's own signature, the legacy .bin spelling of an embedded object which no reader in this ecosystem decodes), followed by four arbitrary trailing bytes standing in for whatever real header content would normally follow the signature — their exact values carry no meaning, so they simply count upward.
+    const TRAILING_BYTE_COUNT = 4;
+    const arbitraryTrailingBytes = Array.from(
+      { length: TRAILING_BYTE_COUNT },
+      (_unused, index) => index + 1,
+    );
     const bytes = new Uint8Array([
-      0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1, 0x01, 0x02, 0x03, 0x04,
+      ...COMPOUND_FILE_MAGIC,
+      ...arbitraryTrailingBytes,
     ]);
     expect(readEmbeddedOoxmlPayload(bytes)).toBeUndefined();
   });
@@ -150,8 +157,9 @@ describe("readEmbeddedOoxmlPayload", () => {
   });
 
   it("returns undefined for a corrupt ZIP payload (magic bytes present, structure truncated)", () => {
-    // A truncated archive passes the magic-byte gate (the gate is four bytes long and cannot see structural corruption), then fails inside the unzip itself — the raw inflate failure must degrade exactly like an unrecognisable flavour rather than propagating out of the host read.
-    const truncated = minimalDocxBytes().slice(0, 30);
+    // A truncated archive passes the magic-byte gate (the gate is four bytes long and cannot see structural corruption), then fails inside the unzip itself — the raw inflate failure must degrade exactly like an unrecognisable flavour rather than propagating out of the host read. 30 bytes is short enough to land inside the ZIP's own local-file-header/central-directory structure without being a full archive.
+    const TRUNCATED_BYTE_LENGTH = 30;
+    const truncated = minimalDocxBytes().slice(0, TRUNCATED_BYTE_LENGTH);
     expect(readEmbeddedOoxmlPayload(truncated)).toBeUndefined();
   });
 

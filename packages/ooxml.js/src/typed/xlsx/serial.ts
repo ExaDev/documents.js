@@ -24,9 +24,22 @@ export function readDate1904(pkg: Package): boolean {
 const PHANTOM_LEAP_DAY_SERIAL = 60;
 
 // The three day-count origins, named once and shared by both directions below so a serial and its inverse can never be counted from different days. Below the phantom leap day the 1900 system is a true offset from 1899-12-31 (serial 1 = 1900-01-01); at and above it every serial is one too high, expressed by moving the origin back a day to 1899-12-30 (serial 61 = 1900-03-01) rather than by subtracting from the count. The 1904 system is a plain day count from its own epoch, with serial 0 being 1904-01-01 — no phantom day, since 1904 genuinely was a leap year and the count starts after February.
-const ORIGIN_1900_BELOW_PHANTOM_UTC_MS = Date.UTC(1899, 11, 31);
-const ORIGIN_1900_ABOVE_PHANTOM_UTC_MS = Date.UTC(1899, 11, 30);
-const ORIGIN_1904_UTC_MS = Date.UTC(1904, 0, 1);
+const ORIGIN_1900_YEAR = 1899;
+const ORIGIN_1900_MONTH_INDEX = 11; // December, 0-indexed.
+const ORIGIN_1900_BELOW_PHANTOM_DAY = 31;
+const ORIGIN_1900_ABOVE_PHANTOM_DAY = 30;
+const ORIGIN_1904_YEAR = 1904;
+const ORIGIN_1900_BELOW_PHANTOM_UTC_MS = Date.UTC(
+  ORIGIN_1900_YEAR,
+  ORIGIN_1900_MONTH_INDEX,
+  ORIGIN_1900_BELOW_PHANTOM_DAY,
+);
+const ORIGIN_1900_ABOVE_PHANTOM_UTC_MS = Date.UTC(
+  ORIGIN_1900_YEAR,
+  ORIGIN_1900_MONTH_INDEX,
+  ORIGIN_1900_ABOVE_PHANTOM_DAY,
+);
+const ORIGIN_1904_UTC_MS = Date.UTC(ORIGIN_1904_YEAR, 0, 1);
 
 interface SplitSerial {
   days: number;
@@ -47,9 +60,13 @@ function pad(value: number, length: number): string {
 }
 
 // Every calculation below is done in UTC deliberately: a serial carries no timezone, and using local-time Date methods would shift a date across a day boundary for any host west of Greenwich.
+// The zero-padded field widths the canonical ISO spelling uses for each component: a 4-digit year, 2-digit month/day.
+const ISO_YEAR_PAD_LENGTH = 4;
+const ISO_MONTH_OR_DAY_PAD_LENGTH = 2;
+
 function isoDateOfUtcMs(ms: number): string {
   const date = new Date(ms);
-  return `${pad(date.getUTCFullYear(), 4)}-${pad(date.getUTCMonth() + 1, 2)}-${pad(date.getUTCDate(), 2)}`;
+  return `${pad(date.getUTCFullYear(), ISO_YEAR_PAD_LENGTH)}-${pad(date.getUTCMonth() + 1, ISO_MONTH_OR_DAY_PAD_LENGTH)}-${pad(date.getUTCDate(), ISO_MONTH_OR_DAY_PAD_LENGTH)}`;
 }
 
 // The day-count half of a serial, as a calendar date — undefined when the serial names no real date, which the caller degrades to a plain number rather than emitting an invalid one. Two cases produce that: a negative serial (no date exists before either epoch), and serial 60 in the 1900 system (the phantom leap day above).
@@ -184,7 +201,14 @@ export function isoTimeToSerial(iso: string): number | undefined {
   const minuteCount = Number.parseInt(minutes, 10);
   const secondCount = Number.parseInt(seconds, 10);
   // A wall-clock time of day, not a duration: 24:00:00 and 26:30:00 are both legal ELAPSED times but neither is a time of day, and ContentCellValue's own 'time' variant is documented as the latter.
-  if (hourCount > 23 || minuteCount > 59 || secondCount > 59) {
+  const MAX_HOUR_OF_DAY = 23;
+  const MAX_MINUTE_OF_HOUR = 59;
+  const MAX_SECOND_OF_MINUTE = 59;
+  if (
+    hourCount > MAX_HOUR_OF_DAY ||
+    minuteCount > MAX_MINUTE_OF_HOUR ||
+    secondCount > MAX_SECOND_OF_MINUTE
+  ) {
     return undefined;
   }
   return (
