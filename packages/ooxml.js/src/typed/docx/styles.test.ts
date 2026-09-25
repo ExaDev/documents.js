@@ -12,6 +12,13 @@ const THEME = {
   minorFont: "Minor Font",
 };
 
+// The theme's own accent1 colour, in resolveRunProperties' normalised 0-1 RGB space, shared by every w:themeTint/w:themeShade test below so a fixture value and its own assertion never drift independently of one another.
+const ACCENT1_R = 0.2;
+const ACCENT1_G = 0.4;
+const ACCENT1_B = 0.6;
+// toBeCloseTo precision (decimal places) for the colour-blend assertions below: tight enough to catch a real blend-math bug, loose enough to tolerate ordinary floating-point noise from the tint/shade arithmetic.
+const COLOR_PRECISION_DIGITS = 5;
+
 function styleEl(
   id: string,
   type: "paragraph" | "character",
@@ -262,9 +269,9 @@ describe("resolveRunProperties: colour", () => {
       stylesRoot: undefined,
       theme: themedTheme,
     }).color;
-    expect(color?.r).toBeCloseTo(0.2, 5);
-    expect(color?.g).toBeCloseTo(0.4, 5);
-    expect(color?.b).toBeCloseTo(0.6, 5);
+    expect(color?.r).toBeCloseTo(ACCENT1_R, COLOR_PRECISION_DIGITS);
+    expect(color?.g).toBeCloseTo(ACCENT1_G, COLOR_PRECISION_DIGITS);
+    expect(color?.b).toBeCloseTo(ACCENT1_B, COLOR_PRECISION_DIGITS);
   });
 
   it("w:themeTint byte 0x00 lightens the resolved theme colour fully to white, hue and saturation notwithstanding", () => {
@@ -283,9 +290,9 @@ describe("resolveRunProperties: colour", () => {
       stylesRoot: undefined,
       theme: themedTheme,
     }).color;
-    expect(color?.r).toBeCloseTo(1, 5);
-    expect(color?.g).toBeCloseTo(1, 5);
-    expect(color?.b).toBeCloseTo(1, 5);
+    expect(color?.r).toBeCloseTo(1, COLOR_PRECISION_DIGITS);
+    expect(color?.g).toBeCloseTo(1, COLOR_PRECISION_DIGITS);
+    expect(color?.b).toBeCloseTo(1, COLOR_PRECISION_DIGITS);
   });
 
   it("w:themeShade byte 0x00 darkens the resolved theme colour fully to black", () => {
@@ -304,9 +311,9 @@ describe("resolveRunProperties: colour", () => {
       stylesRoot: undefined,
       theme: themedTheme,
     }).color;
-    expect(color?.r).toBeCloseTo(0, 5);
-    expect(color?.g).toBeCloseTo(0, 5);
-    expect(color?.b).toBeCloseTo(0, 5);
+    expect(color?.r).toBeCloseTo(0, COLOR_PRECISION_DIGITS);
+    expect(color?.g).toBeCloseTo(0, COLOR_PRECISION_DIGITS);
+    expect(color?.b).toBeCloseTo(0, COLOR_PRECISION_DIGITS);
   });
 
   it("w:themeShade byte 0xFF leaves the resolved theme colour unchanged", () => {
@@ -325,9 +332,9 @@ describe("resolveRunProperties: colour", () => {
       stylesRoot: undefined,
       theme: themedTheme,
     }).color;
-    expect(color?.r).toBeCloseTo(0.2, 5);
-    expect(color?.g).toBeCloseTo(0.4, 5);
-    expect(color?.b).toBeCloseTo(0.6, 5);
+    expect(color?.r).toBeCloseTo(ACCENT1_R, COLOR_PRECISION_DIGITS);
+    expect(color?.g).toBeCloseTo(ACCENT1_G, COLOR_PRECISION_DIGITS);
+    expect(color?.b).toBeCloseTo(ACCENT1_B, COLOR_PRECISION_DIGITS);
   });
 
   it("a mid-range w:themeTint noticeably lightens the colour without reaching white", () => {
@@ -347,9 +354,9 @@ describe("resolveRunProperties: colour", () => {
       theme: themedTheme,
     }).color;
     // Lighter than the base colour on every channel, but not fully white.
-    expect(color!.r).toBeGreaterThan(0.2);
-    expect(color!.g).toBeGreaterThan(0.4);
-    expect(color!.b).toBeGreaterThan(0.6);
+    expect(color!.r).toBeGreaterThan(ACCENT1_R);
+    expect(color!.g).toBeGreaterThan(ACCENT1_G);
+    expect(color!.b).toBeGreaterThan(ACCENT1_B);
     expect(color!.r).toBeLessThan(1);
   });
 
@@ -507,12 +514,13 @@ describe("resolveRunProperties: fonts and size", () => {
       [],
       runEl([el("w:sz", { "w:val": "36" })]),
     );
+    const EXPECTED_SIZE_PT = 18; // half of w:sz's own 36 half-points
     expect(
       resolveRunProperties(run, paragraph, {
         stylesRoot: undefined,
         theme: EMPTY_THEME,
       }).sizePt,
-    ).toBe(18);
+    ).toBe(EXPECTED_SIZE_PT);
   });
 });
 
@@ -521,12 +529,13 @@ describe("resolveRunProperties: cascade", () => {
     const docDefaultsRPr = el("w:rPr", {}, [el("w:sz", { "w:val": "20" })]);
     const styles = stylesRoot([], undefined, docDefaultsRPr);
     const { paragraph, run } = paragraphWithRun([], runEl([]));
+    const EXPECTED_SIZE_PT = 10; // half of docDefaults' own 20 half-points
     expect(
       resolveRunProperties(run, paragraph, {
         stylesRoot: styles,
         theme: EMPTY_THEME,
       }).sizePt,
-    ).toBe(10);
+    ).toBe(EXPECTED_SIZE_PT);
   });
 
   it("the default paragraph style overrides docDefaults", () => {
@@ -537,12 +546,13 @@ describe("resolveRunProperties: cascade", () => {
     });
     const styles = stylesRoot([normalStyle], undefined, docDefaultsRPr);
     const { paragraph, run } = paragraphWithRun([], runEl([]));
+    const EXPECTED_SIZE_PT = 12; // half of the Normal style's own 24 half-points, overriding docDefaults' 20
     expect(
       resolveRunProperties(run, paragraph, {
         stylesRoot: styles,
         theme: EMPTY_THEME,
       }).sizePt,
-    ).toBe(12);
+    ).toBe(EXPECTED_SIZE_PT);
   });
 
   it("finds the default style by BOTH its own type and w:default=1, ignoring a same-typed non-default style and a differently-typed default style", () => {
@@ -559,12 +569,13 @@ describe("resolveRunProperties: cascade", () => {
     });
     const styles = stylesRoot([wrongType, notDefault, realDefault]);
     const { paragraph, run } = paragraphWithRun([], runEl([]));
+    const EXPECTED_SIZE_PT = 12; // half of realDefault's own 24 half-points, the only style that is both the right type AND w:default=1
     expect(
       resolveRunProperties(run, paragraph, {
         stylesRoot: styles,
         theme: EMPTY_THEME,
       }).sizePt,
-    ).toBe(12);
+    ).toBe(EXPECTED_SIZE_PT);
   });
 
   it("resolves a w:pStyle reference against a style of the SAME id but the WRONG type as a miss, not a match", () => {
@@ -579,12 +590,13 @@ describe("resolveRunProperties: cascade", () => {
       [el("w:pStyle", { "w:val": "Shared" })],
       runEl([]),
     );
+    const EXPECTED_SIZE_PT = 12; // half of rightTypeSameId's own 24 half-points; wrongTypeSameId's 60 must not win despite sharing the id
     expect(
       resolveRunProperties(run, paragraph, {
         stylesRoot: styles,
         theme: EMPTY_THEME,
       }).sizePt,
-    ).toBe(12);
+    ).toBe(EXPECTED_SIZE_PT);
   });
 
   it("inherits strike from an ancestor style when a descendant style doesn't set it", () => {
@@ -625,7 +637,8 @@ describe("resolveRunProperties: cascade", () => {
       stylesRoot: styles,
       theme: EMPTY_THEME,
     });
-    expect(props.sizePt).toBe(14); // Parent's own size wins over Grandparent's
+    const EXPECTED_SIZE_PT = 14; // half of Parent's own 28 half-points, winning over Grandparent's
+    expect(props.sizePt).toBe(EXPECTED_SIZE_PT); // Parent's own size wins over Grandparent's
     expect(props.bold).toBe(true); // inherited from Grandparent, since Parent doesn't set it
   });
 
@@ -653,12 +666,13 @@ describe("resolveRunProperties: cascade", () => {
       [el("w:rPr", {}, [el("w:sz", { "w:val": "32" })])],
       runEl([]),
     );
+    const EXPECTED_SIZE_PT = 16; // half of the paragraph mark's own 32 half-points
     expect(
       resolveRunProperties(run, paragraph, {
         stylesRoot: undefined,
         theme: EMPTY_THEME,
       }).sizePt,
-    ).toBe(16);
+    ).toBe(EXPECTED_SIZE_PT);
   });
 
   it("a run's own character style overrides the paragraph-mark baseline, and direct rPr overrides everything", () => {
@@ -677,10 +691,14 @@ describe("resolveRunProperties: cascade", () => {
       stylesRoot: styles,
       theme: EMPTY_THEME,
     });
+    const EXPECTED_SIZE_PT = 20; // half of the run's own direct 40 half-points
     expect(props.italic).toBe(true); // from the character style
-    expect(props.sizePt).toBe(20); // the run's own direct w:sz overrides both the character style and the paragraph mark
+    expect(props.sizePt).toBe(EXPECTED_SIZE_PT); // the run's own direct w:sz overrides both the character style and the paragraph mark
   });
 });
+
+// A w:ind left/start value of 720 twips (half an inch, a common paragraph-indent value in real documents) converts to this many points via the fixed 20-twips-per-point ratio; shared by every test below that uses exactly this indent so the fixture value and its own assertion never drift independently of one another.
+const HALF_INCH_INDENT_PT = 36;
 
 describe("resolveParagraphProperties", () => {
   it("reads alignment from w:jc", () => {
@@ -717,10 +735,13 @@ describe("resolveParagraphProperties", () => {
       stylesRoot: undefined,
       theme: EMPTY_THEME,
     });
-    expect(props.spacingBeforePt).toBe(12);
-    expect(props.spacingAfterPt).toBe(6);
-    expect(props.lineSpacing).toBe(1.5);
-    expect(props.indentLeftPt).toBe(36);
+    const EXPECTED_SPACING_BEFORE_PT = 12; // 240 twips (w:spacing's own unit) / 20 twips-per-point
+    const EXPECTED_SPACING_AFTER_PT = 6; // 120 twips / 20 twips-per-point
+    const EXPECTED_LINE_SPACING_MULTIPLIER = 1.5; // w:line's own 360 / 240, the fixed OOXML denominator for a lineRule=auto multiplier
+    expect(props.spacingBeforePt).toBe(EXPECTED_SPACING_BEFORE_PT);
+    expect(props.spacingAfterPt).toBe(EXPECTED_SPACING_AFTER_PT);
+    expect(props.lineSpacing).toBe(EXPECTED_LINE_SPACING_MULTIPLIER);
+    expect(props.indentLeftPt).toBe(HALF_INCH_INDENT_PT);
   });
 
   it("ignores w:line when lineRule is exact/atLeast, since it is then an absolute height, not a multiplier", () => {
@@ -751,7 +772,7 @@ describe("resolveParagraphProperties", () => {
         stylesRoot: undefined,
         theme: EMPTY_THEME,
       }).indentLeftPt,
-    ).toBe(36);
+    ).toBe(HALF_INCH_INDENT_PT);
   });
 
   it("reads w:firstLine as a positive indent and w:hanging as its negative", () => {
@@ -759,18 +780,19 @@ describe("resolveParagraphProperties", () => {
       el("w:ind", { "w:firstLine": "360" }),
     ]);
     const hangingParagraph = paragraphEl([el("w:ind", { "w:hanging": "360" })]);
+    const FIRST_LINE_INDENT_PT = 18; // 360 twips (w:ind's own unit) / 20 twips-per-point
     expect(
       resolveParagraphProperties(firstLineParagraph, {
         stylesRoot: undefined,
         theme: EMPTY_THEME,
       }).indentFirstLinePt,
-    ).toBe(18);
+    ).toBe(FIRST_LINE_INDENT_PT);
     expect(
       resolveParagraphProperties(hangingParagraph, {
         stylesRoot: undefined,
         theme: EMPTY_THEME,
       }).indentFirstLinePt,
-    ).toBe(-18);
+    ).toBe(-FIRST_LINE_INDENT_PT);
   });
 
   it("the default paragraph style's own w:pPr is merged in, above docDefaults", () => {
@@ -804,7 +826,7 @@ describe("resolveParagraphProperties", () => {
       theme: EMPTY_THEME,
     });
     expect(props.alignment).toBe("center"); // inherited from Grandparent
-    expect(props.indentLeftPt).toBe(36); // Parent's own
+    expect(props.indentLeftPt).toBe(HALF_INCH_INDENT_PT); // Parent's own
   });
 
   it("the paragraph's own direct w:pPr overrides its style chain", () => {
