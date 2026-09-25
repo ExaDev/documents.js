@@ -1,6 +1,11 @@
 // The table suites split from emit.test.ts, sharing the doc/diagnostics harness and carrying the grid-fault cases.
 
-import type { ContentBlock, ContentDocument } from "document-schema.js";
+import type {
+  ContentBlock,
+  ContentDocument,
+  ContentTable,
+  ContentTableCell,
+} from "document-schema.js";
 import { PAGE_SIZE_A4 } from "document-schema.js";
 import { describe, expect, it } from "vitest";
 import { DEFAULT_MARGINS } from "../defaults/defaults";
