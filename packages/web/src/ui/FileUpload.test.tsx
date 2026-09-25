@@ -24,6 +24,7 @@ vi.mock("@mantine/dropzone", () => {
     loading: boolean | undefined;
     multiple: boolean | undefined;
     accept: Record<string, string[]> | undefined;
+    className: string | undefined;
     children: React.ReactNode;
   }) {
     latestOnDrop = props.onDrop;
@@ -38,6 +39,7 @@ vi.mock("@mantine/dropzone", () => {
         data-multiple={String(props.multiple)}
         data-accept={JSON.stringify(props.accept ?? null)}
         data-has-onclick={String(props.onClick !== undefined)}
+        className={props.className}
         onClick={props.onClick}
       >
         {props.children}
@@ -150,6 +152,22 @@ describe("FileUpload", () => {
     expect(html()).not.toContain("Drag a file here");
     expect(html()).toContain("tabler-icon-file");
     expect(html()).not.toContain("tabler-icon-upload");
+  });
+
+  it("settles the drop zone's own border only once a file is open", () => {
+    createFileAccess.mockReturnValue(fileAccessStub());
+    const { container } = renderUpload();
+    const empty = container.querySelector('[data-testid="dropzone"]');
+    expect(empty?.className ?? "").toBe("");
+  });
+
+  it("marks the drop zone settled while a file is open, so it stops reading as an empty target", () => {
+    createFileAccess.mockReturnValue(fileAccessStub());
+    const { container } = renderUpload({
+      file: { bytes: new Uint8Array([1]), name: "report.pdf" },
+    });
+    const settled = container.querySelector('[data-testid="dropzone"]');
+    expect(settled?.className ?? "").not.toBe("");
   });
 
   it("renders no close button when a file is present but onClose is not given", () => {
