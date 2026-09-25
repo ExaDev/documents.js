@@ -1,3 +1,28 @@
+## [11.2.0](https://github.com/ExaDev/documents.js/compare/odf.js%4011.1.13...odf.js%4011.2.0) (2026-09-25)
+
+### Features
+
+* **odf.js:** enforce the 800-line maxLines limit ([435385e](https://github.com/ExaDev/documents.js/commit/435385e2b0795645a878caa6bf8940a4842e3cbf))
+
+### Code Refactoring
+
+* **odf.js:** split draw shapes.test.ts by suite family ([594d666](https://github.com/ExaDev/documents.js/commit/594d6660f997d67e125e5216d4c06bcebb693c38))
+* **odf.js:** split every remaining over-limit test suite by family ([9d21568](https://github.com/ExaDev/documents.js/commit/9d215683b4871347dbdcfe0370bf962925b14744))
+* **odf.js:** split ods read.test.ts by suite family ([6816d79](https://github.com/ExaDev/documents.js/commit/6816d797355f2e8451fc948909cc2bfcf71256de))
+* **odf.js:** split ods write.test.ts by suite family ([99f2102](https://github.com/ExaDev/documents.js/commit/99f2102b2506e4968085b8d18a9c9369b848a561))
+* **odf.js:** split ooo1 write.test.ts by output format ([3cda19f](https://github.com/ExaDev/documents.js/commit/3cda19f685a0978a40bd6b6a2d41bf972d805140))
+* **odf.js:** split shared constructs.test.ts by suite family ([bbed704](https://github.com/ExaDev/documents.js/commit/bbed704bf4a25ceb58f9e5e188c29661dc098e9c))
+* **odf.js:** split shared table.test.ts by suite family ([4e37e5f](https://github.com/ExaDev/documents.js/commit/4e37e5f9f4fc1630d7dca377bbf0676cb62b141b))
+* **odf.js:** split the anchored-drawing walk out of ods read.ts ([77c4d56](https://github.com/ExaDev/documents.js/commit/77c4d561e654272bb9233fde042b1816cfcb5404))
+* **odf.js:** split the block plan out of odt write.ts ([71a2a4c](https://github.com/ExaDev/documents.js/commit/71a2a4c6fdb1e3fd304a4ec14427814ce7fb694b))
+* **odf.js:** split the canonical-form family out of ods write.ts ([8ace92a](https://github.com/ExaDev/documents.js/commit/8ace92a0a2b928996cd7562f925c874b71b9d609))
+* **odf.js:** split the marker pairing and definitions collectors out of shared constructs.ts ([1d7c17b](https://github.com/ExaDev/documents.js/commit/1d7c17bab2ad14c1c536d8703e3e12cd7ca4498e))
+* **odf.js:** split the reverse transform out of ooo1 transform.ts ([5aaf02a](https://github.com/ExaDev/documents.js/commit/5aaf02a226e7ce2f6afec899ee88c1b6b97b6c4e))
+* **odf.js:** split the reverse-direction suites out of ooo1 transform.test.ts ([9bc2e65](https://github.com/ExaDev/documents.js/commit/9bc2e653ff7fed11be692e403818d1da68c5b024))
+* **odf.js:** split the run-segmentation family out of shared/paragraph ([307d484](https://github.com/ExaDev/documents.js/commit/307d484445c5bb6e5397117e5e0faa20c4709003))
+* **odf.js:** split the validation and frame writers out of ods write.ts ([869d119](https://github.com/ExaDev/documents.js/commit/869d11901c99fb92566c4b61fea10f8f6e6424fa))
+* **odf.js:** split the vector-primitive readers out of draw shapes.ts ([fa25fbb](https://github.com/ExaDev/documents.js/commit/fa25fbbff7aa32955fd4fc6f4e87202e7500c7ab))
+
 ## [11.1.13](https://github.com/ExaDev/documents.js/compare/odf.js%4011.1.12...odf.js%4011.1.13) (2026-09-25)
 
 
