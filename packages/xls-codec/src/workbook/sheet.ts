@@ -58,6 +58,7 @@ import {
 } from "./conditional-format-12";
 import { readCfEx, type CfExTarget } from "./conditional-format-ex";
 import { readDv, type RawDataValidation } from "./data-validation";
+import { collectFormulaGroups, groupKey } from "./formula-groups";
 
 // Field sizes this reader steps over or consumes: a page break's extent and a row's column range are each 4 bytes; a column index tops out at 0xff; the Formula record's own Cell header is 6 bytes and its cached FormulaValue 8, whose bytes 6 and 7 both being 0xFF mark a tagged (string/boolean/error/shared) value rather than a plain number; cce itself is 2 bytes.
 const PAGE_BREAK_EXTENT_SIZE = 4;
@@ -194,101 +195,21 @@ const EMPTY_FORMULA_SHEET_CONTEXT: FormulaSheetContext = {
 };
 
 /** A shared formula's real expression, from the SharedParsedFormula a ShrFmla record following the group's base Formula record carries — expanded relative to each referencing cell's own position by parseFormulaText's `relativeTo` option (see resolveFormulaText). */
-interface SharedFormulaGroup {
+export interface SharedFormulaGroup {
   readonly kind: "shared";
   readonly rgce: Uint8Array<ArrayBuffer>;
 }
 
 /** An array (CSE) formula's real expression, from the ArrayParsedFormula an Array record following the group's base Formula record carries — identical, unadjusted text for every cell in the array's range (ArrayParsedFormula's own grammar forbids PtgRefN/PtgAreaN, so there is no per-cell expansion to do). resolveFormulaText hands this straight back with no further wrapping: Excel's own `{...}` bracing around a CSE-entered formula is formula-BAR DISPLAY syntax, not something written into the formula itself (unlike an array-CONSTANT-literal's own `{...}`, e.g. `{1,2;3,4}`, which genuinely is real, retypeable syntax — see biff/ptg.ts's PtgExtraArray), matching the convention ooxml.js's own xlsx reading already uses for the identical construct. `rgcb` is undefined both when the record genuinely carries none (rgce has no PtgArray to feed) and when readArrayGroup could not make sense of what should have been one — the two are indistinguishable from here, and parseFormulaText's own rgcb-absent handling is already the correct behaviour for both: rgce is trusted only up to its own PtgArray tokens, which then simply fail to resolve. */
-interface ArrayFormulaGroup {
+export interface ArrayFormulaGroup {
   readonly kind: "array";
   readonly rgce: Uint8Array<ArrayBuffer>;
   readonly rgcb: Uint8Array<ArrayBuffer> | undefined;
 }
 
-type FormulaGroup = SharedFormulaGroup | ArrayFormulaGroup;
+export type FormulaGroup = SharedFormulaGroup | ArrayFormulaGroup;
 
 /** The key collectFormulaGroups and its lookup agree on: a shared/array formula group's own base cell, the same (row, column) a PtgExp token elsewhere in the sheet points back to. */
-function groupKey(row: number, column: number): string {
-  return `${row},${column}`;
-}
-
-/**
- * Walks every record once, looking for a Formula record immediately followed by a ShrFmla or Array record ([MS-XLS] 2.1.7.20.6's own FORMULA production, and 984826cc/c6ee7512's own "this record is preceded by a single Formula record"), and returns the shared/array expression each one carries, keyed by that Formula record's own cell — the same (row, column) a PtgExp token names when it points back to this group (see readPtgExpBase, and readFormula below which performs the actual lookup).
- *
- * Built as a single upfront pass over the whole sheet rather than interleaved into readSheetRecords' own per-record loop: every Formula record that uses a shared/array formula (including the group's own base cell, which points at itself) needs this map already complete when it is reached, and although [MS-XLS] guarantees the base pair precedes every other use, resolving the whole map first removes that ordering as a correctness dependency rather than merely relying on it.
- */
-function collectFormulaGroups(
-  records: readonly RecordGroup[],
-): ReadonlyMap<string, FormulaGroup> {
-  const groups = new Map<string, FormulaGroup>();
-  // records.entries() rather than an indexed for-loop: it types `record` as a genuine RecordGroup with no undefined case to guard for the loop's own sake (noUncheckedIndexedAccess only has an opinion about arr[i], not about-of iteration), leaving `next = records[index + 1]` — genuinely capable of running past the array's own end — as the one undefined check this loop actually needs.
-  for (const [index, record] of records.entries()) {
-    const next = records[index + 1];
-    if (next === undefined) {
-      continue;
-    }
-    if (record.type !== RECORD_FORMULA) {
-      continue;
-    }
-    if (next.type === RECORD_SHRFMLA) {
-      collectFormulaGroup(groups, record, next, readShrFmlaGroup);
-    } else if (next.type === RECORD_ARRAY) {
-      collectFormulaGroup(groups, record, next, readArrayGroup);
-    }
-  }
-  return groups;
-}
-
-/**
- * Reads one shared/array formula group and keys it by its base Formula record's own cell, degrading a malformed ShrFmla/Array record to "no group recovered for this base cell" rather than letting a BiffFormatError propagate out of collectFormulaGroups and abort the whole sheet read (and every other cell in it, formula or not). readCellHeader and readGroup (readShrFmlaGroup or readArrayGroup) between them make several cursor reads capable of raising that error, not only the final `cursor.take(cce)` that copies out rgce itself: an undersized record already runs out of bytes during readCellHeader's own Cell fields, or during readShrFmlaGroup/readArrayGroup's leading `cursor.skip` past their fixed header, or during the `cursor.u16()` that reads cce — every one of those, like the `take`, is a plain read past this record's own declared bytes, and every one is caught here the same way. This is the same per-record boundary readSupBookSafely already draws for a malformed SupBook (workbook/globals.ts): before this reader ever walked a ShrFmla/Array record's own length fields, a malformed one had nothing here to trip over, so this is entirely new territory the read-every-record-once contract now needs to hold against. A cell whose Formula record points at this base through a PtgExp then resolves to no formula text at all — exactly the same outcome "leaves formula absent for a PtgExp whose base cell has no matching ShrFmla/Array group" already documents for a dangling reference, since from resolveFormulaText's own vantage point the two cases are indistinguishable.
- */
-function collectFormulaGroup(
-  groups: Map<string, FormulaGroup>,
-  record: RecordGroup,
-  next: RecordGroup,
-  readGroup: (record: RecordGroup) => FormulaGroup,
-): void {
-  try {
-    const header = readCellHeader(new BlockCursor(record.blocks));
-    groups.set(groupKey(header.row, header.column), readGroup(next));
-  } catch (error) {
-    recoverFromFormatError(error, undefined);
-  }
-}
-
-/** ShrFmla ([MS-XLS] 984826cc): a RefU range (6 bytes, not needed here — the group is looked up by its base cell's own coordinates, not by re-deriving them from this range), a reserved byte, a cUse byte, then a SharedParsedFormula (458bbec0): a two-byte cce and that many bytes of rgce. Its own rgce is forbidden from containing PtgArray ([MS-XLS] 458bbec0's own "MUST NOT contain... PtgArray"), so no rgcb is read here. */
-const SHRFMLA_HEADER_BYTES = 8;
-
-function readShrFmlaGroup(record: RecordGroup): SharedFormulaGroup {
-  const cursor = new BlockCursor(record.blocks);
-  cursor.skip(SHRFMLA_HEADER_BYTES);
-  const cce = cursor.u16();
-  return { kind: "shared", rgce: cursor.take(cce) };
-}
-
-/** Array ([MS-XLS] c6ee7512): a Ref range (6 bytes), a flags word (fAlwaysCalc plus reserved bits), four unused bytes, then an ArrayParsedFormula (242bcf20): a two-byte cce, that many bytes of rgce, and — unlike ShrFmla's own SharedParsedFormula — a real rgcb trailer, since an array formula's rgce CAN contain a PtgArray for an array-constant literal used within it (e.g. `{=A1:A3+{1;2;3}}`). rgcb's own length is never stated directly: it is whatever bytes remain in the record once the header and rgce are accounted for. */
-const ARRAY_HEADER_BYTES = 12;
-
-function readArrayGroup(record: RecordGroup): ArrayFormulaGroup {
-  const cursor = new BlockCursor(record.blocks);
-  cursor.skip(ARRAY_HEADER_BYTES);
-  const cce = cursor.u16();
-  const rgce = cursor.take(cce);
-  // Never negative: cursor.take(cce) just above already proved that many bytes genuinely present, so recordByteLength(record) is provably >= ARRAY_HEADER_BYTES + 2 + cce already. Always taking it (rather than special-casing a non-positive length as undefined) still hands parseFormulaText the exact same "no PtgArray trailer" fact when it is genuinely zero: an empty-but-defined rgcb makes ptg.ts's own rgcbCursor real rather than undefined, but a real cursor with zero bytes left fails on its own very first read exactly as an absent one already does, so a formula needing one resolves to undefined either way, and one that needs none never consults rgcb at all. Reading a length larger than what the record actually holds (a genuine overrun) still throws BiffFormatError, caught below for the same reason as before: a malformed trailer should degrade only this one array formula's group, not abort any other cell's read.
-  const rgcbLength = recordByteLength(record) - (ARRAY_HEADER_BYTES + 2 + cce);
-  try {
-    return { kind: "array", rgce, rgcb: cursor.take(rgcbLength) };
-  } catch (error) {
-    return recoverFromFormatError(error, {
-      kind: "array" as const,
-      rgce,
-      rgcb: undefined,
-    });
-  }
-}
-
-/** Reads one worksheet substream's records. */
 export function readSheetRecords(
   records: readonly RecordGroup[],
   sharedStrings: readonly string[],
@@ -629,7 +550,7 @@ function readMergeCells(record: RecordGroup): RawRange[] {
 }
 
 /** The Cell structure ([MS-XLS] 2.5.19) every single-cell record opens with. */
-function readCellHeader(cursor: BlockCursor): {
+export function readCellHeader(cursor: BlockCursor): {
   row: number;
   column: number;
   xfIndex: number;
