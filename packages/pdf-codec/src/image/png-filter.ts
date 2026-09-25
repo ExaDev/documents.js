@@ -1,6 +1,14 @@
 // The five PNG scanline (un)filters (PNG spec section 9.2), shared by the PDF cross-reference stream predictor path (src/pdf/predictors.ts): xref streams are almost always /Predictor 12, which is exactly PNG's "Up" filter applied to fixed-width rows, so this module sits on the critical path for reading modern PDFs, not just for PNG images.
 export type PngFilterType = 0 | 1 | 2 | 3 | 4; // None, Sub, Up, Average, Paeth
 
+const FILTER_TYPE_NONE: PngFilterType = 0;
+const FILTER_TYPE_SUB: PngFilterType = 1;
+const FILTER_TYPE_UP: PngFilterType = 2;
+const FILTER_TYPE_AVERAGE: PngFilterType = 3;
+const FILTER_TYPE_PAETH: PngFilterType = 4;
+
+const BYTE_MASK = 0xff; // wraps a filtered/unfiltered sample back into an unsigned byte, matching the PNG spec's own "all arithmetic is performed modulo 256" rule for filtering and unfiltering (section 9.2)
+
 function paethPredictor(a: number, b: number, c: number): number {
   const p = a + b - c;
   const pa = Math.abs(p - a);
@@ -18,7 +26,11 @@ function paethPredictor(a: number, b: number, c: number): number {
 // The value a filter type predicts from the left (a), above (b), and above-left (c) samples — added back in during unfiltering, or subtracted out during filtering. Returning a value from a pure function (rather than assigning inside a switch) sidesteps having to prove a switch over a literal union is exhaustive to a variable declared without an initialiser.
 function isPngFilterType(value: number): value is PngFilterType {
   return (
-    value === 0 || value === 1 || value === 2 || value === 3 || value === 4
+    value === FILTER_TYPE_NONE ||
+    value === FILTER_TYPE_SUB ||
+    value === FILTER_TYPE_UP ||
+    value === FILTER_TYPE_AVERAGE ||
+    value === FILTER_TYPE_PAETH
   );
 }
 
@@ -28,16 +40,16 @@ function predictorValue(
   b: number,
   c: number,
 ): number {
-  if (filterType === 1) {
+  if (filterType === FILTER_TYPE_SUB) {
     return a;
   }
-  if (filterType === 2) {
+  if (filterType === FILTER_TYPE_UP) {
     return b;
   }
-  if (filterType === 3) {
+  if (filterType === FILTER_TYPE_AVERAGE) {
     return Math.floor((a + b) / 2);
   }
-  if (filterType === 4) {
+  if (filterType === FILTER_TYPE_PAETH) {
     return paethPredictor(a, b, c);
   }
   return 0; // None
@@ -73,16 +85,20 @@ export function unfilterScanlines(
         x >= bpp && prevOutRowStart !== undefined
           ? out[prevOutRowStart + x - bpp]!
           : 0;
-      out[outRowStart + x] = (raw + predictorValue(filterByte, a, b, c)) & 0xff;
+      out[outRowStart + x] =
+        (raw + predictorValue(filterByte, a, b, c)) & BYTE_MASK;
     }
   }
   return out;
 }
 
+const BYTE_RADIX = 256; // one past the maximum value an unsigned byte holds; also the modulus that turns a byte >= SIGNED_BYTE_THRESHOLD into its two's-complement negative equivalent
+const SIGNED_BYTE_THRESHOLD = 128; // 2^7: an unsigned byte at or above this value represents a negative number when read as signed 8-bit, per the PNG spec's own "sum of absolute differences" filter-selection heuristic (section 9.8, "Filter selection heuristics")
+
 function sumOfAbsSigned(bytes: Uint8Array<ArrayBuffer>): number {
   let sum = 0;
   for (const byte of bytes) {
-    sum += byte < 128 ? byte : 256 - byte;
+    sum += byte < SIGNED_BYTE_THRESHOLD ? byte : BYTE_RADIX - byte;
   }
   return sum;
 }
@@ -103,11 +119,18 @@ function filterRowInto(
     const b = prevRowStart === undefined ? 0 : raw[prevRowStart + x]!;
     const c =
       x >= bpp && prevRowStart !== undefined ? raw[prevRowStart + x - bpp]! : 0;
-    out[outOffset + x] = (rawByte - predictorValue(filterType, a, b, c)) & 0xff;
+    out[outOffset + x] =
+      (rawByte - predictorValue(filterType, a, b, c)) & BYTE_MASK;
   }
 }
 
-const ALL_FILTER_TYPES: readonly PngFilterType[] = [0, 1, 2, 3, 4];
+const ALL_FILTER_TYPES: readonly PngFilterType[] = [
+  FILTER_TYPE_NONE,
+  FILTER_TYPE_SUB,
+  FILTER_TYPE_UP,
+  FILTER_TYPE_AVERAGE,
+  FILTER_TYPE_PAETH,
+];
 
 // Filters raw (unfiltered) pixel bytes into PNG's per-scanline IDAT payload shape. `strategy: 'none'` always emits filter type 0 (useful for deterministic, human-auditable test output); `'adaptive'` (the default) picks, per row, whichever of the five filters minimises the sum of the filtered bytes' absolute values interpreted as signed — the heuristic the PNG spec itself recommends.
 export function filterScanlines(
@@ -134,14 +157,14 @@ export function filterScanlines(
         prevRowStart,
         bytesPerRow,
         bpp,
-        0,
+        FILTER_TYPE_NONE,
         out,
         outRowStart + 1,
       );
       continue;
     }
 
-    let bestType: PngFilterType = 0;
+    let bestType: PngFilterType = FILTER_TYPE_NONE;
     let bestSum = Number.POSITIVE_INFINITY;
     let best: Uint8Array<ArrayBuffer> | undefined;
     for (const filterType of ALL_FILTER_TYPES) {
