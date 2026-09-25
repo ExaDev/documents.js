@@ -3,6 +3,8 @@
 // RC4 is comprehensively broken and must never be used to protect anything. It is implemented here solely to *read* files that already exist and whose format mandates it.
 
 const STATE_SIZE = 256;
+// RC4's state array is indexed mod 256; ANDing with this mask wraps an index/accumulator back into [0, 255] the same way `% STATE_SIZE` would, since STATE_SIZE is a power of two.
+const STATE_INDEX_MASK = 0xff;
 
 export function rc4(
   key: Uint8Array<ArrayBuffer>,
@@ -16,7 +18,7 @@ export function rc4(
   }
   let j = 0;
   for (let i = 0; i < STATE_SIZE; i++) {
-    j = (j + state[i]! + key[i % key.length]!) & 0xff;
+    j = (j + state[i]! + key[i % key.length]!) & STATE_INDEX_MASK;
     const swap = state[i]!;
     state[i] = state[j]!;
     state[j] = swap;
@@ -26,12 +28,12 @@ export function rc4(
   let x = 0;
   let y = 0;
   data.forEach((byte, n) => {
-    x = (x + 1) & 0xff;
-    y = (y + state[x]!) & 0xff;
+    x = (x + 1) & STATE_INDEX_MASK;
+    y = (y + state[x]!) & STATE_INDEX_MASK;
     const swap = state[x]!;
     state[x] = state[y]!;
     state[y] = swap;
-    out[n] = byte ^ state[(state[x]! + state[y]!) & 0xff]!;
+    out[n] = byte ^ state[(state[x]! + state[y]!) & STATE_INDEX_MASK]!;
   });
   return out;
 }
