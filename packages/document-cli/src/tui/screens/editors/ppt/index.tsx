@@ -15,6 +15,12 @@ import { useNavigationInput } from "../../../keybindings/use-navigation-input.js
 import { useAppDispatch, useAppState } from "../../../state/context.js";
 import { anyOverlayOpen, type PptOpenDocument } from "../../../state/types.js";
 
+// Where a newly added shape sits and how big it is when the operator leaves the field blank, sized for a slide rather than a page.
+const DEFAULT_SHAPE_X_PT = 40;
+const DEFAULT_SHAPE_Y_PT = 30;
+const DEFAULT_SHAPE_WIDTH_PT = 640;
+const DEFAULT_SHAPE_HEIGHT_PT = 80;
+
 // The ppt root screens. The slide list is the shared slide-family list (PptSlide/PptShape carry the identical summary subset it reads); the detail screen is deliberately NOT the shared rich one — that screen's shape/table/image editing runs on PptxSlide/OdpSlide's full API, while a ppt slide carries the text-box-and-notes subset [MS-PPT]'s own writer supports — so this narrower companion exists beside it, editing exactly what a .ppt can state: shape text and frames, speaker notes, and adding text boxes.
 
 function pptDocument(state: ReturnType<typeof useAppState>): PptOpenDocument {
@@ -174,15 +180,21 @@ export function PptSlideDetailScreen(props: {
             type: "ADD_TEXTBOX",
             containerIndex: props.slideIndex,
             frame: {
-              xPt: parseNumberField(requireFieldValue(values, "xPt"), 40),
-              yPt: parseNumberField(requireFieldValue(values, "yPt"), 30),
+              xPt: parseNumberField(
+                requireFieldValue(values, "xPt"),
+                DEFAULT_SHAPE_X_PT,
+              ),
+              yPt: parseNumberField(
+                requireFieldValue(values, "yPt"),
+                DEFAULT_SHAPE_Y_PT,
+              ),
               widthPt: parseNumberField(
                 requireFieldValue(values, "widthPt"),
-                640,
+                DEFAULT_SHAPE_WIDTH_PT,
               ),
               heightPt: parseNumberField(
                 requireFieldValue(values, "heightPt"),
-                80,
+                DEFAULT_SHAPE_HEIGHT_PT,
               ),
             },
             text: requireFieldValue(values, "text"),

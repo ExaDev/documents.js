@@ -31,6 +31,10 @@ import {
   sheetExtent,
 } from "./shared.js";
 
+// The size a newly added image takes when the operator leaves the field blank.
+const DEFAULT_IMAGE_WIDTH_PT = 100;
+const DEFAULT_IMAGE_HEIGHT_PT = 60;
+
 const ROW_HEADER_WIDTH = 5;
 const CELL_WIDTH = 11;
 const PAGE_JUMP_ROWS = 10;
@@ -101,10 +105,13 @@ async function applyAddSheetImage(
   }
   try {
     const bytes = new Uint8Array(await readInput(path));
-    const widthPt = parseNumberField(requireFieldValue(values, "widthPt"), 100);
+    const widthPt = parseNumberField(
+      requireFieldValue(values, "widthPt"),
+      DEFAULT_IMAGE_WIDTH_PT,
+    );
     const heightPt = parseNumberField(
       requireFieldValue(values, "heightPt"),
-      60,
+      DEFAULT_IMAGE_HEIGHT_PT,
     );
     const offsetXPt = parseNumberField(
       requireFieldValue(values, "offsetXPt"),

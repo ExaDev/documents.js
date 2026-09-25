@@ -378,6 +378,8 @@ export function packageLintConfig(
           "error",
           { allow: ["arrowFunctions", "asyncFunctions"] },
         ],
+        // Off for the same reason, and measured rather than assumed: across six packages surveyed, 8,018 of 10,159 reported sites were in test files, and sampling them found almost entirely values whose arbitrariness is the point. A sentinel payload (`new Uint8Array([9, 9])`), a heading level in `[1, 2, 3, 4, 5, 6]` where the literal is what the spec says, a count handed to a fixture builder (`spreadsheet(2, 50)`): each is the case the test is about, and giving it a name puts an indirection between the reader and the thing being pinned. The rule guards against an unexplained number in code someone has to maintain; a fixture's numbers are the specification, not a maintenance hazard. A test constant that does carry meaning, a time boundary or a size threshold, is still worth naming, and nothing here stops that.
+        "@typescript-eslint/no-magic-numbers": "off",
       },
     },
     ...(restrictedImportPatterns.length > 0

@@ -13,6 +13,7 @@ import {
   parseColorField,
   parseStrokeField,
 } from "../../shared/vector-fields.js";
+import { layoutColorToHex } from "../../shared/color";
 
 export { parseColorField, parseStrokeField };
 export { parseNumberField } from "../../shared/text.js";
@@ -67,20 +68,13 @@ export function formatPt(value: number): string {
   return value.toFixed(1);
 }
 
-// documents.js re-exports `rgbHexToColor` (hex string -> Color) at its top level but not that conversion's own inverse, `colorToRgbHex` — this is display-only formatting, not a reimplementation of that (unexported) function.
-export function formatColor(color: Readonly<LayoutColor>): string {
-  const byte = (component: number): string =>
-    Math.round(component * 255)
-      .toString(16)
-      .padStart(2, "0");
-  return `#${byte(color.r)}${byte(color.g)}${byte(color.b)}`;
-}
+// Re-exported rather than restated: this is the same float-channel-to-hex conversion ../shared/color.ts already owns, which documents.js itself does not expose the inverse of.
 
 export function formatStroke(stroke: {
   readonly color: LayoutColor;
   readonly widthPt: number;
 }): string {
-  return `${formatColor(stroke.color)} @ ${stroke.widthPt.toFixed(1)}pt`;
+  return `${layoutColorToHex(stroke.color)} @ ${stroke.widthPt.toFixed(1)}pt`;
 }
 
 // `LayoutText.color`/`LayoutLine.color` are both REQUIRED fields (unlike a rect/ellipse/path's own optional `fill`), so a blank or unparseable entry falls back to the item's current colour rather than clearing it — there is nowhere in either item's own type for "no colour" to live.

@@ -127,9 +127,25 @@ const HTML_BLOCK_END_PATTERNS: readonly RegExp[] = [
   /\]\]>/,
 ];
 
-// This array's own literal elements above the ignored range stay flagged by no-magic-numbers, deliberately: they are the CommonMark spec's own HTML block-type numbers (spec 0.31.2, conditions 1-7), the exact reason HtmlBlockType is numbered rather than named. An Array.from-plus-index-math derivation from LAST_HTML_BLOCK_TYPE was tried and reverted, since it replaces the direct, spec-legible literal with an unnecessary `as HtmlBlockType` assertion and arithmetic nobody needed to satisfy the linter, making the code worse for it. Inline eslint-disable comments are inert in this repo (noInlineConfig), so there is no suppression to add; this array is a documented, permanent exception instead.
-const HTML_BLOCK_TYPES: readonly HtmlBlockType[] = [1, 2, 3, 4, 5, 6, 7];
-const LAST_HTML_BLOCK_TYPE = 7;
+// Each start condition by what it matches, so a reader does not have to carry spec 0.31.2's numbering in their head. The numbers stay load-bearing: each one indexes its own entry in HTML_BLOCK_START_PATTERNS and HTML_BLOCK_END_PATTERNS above. A bare `const` infers its own literal type, so each of these satisfies HtmlBlockType with no assertion.
+const HTML_BLOCK_RAW_TEXT = 1;
+const HTML_BLOCK_COMMENT = 2;
+const HTML_BLOCK_PROCESSING_INSTRUCTION = 3;
+const HTML_BLOCK_DECLARATION = 4;
+const HTML_BLOCK_CDATA = 5;
+const HTML_BLOCK_KNOWN_TAG = 6;
+// The one condition that may not interrupt a paragraph, which is why it is named where that rule is applied below.
+const HTML_BLOCK_ANY_COMPLETE_TAG = 7;
+
+const HTML_BLOCK_TYPES: readonly HtmlBlockType[] = [
+  HTML_BLOCK_RAW_TEXT,
+  HTML_BLOCK_COMMENT,
+  HTML_BLOCK_PROCESSING_INSTRUCTION,
+  HTML_BLOCK_DECLARATION,
+  HTML_BLOCK_CDATA,
+  HTML_BLOCK_KNOWN_TAG,
+  HTML_BLOCK_ANY_COMPLETE_TAG,
+];
 
 // The first start condition `line` meets, or undefined when it meets none. `interruptsParagraph` suppresses condition 7 alone: spec 0.31.2 says an HTML block of type 7 "may not interrupt a paragraph", so that one condition is unavailable when there is an open paragraph the block would have to break.
 export function matchHtmlBlockStart(
@@ -138,7 +154,7 @@ export function matchHtmlBlockStart(
 ): HtmlBlockType | undefined {
   // No separate "does line even start with '<'?" guard: every one of HTML_BLOCK_START_PATTERNS' real entries (types 1-7) is itself anchored at `^` and begins with a literal '<' in its own regex source, so a line that doesn't open with '<' already fails every pattern in the loop below on its own, and the loop exhausts to the identical `undefined` regardless.
   for (const type of HTML_BLOCK_TYPES) {
-    if (type === LAST_HTML_BLOCK_TYPE && interruptsParagraph) {
+    if (type === HTML_BLOCK_ANY_COMPLETE_TAG && interruptsParagraph) {
       continue;
     }
     const pattern = HTML_BLOCK_START_PATTERNS[type];

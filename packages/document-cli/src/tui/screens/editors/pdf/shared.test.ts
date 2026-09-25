@@ -6,7 +6,6 @@ import type {
 } from "../../../state/types.js";
 import {
   defaultTriangleLayoutSubpaths,
-  formatColor,
   formatPt,
   formatSize,
   formatStroke,
@@ -18,6 +17,7 @@ import {
   parseRequiredColorField,
   requirePdfDocument,
 } from "./shared";
+import { layoutColorToHex } from "../../shared/color";
 
 function pdfDoc(): PdfOpenDocument {
   return {
@@ -103,13 +103,13 @@ describe("formatPt", () => {
   });
 });
 
-describe("formatColor", () => {
+describe("layoutColorToHex", () => {
   it("renders a colour as a 6-digit hex string", () => {
-    expect(formatColor({ r: 1, g: 0, b: 0.5 })).toBe("#ff0080");
+    expect(layoutColorToHex({ r: 1, g: 0, b: 0.5 })).toBe("#ff0080");
   });
 
   it("pads a single-digit byte with a leading zero", () => {
-    expect(formatColor({ r: 1 / 255, g: 0, b: 0 })).toBe("#010000");
+    expect(layoutColorToHex({ r: 1 / 255, g: 0, b: 0 })).toBe("#010000");
   });
 });
 

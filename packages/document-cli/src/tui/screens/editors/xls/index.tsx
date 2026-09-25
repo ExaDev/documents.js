@@ -112,13 +112,23 @@ export function XlsSheetListScreen(): ReactElement {
   );
 }
 
+// Column letters are base-26 over 'A'..'Z', with the running value stepped down by one each round because the alphabet has no zero digit (so AA follows Z rather than BA).
+const ALPHABET_LENGTH = 26;
+const UPPERCASE_A_CHAR_CODE = 65;
+
+// How much of the sheet the summary and the grid each show: the value list is capped so a large sheet cannot flood the pane, and every grid cell is padded to one width so the columns line up in a terminal.
+const MAX_LISTED_CELLS = 200;
+const GRID_CELL_WIDTH = 12;
+
 // Column letters the way a spreadsheet states them (A, B, ... AA), for the cursor address readout — the identical convention the ods grid's own address line uses.
 function columnLetters(column: number): string {
   let value = column;
   let letters = "";
   do {
-    letters = String.fromCharCode((value % 26) + 65) + letters;
-    value = Math.floor(value / 26) - 1;
+    letters =
+      String.fromCharCode((value % ALPHABET_LENGTH) + UPPERCASE_A_CHAR_CODE) +
+      letters;
+    value = Math.floor(value / ALPHABET_LENGTH) - 1;
   } while (value >= 0);
   return letters;
 }
@@ -227,7 +237,7 @@ export function XlsSpreadsheetGridScreen(props: {
         {entries.length === 0 ? (
           <Text dimColor>No cells carry a value yet.</Text>
         ) : (
-          entries.slice(0, 200).map((cell) => (
+          entries.slice(0, MAX_LISTED_CELLS).map((cell) => (
             <Text key={`${cell.row}:${cell.column}`}>
               {columnLetters(cell.column)}
               {cell.row + 1}:{" "}
@@ -264,9 +274,14 @@ export function XlsSpreadsheetGridScreen(props: {
               .map((column) => {
                 const cell = cells.get(`${row}:${column}`);
                 const isCursor = row === cursor.row && column === cursor.column;
-                const body = (cell?.displayText ?? "").slice(0, 12);
-                const padded = body.padEnd(12, " ");
-                return isCursor ? `[${padded.slice(0, 12)}]` : ` ${padded} `;
+                const body = (cell?.displayText ?? "").slice(
+                  0,
+                  GRID_CELL_WIDTH,
+                );
+                const padded = body.padEnd(GRID_CELL_WIDTH, " ");
+                return isCursor
+                  ? `[${padded.slice(0, GRID_CELL_WIDTH)}]`
+                  : ` ${padded} `;
               })
               .join("")}
           </Text>

@@ -2,12 +2,7 @@ import { packageLintConfig } from "../../eslint.shared.ts";
 
 export default packageLintConfig({
   tsconfigRootDir: import.meta.dirname,
-  // Off, deliberately, not merely unaddressed, but for ONE reason rather than the two this comment used to give. src/image/image.test.ts's JPEG marker-walking fixtures carry literals that are each test's own deliberately exact payload: the marker, length, precision, width and height bytes are the point of each case, adjacent tests differ by a single byte to exercise one state-machine transition, and a parameterised builder covering every truncation and corruption edge risks silently changing what a test asserts. Naming them would hide the difference that gives each case its meaning, so they stay literal by judgement.
-  //
-  // The second reason this comment previously gave was wrong and is withdrawn. It claimed src/html/html.ts's HTML_BLOCK_TYPES, which enumerates the HtmlBlockType union as a runtime array, could not be satisfied without an unwanted `as HtmlBlockType` assertion. It can: a named `const` infers its own literal type, so per-value constants satisfy the union with no assertion at all, exactly as epub-codec's zip.ts already does for its PKWARE signature bytes while running with this rule enforced. That array is ordinary naming work and is not the reason this flag is off.
-  magicNumbers: "off",
-  // Off: 781 sites across every package are debt from this same @exadev/eslint-config 2.1.2->2.12.1 bump (see PackageLintOptions.newRuleDebt in eslint.shared.ts), not something this bump's own PR fixes. This package's own measured subset:
-  newRuleDebt: [],
+  magicNumbers: "error",
   // Off: with noUncheckedIndexedAccess on, every indexed read is typed as possibly-undefined, so this rule fires on array and byte-buffer indexing whose bound the surrounding code has already established — a loop condition, a prior length check, or a fixture the test itself just built. None of the sites here is a value that can actually be absent. Tracked for a per-package decision on whether any of them is genuine; see the burn-down epic.
   nonNullAssertion: "off",
   isomorphic: true,

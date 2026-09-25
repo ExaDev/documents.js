@@ -28,7 +28,6 @@ import {
 } from "../../../state/types.js";
 import { FieldWizard, requireFieldValue } from "../../shared/field-wizard.js";
 import {
-  formatColor,
   formatPt,
   formatSize,
   formatStroke,
@@ -41,6 +40,7 @@ import {
   parseStrokeField,
   requirePdfDocument,
 } from "./shared.js";
+import { layoutColorToHex } from "../../shared/color";
 
 // --- read-only field dump, for an xlsx-sourced item (no live PdfEditor to edit through — see shared.ts's own isEditablePdfDocument doc comment) -------------------------------------------------------------------------------------------------
 
@@ -61,7 +61,7 @@ function fieldsFor(item: LayoutItem): readonly Field[] {
       fields.push(["Font weight", item.font.weight]);
       fields.push(["Font style", item.font.style]);
       fields.push(["Size", `${item.sizePt}pt`]);
-      fields.push(["Colour", formatColor(item.color)]);
+      fields.push(["Colour", layoutColorToHex(item.color)]);
       if (item.widthPt !== undefined) {
         fields.push(["Width", `${item.widthPt}pt`]);
       }
@@ -85,7 +85,7 @@ function fieldsFor(item: LayoutItem): readonly Field[] {
       fields.push(["Position", formatPoint(item.xPt, item.yPt)]);
       fields.push(["Size", formatSize(item.widthPt, item.heightPt)]);
       if (item.fill !== undefined) {
-        fields.push(["Fill", formatColor(item.fill)]);
+        fields.push(["Fill", layoutColorToHex(item.fill)]);
       }
       if (item.stroke !== undefined) {
         fields.push(["Stroke", formatStroke(item.stroke)]);
@@ -94,7 +94,7 @@ function fieldsFor(item: LayoutItem): readonly Field[] {
     case "line":
       fields.push(["From", formatPoint(item.x1Pt, item.y1Pt)]);
       fields.push(["To", formatPoint(item.x2Pt, item.y2Pt)]);
-      fields.push(["Colour", formatColor(item.color)]);
+      fields.push(["Colour", layoutColorToHex(item.color)]);
       fields.push(["Width", `${item.widthPt}pt`]);
       break;
     case "path":
@@ -104,7 +104,7 @@ function fieldsFor(item: LayoutItem): readonly Field[] {
         `${item.subpaths.reduce((total, subpath) => total + subpath.segments.length, 0)}`,
       ]);
       if (item.fill !== undefined) {
-        fields.push(["Fill", formatColor(item.fill)]);
+        fields.push(["Fill", layoutColorToHex(item.fill)]);
       }
       if (item.fillRule !== undefined) {
         fields.push(["Fill rule", item.fillRule]);
@@ -253,7 +253,7 @@ function buildFillStrokeRows(
 ): EditableRow[] {
   return [
     {
-      label: `Fill: ${fill === undefined ? "none" : formatColor(fill)}`,
+      label: `Fill: ${fill === undefined ? "none" : layoutColorToHex(fill)}`,
       currentValue: fill === undefined ? "" : `${fill.r} ${fill.g} ${fill.b}`,
       commit: (raw) => {
         onFillChange(parseColorField(raw));
@@ -374,7 +374,7 @@ function buildTextRows(
       },
     },
     {
-      label: `Colour: ${formatColor(item.color)}`,
+      label: `Colour: ${layoutColorToHex(item.color)}`,
       currentValue: `${item.color.r} ${item.color.g} ${item.color.b}`,
       commit: (raw) => {
         dispatch({
@@ -535,7 +535,7 @@ function buildLineRows(
       },
     },
     {
-      label: `Colour: ${formatColor(item.color)}`,
+      label: `Colour: ${layoutColorToHex(item.color)}`,
       currentValue: `${item.color.r} ${item.color.g} ${item.color.b}`,
       commit: (raw) => {
         dispatch({

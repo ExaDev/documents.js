@@ -5,6 +5,18 @@
 // Table offsets and the 'name' table layout are ISO/IEC 14496-22 clause 4 and clause 5.2.7 respectively — the same clauses src/runtime/font-face.ts reads, which is deliberate: this builder is that reader's write-side inverse, so a test feeding one into the other proves both against real font bytes rather than against each other's assumptions alone.
 import { createFontRegistry } from "documents.js";
 
+// Field offsets within the structures this fixture writes, from the OpenType spec: the 'name' table header (format, count, stringOffset), one NameRecord (platformID, encodingID, languageID, nameID, length, offset), and one table-directory record (tag, checksum, offset, length).
+const NAME_HEADER_COUNT_OFFSET = 2;
+const NAME_HEADER_STORAGE_OFFSET = 4;
+const NAME_RECORD_ENCODING_OFFSET = 2;
+const NAME_RECORD_LANGUAGE_OFFSET = 4;
+const NAME_RECORD_NAME_ID_OFFSET = 6;
+const NAME_RECORD_LENGTH_OFFSET = 8;
+const NAME_RECORD_STRING_OFFSET = 10;
+const TABLE_DIRECTORY_NUM_TABLES_OFFSET = 4;
+const TABLE_RECORD_OFFSET_FIELD = 8;
+const TABLE_RECORD_LENGTH_FIELD = 12;
+
 // What the fixture font declares as its family: the family the fixture document below also asks for, and the family documents.js's own vendored-substitute table maps to Carlito.
 export const FIXTURE_FONT_FAMILY = "Calibri";
 
@@ -58,6 +70,7 @@ function buildNameTable(
     nameId: entry.nameId,
     bytes: encodeUtf16Be(entry.text),
   }));
+
   const storageOffset = NAME_HEADER_SIZE + encoded.length * NAME_RECORD_SIZE;
   const storageLength = encoded.reduce(
     (total, entry) => total + entry.bytes.length,
@@ -67,18 +80,27 @@ function buildNameTable(
   const table = new Uint8Array(storageOffset + storageLength);
   const view = new DataView(table.buffer);
   view.setUint16(0, 0); // format 0: platform/encoding/language/name records only, no language-tag records
-  view.setUint16(2, encoded.length);
-  view.setUint16(4, storageOffset);
+  view.setUint16(NAME_HEADER_COUNT_OFFSET, encoded.length);
+  view.setUint16(NAME_HEADER_STORAGE_OFFSET, storageOffset);
 
   let stringOffset = 0;
   for (const [index, entry] of encoded.entries()) {
     const recordOffset = NAME_HEADER_SIZE + index * NAME_RECORD_SIZE;
     view.setUint16(recordOffset, PLATFORM_WINDOWS);
-    view.setUint16(recordOffset + 2, WINDOWS_ENCODING_UNICODE_BMP);
-    view.setUint16(recordOffset + 4, WINDOWS_LANGUAGE_EN_US);
-    view.setUint16(recordOffset + 6, entry.nameId);
-    view.setUint16(recordOffset + 8, entry.bytes.length);
-    view.setUint16(recordOffset + 10, stringOffset);
+    view.setUint16(
+      recordOffset + NAME_RECORD_ENCODING_OFFSET,
+      WINDOWS_ENCODING_UNICODE_BMP,
+    );
+    view.setUint16(
+      recordOffset + NAME_RECORD_LANGUAGE_OFFSET,
+      WINDOWS_LANGUAGE_EN_US,
+    );
+    view.setUint16(recordOffset + NAME_RECORD_NAME_ID_OFFSET, entry.nameId);
+    view.setUint16(
+      recordOffset + NAME_RECORD_LENGTH_OFFSET,
+      entry.bytes.length,
+    );
+    view.setUint16(recordOffset + NAME_RECORD_STRING_OFFSET, stringOffset);
     table.set(entry.bytes, storageOffset + stringOffset);
     stringOffset += entry.bytes.length;
   }
@@ -100,15 +122,15 @@ function replaceNameTable(
   patched.set(nameTable, tableOffset);
 
   const view = new DataView(patched.buffer);
-  const numTables = view.getUint16(4);
+  const numTables = view.getUint16(TABLE_DIRECTORY_NUM_TABLES_OFFSET);
   for (let index = 0; index < numTables; index++) {
     const recordOffset =
       TABLE_DIRECTORY_HEADER_SIZE + index * TABLE_RECORD_SIZE;
     if (decodeTag(view, recordOffset) !== "name") {
       continue;
     }
-    view.setUint32(recordOffset + 8, tableOffset);
-    view.setUint32(recordOffset + 12, nameTable.length);
+    view.setUint32(recordOffset + TABLE_RECORD_OFFSET_FIELD, tableOffset);
+    view.setUint32(recordOffset + TABLE_RECORD_LENGTH_FIELD, nameTable.length);
     return patched;
   }
   throw new Error(
