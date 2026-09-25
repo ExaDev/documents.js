@@ -1,3 +1,26 @@
+## [14.4.47](https://github.com/ExaDev/documents.js/compare/documents.js%4014.4.46...documents.js%4014.4.47) (2026-09-25)
+
+### Bug Fixes
+
+* **documents.js:** generate Mathematical Alphanumeric Symbols tables from bases ([6abbbbb](https://github.com/ExaDev/documents.js/commit/6abbbbb5c6e41f9ce3b293bb542d85f79f902d3b))
+* **documents.js:** name Firebird date/time decode algorithm's constants ([5cad2d8](https://github.com/ExaDev/documents.js/commit/5cad2d87db22ba313bf9e35d4e5c6bcb37789d35))
+* **documents.js:** name firebird reader byte-shift and sign-wrap constants ([cf3b83d](https://github.com/ExaDev/documents.js/commit/cf3b83dfcf99a4f4a87a0d957fd246d45c24adea))
+* **documents.js:** name HSQLDB row-format's byte-level constants ([279b704](https://github.com/ExaDev/documents.js/commit/279b70428da7c12d553b85ac8b01fa43b319db07))
+* **documents.js:** name the last production magic numbers ([8c4c755](https://github.com/ExaDev/documents.js/commit/8c4c7558653f089fd7ce70b1114edf87e940689b))
+* **documents.js:** name the PDF fixture builder's object numbers ([f59b62e](https://github.com/ExaDev/documents.js/commit/f59b62e4b6bc1632a233fad8cfd03ca58ede9c8b))
+* **documents.js:** name the remaining magic numbers in firebird, model and svg modules ([bf4078d](https://github.com/ExaDev/documents.js/commit/bf4078d0b563f2766ffe1caa3ea325482187452a))
+* **documents.js:** store font obfuscation key bytes as hex strings ([449a7b6](https://github.com/ExaDev/documents.js/commit/449a7b697f0138b402b0c7e2aface7b4f2f65f7d))
+* **documents.js:** store named CSS colours as hex strings ([30e6fb2](https://github.com/ExaDev/documents.js/commit/30e6fb298b55316686ddf7a8c26505cd5e0570df))
+
+### Miscellaneous Chores
+
+* **lint:** enable no-magic-numbers for documents.js production code ([6fdd2fb](https://github.com/ExaDev/documents.js/commit/6fdd2fb3683b6976d70eb6b23ea59af89bb49e7c))
+
+
+### Dependencies
+
+- Updated pdf-codec to 5.2.28
+
 ## [14.4.46](https://github.com/ExaDev/documents.js/compare/documents.js%4014.4.45...documents.js%4014.4.46) (2026-09-25)
 
 
