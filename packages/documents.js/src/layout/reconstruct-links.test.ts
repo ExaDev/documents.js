@@ -189,6 +189,70 @@ describe("reconstructWordprocessing: link reconciliation (#721)", () => {
     expect(list[start + 1]?.kind).toBe("paragraph");
     expect(list[start + 2]?.kind).toBe("constructEnd");
   });
+
+  it("wraps the block with the LARGER overlap when a link rect intersects two candidate blocks by different amounts", () => {
+    // The existing "no run matches" test above has only one candidate block (an image the link rect covers exactly), so it never exercises intersectionArea comparing two real, non-zero, unequal overlaps against each other; wrapBestBlock's own "best" only means anything once there is a genuine choice to make. An internalLink, not an external one, since reconcileLinks only ever checks run-level overlap for an external link, never for an internalLink, so this reaches wrapBestBlock/intersectionArea directly regardless of how the rect also happens to cover either line's own run frame.
+    const doc = reconstructWordprocessing(
+      docFrom([
+        page(612, 792, [
+          text({
+            text: "Upper line, barely clipped",
+            xPt: 50,
+            yPt: 700,
+            widthPt: 120,
+          }),
+          text({
+            text: "Lower line, fully covered",
+            xPt: 50,
+            yPt: 600,
+            widthPt: 120,
+          }),
+          {
+            kind: "internalLink",
+            destination: "target-anchor",
+            xPt: 40,
+            yPt: 590,
+            widthPt: 150,
+            heightPt: 115,
+          },
+        ]),
+      ]),
+    );
+    const list = blocks(doc);
+    const paras = list.filter((b) => b.kind === "paragraph");
+    expect(paras).toHaveLength(2);
+    const start = list.findIndex((b) => b.kind === "constructStart");
+    expect(list[start + 1]).toBe(paras[1]);
+  });
+
+  it("carries the link annotation's own title through to the construct descriptor", () => {
+    const doc = reconstructWordprocessing(
+      docFrom([
+        page(612, 792, [
+          text({ text: "Heading", xPt: 50, yPt: 700, widthPt: 60, sizePt: 18 }),
+          {
+            kind: "link",
+            uri: "https://images.example",
+            title: "An example image",
+            xPt: 400,
+            yPt: 100,
+            widthPt: 100,
+            heightPt: 60,
+          },
+        ]),
+      ]),
+    );
+    const list = blocks(doc);
+    const start = list.findIndex((b) => b.kind === "constructStart");
+    expect(list[start]).toMatchObject({
+      kind: "constructStart",
+      descriptor: {
+        kind: "link",
+        target: { kind: "external", uri: "https://images.example" },
+        title: "An example image",
+      },
+    });
+  });
 });
 
 describe("reconstructWordprocessing: optional content visibility (#721)", () => {
