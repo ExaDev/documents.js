@@ -12,52 +12,84 @@ import { buildPersistDirectory, resolvePersistObject } from "../stream/persist";
 
 // This file is deliberately a fidelity test of the FIXTURE's own bytes, not of anything read.ts observes: several [MS-PPT]/[MS-ODRAW] header fields exercised below (an atom's own recVer, an FBSE's own blip-type instance, a font entity's name, an OfficeArtBStoreContainer's own recInstance count) are real, spec-mandated parts of a genuine PowerPoint binary document that this package's own reader deliberately tolerates a wrong, default, or unset value for — so a test written only against read.ts's own observable output could never catch a regression in one of them. These assertions instead re-parse the constructed record tree directly, the same way record/header.test.ts pins header bytes directly rather than only through something that consumes them, and check each value against what the spec (and the fixture's own comments) say a real file states.
 
-export function resolveDocumentContainer(
+interface PersistContext {
+  readonly streamBytes: Uint8Array<ArrayBuffer>;
+  readonly directory: ReadonlyMap<number, number>;
+  readonly documentContainer: PptRecord;
+}
+
+// The three resolve* entry points below all need the same three things, and reaching any one of them means walking the CurrentUserAtom to the user edit, the user edit to the persist directory, and the directory to the document container. Stated once here so the walk, and the description a failed lookup reports itself by, exist in one place rather than three copies that can drift apart.
+function persistContext(
   currentUserStream: Uint8Array<ArrayBuffer>,
   powerPointDocumentStream: Uint8Array<ArrayBuffer>,
-): PptRecord {
+): PersistContext {
   const currentUser = readCurrentUserAtom(currentUserStream);
   const { directory, currentEdit } = buildPersistDirectory(
     powerPointDocumentStream,
     currentUser.offsetToCurrentEdit,
   );
-  return resolvePersistObject(
-    powerPointDocumentStream,
+  return {
+    streamBytes: powerPointDocumentStream,
     directory,
-    currentEdit.docPersistIdRef,
-    "test fixture's own docPersistIdRef",
+    documentContainer: resolvePersistObject(
+      powerPointDocumentStream,
+      directory,
+      currentEdit.docPersistIdRef,
+      "test fixture's own docPersistIdRef",
+    ),
+  };
+}
+
+// The document's own two RT_SlideListWithText containers. A list is the masters list by its own recInstance; every other instance is treated as the slides list, which is what the fidelity suites have always relied on and is correct for a fixture whose slides list precedes its notes list.
+export function slideLists(documentContainer: PptRecord): {
+  readonly masters: PptRecord | undefined;
+  readonly slides: PptRecord | undefined;
+} {
+  const lists = childRecords(documentContainer).filter(
+    (record) => record.header.recType === RT_SlideListWithText,
   );
+  return {
+    masters: lists.find(
+      (record) => record.header.recInstance === SLIDE_LIST_INSTANCE_MASTERS,
+    ),
+    slides: lists.find(
+      (record) => record.header.recInstance !== SLIDE_LIST_INSTANCE_MASTERS,
+    ),
+  };
+}
+
+// The persist ID the first entry of a slide list names. An absent list and a present but empty one are the same failure to a fixture that is supposed to carry one, so both report it the same way.
+export function firstPersistIdRef(
+  list: PptRecord | undefined,
+  what: string,
+): number {
+  const [entry] = list === undefined ? [] : readSlideListWithText(list);
+  if (entry === undefined) {
+    throw new Error(`test fixture always carries a ${what} list entry`);
+  }
+  return entry.persistIdRef;
+}
+
+export function resolveDocumentContainer(
+  currentUserStream: Uint8Array<ArrayBuffer>,
+  powerPointDocumentStream: Uint8Array<ArrayBuffer>,
+): PptRecord {
+  return persistContext(currentUserStream, powerPointDocumentStream)
+    .documentContainer;
 }
 
 export function resolveMasterContainer(
   currentUserStream: Uint8Array<ArrayBuffer>,
   powerPointDocumentStream: Uint8Array<ArrayBuffer>,
 ): PptRecord {
-  const currentUser = readCurrentUserAtom(currentUserStream);
-  const { directory, currentEdit } = buildPersistDirectory(
+  const { streamBytes, directory, documentContainer } = persistContext(
+    currentUserStream,
     powerPointDocumentStream,
-    currentUser.offsetToCurrentEdit,
   );
-  const documentContainer = resolvePersistObject(
-    powerPointDocumentStream,
-    directory,
-    currentEdit.docPersistIdRef,
-    "test fixture's own docPersistIdRef",
-  );
-  const masterList = childRecords(documentContainer).find(
-    (record) =>
-      record.header.recType === RT_SlideListWithText &&
-      record.header.recInstance === SLIDE_LIST_INSTANCE_MASTERS,
-  );
-  const [masterPersist] =
-    masterList === undefined ? [] : readSlideListWithText(masterList);
-  if (masterPersist === undefined) {
-    throw new Error("test fixture always carries a master list entry");
-  }
   return resolvePersistObject(
-    powerPointDocumentStream,
+    streamBytes,
     directory,
-    masterPersist.persistIdRef,
+    firstPersistIdRef(slideLists(documentContainer).masters, "master"),
     "test fixture's own master persist entry",
   );
 }
@@ -66,56 +98,37 @@ export function resolveSlideContainer(
   currentUserStream: Uint8Array<ArrayBuffer>,
   powerPointDocumentStream: Uint8Array<ArrayBuffer>,
 ): PptRecord {
-  const currentUser = readCurrentUserAtom(currentUserStream);
-  const { directory, currentEdit } = buildPersistDirectory(
+  const { streamBytes, directory, documentContainer } = persistContext(
+    currentUserStream,
     powerPointDocumentStream,
-    currentUser.offsetToCurrentEdit,
   );
-  const documentContainer = resolvePersistObject(
-    powerPointDocumentStream,
-    directory,
-    currentEdit.docPersistIdRef,
-    "test fixture's own docPersistIdRef",
-  );
-  const slideList = childRecords(documentContainer).find(
-    (record) =>
-      record.header.recType === RT_SlideListWithText &&
-      record.header.recInstance !== SLIDE_LIST_INSTANCE_MASTERS,
-  );
-  const [slidePersist] =
-    slideList === undefined ? [] : readSlideListWithText(slideList);
-  if (slidePersist === undefined) {
-    throw new Error("test fixture always carries a slide list entry");
-  }
   return resolvePersistObject(
-    powerPointDocumentStream,
+    streamBytes,
     directory,
-    slidePersist.persistIdRef,
+    firstPersistIdRef(slideLists(documentContainer).slides, "slide"),
     "test fixture's own slide persist entry",
   );
 }
 
-// The document's own slide list container itself (RT_SlideListWithText, recInstance SLIDES) — distinct from resolveSlideContainer, which follows its own SlidePersistAtom on to the actual SlideContainer. Needed for fidelity checks against the list's own raw entries (a SlidePersistAtom's cTexts field, an inserted phantom record) rather than anything the slide container holds.
+// The document's own slide list container itself (RT_SlideListWithText, recInstance SLIDES), distinct from resolveSlideContainer, which follows its own SlidePersistAtom on to the actual SlideContainer. Needed for fidelity checks against the list's own raw entries (a SlidePersistAtom's cTexts field, an inserted phantom record) rather than anything the slide container holds.
+export function requireSlideList(documentContainer: PptRecord): PptRecord {
+  const { slides } = slideLists(documentContainer);
+  if (slides === undefined) {
+    throw new Error("test fixture always carries a slide list entry");
+  }
+  return slides;
+}
+
 export function resolveSlideListRecord(
   currentUserStream: Uint8Array<ArrayBuffer>,
   powerPointDocumentStream: Uint8Array<ArrayBuffer>,
 ): PptRecord {
-  const documentContainer = resolveDocumentContainer(
-    currentUserStream,
-    powerPointDocumentStream,
+  return requireSlideList(
+    resolveDocumentContainer(currentUserStream, powerPointDocumentStream),
   );
-  const slideList = childRecords(documentContainer).find(
-    (record) =>
-      record.header.recType === RT_SlideListWithText &&
-      record.header.recInstance !== SLIDE_LIST_INSTANCE_MASTERS,
-  );
-  if (slideList === undefined) {
-    throw new Error("test fixture always carries a slide list entry");
-  }
-  return slideList;
 }
 
-// Recursively asserts no record anywhere beneath `record` has recType 0 — the header a run of raw zero bytes decodes as. A mutant that splices non-byte content (a string, `undefined`) into a children array this package's own writeContainer/concatBytes then silently coerces to zero bytes is otherwise invisible to any test that only checks the real records' own content, since a handful of zero bytes can decode as one or more harmless, ignored phantom records rather than a parse failure.
+// Recursively asserts no record anywhere beneath `record` has recType 0, the header a run of raw zero bytes decodes as. A mutant that splices non-byte content (a string, `undefined`) into a children array this package's own writeContainer/concatBytes then silently coerces to zero bytes is otherwise invisible to any test that only checks the real records' own content, since a handful of zero bytes can decode as one or more harmless, ignored phantom records rather than a parse failure.
 export function assertNoPhantomRecords(record: PptRecord): void {
   for (const child of childRecords(record)) {
     expect(child.header.recType).not.toBe(0);
