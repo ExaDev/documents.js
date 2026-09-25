@@ -978,6 +978,7 @@ export {
 // --- Every DocumentFormat's own source-embedded font faces, dispatched by format — the DocumentFormat-aware counterpart to extractSourceFonts/FontSourcePackage above, for a caller holding a format + bytes rather than an already-decoded Package. ---
 export {
   extractSourceFontsForFormat,
+  isFontSourceFormat,
   UnsupportedFontSourceFormatError,
 } from "./convert/document-fonts";
 

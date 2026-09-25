@@ -128,7 +128,7 @@ export default tseslint.config(
     languageOptions: { globals: { ...globals.node } },
   },
   {
-    // Import-boundary enforcement: UI/route code must go through the RPC client for anything that touches real document bytes — only src/workers/** may call documents.js's conversion/editor functions directly. Uses the typescript-eslint variant of no-restricted-imports (the base rule is turned off below to avoid double-reporting the same import) specifically for its `allowTypeImports` option: a type-only import is erased at compile time regardless of which name it is, so it can never pull the conversion engine into the main bundle — allowImportNames only needs to name genuine runtime values (DocumentFormatSchema/DOCUMENT_FORMATS/columnIndexToLetters), not every type re-exported alongside them.
+    // Import-boundary enforcement: UI/route code must go through the RPC client for anything that touches real document bytes — only src/workers/** may call documents.js's conversion/editor functions directly. Uses the typescript-eslint variant of no-restricted-imports (the base rule is turned off below to avoid double-reporting the same import) specifically for its `allowTypeImports` option: a type-only import is erased at compile time regardless of which name it is, so it can never pull the conversion engine into the main bundle — allowImportNames only needs to name genuine runtime values (DocumentFormatSchema/DOCUMENT_FORMATS/columnIndexToLetters/isFontSourceFormat), not every type re-exported alongside them.
     files: [
       "src/routes/**/*.{ts,tsx}",
       "src/features/**/*.{ts,tsx}",
@@ -148,6 +148,8 @@ export default tseslint.config(
                 "DocumentFormatSchema",
                 "DOCUMENT_FORMATS",
                 "columnIndexToLetters",
+                // Same shape as the three above: a pure predicate over a format string that touches no document bytes. It exists so a page can say a format carries no embedded fonts without calling the extractor that throws for exactly those formats.
+                "isFontSourceFormat",
               ],
               message:
                 "UI code may not import documents.js's conversion/editor functions directly — go through the RPC client (src/rpc/client.ts). Only src/workers/** may call them.",

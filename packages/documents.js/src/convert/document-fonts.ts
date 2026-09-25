@@ -19,7 +19,8 @@ const FONT_SOURCE_FORMATS: Readonly<
   odg: true,
 };
 
-function isFontSourceFormat(
+// Exported because extractSourceFontsForFormat throws for anything else: a caller that wants to say "this format carries no embedded fonts" needs to ask before calling, rather than calling and catching, or restating the list of six formats for itself.
+export function isFontSourceFormat(
   format: DocumentFormat,
 ): format is keyof typeof FONT_SOURCE_FORMATS {
   return format in FONT_SOURCE_FORMATS;
