@@ -7,6 +7,10 @@ import type {
 import { byteAt, uint16At } from "../bytes/view";
 import { pointsFromWpu } from "./units";
 
+// The formula subfunction's tokens start past its own code and its two-byte length word; a Row Information payload is its three bytes between the gates.
+const FORMULA_TOKENS_OFFSET = 3;
+const ROW_INFORMATION_PAYLOAD_SIZE = 3;
+
 // — Tables, per WPFF "D4 Character Functions" (the definition) and "D0 EOL Functions" (the cell and row boundaries) --
 //
 // A WordPerfect table is stated in two halves that sit in different function groups, and neither half is nested inside the other:
@@ -48,18 +52,57 @@ export function readTableColumnWidthPt(
 // Each is gated the way every multi-byte function is — its own code at both ends — and the SDK prints a size against each one. This table is that column, and it is what makes the walk safe: an embedded subfunction whose size is not stated here cannot be stepped over, so the walk stops at it rather than guessing a length and decoding the rest of the list as rubbish.
 //
 // 0x81 is the one variable-length member, and 0x8D the one with no end gate at all ("size = 1"); both are handled by the walker below rather than by this table.
+// Each embedded subfunction's own code and the size the SDK prints against it, named per subfunction.
+const SUBFUNCTION_ROW_INFORMATION_CODE = 0x80;
+const SUBFUNCTION_ROW_INFORMATION_SIZE = 5;
+const SUBFUNCTION_NEW_TOP_GUTTER_SPACING_CODE = 0x82;
+const SUBFUNCTION_NEW_TOP_GUTTER_SPACING_SIZE = 4;
+const SUBFUNCTION_NEW_BOTTOM_GUTTER_SPACING_CODE = 0x83;
+const SUBFUNCTION_NEW_BOTTOM_GUTTER_SPACING_SIZE = 4;
+const SUBFUNCTION_CELL_INFORMATION_CODE = 0x84;
+const SUBFUNCTION_CELL_INFORMATION_SIZE = 9;
+const SUBFUNCTION_CELL_SPANNING_INFORMATION_CODE = 0x85;
+const SUBFUNCTION_CELL_SPANNING_INFORMATION_SIZE = 4;
+const SUBFUNCTION_CELL_FILL_COLORS_CODE = 0x86;
+const SUBFUNCTION_CELL_FILL_COLORS_SIZE = 10;
+const SUBFUNCTION_CELL_LINE_COLOR_CODE = 0x87;
+const SUBFUNCTION_CELL_LINE_COLOR_SIZE = 6;
+const SUBFUNCTION_CELL_NUMBER_TYPE_CODE = 0x88;
+const SUBFUNCTION_CELL_NUMBER_TYPE_SIZE = 5;
+const SUBFUNCTION_CELL_FLOATING_POINT_NUMBER_CODE = 0x89;
+const SUBFUNCTION_CELL_FLOATING_POINT_NUMBER_SIZE = 11;
+const SUBFUNCTION_CELL_PREFIX_FLAG_CODE = 0x8b;
+const SUBFUNCTION_CELL_PREFIX_FLAG_SIZE = 3;
+const SUBFUNCTION_CELL_RECALCULATION_ERROR_NUMBER_CODE = 0x8c;
+const SUBFUNCTION_CELL_RECALCULATION_ERROR_NUMBER_SIZE = 3;
+
 const EMBEDDED_SUBFUNCTION_SIZES: ReadonlyMap<number, number> = new Map([
-  [0x80, 5], // Row Information
-  [0x82, 4], // New Top Gutter Spacing
-  [0x83, 4], // New Bottom Gutter Spacing
-  [0x84, 9], // Cell Information
-  [0x85, 4], // Cell Spanning Information
-  [0x86, 10], // Cell Fill Colors
-  [0x87, 6], // Cell Line Color
-  [0x88, 5], // Cell Number Type
-  [0x89, 11], // Cell Floating Point Number
-  [0x8b, 3], // Cell Prefix Flag
-  [0x8c, 3], // Cell Recalculation Error Number
+  [SUBFUNCTION_ROW_INFORMATION_CODE, SUBFUNCTION_ROW_INFORMATION_SIZE], // Row Information
+  [
+    SUBFUNCTION_NEW_TOP_GUTTER_SPACING_CODE,
+    SUBFUNCTION_NEW_TOP_GUTTER_SPACING_SIZE,
+  ], // New Top Gutter Spacing
+  [
+    SUBFUNCTION_NEW_BOTTOM_GUTTER_SPACING_CODE,
+    SUBFUNCTION_NEW_BOTTOM_GUTTER_SPACING_SIZE,
+  ], // New Bottom Gutter Spacing
+  [SUBFUNCTION_CELL_INFORMATION_CODE, SUBFUNCTION_CELL_INFORMATION_SIZE], // Cell Information
+  [
+    SUBFUNCTION_CELL_SPANNING_INFORMATION_CODE,
+    SUBFUNCTION_CELL_SPANNING_INFORMATION_SIZE,
+  ], // Cell Spanning Information
+  [SUBFUNCTION_CELL_FILL_COLORS_CODE, SUBFUNCTION_CELL_FILL_COLORS_SIZE], // Cell Fill Colors
+  [SUBFUNCTION_CELL_LINE_COLOR_CODE, SUBFUNCTION_CELL_LINE_COLOR_SIZE], // Cell Line Color
+  [SUBFUNCTION_CELL_NUMBER_TYPE_CODE, SUBFUNCTION_CELL_NUMBER_TYPE_SIZE], // Cell Number Type
+  [
+    SUBFUNCTION_CELL_FLOATING_POINT_NUMBER_CODE,
+    SUBFUNCTION_CELL_FLOATING_POINT_NUMBER_SIZE,
+  ], // Cell Floating Point Number
+  [SUBFUNCTION_CELL_PREFIX_FLAG_CODE, SUBFUNCTION_CELL_PREFIX_FLAG_SIZE], // Cell Prefix Flag
+  [
+    SUBFUNCTION_CELL_RECALCULATION_ERROR_NUMBER_CODE,
+    SUBFUNCTION_CELL_RECALCULATION_ERROR_NUMBER_SIZE,
+  ], // Cell Recalculation Error Number
 ]);
 
 // "New Cell Formula Embedded Subfunction ... <129 (0x81)> [size = variable] [length of formula] <tokenized formula> x length of formula [length] <129 (0x81)>" — the code, the length word, the formula, the length word again, the code: six bytes of framing around the formula itself.
@@ -137,7 +180,10 @@ export function readEmbeddedSubfunctions(
         data:
           formulaLength === undefined
             ? nonDeletable.subarray(cursor + 1, cursor + size - 1)
-            : nonDeletable.subarray(cursor + 3, cursor + 3 + formulaLength),
+            : nonDeletable.subarray(
+                cursor + FORMULA_TOKENS_OFFSET,
+                cursor + FORMULA_TOKENS_OFFSET + formulaLength,
+              ),
       });
       cursor += size;
     }
@@ -169,7 +215,7 @@ export function readRowInformation(
   data: Uint8Array,
 ): WpdRowInformation | undefined {
   const flags = data[0];
-  if (flags === undefined || data.length < 3) {
+  if (flags === undefined || data.length < ROW_INFORMATION_PAYLOAD_SIZE) {
     return undefined;
   }
   const heightWpu = uint16At(data, 1);
@@ -257,39 +303,68 @@ const COLOR_COMPONENT_MAX = 255;
 const RGBS_SIZE = 4;
 const SHADE_OFFSET = 3;
 const FULL_SHADE = 255;
+// A percentage is hundredths; a shade byte takes one of 256 values.
+const PERCENT_SCALE = 100;
+const SHADE_BYTE_VALUES = 256;
 
 // Every percentN member ContentCellPatternTypeSchema defines, ascending — the discrete steps this reader's own derived foreground-coverage percentage (see this file's own top-of-file note) snaps onto, since the schema states a two-colour pattern fill only as one of these named densities, never an arbitrary float.
+// Each percentN density the schema defines, named by its own percentage.
+const PERCENT_5 = 5;
+const PERCENT_10 = 10;
+const PERCENT_12 = 12;
+const PERCENT_15 = 15;
+const PERCENT_20 = 20;
+const PERCENT_25 = 25;
+const PERCENT_30 = 30;
+const PERCENT_35 = 35;
+const PERCENT_37 = 37;
+const PERCENT_40 = 40;
+const PERCENT_45 = 45;
+const PERCENT_50 = 50;
+const PERCENT_55 = 55;
+const PERCENT_60 = 60;
+const PERCENT_62 = 62;
+const PERCENT_65 = 65;
+const PERCENT_70 = 70;
+const PERCENT_75 = 75;
+const PERCENT_80 = 80;
+const PERCENT_85 = 85;
+const PERCENT_87 = 87;
+const PERCENT_90 = 90;
+const PERCENT_95 = 95;
+
 const PERCENT_STEPS: readonly [number, ContentCellPatternType][] = [
-  [5, "percent5"],
-  [10, "percent10"],
-  [12, "percent12"],
-  [15, "percent15"],
-  [20, "percent20"],
-  [25, "percent25"],
-  [30, "percent30"],
-  [35, "percent35"],
-  [37, "percent37"],
-  [40, "percent40"],
-  [45, "percent45"],
-  [50, "percent50"],
-  [55, "percent55"],
-  [60, "percent60"],
-  [62, "percent62"],
-  [65, "percent65"],
-  [70, "percent70"],
-  [75, "percent75"],
-  [80, "percent80"],
-  [85, "percent85"],
-  [87, "percent87"],
-  [90, "percent90"],
-  [95, "percent95"],
+  [PERCENT_5, "percent5"],
+  [PERCENT_10, "percent10"],
+  [PERCENT_12, "percent12"],
+  [PERCENT_15, "percent15"],
+  [PERCENT_20, "percent20"],
+  [PERCENT_25, "percent25"],
+  [PERCENT_30, "percent30"],
+  [PERCENT_35, "percent35"],
+  [PERCENT_37, "percent37"],
+  [PERCENT_40, "percent40"],
+  [PERCENT_45, "percent45"],
+  [PERCENT_50, "percent50"],
+  [PERCENT_55, "percent55"],
+  [PERCENT_60, "percent60"],
+  [PERCENT_62, "percent62"],
+  [PERCENT_65, "percent65"],
+  [PERCENT_70, "percent70"],
+  [PERCENT_75, "percent75"],
+  [PERCENT_80, "percent80"],
+  [PERCENT_85, "percent85"],
+  [PERCENT_87, "percent87"],
+  [PERCENT_90, "percent90"],
+  [PERCENT_95, "percent95"],
 ];
 
 // Precomputed once, at module load, for every one of the 256 possible background shade bytes: which PERCENT_STEPS entry the resulting foreground-coverage percentage is nearest to. The "which candidate is strictly closer" comparison this needs only ever matters across this one, fixed, exhaustively enumerable domain, not per document read, so it runs here rather than inside readCellFill.
 const PATTERN_TYPE_BY_SHADE: readonly ContentCellPatternType[] = Array.from(
-  { length: 256 },
+  { length: SHADE_BYTE_VALUES },
   (_, shade) => {
-    const foregroundCoveragePercent = 100 - (shade / COLOR_COMPONENT_MAX) * 100;
+    const foregroundCoveragePercent =
+      PERCENT_SCALE - (shade / COLOR_COMPONENT_MAX) * PERCENT_SCALE;
     return PERCENT_STEPS.reduce((best, step) =>
       Math.abs(step[0] - foregroundCoveragePercent) <
       Math.abs(best[0] - foregroundCoveragePercent)

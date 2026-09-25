@@ -1,6 +1,15 @@
 import { byteAt, sliceAt, uint16At } from "../bytes/view";
 import { WpdFormatError } from "../errors";
 
+// Hex, for printing a function code the way the SDK's own tables do.
+const HEX_RADIX = 16;
+
+// A variable-length function's own header: group, subgroup, a two-byte size, and the flags byte; the high bit of the flags byte marks prefix data. The trailing size word sits three bytes from the end (size short, then the end gate).
+const VARIABLE_FUNCTION_FLAGS_OFFSET = 4;
+const VARIABLE_FUNCTION_HEADER_SIZE = 5;
+const PREFIX_DATA_FLAG = 0x80;
+const TRAILING_SIZE_OFFSET = 3;
+
 // — The document area's function-code stream, per WPFF Document Structure, "Document Area" --
 //
 // "Document formatting is accomplished by embedding function codes in the text of a document. A function is any byte greater than 127 (0x7F)." Everything at or below 0x7F is a literal character, and the four ranges above it are these: 0x80-0xCF single-byte functions, standing alone with no payload and no end gate; 0xD0-0xEF variable-length multi-byte functions, self-describing through a size field; 0xF0-0xFE fixed-length multi-byte functions, whose length this module holds as a table; and 0xFF, which "cannot be used. -1 is reserved so no size is assigned to this value."
@@ -55,22 +64,29 @@ export const FIRST_VARIABLE_FUNCTION = 0xd0;
 export const FIRST_FIXED_FUNCTION = 0xf0;
 
 // The SDK's "Fixed-Length Multi-Byte Functions" size table, indexed by code less 0xF0. Every entry counts both gates, so the smallest (3) is a gate, one payload byte, and a gate — the shape of Attribute On and Attribute Off. 0xFF has no entry at all: "Cannot be used."
+// Each size by its own shape: the entry counts both gates, so its payload is its size minus two.
+const FIXED_FUNCTION_TWO_PAYLOAD_BYTE_SIZE = 4; // a gate, two payload bytes, and a gate
+const FIXED_FUNCTION_THREE_PAYLOAD_BYTE_SIZE = 5; // a gate, three payload bytes, and a gate
+const FIXED_FUNCTION_ONE_PAYLOAD_BYTE_SIZE = 3; // a gate, one payload byte, and a gate
+const FIXED_FUNCTION_FOUR_PAYLOAD_BYTE_SIZE = 6; // a gate, four payload bytes, and a gate
+const FIXED_FUNCTION_SIX_PAYLOAD_BYTE_SIZE = 8; // a gate, six payload bytes, and a gate
+
 const FIXED_FUNCTION_SIZES: readonly number[] = [
-  4, // 0xF0 Extended Character
-  5, // 0xF1 Undo
-  3, // 0xF2 Attribute On
-  3, // 0xF3 Attribute Off
-  3, // 0xF4 reserved
-  3, // 0xF5 reserved
-  4, // 0xF6 reserved
-  4, // 0xF7 reserved
-  4, // 0xF8 reserved
-  5, // 0xF9 reserved
-  5, // 0xFA reserved
-  6, // 0xFB Highlight On
-  6, // 0xFC Highlight Off
-  8, // 0xFD reserved
-  8, // 0xFE reserved
+  FIXED_FUNCTION_TWO_PAYLOAD_BYTE_SIZE, // 0xF0 Extended Character
+  FIXED_FUNCTION_THREE_PAYLOAD_BYTE_SIZE, // 0xF1 Undo
+  FIXED_FUNCTION_ONE_PAYLOAD_BYTE_SIZE, // 0xF2 Attribute On
+  FIXED_FUNCTION_ONE_PAYLOAD_BYTE_SIZE, // 0xF3 Attribute Off
+  FIXED_FUNCTION_ONE_PAYLOAD_BYTE_SIZE, // 0xF4 reserved
+  FIXED_FUNCTION_ONE_PAYLOAD_BYTE_SIZE, // 0xF5 reserved
+  FIXED_FUNCTION_TWO_PAYLOAD_BYTE_SIZE, // 0xF6 reserved
+  FIXED_FUNCTION_TWO_PAYLOAD_BYTE_SIZE, // 0xF7 reserved
+  FIXED_FUNCTION_TWO_PAYLOAD_BYTE_SIZE, // 0xF8 reserved
+  FIXED_FUNCTION_THREE_PAYLOAD_BYTE_SIZE, // 0xF9 reserved
+  FIXED_FUNCTION_THREE_PAYLOAD_BYTE_SIZE, // 0xFA reserved
+  FIXED_FUNCTION_FOUR_PAYLOAD_BYTE_SIZE, // 0xFB Highlight On
+  FIXED_FUNCTION_FOUR_PAYLOAD_BYTE_SIZE, // 0xFC Highlight Off
+  FIXED_FUNCTION_SIX_PAYLOAD_BYTE_SIZE, // 0xFD reserved
+  FIXED_FUNCTION_SIX_PAYLOAD_BYTE_SIZE, // 0xFE reserved
 ];
 
 // A variable-length function with neither prefix IDs nor any data at all: two gates, the size field twice, the subgroup, the flags byte, and the non-deletable size. Every "[size = 10]" the SDK prints against an encased function with no payload confirms the arithmetic.
@@ -87,24 +103,24 @@ function readVariableFunction(
   const group = byteAt(bytes, offset);
   const subgroup = byteAt(bytes, offset + 1);
   const size = uint16At(bytes, offset + 2);
-  const flags = byteAt(bytes, offset + 4);
+  const flags = byteAt(bytes, offset + VARIABLE_FUNCTION_FLAGS_OFFSET);
 
   if (size < MIN_VARIABLE_FUNCTION_SIZE) {
     throw new WpdFormatError(
-      `The variable-length function 0x${group.toString(16).toUpperCase()} at offset ${offset} declares a size of ${size}, below the ${MIN_VARIABLE_FUNCTION_SIZE} bytes its own gates and fields occupy.`,
+      `The variable-length function 0x${group.toString(HEX_RADIX).toUpperCase()} at offset ${offset} declares a size of ${size}, below the ${MIN_VARIABLE_FUNCTION_SIZE} bytes its own gates and fields occupy.`,
     );
   }
   const end = offset + size;
   if (end > limit) {
     throw new WpdFormatError(
-      `The variable-length function 0x${group.toString(16).toUpperCase()} at offset ${offset} declares a size of ${size}, which runs past the end of the document area at offset ${limit}.`,
+      `The variable-length function 0x${group.toString(HEX_RADIX).toUpperCase()} at offset ${offset} declares a size of ${size}, which runs past the end of the document area at offset ${limit}.`,
     );
   }
 
-  let cursor = offset + 5;
+  let cursor = offset + VARIABLE_FUNCTION_HEADER_SIZE;
   const prefixIds: number[] = [];
   // "When the flags byte has the high bit set, there is prefix data associated with the function. The byte following the flags byte (the number of prefix IDs byte) shows how many prefix IDs are referenced."
-  if ((flags & 0x80) !== 0) {
+  if ((flags & PREFIX_DATA_FLAG) !== 0) {
     const prefixIdCount = byteAt(bytes, cursor);
     cursor += 1;
     for (let index = 0; index < prefixIdCount; index += 1) {
@@ -118,22 +134,22 @@ function readVariableFunction(
   const availableForData = end - VARIABLE_FUNCTION_TRAILER_SIZE - cursor;
   if (nonDeletableSize > availableForData) {
     throw new WpdFormatError(
-      `The variable-length function 0x${group.toString(16).toUpperCase()} subgroup ${subgroup} at offset ${offset} declares ${nonDeletableSize} bytes of non-deletable data, but only ${availableForData} remain inside its own ${size}-byte extent.`,
+      `The variable-length function 0x${group.toString(HEX_RADIX).toUpperCase()} subgroup ${subgroup} at offset ${offset} declares ${nonDeletableSize} bytes of non-deletable data, but only ${availableForData} remain inside its own ${size}-byte extent.`,
     );
   }
   const nonDeletable = sliceAt(bytes, cursor, nonDeletableSize);
 
   // "Each end gate is preceded by a size value (short), which should always be the same value as the size encountered at the beginning of the function." Checking it is what turns a mis-stepped walk into an immediate, located failure.
-  const trailingSize = uint16At(bytes, end - 3);
+  const trailingSize = uint16At(bytes, end - TRAILING_SIZE_OFFSET);
   if (trailingSize !== size) {
     throw new WpdFormatError(
-      `The variable-length function 0x${group.toString(16).toUpperCase()} at offset ${offset} opens with size ${size} but closes with size ${trailingSize}.`,
+      `The variable-length function 0x${group.toString(HEX_RADIX).toUpperCase()} at offset ${offset} opens with size ${size} but closes with size ${trailingSize}.`,
     );
   }
   const endGate = byteAt(bytes, end - 1);
   if (endGate !== group) {
     throw new WpdFormatError(
-      `The variable-length function at offset ${offset} opens with gate 0x${group.toString(16).toUpperCase()} but closes with 0x${endGate.toString(16).toUpperCase()}.`,
+      `The variable-length function at offset ${offset} opens with gate 0x${group.toString(HEX_RADIX).toUpperCase()} but closes with 0x${endGate.toString(HEX_RADIX).toUpperCase()}.`,
     );
   }
 
@@ -160,19 +176,19 @@ function readFixedFunction(
   const size = FIXED_FUNCTION_SIZES[code - FIRST_FIXED_FUNCTION];
   if (size === undefined) {
     throw new WpdFormatError(
-      `Function code 0x${code.toString(16).toUpperCase()} at offset ${offset} cannot appear in a document: -1 is reserved and has no assigned size.`,
+      `Function code 0x${code.toString(HEX_RADIX).toUpperCase()} at offset ${offset} cannot appear in a document: -1 is reserved and has no assigned size.`,
     );
   }
   const end = offset + size;
   if (end > limit) {
     throw new WpdFormatError(
-      `The ${size}-byte fixed-length function 0x${code.toString(16).toUpperCase()} at offset ${offset} runs past the end of the document area at offset ${limit}.`,
+      `The ${size}-byte fixed-length function 0x${code.toString(HEX_RADIX).toUpperCase()} at offset ${offset} runs past the end of the document area at offset ${limit}.`,
     );
   }
   const endGate = byteAt(bytes, end - 1);
   if (endGate !== code) {
     throw new WpdFormatError(
-      `The fixed-length function at offset ${offset} opens with gate 0x${code.toString(16).toUpperCase()} but closes with 0x${endGate.toString(16).toUpperCase()}.`,
+      `The fixed-length function at offset ${offset} opens with gate 0x${code.toString(HEX_RADIX).toUpperCase()} but closes with 0x${endGate.toString(HEX_RADIX).toUpperCase()}.`,
     );
   }
   return {
