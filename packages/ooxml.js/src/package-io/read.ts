@@ -23,21 +23,43 @@ export function packageFromEntries(
   return { parts };
 }
 
+// The three-byte UTF-8 BOM signature (EF BB BF), named byte-by-byte matching this package's own established signature-naming convention (see typed image/sniff.ts).
+const UTF8_BOM_BYTE_0 = 0xef;
+const UTF8_BOM_BYTE_1 = 0xbb;
+const UTF8_BOM_BYTE_2 = 0xbf;
+const UTF8_BOM_LENGTH_BYTES = 3;
+
+// The XML-significant whitespace codepoints XML 1.0 SS2.3's own S production permits before the root element's opening '<': space, tab, LF, CR.
+const ASCII_SPACE = 0x20;
+const ASCII_TAB = 0x09;
+const ASCII_LF = 0x0a;
+const ASCII_CR = 0x0d;
+const ASCII_LESS_THAN = 0x3c;
+
 // An XML part (after any BOM/whitespace) starts with '<'; no standard OOXML binary part (png, jpeg, font, emf, embedded zip, ...) starts with '<', so a misclassification only ever stores an XML part losslessly as base64 — it never misparses a binary part.
 function looksLikeXml(bytes: Uint8Array<ArrayBuffer>): boolean {
   let i = 0;
   // No separate length guard needed: bytes[0]/[1]/[2] are each `undefined` for any array shorter than three bytes (an out-of-range index never throws), and undefined can never equal a real BOM byte value — so a short array already fails this comparison on its own.
-  if (bytes[0] === 0xef && bytes[1] === 0xbb && bytes[2] === 0xbf) {
-    i = 3;
+  if (
+    bytes[0] === UTF8_BOM_BYTE_0 &&
+    bytes[1] === UTF8_BOM_BYTE_1 &&
+    bytes[2] === UTF8_BOM_BYTE_2
+  ) {
+    i = UTF8_BOM_LENGTH_BYTES;
   }
   // Bounded by the data itself rather than by a separately tracked length: bytes[i] is `undefined` the moment i runs off the end, which fails every comparison in the loop body below and falls through to the same `return false` the length-bounded loop's own normal exit already reached.
   while (bytes[i] !== undefined) {
     const b = bytes[i]!;
-    if (b === 0x20 || b === 0x09 || b === 0x0a || b === 0x0d) {
+    if (
+      b === ASCII_SPACE ||
+      b === ASCII_TAB ||
+      b === ASCII_LF ||
+      b === ASCII_CR
+    ) {
       i = i + 1;
       continue;
     }
-    return b === 0x3c;
+    return b === ASCII_LESS_THAN;
   }
   return false;
 }
