@@ -15,6 +15,8 @@ const SETUP_FLAG_NO_ORIENT = 0x0040;
 /** WsBool's own fFitToPage bit — field G of [MS-XLS] 2.4.351, the ninth bit of its single 16-bit field (fShowAutoBreaks, reserved1 (3 bits), fDialog, fApplyStyles, fRowSumsBelow, fColSumsRight, fFitToPage, ...). */
 export const WSBOOL_FLAG_FIT_TO_PAGE = 0x0100;
 
+const HUNDREDTHS_ROUNDING_FACTOR = 100; // module-eval-time table below calls inchPaper/millimetrePaper, which need this const already initialised, so it is declared ahead of the table rather than beside roundToHundredths further down.
+
 /**
  * The Setup record's fields, as this package reads and writes them.
  *
@@ -69,31 +71,54 @@ export function unpackSetupFlags(grbit: number): {
  *
  * The full enumeration runs to 118 entries, most of them envelopes, rotated variants, and regional stationery sizes; the ones here are the office paper sizes a spreadsheet is realistically printed on, entered exactly as [MS-XLS]'s own table names them. A code outside this table — including 0 and everything at 256 or above, which the spec reserves for "custom printer paper sizes" no reader can resolve without the printer's own Pls record — resolves to no page size at all, and content.ts falls back to its documented default rather than guessing a size the file never stated.
  */
+// [MS-XLS] 2.4.257's own iPaperSize codes for the entries PAPER_SIZE_BY_CODE below states, named exactly as that table names each one.
+const PAPER_US_LETTER = 1;
+const PAPER_US_LETTER_SMALL = 2;
+const PAPER_US_TABLOID = 3;
+const PAPER_US_LEDGER = 4;
+const PAPER_US_LEGAL = 5;
+const PAPER_US_STATEMENT = 6;
+const PAPER_US_EXECUTIVE = 7;
+const PAPER_A3 = 8;
+const PAPER_A4 = 9;
+const PAPER_A4_SMALL = 10;
+const PAPER_A5 = 11;
+const PAPER_B4_JIS = 12;
+const PAPER_B5_JIS = 13;
+const PAPER_FOLIO = 14;
+const PAPER_QUARTO = 15;
+const PAPER_10X14 = 16;
+const PAPER_11X17 = 17;
+const PAPER_US_NOTE = 18;
+const PAPER_B4_ISO = 42;
+const PAPER_A2 = 66;
+const PAPER_A6 = 70;
+
 const PAPER_SIZE_BY_CODE: ReadonlyMap<number, PageSize> = new Map<
   number,
   PageSize
 >([
-  [1, inchPaper(8.5, 11)], // US Letter 8 1/2 x 11 in
-  [2, inchPaper(8.5, 11)], // US Letter Small 8 1/2 x 11 in
-  [3, inchPaper(11, 17)], // US Tabloid 11 x 17 in
-  [4, inchPaper(17, 11)], // US Ledger 17 x 11 in
-  [5, inchPaper(8.5, 14)], // US Legal 8 1/2 x 14 in
-  [6, inchPaper(5.5, 8.5)], // US Statement 5 1/2 x 8 1/2 in
-  [7, inchPaper(7.25, 10.5)], // US Executive 7 1/4 x 10 1/2 in
-  [8, millimetrePaper(297, 420)], // A3 297 x 420 mm
-  [9, millimetrePaper(210, 297)], // A4 210 x 297 mm
-  [10, millimetrePaper(210, 297)], // A4 Small 210 x 297 mm
-  [11, millimetrePaper(148, 210)], // A5 148 x 210 mm
-  [12, millimetrePaper(250, 354)], // B4 (JIS) 250 x 354
-  [13, millimetrePaper(182, 257)], // B5 (JIS) 182 x 257 mm
-  [14, inchPaper(8.5, 13)], // Folio 8 1/2 x 13 in
-  [15, millimetrePaper(215, 275)], // Quarto 215 x 275 mm
-  [16, inchPaper(10, 14)], // 10 x 14 in
-  [17, inchPaper(11, 17)], // 11 x 17 in
-  [18, inchPaper(8.5, 11)], // US Note 8 1/2 x 11 in
-  [42, millimetrePaper(250, 353)], // B4 (ISO) 250 x 353 mm
-  [66, millimetrePaper(420, 594)], // A2 420 x 594 mm
-  [70, millimetrePaper(105, 148)], // A6 105 x 148 mm
+  [PAPER_US_LETTER, inchPaper("8.5x11")], // US Letter 8 1/2 x 11 in
+  [PAPER_US_LETTER_SMALL, inchPaper("8.5x11")], // US Letter Small 8 1/2 x 11 in
+  [PAPER_US_TABLOID, inchPaper("11x17")], // US Tabloid 11 x 17 in
+  [PAPER_US_LEDGER, inchPaper("17x11")], // US Ledger 17 x 11 in
+  [PAPER_US_LEGAL, inchPaper("8.5x14")], // US Legal 8 1/2 x 14 in
+  [PAPER_US_STATEMENT, inchPaper("5.5x8.5")], // US Statement 5 1/2 x 8 1/2 in
+  [PAPER_US_EXECUTIVE, inchPaper("7.25x10.5")], // US Executive 7 1/4 x 10 1/2 in
+  [PAPER_A3, millimetrePaper("297x420")], // A3 297 x 420 mm
+  [PAPER_A4, millimetrePaper("210x297")], // A4 210 x 297 mm
+  [PAPER_A4_SMALL, millimetrePaper("210x297")], // A4 Small 210 x 297 mm
+  [PAPER_A5, millimetrePaper("148x210")], // A5 148 x 210 mm
+  [PAPER_B4_JIS, millimetrePaper("250x354")], // B4 (JIS) 250 x 354
+  [PAPER_B5_JIS, millimetrePaper("182x257")], // B5 (JIS) 182 x 257 mm
+  [PAPER_FOLIO, inchPaper("8.5x13")], // Folio 8 1/2 x 13 in
+  [PAPER_QUARTO, millimetrePaper("215x275")], // Quarto 215 x 275 mm
+  [PAPER_10X14, inchPaper("10x14")], // 10 x 14 in
+  [PAPER_11X17, inchPaper("11x17")], // 11 x 17 in
+  [PAPER_US_NOTE, inchPaper("8.5x11")], // US Note 8 1/2 x 11 in
+  [PAPER_B4_ISO, millimetrePaper("250x353")], // B4 (ISO) 250 x 353 mm
+  [PAPER_A2, millimetrePaper("420x594")], // A2 420 x 594 mm
+  [PAPER_A6, millimetrePaper("105x148")], // A6 105 x 148 mm
 ]);
 
 /**
@@ -156,17 +181,32 @@ function matches(a: number, b: number): boolean {
 
 /** Rounded to hundredths of a point, which is how document-schema.js spells its own PAGE_SIZE_A4 (595.28 x 841.89 pt, the same 210 x 297 mm converted the same way). Rounding here rather than carrying the full conversion is what makes a code-9 page size read out of a real file EQUAL that shared constant instead of merely being within a rounding error of it. */
 function roundToHundredths(value: number): number {
-  return Math.round(value * 100) / 100;
+  return (
+    Math.round(value * HUNDREDTHS_ROUNDING_FACTOR) / HUNDREDTHS_ROUNDING_FACTOR
+  );
 }
 
-function inchPaper(widthIn: number, heightIn: number): PageSize {
+/** A "WIDTHxHEIGHT" pair, in the paper table's own unit — a single literal per table entry, rather than two, so PAPER_SIZE_BY_CODE states each size the same compact way [MS-XLS] 2.4.257's own comment column does ("8 1/2 x 11 in"). */
+type Dimensions = `${number}x${number}`;
+
+function parseDimensions(dimensions: Dimensions): readonly [number, number] {
+  const [width, height] = dimensions.split("x");
+  if (width === undefined || height === undefined) {
+    throw new Error(`invalid paper dimensions: ${dimensions}`);
+  }
+  return [Number(width), Number(height)];
+}
+
+function inchPaper(dimensions: Dimensions): PageSize {
+  const [widthIn, heightIn] = parseDimensions(dimensions);
   return {
     widthPt: roundToHundredths(inchesToPoints(widthIn)),
     heightPt: roundToHundredths(inchesToPoints(heightIn)),
   };
 }
 
-function millimetrePaper(widthMm: number, heightMm: number): PageSize {
+function millimetrePaper(dimensions: Dimensions): PageSize {
+  const [widthMm, heightMm] = parseDimensions(dimensions);
   return {
     widthPt: roundToHundredths(millimetresToPoints(widthMm)),
     heightPt: roundToHundredths(millimetresToPoints(heightMm)),
