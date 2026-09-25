@@ -16,6 +16,17 @@ const DEFAULT_COLORS = 1;
 const DEFAULT_BITS_PER_COMPONENT = 8;
 const DEFAULT_COLUMNS = 1;
 
+// One byte's worth of bits, used below both to convert a component's bit depth to a byte count (ceiling division) and to shift a byte into the high half of a 16-bit sample.
+const BITS_PER_BYTE = 8;
+// Masks the low 8 bits of a value down to one byte.
+const BYTE_MASK = 0xff;
+// PDF /Predictor values (ISO 32000-1 Table 8): 10-15 select one of PNG's five per-scanline filters (unfilterScanlines below reads the actual filter-type byte per row); 10 is the lowest of that range.
+const PNG_PREDICTOR_CODE_MIN = 10;
+// A component's bit depth that packs into two bytes per sample (as opposed to DEFAULT_BITS_PER_COMPONENT's one-byte 8-bit depth).
+const SIXTEEN_BIT_COMPONENT = 16;
+// Masks a value down to 16 bits, the width of a two-byte TIFF-predictor sample sum before it is split back into high/low bytes.
+const SIXTEEN_BIT_SAMPLE_MASK = 0xffff;
+
 export function readPredictorParams(
   parms: PdfDict | undefined,
 ): PredictorParams {
@@ -44,15 +55,15 @@ export function applyPredictor(
   }
   const bpp = Math.max(
     1,
-    Math.ceil((params.colors * params.bitsPerComponent) / 8),
+    Math.ceil((params.colors * params.bitsPerComponent) / BITS_PER_BYTE),
   );
   const bytesPerRow = Math.ceil(
-    (params.colors * params.bitsPerComponent * params.columns) / 8,
+    (params.colors * params.bitsPerComponent * params.columns) / BITS_PER_BYTE,
   );
   if (params.predictor === 2) {
     return applyTiffPredictor(data, params, bytesPerRow, sink);
   }
-  if (params.predictor >= 10) {
+  if (params.predictor >= PNG_PREDICTOR_CODE_MIN) {
     const height =
       bytesPerRow > 0 ? Math.floor(data.length / (bytesPerRow + 1)) : 0;
     return unfilterScanlines(data, height, bytesPerRow, bpp);
@@ -72,7 +83,10 @@ function applyTiffPredictor(
   bytesPerRow: number,
   sink: PdfDiagnosticSink,
 ): Uint8Array<ArrayBuffer> {
-  if (params.bitsPerComponent !== 8 && params.bitsPerComponent !== 16) {
+  if (
+    params.bitsPerComponent !== BITS_PER_BYTE &&
+    params.bitsPerComponent !== SIXTEEN_BIT_COMPONENT
+  ) {
     sink({
       code: "pdf/unsupported-predictor",
       severity: "warning",
@@ -83,7 +97,8 @@ function applyTiffPredictor(
   const out = new Uint8Array(data.length);
   out.set(data);
   const rowCount = bytesPerRow > 0 ? Math.floor(out.length / bytesPerRow) : 0;
-  const componentStride = params.bitsPerComponent === 16 ? 2 : 1;
+  const componentStride =
+    params.bitsPerComponent === SIXTEEN_BIT_COMPONENT ? 2 : 1;
   const componentsPerPixel = params.colors;
   for (let row = 0; row < rowCount; row++) {
     const rowStart = row * bytesPerRow;
@@ -95,13 +110,14 @@ function applyTiffPredictor(
       const i = rowStart + component * componentStride;
       const prevI = i - componentsPerPixel * componentStride;
       if (componentStride === 1) {
-        out[i] = ((out[i] ?? 0) + (out[prevI] ?? 0)) & 0xff;
+        out[i] = ((out[i] ?? 0) + (out[prevI] ?? 0)) & BYTE_MASK;
       } else {
-        const current = ((out[i] ?? 0) << 8) | (out[i + 1] ?? 0);
-        const prev = ((out[prevI] ?? 0) << 8) | (out[prevI + 1] ?? 0);
-        const sum = (current + prev) & 0xffff;
-        out[i] = (sum >> 8) & 0xff;
-        out[i + 1] = sum & 0xff;
+        const current = ((out[i] ?? 0) << BITS_PER_BYTE) | (out[i + 1] ?? 0);
+        const prev =
+          ((out[prevI] ?? 0) << BITS_PER_BYTE) | (out[prevI + 1] ?? 0);
+        const sum = (current + prev) & SIXTEEN_BIT_SAMPLE_MASK;
+        out[i] = (sum >> BITS_PER_BYTE) & BYTE_MASK;
+        out[i + 1] = sum & BYTE_MASK;
       }
     }
   }
