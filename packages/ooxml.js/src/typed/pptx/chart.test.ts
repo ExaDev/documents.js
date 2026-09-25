@@ -82,7 +82,12 @@ describe("readChartTable", () => {
       ),
     );
     const table = readChartTable(chartRoot, { ...FRAME, widthPt: 400 });
-    expect(table?.columns.map((c) => c.widthPt)).toEqual([200, 200]);
+    // 400pt split evenly across the category column and the one series column.
+    const EVEN_COLUMN_WIDTH_PT = 200;
+    expect(table?.columns.map((c) => c.widthPt)).toEqual([
+      EVEN_COLUMN_WIDTH_PT,
+      EVEN_COLUMN_WIDTH_PT,
+    ]);
   });
 
   it("sorts category indexes NUMERICALLY, not lexicographically or in insertion order", () => {

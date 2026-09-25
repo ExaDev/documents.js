@@ -205,8 +205,10 @@ function txStyleTagFor(
 }
 
 // a:lvl1pPr..a:lvl9pPr are 1-indexed in the XML; `level` here is 0-indexed, matching ContentParagraph.list.level (mirroring WordprocessingML's own 0-indexed w:ilvl).
+const MAX_ZERO_INDEXED_LEVEL = 8; // a:lvl9pPr, the last of the nine.
+
 function levelTag(level: number): string {
-  const clamped = Math.min(Math.max(level, 0), 8);
+  const clamped = Math.min(Math.max(level, 0), MAX_ZERO_INDEXED_LEVEL);
   return `a:lvl${clamped + 1}pPr`;
 }
 
