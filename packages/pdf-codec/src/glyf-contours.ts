@@ -25,6 +25,10 @@ const FLAG_Y_SAME_OR_POSITIVE = 0x20;
 // A composite may reference another composite, matching glyf.ts's own MAX_COMPOSITE_DEPTH: the format sets no nesting limit, so a cyclic component chain must terminate here rather than in the stack.
 const MAX_COMPOSITE_DEPTH = 5;
 
+// Composite glyph flag bits (ISO/IEC 14496-22 clause 5.3.3.1), matching glyf.ts's own SCALED_COMPONENT_OFFSET/UNSCALED_COMPONENT_OFFSET precedence: SCALED_COMPONENT_OFFSET (and only it, since UNSCALED_COMPONENT_OFFSET wins where a font sets both) puts the component offset in the component's own space, so it goes through the same transform the outline does.
+const SCALED_COMPONENT_OFFSET = 0x0800;
+const UNSCALED_COMPONENT_OFFSET = 0x1000;
+
 // Decodes one simple glyph's contours from its own 'glyf' bytes (everything after the 10-byte header). Returns undefined rather than a partial outline: end-point indices must be strictly increasing and land inside the flag/coordinate arrays the glyph actually carries, and a glyph that violates either is malformed — half a glyph rendered is worse than no glyph rendered plus the caller's diagnostic.
 function decodeSimpleContours(
   glyph: Uint8Array<ArrayBuffer>,
@@ -140,7 +144,8 @@ function placeComponentContours(
 ): readonly (readonly GlyphContourPoint[])[] {
   const [a, b, c, d] = component.transform ?? [1, 0, 0, 1];
   const scaledOffset =
-    (component.flags & 0x0800) !== 0 && (component.flags & 0x1000) === 0;
+    (component.flags & SCALED_COMPONENT_OFFSET) !== 0 &&
+    (component.flags & UNSCALED_COMPONENT_OFFSET) === 0;
   const dx = scaledOffset
     ? a * component.argument1 + c * component.argument2
     : component.argument1;
