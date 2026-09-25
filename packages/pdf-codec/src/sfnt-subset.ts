@@ -53,6 +53,15 @@ const LOCA_LONG_ENTRY_SIZE = 4;
 
 const TABLE_DIRECTORY_HEADER_SIZE = 12;
 const TABLE_RECORD_SIZE = 16;
+// Field offsets within the sfnt Offset Table (clause 4.2), following its 4-byte sfntVersion: numTables, searchRange, entrySelector, rangeShift, each a uint16.
+const SFNT_HEADER_NUM_TABLES_OFFSET = 4;
+const SFNT_HEADER_SEARCH_RANGE_OFFSET = 6;
+const SFNT_HEADER_ENTRY_SELECTOR_OFFSET = 8;
+const SFNT_HEADER_RANGE_SHIFT_OFFSET = 10;
+// Field offsets within one Table Record (clause 4.2): a 4-byte tag, then checkSum, offset, and length, each a uint32.
+const TABLE_RECORD_CHECKSUM_OFFSET = 4;
+const TABLE_RECORD_TABLE_OFFSET_OFFSET = 8;
+const TABLE_RECORD_LENGTH_OFFSET = 12;
 const SFNT_VERSION_TRUETYPE = 0x00010000;
 // The value a whole file's checksum is defined to sum to once 'head's own checkSumAdjustment is filled in (clause 4.1) — so the adjustment is this constant minus the checksum of the file with that field zeroed.
 const CHECKSUM_ADJUSTMENT_MAGIC = 0xb1b0afba;
@@ -66,13 +75,22 @@ function alignUp(value: number): number {
   return Math.ceil(value / GLYPH_ALIGNMENT) * GLYPH_ALIGNMENT;
 }
 
+// Bits in one byte, and the mask that isolates one once a value has been shifted down to its low byte.
+const BITS_PER_BYTE = 8;
+const BYTE_MASK = 0xff;
+// Shift amounts to bring the 2nd and 1st (most significant) bytes of a big-endian uint32 down to the low byte in turn; the 8-bit shift for the 3rd byte reuses BITS_PER_BYTE directly.
+const U32_BYTE_2_SHIFT = 16;
+const U32_BYTE_1_SHIFT = 24;
+// Offset of the least significant byte within a 4-byte big-endian value; offsets 1 and 2 need no name of their own (both exempt from this rule as structurally self-evident).
+const U32_LAST_BYTE_OFFSET = 3;
+
 function writeU16(
   bytes: Uint8Array<ArrayBuffer>,
   offset: number,
   value: number,
 ): void {
-  bytes[offset] = (value >>> 8) & 0xff;
-  bytes[offset + 1] = value & 0xff;
+  bytes[offset] = (value >>> BITS_PER_BYTE) & BYTE_MASK;
+  bytes[offset + 1] = value & BYTE_MASK;
 }
 
 function writeU32(
@@ -80,10 +98,10 @@ function writeU32(
   offset: number,
   value: number,
 ): void {
-  bytes[offset] = (value >>> 24) & 0xff;
-  bytes[offset + 1] = (value >>> 16) & 0xff;
-  bytes[offset + 2] = (value >>> 8) & 0xff;
-  bytes[offset + 3] = value & 0xff;
+  bytes[offset] = (value >>> U32_BYTE_1_SHIFT) & BYTE_MASK;
+  bytes[offset + 1] = (value >>> U32_BYTE_2_SHIFT) & BYTE_MASK;
+  bytes[offset + 2] = (value >>> BITS_PER_BYTE) & BYTE_MASK;
+  bytes[offset + U32_LAST_BYTE_OFFSET] = value & BYTE_MASK;
 }
 
 // The sfnt checksum (clause 4.1): the sum of a region's big-endian uint32s, truncated to 32 bits. Callers pass a 4-byte-aligned region only — every table this module writes is zero-padded to a multiple of four, which is the same thing the spec's own "pad with zeroes" wording produces.
@@ -373,10 +391,10 @@ export function subsetSfnt(
 
   const file = new Uint8Array(fileLength);
   writeU32(file, 0, SFNT_VERSION_TRUETYPE);
-  writeU16(file, 4, numTables);
-  writeU16(file, 6, searchRange);
-  writeU16(file, 8, entrySelector);
-  writeU16(file, 10, rangeShift);
+  writeU16(file, SFNT_HEADER_NUM_TABLES_OFFSET, numTables);
+  writeU16(file, SFNT_HEADER_SEARCH_RANGE_OFFSET, searchRange);
+  writeU16(file, SFNT_HEADER_ENTRY_SELECTOR_OFFSET, entrySelector);
+  writeU16(file, SFNT_HEADER_RANGE_SHIFT_OFFSET, rangeShift);
   for (let i = 0; i < numTables; i++) {
     const table = tables[i]!;
     const tableOffset = offsets[i]!;
@@ -388,11 +406,19 @@ export function subsetSfnt(
     // The record's own checksum covers the table's zero-padded region, and its length field the unpadded one (clause 4.2). For 'head' this is the checksum with checkSumAdjustment zeroed, which is exactly what the spec asks for and what the file currently holds.
     writeU32(
       file,
-      recordOffset + 4,
+      recordOffset + TABLE_RECORD_CHECKSUM_OFFSET,
       checksum(file, tableOffset, alignUp(table.data.length)),
     );
-    writeU32(file, recordOffset + 8, tableOffset);
-    writeU32(file, recordOffset + 12, table.data.length);
+    writeU32(
+      file,
+      recordOffset + TABLE_RECORD_TABLE_OFFSET_OFFSET,
+      tableOffset,
+    );
+    writeU32(
+      file,
+      recordOffset + TABLE_RECORD_LENGTH_OFFSET,
+      table.data.length,
+    );
   }
 
   // Last, once every other byte of the file is final: the whole file, with this field still zero, must sum to the magic constant once the value written here is added back (clause 4.1). The 'head' record's own checksum above deliberately stays as computed against the zeroed field, which is what that record is defined to hold.
