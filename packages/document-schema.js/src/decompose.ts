@@ -3,14 +3,16 @@ import {
   type ConstructMarkerImbalance,
   type ContentBlock,
   type ContentDocument,
-  type ContentDrawPage,
   type ContentFormula,
   type ContentParagraph,
   type ContentSection,
-  type ContentShape,
-  type ContentSheet,
-  type ContentSlide,
 } from "./content";
+import { type ContentSheet } from "./content-sheet";
+import {
+  type ContentDrawPage,
+  type ContentShape,
+  type ContentSlide,
+} from "./content-drawing";
 import type {
   DrawPageGroupNode,
   HeadingGroupNode,

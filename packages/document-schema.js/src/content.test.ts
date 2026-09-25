@@ -3,24 +3,14 @@ import { COLOR_BLACK } from "./color";
 import {
   type ContentBlock,
   ContentBlockSchema,
-  ContentCellBordersSchema,
-  ContentCellFillSchema,
-  ContentCellPatternTypeSchema,
   ContentConstructEndSchema,
   ContentConstructStartSchema,
   type ContentDocument,
   ContentDefinedNameSchema,
   ContentDocumentSchema,
   type ContentEmbeddedObject,
-  ContentEmbeddedObjectSchema,
-  ContentImageBlockSchema,
   ContentParagraphSchema,
-  ContentRunSchema,
   ContentSectionSchema,
-  ContentShapeSchema,
-  ContentSheetCellSchema,
-  ContentSheetColumnSchema,
-  ContentSheetRowSchema,
   type ContentTable,
   ContentTableCellSchema,
   ContentTableRowSchema,
@@ -28,15 +18,30 @@ import {
   clampHeadingLevel,
   findConstructMarkerImbalance,
   findRunConstructFault,
-  IMAGE_FORMATS,
   isContentBlock,
   isContentConstructEnd,
   isContentConstructStart,
   isRunConstructExtent,
-  resolveCellFillColor,
-  type RunConstructExtent,
-  unrecognizedFillKind,
 } from "./content";
+import {
+  ContentEmbeddedObjectSchema,
+  ContentImageBlockSchema,
+  ContentRunSchema,
+  IMAGE_FORMATS,
+  type RunConstructExtent,
+} from "./content-vocabulary";
+import {
+  ContentCellBordersSchema,
+  ContentCellFillSchema,
+  ContentCellPatternTypeSchema,
+  ContentSheetCellSchema,
+  ContentSheetColumnSchema,
+  ContentSheetRowSchema,
+  resolveCellFillColor,
+  unrecognizedFillKind,
+} from "./content-sheet";
+import { ContentShapeSchema } from "./content-drawing";
+
 import type { ConstructDescriptor } from "./construct";
 import { assembleTree } from "./factor-styles";
 import { flattenTree } from "./flatten";

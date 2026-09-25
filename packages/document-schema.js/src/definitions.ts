@@ -1,11 +1,7 @@
 import { z } from "zod";
-import {
-  ContentListMembershipSchema,
-  type ContentParagraph,
-  type ContentRun,
-  RUN_FONT_PROPERTY_SHAPE,
-} from "./content";
+import { ContentListMembershipSchema, type ContentParagraph } from "./content";
 import { AlignmentSchema } from "./style";
+import { type ContentRun, RUN_FONT_PROPERTY_SHAPE } from "./content-vocabulary";
 
 // The package-level definitions-table facility (ExaDev/document-schema.js#21): named tables at the DocumentTree root whose entries tree nodes reference by string id, so repeated data is stated once and referenced many times. Styles were the first tenant (the StylesTableSchema below), and the tenant-generic DefinitionsTableSchema beside it is what let every later tenant land without this module changing: link, footnote, and comment definitions (ExaDev/markdown-codec#63, ExaDev/document-schema.js#22) ride the `definitions` field, and 4.1.0's three construct tables — `layers`, `attachments`, `destinations` (ExaDev/document-schema.js#24) — are three more root fields of this same generic type rather than three parallel shapes. This module defines the schemas and the pure resolution helpers; the frequency pass that mints entries from repeated property tuples is src/factor-styles.ts, which consumes them.
 

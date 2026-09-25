@@ -2,16 +2,17 @@ import {
   ContentFormulaSchema,
   type ContentBlock,
   type ContentDocument,
-  type ContentDrawPage,
   type ContentEmbeddedObject,
   type ContentParagraph,
   type ContentSection,
+} from "./content";
+import { type ContentSheet, type ContentSheetImage } from "./content-sheet";
+import {
+  type ContentDrawPage,
   type ContentShape,
-  type ContentSheet,
-  type ContentSheetImage,
   type ContentSlide,
   type ContentVector,
-} from "./content";
+} from "./content-drawing";
 import {
   applyParagraphStyleProperties,
   applyRunStyleProperties,

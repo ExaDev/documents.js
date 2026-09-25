@@ -6,12 +6,14 @@ import type {
   ContentEmbeddedObject,
   ContentFormula,
   ContentSection,
-  ContentShape,
+} from "./content";
+import type {
   ContentSheetCell,
   ContentSheetImage,
   ContentSheetPrintSettings,
-  ContentVector,
-} from "./content";
+} from "./content-sheet";
+import type { ContentShape, ContentVector } from "./content-drawing";
+
 import {
   ConstructMarkerImbalanceError,
   assertNeverContentDocumentKind,

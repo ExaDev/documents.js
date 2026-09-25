@@ -1,10 +1,7 @@
 import { canonicalKey } from "./canonicalise";
-import type {
-  ContentDocument,
-  ContentParagraph,
-  ContentRun,
-  ContentVector,
-} from "./content";
+import type { ContentRun } from "./content-vocabulary";
+import type { ContentDocument, ContentParagraph } from "./content";
+import type { ContentVector } from "./content-drawing";
 import {
   assertNeverContentDocumentKind,
   decomposeDrawPage,
