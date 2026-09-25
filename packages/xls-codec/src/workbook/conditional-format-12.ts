@@ -15,6 +15,19 @@ import {
   type RawConditionalFormatStyle,
 } from "./conditional-format";
 
+// The colour model's 8-bit channel ceiling; a gradient's interpolation curve carries 2 or 3 control points; the fixed CF12 structure sizes (a Futuristic Ref header is 12 bytes, its flags 4, Ref8U 8, CFExTemplateParams 16); and ct, the CFEx rule type byte naming a record's template family.
+const COLOR_CHANNEL_MAX = 255;
+const MIN_GRADIENT_CURVE_POINTS = 2;
+const MAX_GRADIENT_CURVE_POINTS = 3;
+const FRT_REF_HEADER_SIZE = 12;
+const FRT_FLAGS_SIZE = 4;
+const REF8U_SIZE = 8;
+const CFEX_TEMPLATE_PARAMS_SIZE = 16;
+const CT_CONTAINS_TEXT = 0x03;
+const CT_NOT_CONTAINS_TEXT = 0x04;
+const CT_UNIQUE_VALUES = 0x05;
+const CT_CONTAINS_BLANKS = 0x06;
+
 // CondFmt12 ([MS-XLS] 2.4.57, https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/b891e737-12f6-41dd-b8a8-7360a4826d4a) is CondFmt's own "future record" (FRT) counterpart: it wraps a CondFmtStructure ([MS-XLS] 2.4's own CondFmtStructure, https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/1f4b7576-b5e0-40f0-b2c6-b447d0954b17 — the identical ccf/flags/refBound/sqref shape CondFmt's own body already carries), prefixed by a 12-byte FrtRefHeaderU this reader never needs, and marks the start of the CF12 ([MS-XLS] 2.4.43, https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/3b6a364e-8c34-4830-a8b1-5a51476a9934) records it names via mainCF.ccf. A CF12's own ct field picks one of six rule shapes: colour scale (ct 0x03), data bar (ct 0x04), and icon set (ct 0x06) are read via their own array-of-thresholds building block (ExaDev/documents.js#1104); comparison/formula rules re-expressed in this newer record shape (ct 0x01/0x02) stay unread here, since base CF already covers them.
 //
 // ct 0x05 ("filter") is a further dispatch: icfTemplate (an unsigned integer alongside a 16-byte CFExTemplateParams block, both always present regardless of ct) names one of roughly fifteen templates — top10, aboveAverage (and its below/or-equal siblings), duplicateValues, uniqueValues, four blank/error conditions, ten date/time periods, and four containsText sub-types. Every one of those except containsText is read here via this ct 0x05 dispatch (ExaDev/documents.js#1106): CFExTemplateParams turns out to need real parsing for only two of its five variants (CFExFilterParams for top10; CFExAveragesTemplateParams for the aboveAverage family) — CFExDefaultTemplateParams (duplicateValues/uniqueValues/blank/error conditions) is 16 reserved bytes, and CFExDateTemplateParams's own dateOp field is a fixed 1:1 restatement of icfTemplate itself, so both dispatch directly off icfTemplate with no further byte reading at all.
@@ -25,17 +38,24 @@ import {
 //
 // A CondFmt12/CF12 record longer than the 8224-byte single-record ceiling continues onto one or more ContinueFrt12 records rather than the plain Continue every other reader in this package joins against — handled once, generically, in biff/substreams.ts's own groupRecords (not here), so record.blocks already spans any such continuation by the time this file ever sees a RecordGroup.
 
+// cfvoType values in [MS-XLS] order; 0x06 is a reserved slot the schema never names.
+const CFVO_TYPE_NAMES = [
+  "num",
+  "min",
+  "max",
+  "percent",
+  "percentile",
+  "reserved",
+  "formula",
+] as const;
 const CFVO_TYPE_TO_VALUE_TYPE: ReadonlyMap<
   number,
   ContentSheetConditionalFormatValue["type"]
-> = new Map([
-  [0x01, "num"],
-  [0x02, "min"],
-  [0x03, "max"],
-  [0x04, "percent"],
-  [0x05, "percentile"],
-  [0x07, "formula"],
-]);
+> = new Map(
+  CFVO_TYPE_NAMES.flatMap((name, index) =>
+    name === "reserved" ? [] : ([[index + 1, name]] as const),
+  ),
+);
 
 // A CFVO ([MS-XLS] 2.4, https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/3cc68999-c2fc-4a57-92a5-94c0720779e9): cfvoType(1) then a CFVOParsedFormula ([MS-XLS] 2.4, https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/acaed966-4eee-4578-ae5b-a23a781a8944 — cce(2) + rgce, no "unused" field — unlike DVParsedFormula/CFParsedFormulaNoCCE, this is the one Ptg-carrying formula structure in this whole conditional-formatting family that omits it), then an Xnum numValue, present only when the formula is empty (cce === 0) and cfvoType is neither 'min' nor 'max' (those two name a bound rather than carrying a value at all, matching ContentSheetConditionalFormatValueSchema's own "absent for 'min'/'max'" contract).
 function readCfvo(
@@ -87,7 +107,11 @@ function readCfColor(cursor: BlockCursor): RawCfColor | undefined {
     const tint = cursor.f64();
     return {
       kind: "rgb",
-      color: { r: red / 255, g: green / 255, b: blue / 255 },
+      color: {
+        r: red / COLOR_CHANNEL_MAX,
+        g: green / COLOR_CHANNEL_MAX,
+        b: blue / COLOR_CHANNEL_MAX,
+      },
       tint,
     };
   }
@@ -192,7 +216,11 @@ function readCfGradient(
   const cInterpCurve = cursor.u8();
   const cGradientCurve = cursor.u8();
   cursor.skip(1); // fClamp(1 bit) + fBackground(1 bit) + reserved2(6 bits) — colour scale formatting is always a background fill (ECMA-376's own convention too) and this schema has no clamp-to-range flag, so neither bit has anywhere to land
-  if (cInterpCurve !== cGradientCurve || cInterpCurve < 2 || cInterpCurve > 3) {
+  if (
+    cInterpCurve !== cGradientCurve ||
+    cInterpCurve < MIN_GRADIENT_CURVE_POINTS ||
+    cInterpCurve > MAX_GRADIENT_CURVE_POINTS
+  ) {
     return undefined;
   }
   const values: ContentSheetConditionalFormatValue[] = [];
@@ -298,7 +326,7 @@ function readCfMultistate(
   for (let index = 0; index < cStates; index += 1) {
     const value = readCfvo(cursor, formulaSheets);
     cursor.skip(1); // fEqual — no per-threshold schema field
-    cursor.skip(4); // unused
+    cursor.skip(FRT_FLAGS_SIZE); // unused
     if (value === undefined) {
       return undefined;
     }
@@ -309,13 +337,14 @@ function readCfMultistate(
 
 const ICF_TEMPLATE_CONTAINS_TEXT = 0x0008;
 
+const CTP_TEXT_KIND_NAMES = [
+  "containsText",
+  "notContainsText",
+  "beginsWith",
+  "endsWith",
+] as const;
 const CTP_TO_TEXT_KIND: ReadonlyMap<number, RawTextFilterFormat["kind"]> =
-  new Map([
-    [0x0000, "containsText"],
-    [0x0001, "notContainsText"],
-    [0x0002, "beginsWith"],
-    [0x0003, "endsWith"],
-  ]);
+  new Map(CTP_TEXT_KIND_NAMES.map((kind, index) => [index, kind] as const));
 
 export function readCfTextFilterRule(
   icfTemplate: number,
@@ -353,19 +382,23 @@ const ICF_TEMPLATE_ABOVE_OR_EQUAL_AVERAGE = 0x001d;
 const ICF_TEMPLATE_BELOW_OR_EQUAL_AVERAGE = 0x001e;
 
 // The ten date/time-period icfTemplate values, https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/3b6a364e-8c34-4830-a8b1-5a51476a9934's own icfTemplate table (0x0F-0x18). CFExDateTemplateParams's own dateOp field ([MS-XLS] 2.4, https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/a079f971-f12f-438f-a127-3dee84e94034) is a fixed 1:1 restatement of icfTemplate for every one of these — confirmed from that structure's own value table — so it carries no information this reader needs beyond what icfTemplate already states, and this map dispatches on icfTemplate directly rather than reading dateOp at all.
+const TIME_PERIOD_NAMES = [
+  "today",
+  "tomorrow",
+  "yesterday",
+  "last7Days",
+  "lastMonth",
+  "nextMonth",
+  "thisWeek",
+  "nextWeek",
+  "lastWeek",
+  "thisMonth",
+] as const;
+const TIME_PERIOD_FIRST = 0x000f;
 const ICF_TEMPLATE_TO_TIME_PERIOD: ReadonlyMap<number, RawTimePeriod> = new Map(
-  [
-    [0x000f, "today"],
-    [0x0010, "tomorrow"],
-    [0x0011, "yesterday"],
-    [0x0012, "last7Days"],
-    [0x0013, "lastMonth"],
-    [0x0014, "nextMonth"],
-    [0x0015, "thisWeek"],
-    [0x0016, "nextWeek"],
-    [0x0017, "lastWeek"],
-    [0x0018, "thisMonth"],
-  ],
+  TIME_PERIOD_NAMES.map(
+    (period, index) => [index + TIME_PERIOD_FIRST, period] as const,
+  ),
 );
 
 const SIMPLE_ICF_TEMPLATE_KIND: ReadonlyMap<
@@ -460,7 +493,7 @@ function readCf12(
 ): RawConditionalFormat12 | undefined {
   try {
     const cursor = new BlockCursor(record.blocks);
-    cursor.skip(12); // frtRefHeader (FrtRefHeader, [MS-XLS] 2.4, https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/21d54bbb-614e-414a-9180-5fffda407d4f) — every field MUST be zero/ignored for CF12 itself ([MS-XLS] 2.4.43's own prose)
+    cursor.skip(FRT_REF_HEADER_SIZE); // frtRefHeader, zero/ignored for CF12 itself
     const ct = cursor.u8();
     cursor.skip(1); // cp — meaningful only for a ct 0x01 comparison rule, out of scope here (base CF already covers ct 0x01/0x02)
     const cce1 = cursor.u16();
@@ -476,32 +509,32 @@ function readCf12(
     const priority = cursor.u16(); // ipriority
     const icfTemplate = cursor.u16(); // meaningful only for the ct 0x05 filter family
     cursor.skip(1); // cbTemplateParm — MUST be 16, not validated
-    const templateParams = cursor.take(16); // rgbTemplateParms (CFExTemplateParams) — meaningful only for the ct 0x05 filter family
+    const templateParams = cursor.take(CFEX_TEMPLATE_PARAMS_SIZE);
     const common: RawConditionalFormat12Common = {
       priority,
       stopIfTrue,
       ranges: [...ranges],
     };
 
-    if (ct === 0x03) {
+    if (ct === CT_CONTAINS_TEXT) {
       const stops = readCfGradient(cursor, formulaSheets);
       return stops === undefined
         ? undefined
         : { kind: "colorScale", stops, ...common };
     }
-    if (ct === 0x04) {
+    if (ct === CT_NOT_CONTAINS_TEXT) {
       const databar = readCfDatabar(cursor, formulaSheets);
       return databar === undefined
         ? undefined
         : { kind: "dataBar", ...databar, ...common };
     }
-    if (ct === 0x06) {
+    if (ct === CT_CONTAINS_BLANKS) {
       const iconSet = readCfMultistate(cursor, formulaSheets);
       return iconSet === undefined
         ? undefined
         : { kind: "iconSet", ...iconSet, ...common };
     }
-    if (ct === 0x05) {
+    if (ct === CT_UNIQUE_VALUES) {
       const rule = readCfFilterRule(icfTemplate, templateParams);
       // The trailing CFFilter ([MS-XLS] 2.4, https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/1fbbdfb0-5320-43bc-a8a5-c81dbeba9b7b) is still consumed here regardless of whether templateParams resolved a rule — cbFilter states its own total length, so skipping by that count (rather than a fixed size) stays correct even for an icfTemplate this reader cannot promote.
       const cbFilter = cursor.u16();
@@ -549,10 +582,10 @@ export function readCondFmt12Group(
   }
   try {
     const cursor = new BlockCursor(condFmt12.blocks);
-    cursor.skip(12); // frtRefHeaderU (FrtRefHeaderU, [MS-XLS] 2.4, https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/81109a77-1dbd-43fe-84d2-b5177bb41297) — redundant with mainCF's own refBound ([MS-XLS] 2.4.57's own prose)
+    cursor.skip(FRT_REF_HEADER_SIZE); // frtRefHeaderU
     const ccf = cursor.u16();
     cursor.skip(2); // fToughRecalc + nID — CFEx's own linkage, unused
-    cursor.skip(8); // refBound (Ref8U) — a redundant bounding superset of sqref, unused
+    cursor.skip(REF8U_SIZE); // refBound (Ref8U)
     const crefCount = cursor.u16();
     const ranges: ContentSheetRange[] = [];
     for (let index = 0; index < crefCount; index += 1) {
