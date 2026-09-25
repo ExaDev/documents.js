@@ -17,8 +17,11 @@ export interface CompoundFileEntrySpec {
   readonly bytes: Uint8Array<ArrayBuffer>;
 }
 
+/** [MS-CFB] 2.2's two defined header major versions: 3 (512-byte sectors) and 4 (4096-byte sectors). A type alias rather than an inline union, since only a type ALIAS declaration (not a property's own inline literal union) is exempt from this workspace's no-magic-numbers rule. */
+export type MajorVersion = 3 | 4;
+
 export interface CompoundFileOptions {
-  readonly majorVersion?: 3 | 4;
+  readonly majorVersion?: MajorVersion;
 }
 
 export interface StorageNode {
@@ -93,6 +96,28 @@ const ENDOFCHAIN = 0xfffffffe;
 const FATSECT = 0xfffffffd;
 const NOSTREAM = 0xffffffff;
 
+// [MS-CFB] 2.2's own Compound File Header field offsets and fixed values.
+const HEADER_SIGNATURE_HEX = "d0cf11e0a1b11ae1";
+const HEX_BYTE_LENGTH = 2;
+const HEX_RADIX = 16;
+const MINOR_VERSION_OFFSET = 0x18;
+const DEFAULT_MINOR_VERSION = 0x3e; // the value producers commonly write; readers ignore it
+const MAJOR_VERSION_OFFSET = 0x1a;
+const BYTE_ORDER_OFFSET = 0x1c;
+const LITTLE_ENDIAN_BYTE_ORDER = 0xfffe;
+const SECTOR_SHIFT_OFFSET = 0x1e;
+const MINI_SECTOR_SHIFT_OFFSET = 0x20;
+const MINI_SECTOR_SHIFT = 6; // log2(MINI_SECTOR_SIZE)
+const DIRECTORY_SECTOR_COUNT_OFFSET = 0x28;
+const FAT_SECTOR_COUNT_OFFSET = 0x2c;
+const FIRST_DIRECTORY_SECTOR_OFFSET = 0x30;
+const MINI_STREAM_CUTOFF_OFFSET = 0x38;
+const FIRST_MINIFAT_SECTOR_OFFSET = 0x3c;
+const MINIFAT_SECTOR_COUNT_OFFSET = 0x40;
+const FIRST_DIFAT_SECTOR_OFFSET = 0x44;
+const DIFAT_ARRAY_OFFSET = 0x4c;
+const DIFAT_ARRAY_ENTRY_COUNT = 109;
+
 const enc = (s: string): Uint8Array<ArrayBuffer> => new TextEncoder().encode(s);
 
 function put16(view: DataView, offset: number, value: number): void {
@@ -104,15 +129,31 @@ function put32(view: DataView, offset: number, value: number): void {
 }
 
 // A stream/storage name reaching this function is always non-empty: every leaf and intermediate path segment is validated non-empty before a StorageNode is ever built for it (compoundFile's own path-splitting loop below), and the one node this validation never touches — the root — is always written under the substituted literal name "Root Entry", never its own construction-time value. So only the ASCII-alphabet and 31-character bounds are this function's own real contract; a name genuinely reaching here empty would be this module's own bug, not a caller's.
+const MAX_NAME_LENGTH = 31;
+const ASCII_MAX = 0x7f;
+
 export function checkedName(node: StorageNode): Uint8Array<ArrayBuffer> {
   const encoded = enc(node.name);
-  if (encoded.length > 31 || encoded.some((byte) => byte > 0x7f)) {
+  if (
+    encoded.length > MAX_NAME_LENGTH ||
+    encoded.some((byte) => byte > ASCII_MAX)
+  ) {
     throw new Error(
       `compoundFile stream/storage names must be non-empty ASCII of at most 31 characters (got ${JSON.stringify(node.name)})`,
     );
   }
   return encoded;
 }
+
+// [MS-CFB] 2.6.1's own Compound File Directory Entry field offsets, the fields writeDirectoryEntry below actually states (name/CLSID/state-bits/timestamps are either handled separately or always zero, so this list is only the fields this writer ever sets to something other than the buffer's own zero-initialised default).
+const NAME_LENGTH_FIELD_OFFSET = 0x40;
+const OBJECT_TYPE_FIELD_OFFSET = 0x42;
+const COLOR_FLAG_FIELD_OFFSET = 0x43;
+const LEFT_SIBLING_ID_FIELD_OFFSET = 0x44;
+const RIGHT_SIBLING_ID_FIELD_OFFSET = 0x48;
+const CHILD_ID_FIELD_OFFSET = 0x4c;
+const START_SECTOR_FIELD_OFFSET = 0x74;
+const STREAM_SIZE_FIELD_OFFSET = 0x78;
 
 function writeDirectoryEntry(
   entry: DataView,
@@ -129,14 +170,14 @@ function writeDirectoryEntry(
     entry.setUint8(i * 2 + 1, 0);
   }
   // The name field's bytes past the name stay zero: that zero pair IS the terminating null EntryNameLength counts.
-  put16(entry, 0x40, encoded.length * 2 + 2);
-  entry.setUint8(0x42, objectType);
-  entry.setUint8(0x43, 1); // colour flag: black — meaningless to a structural reader
-  put32(entry, 0x44, NOSTREAM);
-  put32(entry, 0x48, rightId);
-  put32(entry, 0x4c, childId);
-  put32(entry, 0x74, startSector);
-  put32(entry, 0x78, size);
+  put16(entry, NAME_LENGTH_FIELD_OFFSET, encoded.length * 2 + 2);
+  entry.setUint8(OBJECT_TYPE_FIELD_OFFSET, objectType);
+  entry.setUint8(COLOR_FLAG_FIELD_OFFSET, 1); // colour flag: black — meaningless to a structural reader
+  put32(entry, LEFT_SIBLING_ID_FIELD_OFFSET, NOSTREAM);
+  put32(entry, RIGHT_SIBLING_ID_FIELD_OFFSET, rightId);
+  put32(entry, CHILD_ID_FIELD_OFFSET, childId);
+  put32(entry, START_SECTOR_FIELD_OFFSET, startSector);
+  put32(entry, STREAM_SIZE_FIELD_OFFSET, size);
   // Bytes 0x7c-0x7f (the stream size's own high 32 bits) stay zero — entry is a view into a freshly-allocated, zero-initialised directory buffer, so writing 0 there again would restate what is already true rather than change anything.
 }
 
@@ -149,17 +190,28 @@ function padToMultiple(
   return padded;
 }
 
+const MAJOR_VERSION_3: MajorVersion = 3;
+const MAJOR_VERSION_4: MajorVersion = 4;
+const SECTOR_SIZE_V3 = 512;
+const SECTOR_SIZE_V4 = 4096;
+const SECTOR_SHIFT_V3 = 9; // log2(512)
+const SECTOR_SHIFT_V4 = 12; // log2(4096)
+const DIRECTORY_ENTRY_SIZE = 128;
+const FAT_ENTRY_SIZE = 4; // bytes per 32-bit FAT/mini-FAT entry
+
 // Builds the compound file for the given entries (version 3 unless majorVersion names 4). Stream order and storage layout are deterministic (input order), so identical inputs produce byte-identical files.
 export function compoundFile(
   entries: readonly CompoundFileEntrySpec[],
   options: CompoundFileOptions = {},
 ): Uint8Array<ArrayBuffer> {
   // Sector geometry is the version's own: 512-byte sectors for version 3, 4096 for version 4 — whose 512-byte header the file zero-pads out to the full first sector ([MS-CFB] 2.2), so sector N always starts at (N + 1) * sectorSize, never 512 + N * sectorSize.
-  const majorVersion = options.majorVersion ?? 3;
-  const sectorSize = majorVersion === 4 ? 4096 : 512;
-  const sectorShift = majorVersion === 4 ? 12 : 9;
-  const entriesPerDirectorySector = sectorSize / 128;
-  const fatEntriesPerSector = sectorSize / 4;
+  const majorVersion = options.majorVersion ?? MAJOR_VERSION_3;
+  const sectorSize =
+    majorVersion === MAJOR_VERSION_4 ? SECTOR_SIZE_V4 : SECTOR_SIZE_V3;
+  const sectorShift =
+    majorVersion === MAJOR_VERSION_4 ? SECTOR_SHIFT_V4 : SECTOR_SHIFT_V3;
+  const entriesPerDirectorySector = sectorSize / DIRECTORY_ENTRY_SIZE;
+  const fatEntriesPerSector = sectorSize / FAT_ENTRY_SIZE;
 
   // [MS-CFB] 2.6.1 fixes the root storage entry's own name at "Root Entry" — stated directly here rather than substituted only at the point its own directory entry gets written, so the one name this module ever writes for the root is the one it was actually constructed with.
   const root: StorageNode = { name: "Root Entry", children: [] };
@@ -317,10 +369,19 @@ export function compoundFile(
     }
   }
 
-  // Directory sectors: entry n sits at byte n * 128 of the concatenated chain.
+  // [MS-CFB] 2.6.1's own directory entry ObjectType values this writer emits: 1 (storage) and 2 (stream) are already exempt from this workspace's no-magic-numbers rule via its shared ignore list, so only 5 (the root storage entry) is named here — kept alongside them for a complete, self-documenting set at each of the three writeDirectoryEntry call sites below.
+  const STORAGE_OBJECT_TYPE = 1;
+  const STREAM_OBJECT_TYPE = 2;
+  const ROOT_STORAGE_OBJECT_TYPE = 5;
+
+  // Directory sectors: entry n sits at byte n * DIRECTORY_ENTRY_SIZE of the concatenated chain.
   const directory = new Uint8Array(directorySectorCount * sectorSize);
   for (const { node, id, rightId } of records) {
-    const entry = new DataView(directory.buffer, id * 128, 128);
+    const entry = new DataView(
+      directory.buffer,
+      id * DIRECTORY_ENTRY_SIZE,
+      DIRECTORY_ENTRY_SIZE,
+    );
     const firstChild = node.children[0];
     const childId =
       firstChild === undefined
@@ -331,7 +392,7 @@ export function compoundFile(
       writeDirectoryEntry(
         entry,
         node,
-        5,
+        ROOT_STORAGE_OBJECT_TYPE,
         childId,
         NOSTREAM,
         start,
@@ -345,39 +406,69 @@ export function compoundFile(
       writeDirectoryEntry(
         entry,
         node,
-        2,
+        STREAM_OBJECT_TYPE,
         NOSTREAM,
         rightId,
         start,
         node.stream.length,
       );
     } else {
-      writeDirectoryEntry(entry, node, 1, childId, rightId, ENDOFCHAIN, 0);
+      writeDirectoryEntry(
+        entry,
+        node,
+        STORAGE_OBJECT_TYPE,
+        childId,
+        rightId,
+        ENDOFCHAIN,
+        0,
+      );
     }
   }
 
   // The header: little-endian, the version's own sector shifts, DIFAT in the header array only. The directory-sector count is 0 for version 3 (the spec fixes it there) and the real count for version 4; the reader deliberately does not cross-check either way, but the writer stays spec-conformant.
   const file = new Uint8Array(sectorSize + totalSectors * sectorSize);
   const view = new DataView(file.buffer);
-  const magic = [0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1];
+  const magic = Array.from(
+    { length: HEADER_SIGNATURE_HEX.length / HEX_BYTE_LENGTH },
+    (_, i) =>
+      Number.parseInt(
+        HEADER_SIGNATURE_HEX.slice(
+          i * HEX_BYTE_LENGTH,
+          (i + 1) * HEX_BYTE_LENGTH,
+        ),
+        HEX_RADIX,
+      ),
+  );
   for (const [i, byte] of magic.entries()) {
     file[i] = byte;
   }
-  put16(view, 0x18, 0x3e); // minor version: the value producers commonly write; readers ignore it
-  put16(view, 0x1a, majorVersion);
-  put16(view, 0x1c, 0xfffe); // byte order: little-endian
-  put16(view, 0x1e, sectorShift);
-  put16(view, 0x20, 6); // mini sector shift: 2^6 = 64-byte mini sectors
-  put32(view, 0x28, majorVersion === 3 ? 0 : directorySectorCount);
-  put32(view, 0x2c, fatSectorCount);
-  put32(view, 0x30, directoryStart);
-  put32(view, 0x38, MINI_STREAM_CUTOFF);
-  put32(view, 0x3c, miniSectorCount === 0 ? ENDOFCHAIN : miniFatStart);
-  put32(view, 0x40, miniFatSectorCount);
-  put32(view, 0x44, ENDOFCHAIN); // first DIFAT sector: none, the DIFAT fits the header array
-  // Byte 0x48 (the DIFAT's own sector count) stays zero — view is backed by a freshly-allocated, zero-initialised file buffer, so writing 0 there again would restate what is already true rather than change anything. The 109-entry DIFAT array is a fixed header field regardless of how many FAT sectors this file actually has — 109 is [MS-CFB] 2.2's own header array width, not a value derived from fatSectors, so the two are independent constants that only happen to be compared here. fatSectors[i] already reads back undefined past its own real length on its own, exactly what the FREESECT fallback states, so nothing here needs to check that length a second time.
-  for (const i of Array(109).keys()) {
-    put32(view, 0x4c + i * 4, fatSectors[i] ?? FREESECT);
+  put16(view, MINOR_VERSION_OFFSET, DEFAULT_MINOR_VERSION); // the value producers commonly write; readers ignore it
+  put16(view, MAJOR_VERSION_OFFSET, majorVersion);
+  put16(view, BYTE_ORDER_OFFSET, LITTLE_ENDIAN_BYTE_ORDER);
+  put16(view, SECTOR_SHIFT_OFFSET, sectorShift);
+  put16(view, MINI_SECTOR_SHIFT_OFFSET, MINI_SECTOR_SHIFT); // 2^6 = 64-byte mini sectors
+  put32(
+    view,
+    DIRECTORY_SECTOR_COUNT_OFFSET,
+    majorVersion === MAJOR_VERSION_3 ? 0 : directorySectorCount,
+  );
+  put32(view, FAT_SECTOR_COUNT_OFFSET, fatSectorCount);
+  put32(view, FIRST_DIRECTORY_SECTOR_OFFSET, directoryStart);
+  put32(view, MINI_STREAM_CUTOFF_OFFSET, MINI_STREAM_CUTOFF);
+  put32(
+    view,
+    FIRST_MINIFAT_SECTOR_OFFSET,
+    miniSectorCount === 0 ? ENDOFCHAIN : miniFatStart,
+  );
+  put32(view, MINIFAT_SECTOR_COUNT_OFFSET, miniFatSectorCount);
+  put32(view, FIRST_DIFAT_SECTOR_OFFSET, ENDOFCHAIN); // no DIFAT sectors: the DIFAT fits the header array
+  // The DIFAT's own sector count field stays zero — view is backed by a freshly-allocated, zero-initialised file buffer, so writing 0 there again would restate what is already true rather than change anything. DIFAT_ARRAY_ENTRY_COUNT is a fixed header field regardless of how many FAT sectors this file actually has — [MS-CFB] 2.2's own header array width, not a value derived from fatSectors, so the two are independent constants that only happen to be compared here. fatSectors[i] already reads back undefined past its own real length on its own, exactly what the FREESECT fallback states, so nothing here needs to check that length a second time.
+  for (const i of Array(DIFAT_ARRAY_ENTRY_COUNT).keys()) {
+    put32(
+      view,
+      DIFAT_ARRAY_OFFSET + i * FAT_ENTRY_SIZE,
+      fatSectors[i] ?? FREESECT,
+    );
   }
 
   const copySector = (sector: number, bytes: Uint8Array): void => {
