@@ -31,6 +31,20 @@ import { parseMathTable } from "./math-table";
 import type { SfntFont } from "./sfnt";
 import { i16, parseSfnt, sfntTableBytes, u16 } from "./sfnt";
 
+// 'head' table field offsets (ISO/IEC 14496-22 clause 5.2.1 / OpenType 'head'): the version/revision/checksum/flags run of fixed-size fields precedes each of these.
+const HEAD_UNITS_PER_EM_OFFSET = 18;
+const HEAD_X_MIN_OFFSET = 36;
+const HEAD_Y_MIN_OFFSET = 38;
+const HEAD_X_MAX_OFFSET = 40;
+const HEAD_Y_MAX_OFFSET = 42;
+// 'hhea' table field offsets (ISO/IEC 14496-22 clause 5.2.3): ascender and descender are the first two FWORD fields, after the version.
+const HHEA_ASCENDER_OFFSET = 4;
+const HHEA_DESCENDER_OFFSET = 6;
+// 'OS/2' table field offset (OpenType 'OS/2' version 2 and later, ISO/IEC 14496-22 clause 5.2.4): sCapHeight, present only from version 2 onward, which is why capHeight below falls back to the ascender for an older or absent OS/2 table.
+const OS2_CAP_HEIGHT_OFFSET = 88;
+// PDF glyph space, the unit every /W width array entry is expressed in regardless of the font's own design grid (ISO 32000-1 9.8.1): matches embedded-font.ts's own constant of the same name and value.
+const GLYPH_SPACE_UNITS_PER_EM = 1000;
+
 export interface MathFontDescriptorMetrics {
   readonly unitsPerEm: number;
   readonly ascent: number; // design units
@@ -297,19 +311,21 @@ export function loadMathFont(): LoadedMathFont {
     );
   }
 
-  const unitsPerEm = u16(headBytes, 18);
-  const ascentDesignUnits = i16(hheaBytes, 4);
-  const descentDesignUnits = i16(hheaBytes, 6);
+  const unitsPerEm = u16(headBytes, HEAD_UNITS_PER_EM_OFFSET);
+  const ascentDesignUnits = i16(hheaBytes, HHEA_ASCENDER_OFFSET);
+  const descentDesignUnits = i16(hheaBytes, HHEA_DESCENDER_OFFSET);
   const bboxMin: readonly [number, number] = [
-    i16(headBytes, 36),
-    i16(headBytes, 38),
+    i16(headBytes, HEAD_X_MIN_OFFSET),
+    i16(headBytes, HEAD_Y_MIN_OFFSET),
   ];
   const bboxMax: readonly [number, number] = [
-    i16(headBytes, 40),
-    i16(headBytes, 42),
+    i16(headBytes, HEAD_X_MAX_OFFSET),
+    i16(headBytes, HEAD_Y_MAX_OFFSET),
   ];
   const capHeight =
-    os2Bytes === undefined ? ascentDesignUnits : i16(os2Bytes, 88);
+    os2Bytes === undefined
+      ? ascentDesignUnits
+      : i16(os2Bytes, OS2_CAP_HEIGHT_OFFSET);
   // STIX Two Math is an upright design (mathvariant='italic' selects a real, distinct, upright-drawn ITALIC GLYPH rather than an algorithmically slanted one — see variant.ts), so its FontDescriptor's own /ItalicAngle is always 0 — this module doesn't parse 'post's own Fixed-format italicAngle field at all, since nothing this package ever draws through this font needs a non-zero value.
 
   const cmap = buildCmapLookup(sfnt);
@@ -344,7 +360,7 @@ export function loadMathFont(): LoadedMathFont {
     },
     glyphId: (codePoint: number) => cmap(codePoint),
     glyphSpaceWidth: (glyphId: number) =>
-      (hmtx.advanceWidth(glyphId) * 1000) / unitsPerEm,
+      (hmtx.advanceWidth(glyphId) * GLYPH_SPACE_UNITS_PER_EM) / unitsPerEm,
     glyphInkBounds: (glyphId: number) => inkBounds?.bounds(glyphId),
     minConnectorOverlap: math.variants.minConnectorOverlap,
     stretchyConstruction: (codePoint: number, axis: MathStretchAxis) => {
