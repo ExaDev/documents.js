@@ -167,21 +167,33 @@ export const ICV_AUTOMATIC_FOREGROUND = 0x40;
 export const ICV_AUTOMATIC_BACKGROUND = 0x41;
 
 const RGB_BYTE_MAX = 0xff;
+const HEX_BASE = 16;
+const RED_BYTE_SHIFT = 16;
+const GREEN_BYTE_SHIFT = 8;
 
 function rgb255(r: number, g: number, b: number): Color {
   return { r: r / RGB_BYTE_MAX, g: g / RGB_BYTE_MAX, b: b / RGB_BYTE_MAX };
 }
 
+/** Builds a Color from a 6-digit "RRGGBB" hex string, the same notation the tables below and every colour citation in this file's own comments already use — so a table entry stays a single, directly spec-checkable literal rather than three separately-named decimal bytes per colour. */
+function rgbHex(hex: string): Color {
+  const value = Number.parseInt(hex, HEX_BASE);
+  const r = (value >>> RED_BYTE_SHIFT) & RGB_BYTE_MAX;
+  const g = (value >>> GREEN_BYTE_SHIFT) & RGB_BYTE_MAX;
+  const b = value & RGB_BYTE_MAX;
+  return rgb255(r, g, b);
+}
+
 /** Icv values 0x00-0x07: the eight fixed built-in colour constants every BIFF8 reader recognises regardless of a Palette record. This package's own writer never emits one of these (IcvXF's own field documentation: "This value SHOULD NOT be ... less than or equal to 0x07" — the default-palette table below duplicates all eight at icv 8-15, which is what this writer uses instead), but a real third-party file may still carry one, so the read side resolves them. */
 const FIXED_COLOR_TABLE: readonly Color[] = [
-  rgb255(0, 0, 0), // 0x00 Black
-  rgb255(255, 255, 255), // 0x01 White
-  rgb255(255, 0, 0), // 0x02 Red
-  rgb255(0, 255, 0), // 0x03 Green
-  rgb255(0, 0, 255), // 0x04 Blue
-  rgb255(255, 255, 0), // 0x05 Yellow
-  rgb255(255, 0, 255), // 0x06 Magenta
-  rgb255(0, 255, 255), // 0x07 Cyan
+  rgbHex("000000"), // 0x00 Black
+  rgbHex("ffffff"), // 0x01 White
+  rgbHex("ff0000"), // 0x02 Red
+  rgbHex("00ff00"), // 0x03 Green
+  rgbHex("0000ff"), // 0x04 Blue
+  rgbHex("ffff00"), // 0x05 Yellow
+  rgbHex("ff00ff"), // 0x06 Magenta
+  rgbHex("00ffff"), // 0x07 Cyan
 ];
 
 /** icv 8-63's own base offset: icv 8 is rgColor[0] of a Palette record (or the default table's own entry 0) — [MS-XLS] "Icv"'s own colour-table layout. */
@@ -191,62 +203,62 @@ export const PALETTE_ENTRY_COUNT = 56;
 
 /** The 56-entry default colour table icv 8-63 resolve through when no Palette record is present ([MS-XLS] "Icv"'s own default-red/green/blue columns), in icv order (index 0 = icv 8). Entries 0-7 duplicate the eight fixed colours above at their own icv+8 position — the reason this package's writer allocates a fixed colour there rather than at icv 0-7 directly. */
 const DEFAULT_PALETTE_TABLE: readonly Color[] = [
-  rgb255(0, 0, 0),
-  rgb255(255, 255, 255),
-  rgb255(255, 0, 0),
-  rgb255(0, 255, 0),
-  rgb255(0, 0, 255),
-  rgb255(255, 255, 0),
-  rgb255(255, 0, 255),
-  rgb255(0, 255, 255),
-  rgb255(128, 0, 0),
-  rgb255(0, 128, 0),
-  rgb255(0, 0, 128),
-  rgb255(128, 128, 0),
-  rgb255(128, 0, 128),
-  rgb255(0, 128, 128),
-  rgb255(192, 192, 192),
-  rgb255(128, 128, 128),
-  rgb255(153, 153, 255),
-  rgb255(153, 51, 102),
-  rgb255(255, 255, 204),
-  rgb255(204, 255, 255),
-  rgb255(102, 0, 102),
-  rgb255(255, 128, 128),
-  rgb255(0, 102, 204),
-  rgb255(204, 204, 255),
-  rgb255(0, 0, 128),
-  rgb255(255, 0, 255),
-  rgb255(255, 255, 0),
-  rgb255(0, 255, 255),
-  rgb255(128, 0, 128),
-  rgb255(128, 0, 0),
-  rgb255(0, 128, 128),
-  rgb255(0, 0, 255),
-  rgb255(0, 204, 255),
-  rgb255(204, 255, 255),
-  rgb255(204, 255, 204),
-  rgb255(255, 255, 153),
-  rgb255(153, 204, 255),
-  rgb255(255, 153, 204),
-  rgb255(204, 153, 255),
-  rgb255(255, 204, 153),
-  rgb255(51, 102, 255),
-  rgb255(51, 204, 204),
-  rgb255(153, 204, 0),
-  rgb255(255, 204, 0),
-  rgb255(255, 153, 0),
-  rgb255(255, 102, 0),
-  rgb255(102, 102, 153),
-  rgb255(150, 150, 150),
-  rgb255(0, 51, 102),
-  rgb255(51, 153, 102),
-  rgb255(0, 51, 0),
-  rgb255(51, 51, 0),
-  rgb255(153, 51, 0),
-  rgb255(153, 51, 102),
-  rgb255(51, 51, 153),
-  rgb255(51, 51, 51),
+  rgbHex("000000"),
+  rgbHex("ffffff"),
+  rgbHex("ff0000"),
+  rgbHex("00ff00"),
+  rgbHex("0000ff"),
+  rgbHex("ffff00"),
+  rgbHex("ff00ff"),
+  rgbHex("00ffff"),
+  rgbHex("800000"),
+  rgbHex("008000"),
+  rgbHex("000080"),
+  rgbHex("808000"),
+  rgbHex("800080"),
+  rgbHex("008080"),
+  rgbHex("c0c0c0"),
+  rgbHex("808080"),
+  rgbHex("9999ff"),
+  rgbHex("993366"),
+  rgbHex("ffffcc"),
+  rgbHex("ccffff"),
+  rgbHex("660066"),
+  rgbHex("ff8080"),
+  rgbHex("0066cc"),
+  rgbHex("ccccff"),
+  rgbHex("000080"),
+  rgbHex("ff00ff"),
+  rgbHex("ffff00"),
+  rgbHex("00ffff"),
+  rgbHex("800080"),
+  rgbHex("800000"),
+  rgbHex("008080"),
+  rgbHex("0000ff"),
+  rgbHex("00ccff"),
+  rgbHex("ccffff"),
+  rgbHex("ccffcc"),
+  rgbHex("ffff99"),
+  rgbHex("99ccff"),
+  rgbHex("ff99cc"),
+  rgbHex("cc99ff"),
+  rgbHex("ffcc99"),
+  rgbHex("3366ff"),
+  rgbHex("33cccc"),
+  rgbHex("99cc00"),
+  rgbHex("ffcc00"),
+  rgbHex("ff9900"),
+  rgbHex("ff6600"),
+  rgbHex("666699"),
+  rgbHex("969696"),
+  rgbHex("003366"),
+  rgbHex("339966"),
+  rgbHex("003300"),
+  rgbHex("333300"),
+  rgbHex("993300"),
+  rgbHex("993366"),
+  rgbHex("333399"),
+  rgbHex("333333"),
 ];
 
 /** The reverse of DEFAULT_PALETTE_TABLE: a decoration colour's own hex string to the icv (8-63) it resolves to with NO Palette record present. write.ts's own colour-interning pass consults this to decide whether a workbook needs a real Palette record at all, or whether every distinct decoration colour it uses already has a home in the fixed default table. */
@@ -281,6 +293,13 @@ interface Hsl {
 }
 
 // Standard sRGB <-> HSL conversion (CSS Color Module Level 3 / W3C), operating on the gamma-encoded 0-1 components ColorSchema itself carries — the same convention ooxml.js's own DrawingML shade/tint reading (typed/shared/color.ts) documents and cross-validates against Apache POI's RGB2HSL/HSL2RGB, reused here rather than re-derived since it's plain, format-agnostic colour maths.
+// The classic RGB<->HSL hue formula expresses hue as a fraction of one full turn around a six-sector colour wheel (rgbToHsl divides by, and hslToRgb multiplies by, HUE_WHEEL_SECTORS), with red, green and blue sitting a third of a turn (THIRD_TURN/TWO_THIRDS_TURN) apart around it.
+const HUE_WHEEL_SECTORS = 6;
+const BLUE_DOMINANT_HUE_SECTOR_OFFSET = 4;
+const RGB_CHANNEL_COUNT = 3;
+const THIRD_TURN = 1 / RGB_CHANNEL_COUNT;
+const TWO_THIRDS_TURN = 2 / RGB_CHANNEL_COUNT;
+
 function rgbToHsl(color: Readonly<Color>): Hsl {
   const { r, g, b } = color;
   const max = Math.max(r, g, b);
@@ -294,14 +313,14 @@ function rgbToHsl(color: Readonly<Color>): Hsl {
   const s = d / (2 * Math.min(l, 1 - l));
   let h: number;
   if (max === r) {
-    // No `+ (g < b ? 6 : 0)` fixup for a negative result: hueToRgb below already normalises any hue it's given by exactly one full turn in either direction (`tt < 0` adds 1, `tt > 1` subtracts 1) before using it, so a hue this branch hands it already negative reaches the identical final component hueToRgb would have produced from that same hue plus a full 6-count turn — the fixup and its absence are the same colour by hueToRgb's own construction, not merely close.
+    // No `+ (g < b ? HUE_WHEEL_SECTORS : 0)` fixup for a negative result: hueToRgb below already normalises any hue it's given by exactly one full turn in either direction (`tt < 0` adds 1, `tt > 1` subtracts 1) before using it, so a hue this branch hands it already negative reaches the identical final component hueToRgb would have produced from that same hue plus a full HUE_WHEEL_SECTORS-count turn — the fixup and its absence are the same colour by hueToRgb's own construction, not merely close.
     h = (g - b) / d;
   } else if (max === g) {
     h = (b - r) / d + 2;
   } else {
-    h = (r - g) / d + 4;
+    h = (r - g) / d + BLUE_DOMINANT_HUE_SECTOR_OFFSET;
   }
-  return { h: h / 6, s, l };
+  return { h: h / HUE_WHEEL_SECTORS, s, l };
 }
 
 function hslToRgb(hsl: Hsl): Color {
@@ -311,16 +330,19 @@ function hslToRgb(hsl: Hsl): Color {
     // Wraps into [0, 1) by exactly one turn, matching every real caller's own h +/- 1/3 offset (h itself is always in [0, 1)): (t + 1) % 1 alone is enough, since a leading `t % 1` before adding 1 would be redundant — mod-1 addition distributes over the +1 regardless of whether t was reduced first, for any t at all, not merely the realistic range.
     const tt = (t + 1) % 1;
     // The classic four-piece hueToRgb curve (ramp up over [0, 1/6), hold at q over [1/6, 1/2), ramp down over [1/2, 2/3), hold at p beyond) restated as one continuous trapezoid: each adjacent pair of pieces was chosen to meet exactly at its shared boundary, so a separate `<` comparison per piece could only ever disagree with itself about which of two identical values to return. Math.min(tt, 2/3 - tt) picks the up-ramp's height below the midpoint and the down-ramp's height above it (the same unification rgbToHsl's own `s` formula above uses for its `l > 0.5` boundary), and the outer clamp holds it at 0 or 1 everywhere the original's outer branches did.
-    const trapezoid = Math.min(Math.max(6 * Math.min(tt, 2 / 3 - tt), 0), 1);
+    const trapezoid = Math.min(
+      Math.max(HUE_WHEEL_SECTORS * Math.min(tt, TWO_THIRDS_TURN - tt), 0),
+      1,
+    );
     return p + (q - p) * trapezoid;
   };
   // Continuous at l === 0.5 for the identical reason rgbToHsl's own s formula is: l*(1+s) and l+s-l*s both equal 0.5+0.5s there, since l=0.5 forces the two expressions' every l-only and l*s term to coincide. l + s * Math.min(l, 1 - l) is those two branches unified: it reduces to l*(1+s) below the midpoint and l+s-l*s above it, with no boundary comparison left to disagree with itself over.
   const q = l + s * Math.min(l, 1 - l);
   const p = 2 * l - q;
   return {
-    r: hueToRgb(p, q, h + 1 / 3),
+    r: hueToRgb(p, q, h + THIRD_TURN),
     g: hueToRgb(p, q, h),
-    b: hueToRgb(p, q, h - 1 / 3),
+    b: hueToRgb(p, q, h - THIRD_TURN),
   };
 }
 
@@ -486,9 +508,14 @@ export const UNDECORATED_XF_FIELDS: XfDecorationFields = {
 };
 
 /** Unpacks word1 — the CellXF/StyleXF trailing payload's leading word ([MS-XLS] 2.4.353's own field table, cited in full in xf-writer.ts's packAlignmentPrefix) — into the two fields this package's schema can express: alc (bits 0-2) and alcV (bits 4-6). Every other field the word carries (fWrap, fJustLast, trot, cIndent, fShrinkToFit, iReadOrder, the fAtr* inheritance flags) has no ContentSheetCell counterpart and is not read. */
+// Bit positions within word1's own leading byte ([MS-XLS] 2.4.353's field table): "alc (bits 0-2) and alcV (bits 4-6)", per the doc comment above.
+const ALC_MASK = 0x7;
+const ALCV_SHIFT = 4;
+const ALCV_MASK = 0x7;
+
 export function unpackXfAlignment(word1: number): XfAlignmentFields {
-  const alc = word1 & 0x7;
-  const alcV = (word1 >>> 4) & 0x7;
+  const alc = word1 & ALC_MASK;
+  const alcV = (word1 >>> ALCV_SHIFT) & ALCV_MASK;
   return {
     horizontal: resolveHorizontalAlignment(alc),
     vertical: resolveVerticalAlignment(alcV),
@@ -496,22 +523,43 @@ export function unpackXfAlignment(word1: number): XfAlignmentFields {
 }
 
 /** Unpacks the three raw words a CellXF/StyleXF trailing payload's border/fill fields live in ([MS-XLS] 2.4.353's own field table, cited in full in xf-writer.ts's packXfDecorationWords below) into XfDecorationFields. word2 is the 32-bit border word (dgLeft/dgRight/dgTop/dgBottom/icvLeft/icvRight/grbitDiag), word3 the 32-bit fill-pattern word (icvTop/icvBottom/icvDiag/dgDiag/fHasXFExt/fls), word4 the 16-bit fill-colour word (icvFore/icvBack/...). */
+// Bit positions within word2/word3/word4 ([MS-XLS] 2.4.353's own CellXF field table, cited in full in packXfDecorationWords below): the identical shifts and masks unpack word2/word3/word4 here and pack them back together in packXfDecorationWords.
+const DG_MASK = 0xf; // dgLeft/dgRight/dgTop/dgBottom/dgDiag: a 4-bit BorderStyle token
+const ICV_MASK = 0x7f; // icvLeft/icvRight/icvTop/icvBottom/icvDiag/icvFore/icvBack: a 7-bit Icv colour index
+const FLS_MASK = 0x3f; // fls: a 6-bit FillPattern token
+const GRBIT_DIAG_MASK = 0x3; // grbitDiag: a 2-bit diagonal-border-direction flag pair
+
+const DG_RIGHT_SHIFT = 4;
+const DG_TOP_SHIFT = 8;
+const DG_BOTTOM_SHIFT = 12;
+const ICV_LEFT_SHIFT = 16;
+const ICV_RIGHT_SHIFT = 23;
+const GRBIT_DIAG_SHIFT = 30;
+
+const ICV_BOTTOM_SHIFT = 7;
+const ICV_DIAG_SHIFT = 14;
+const DG_DIAG_SHIFT = 21;
+const F_HAS_XF_EXT_SHIFT = 25;
+const FLS_SHIFT = 26;
+
+const ICV_BACK_SHIFT = 7;
+
 export function unpackXfDecoration(
   word2: number,
   word3: number,
   word4: number,
 ): XfDecorationFields {
-  const dgLeft = word2 & 0xf;
-  const dgRight = (word2 >>> 4) & 0xf;
-  const dgTop = (word2 >>> 8) & 0xf;
-  const dgBottom = (word2 >>> 12) & 0xf;
-  const icvLeft = (word2 >>> 16) & 0x7f;
-  const icvRight = (word2 >>> 23) & 0x7f;
-  const icvTop = word3 & 0x7f;
-  const icvBottom = (word3 >>> 7) & 0x7f;
-  const fls = (word3 >>> 26) & 0x3f;
-  const icvFore = word4 & 0x7f;
-  const icvBack = (word4 >>> 7) & 0x7f;
+  const dgLeft = word2 & DG_MASK;
+  const dgRight = (word2 >>> DG_RIGHT_SHIFT) & DG_MASK;
+  const dgTop = (word2 >>> DG_TOP_SHIFT) & DG_MASK;
+  const dgBottom = (word2 >>> DG_BOTTOM_SHIFT) & DG_MASK;
+  const icvLeft = (word2 >>> ICV_LEFT_SHIFT) & ICV_MASK;
+  const icvRight = (word2 >>> ICV_RIGHT_SHIFT) & ICV_MASK;
+  const icvTop = word3 & ICV_MASK;
+  const icvBottom = (word3 >>> ICV_BOTTOM_SHIFT) & ICV_MASK;
+  const fls = (word3 >>> FLS_SHIFT) & FLS_MASK;
+  const icvFore = word4 & ICV_MASK;
+  const icvBack = (word4 >>> ICV_BACK_SHIFT) & ICV_MASK;
   return {
     fillPattern: fls,
     fillForegroundIcv: icvFore,
@@ -534,24 +582,24 @@ export function packXfDecorationWords(
   const { left, right, top, bottom } = decoration;
   const grbitDiag = 0;
   const word2 =
-    (left.style & 0xf) |
-    ((right.style & 0xf) << 4) |
-    ((top.style & 0xf) << 8) |
-    ((bottom.style & 0xf) << 12) |
-    ((left.icv & 0x7f) << 16) |
-    ((right.icv & 0x7f) << 23) |
-    ((grbitDiag & 0x3) << 30);
+    (left.style & DG_MASK) |
+    ((right.style & DG_MASK) << DG_RIGHT_SHIFT) |
+    ((top.style & DG_MASK) << DG_TOP_SHIFT) |
+    ((bottom.style & DG_MASK) << DG_BOTTOM_SHIFT) |
+    ((left.icv & ICV_MASK) << ICV_LEFT_SHIFT) |
+    ((right.icv & ICV_MASK) << ICV_RIGHT_SHIFT) |
+    ((grbitDiag & GRBIT_DIAG_MASK) << GRBIT_DIAG_SHIFT);
 
   const icvDiag = 0;
   const dgDiag = 0;
   const fHasXfExt = 0;
   const word3 =
-    (top.icv & 0x7f) |
-    ((bottom.icv & 0x7f) << 7) |
-    ((icvDiag & 0x7f) << 14) |
-    ((dgDiag & 0xf) << 21) |
-    ((fHasXfExt & 0x1) << 25) |
-    ((decoration.fillPattern & 0x3f) << 26);
+    (top.icv & ICV_MASK) |
+    ((bottom.icv & ICV_MASK) << ICV_BOTTOM_SHIFT) |
+    ((icvDiag & ICV_MASK) << ICV_DIAG_SHIFT) |
+    ((dgDiag & DG_MASK) << DG_DIAG_SHIFT) |
+    ((fHasXfExt & 0x1) << F_HAS_XF_EXT_SHIFT) |
+    ((decoration.fillPattern & FLS_MASK) << FLS_SHIFT);
 
   // icvFore/icvBack are meaningless for FLSNULL (no fill at all) — forcing both to their Automatic defaults there keeps a border-only decoration's fill word byte-identical to a genuinely undecorated one, matching what a real Excel-written cell with borders but no fill also carries. A solid fill states only icvFore ("If this value is 1, then only icvFore is rendered" — [MS-XLS] CellXF), so icvBack stays Automatic for it too, exactly as this writer always emitted; every other named pattern states both, the colour its strokes are drawn in and the colour its gaps show through.
   const icvFore =
@@ -564,7 +612,7 @@ export function packXfDecorationWords(
       ? ICV_AUTOMATIC_BACKGROUND
       : decoration.fillBackgroundIcv;
 
-  const word4 = (icvFore & 0x7f) | ((icvBack & 0x7f) << 7);
+  const word4 = (icvFore & ICV_MASK) | ((icvBack & ICV_MASK) << ICV_BACK_SHIFT);
 
   return { word2, word3, word4 };
 }
