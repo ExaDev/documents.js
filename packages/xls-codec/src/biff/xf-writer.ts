@@ -16,6 +16,32 @@ import {
 } from "./xf-colors";
 import type { Alignment, Color } from "document-schema.js";
 
+// The XF grbit words' own bit layout, straight from [MS-XLS] 2.4.124's field tables. Alignment: a 3-bit alc at bit 0, one-bit wrap/justLast at 3 and 7, a 3-bit alcV at 4, an 8-bit rotation at 8, a 4-bit indent at 16, one-bit shrink/reserved at 20 and 21, and a 2-bit read order at 22. Attribute flags: one fAtr* bit each at 26-31. Style links: the 123-prefix flag at bit 3, a 12-bit parent index at bit 4, a 12-bit xf index, and the built-in flag at bit 15.
+const FLAG_MASK = 0x1;
+const ALC_MASK = 0x7;
+const FWRAP_SHIFT = 3;
+const ALCV_SHIFT = 4;
+const FJUSTLAST_SHIFT = 7;
+const TROT_MASK = 0xff;
+const TROT_SHIFT = 8;
+const CINDENT_MASK = 0xf;
+const CINDENT_SHIFT = 16;
+const SHRINK_SHIFT = 20;
+const RESERVED1_SHIFT = 21;
+const READ_ORDER_MASK = 0x3;
+const READ_ORDER_SHIFT = 22;
+const FATR_NUM_SHIFT = 26;
+const FATR_FNT_SHIFT = 27;
+const FATR_ALC_SHIFT = 28;
+const FATR_BDR_SHIFT = 29;
+const FATR_PAT_SHIFT = 30;
+const FATR_PROT_SHIFT = 31;
+const F123PREFIX_SHIFT = 3;
+const IXF_PARENT_MASK = 0xfff;
+const IXF_PARENT_SHIFT = 4;
+const IXFE_MASK = 0xfff;
+const FBUILTIN_SHIFT = 15;
+
 // The formatting record family this writer emits: Format ([MS-XLS] 2.4.126), XF ([MS-XLS] 2.4.353) with its trailing CellXF ([MS-XLS] 2.4.353's own "Data" field, fStyle=0) or StyleXF (fStyle=1) payload, Style ([MS-XLS] 2.4.269), and Palette ([MS-XLS] 2.4.188). The Font record lives next door in biff/font.ts, beside its own reader, so the one layout has the one home.
 //
 // A cell XF's own fill/border decoration and horizontal/vertical alignment are modelled from document-schema.js's ContentSheetCell.background/borders/alignment/verticalAlignment, and its font index from ContentSheetCell.font through the font table globals-writer.ts builds: this writer's own reader reads all of them back in full (workbook/globals.ts's readCellFormat, biff/font.ts's readFontRecord), so each round-trips — see xls-codec's README, "Cell decoration" and "Cell alignment". Every CellXF/StyleXF field below still defaults to the same spec-legal, undecorated values for anything writeCellXfRecord's caller does not supply: general alignment, bottom vertical alignment, no border, no fill — exactly what a genuinely undecorated Excel-written cell also carries. The bit-level packing of the trailing payload's leading alignment word and its border/fill words lives in xf-colors.ts, shared with workbook/globals.ts's own unpacking of the identical layout on read.
@@ -30,15 +56,15 @@ function packAlignmentPrefix(alc: number, alcV: number): number {
   const reserved1 = 0;
   const iReadOrder = 0;
   return (
-    (alc & 0x7) |
-    ((fWrap & 0x1) << 3) |
-    ((alcV & 0x7) << 4) |
-    ((fJustLast & 0x1) << 7) |
-    ((trot & 0xff) << 8) |
-    ((cIndent & 0xf) << 16) |
-    ((fShrinkToFit & 0x1) << 20) |
-    ((reserved1 & 0x1) << 21) |
-    ((iReadOrder & 0x3) << 22)
+    (alc & ALC_MASK) |
+    ((fWrap & FLAG_MASK) << FWRAP_SHIFT) |
+    ((alcV & ALC_MASK) << ALCV_SHIFT) |
+    ((fJustLast & FLAG_MASK) << FJUSTLAST_SHIFT) |
+    ((trot & TROT_MASK) << TROT_SHIFT) |
+    ((cIndent & CINDENT_MASK) << CINDENT_SHIFT) |
+    ((fShrinkToFit & FLAG_MASK) << SHRINK_SHIFT) |
+    ((reserved1 & FLAG_MASK) << RESERVED1_SHIFT) |
+    ((iReadOrder & READ_ORDER_MASK) << READ_ORDER_SHIFT)
   );
 }
 
@@ -59,12 +85,12 @@ function packCellXf(options: {
       horizAlignTokenFor(options.alignment),
       vertAlignTokenFor(options.verticalAlignment),
     ) |
-    ((fAtrNum & 0x1) << 26) |
-    ((fAtrFnt & 0x1) << 27) |
-    ((fAtrAlc & 0x1) << 28) |
-    ((fAtrBdr & 0x1) << 29) |
-    ((fAtrPat & 0x1) << 30) |
-    ((fAtrProt & 0x1) << 31);
+    ((fAtrNum & FLAG_MASK) << FATR_NUM_SHIFT) |
+    ((fAtrFnt & FLAG_MASK) << FATR_FNT_SHIFT) |
+    ((fAtrAlc & FLAG_MASK) << FATR_ALC_SHIFT) |
+    ((fAtrBdr & FLAG_MASK) << FATR_BDR_SHIFT) |
+    ((fAtrPat & FLAG_MASK) << FATR_PAT_SHIFT) |
+    ((fAtrProt & FLAG_MASK) << FATR_PROT_SHIFT);
   const { word2, word3, word4 } = packXfDecorationWords(options.decoration);
   return new RecordBuilder()
     .u32(word1)
@@ -101,8 +127,8 @@ function packXfFlags(options: {
     (fLocked & 0x1) |
     ((fHidden & 0x1) << 1) |
     ((options.fStyle ? 1 : 0) << 2) |
-    ((f123Prefix & 0x1) << 3) |
-    ((options.ixfParent & 0xfff) << 4)
+    ((f123Prefix & FLAG_MASK) << F123PREFIX_SHIFT) |
+    ((options.ixfParent & IXF_PARENT_MASK) << IXF_PARENT_SHIFT)
   );
 }
 
@@ -153,7 +179,8 @@ export function writeStyleRecord(options: {
   readonly iLevel: number;
 }): Uint8Array<ArrayBuffer> {
   const fBuiltIn = 1;
-  const ixfeWord = (options.xfIndex & 0xfff) | ((fBuiltIn & 0x1) << 15);
+  const ixfeWord =
+    (options.xfIndex & IXFE_MASK) | ((fBuiltIn & FLAG_MASK) << FBUILTIN_SHIFT);
   const data = new RecordBuilder()
     .u16(ixfeWord)
     .u8(options.istyBuiltIn)
