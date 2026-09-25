@@ -238,7 +238,8 @@ describe("frameGeometryAttrs", () => {
   });
 
   it("writes svg:width/height plus draw:transform (no svg:x/y) for a genuinely rotated frame", () => {
-    const attrs = frameGeometryAttrs(frame, 90);
+    const rotationDeg = 90;
+    const attrs = frameGeometryAttrs(frame, rotationDeg);
     expect(attrs["svg:width"]).toBe("100pt");
     expect(attrs["svg:height"]).toBe("50pt");
     expect(attrs["svg:x"]).toBeUndefined();
@@ -249,8 +250,10 @@ describe("frameGeometryAttrs", () => {
   });
 
   it("a 90-degree rotation's own transform matches the documented algebraic derivation exactly", () => {
-    const attrs = frameGeometryAttrs(frame, 90);
-    const angleRad = (-90 * Math.PI) / 180;
+    const rotationDeg = 90;
+    const attrs = frameGeometryAttrs(frame, rotationDeg);
+    const degreesPerHalfTurn = 180;
+    const angleRad = (-rotationDeg * Math.PI) / degreesPerHalfTurn;
     const cos = Math.cos(angleRad);
     const sin = Math.sin(angleRad);
     const halfW = frame.widthPt / 2;
@@ -273,7 +276,8 @@ describe("odfZIndexOf", () => {
   });
 
   it("returns undefined for a fractional paintOrder", () => {
-    expect(odfZIndexOf(1.5)).toBeUndefined();
+    const fractionalPaintOrder = 1.5;
+    expect(odfZIndexOf(fractionalPaintOrder)).toBeUndefined();
   });
 
   it("returns undefined for a paintOrder beyond Number.isSafeInteger's own bound", () => {
@@ -282,7 +286,8 @@ describe("odfZIndexOf", () => {
 
   it("returns the value unchanged for a genuine non-negative safe integer, including zero", () => {
     expect(odfZIndexOf(0)).toBe(0);
-    expect(odfZIndexOf(5)).toBe(5);
+    const nonNegativePaintOrder = 5;
+    expect(odfZIndexOf(nonNegativePaintOrder)).toBe(nonNegativePaintOrder);
   });
 });
 
@@ -397,22 +402,34 @@ describe("writeDrawFrame", () => {
 
 describe("canonicalDrawShape", () => {
   it("resolves paintOrder to documentIndex when the shape states none, and to its own value when it does", () => {
-    expect(canonicalDrawShape(shape(), 4, freshListState()).paintOrder).toBe(4);
+    const fallbackDocumentIndex = 4;
+    const explicitPaintOrder = 7;
     expect(
-      canonicalDrawShape(shape({ paintOrder: 7 }), 4, freshListState())
+      canonicalDrawShape(shape(), fallbackDocumentIndex, freshListState())
         .paintOrder,
-    ).toBe(7);
+    ).toBe(fallbackDocumentIndex);
+    expect(
+      canonicalDrawShape(
+        shape({ paintOrder: explicitPaintOrder }),
+        fallbackDocumentIndex,
+        freshListState(),
+      ).paintOrder,
+    ).toBe(explicitPaintOrder);
   });
 
   it("collapses rotationDeg === 0 to absent, but keeps a genuine non-zero rotation", () => {
+    const nonZeroRotationDeg = 30;
     expect(
       canonicalDrawShape(shape({ rotationDeg: 0 }), 0, freshListState())
         .rotationDeg,
     ).toBeUndefined();
     expect(
-      canonicalDrawShape(shape({ rotationDeg: 30 }), 0, freshListState())
-        .rotationDeg,
-    ).toBe(30);
+      canonicalDrawShape(
+        shape({ rotationDeg: nonZeroRotationDeg }),
+        0,
+        freshListState(),
+      ).rotationDeg,
+    ).toBe(nonZeroRotationDeg);
   });
 
   it("carries name through only when stated", () => {
@@ -445,10 +462,11 @@ describe("canonicalDrawShape", () => {
   });
 
   it("carries frame/insets through unchanged", () => {
-    const s = shape({ insetLeftPt: 5 });
+    const expectedInsetLeftPt = 5;
+    const s = shape({ insetLeftPt: expectedInsetLeftPt });
     const result = canonicalDrawShape(s, 0, freshListState());
     expect(result.frame).toEqual(s.frame);
-    expect(result.insetLeftPt).toBe(5);
+    expect(result.insetLeftPt).toBe(expectedInsetLeftPt);
   });
 });
 
