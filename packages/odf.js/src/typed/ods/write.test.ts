@@ -279,7 +279,8 @@ describe("writeOdsContent XML shapes", () => {
     const row = childrenWithTag(firstTable(pkg), "table:table-row")[0]!;
     const cells = childrenWithTag(row, "table:table-cell");
     // anchor cell, one compressed filler run, the far cell — not 21 individual elements.
-    expect(cells.length).toBeLessThan(5);
+    const maxExpectedCellElements = 5;
+    expect(cells.length).toBeLessThan(maxExpectedCellElements);
     const filler = cells.find(
       (cellElement) =>
         attrValue(cellElement, "table:number-columns-repeated") !== undefined,
@@ -410,24 +411,23 @@ describe("writeOdsContent XML shapes", () => {
   });
 
   it("mints a distinct SheetTableN style name per sheet, not one shared across all of them", () => {
-    const pkg = writeOdsContent(
-      documentOf([
-        sheetOf([], { name: "Sheet1" }),
-        sheetOf([], { name: "Sheet2" }),
-        sheetOf([], { name: "Sheet3" }),
-      ]),
-    );
+    const sheets = [
+      sheetOf([], { name: "Sheet1" }),
+      sheetOf([], { name: "Sheet2" }),
+      sheetOf([], { name: "Sheet3" }),
+    ];
+    const pkg = writeOdsContent(documentOf(sheets));
     const body = findChildElement(
       partRoot(pkg, "content.xml").children,
       "office:body",
     )!;
     const spreadsheet = findChildElement(body.children, "office:spreadsheet")!;
     const tables = childrenWithTag(spreadsheet, "table:table");
-    expect(tables).toHaveLength(3);
+    expect(tables).toHaveLength(sheets.length);
     const styleNames = tables.map((table) =>
       attrValue(table, "table:style-name"),
     );
-    expect(new Set(styleNames).size).toBe(3);
+    expect(new Set(styleNames).size).toBe(sheets.length);
   });
 
   it("writes table:table-column and table:table-row with no table:style-name when the column/row carries no width, height, or manual break", () => {
@@ -500,24 +500,38 @@ describe("writeOdsContent XML shapes", () => {
 
   describe("used range: each independent source extends its own axis, never the other", () => {
     it("a column past the last cell extends table:table-column but not table:table-row", () => {
+      const lastColumnIndex = 3;
       const pkg = writeOdsContent(
-        documentOf([sheetOf([], { columns: [{ index: 3, hidden: false }] })]),
+        documentOf([
+          sheetOf([], {
+            columns: [{ index: lastColumnIndex, hidden: false }],
+          }),
+        ]),
       );
       const table = firstTable(pkg);
-      expect(childrenWithTag(table, "table:table-column")).toHaveLength(4);
+      expect(childrenWithTag(table, "table:table-column")).toHaveLength(
+        lastColumnIndex + 1,
+      );
       expect(childrenWithTag(table, "table:table-row")).toHaveLength(0);
     });
 
     it("a row past the last cell extends table:table-row but not table:table-column", () => {
+      const lastRowIndex = 2;
       const pkg = writeOdsContent(
-        documentOf([sheetOf([], { rows: [{ index: 2, hidden: false }] })]),
+        documentOf([
+          sheetOf([], { rows: [{ index: lastRowIndex, hidden: false }] }),
+        ]),
       );
       const table = firstTable(pkg);
-      expect(childrenWithTag(table, "table:table-row")).toHaveLength(3);
+      expect(childrenWithTag(table, "table:table-row")).toHaveLength(
+        lastRowIndex + 1,
+      );
       expect(childrenWithTag(table, "table:table-column")).toHaveLength(0);
     });
 
     it("an image past the last cell extends both axes to its own anchor position", () => {
+      const anchorRow = 4;
+      const anchorColumn = 2;
       const pkg = writeOdsContent(
         documentOf([
           sheetOf([], {
@@ -529,8 +543,8 @@ describe("writeOdsContent XML shapes", () => {
                   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
                 widthPt: 30,
                 heightPt: 20,
-                anchorRow: 4,
-                anchorColumn: 2,
+                anchorRow,
+                anchorColumn,
                 offsetXPt: 0,
                 offsetYPt: 0,
               },
@@ -539,11 +553,17 @@ describe("writeOdsContent XML shapes", () => {
         ]),
       );
       const table = firstTable(pkg);
-      expect(childrenWithTag(table, "table:table-row")).toHaveLength(5);
-      expect(childrenWithTag(table, "table:table-column")).toHaveLength(3);
+      expect(childrenWithTag(table, "table:table-row")).toHaveLength(
+        anchorRow + 1,
+      );
+      expect(childrenWithTag(table, "table:table-column")).toHaveLength(
+        anchorColumn + 1,
+      );
     });
 
     it("an embedded object past the last cell extends both axes to its own anchor position", () => {
+      const anchorRow = 3;
+      const anchorColumn = 1;
       const pkg = writeOdsContent(
         documentOf([
           sheetOf([], {
@@ -551,8 +571,8 @@ describe("writeOdsContent XML shapes", () => {
               {
                 objectKind: "wordprocessing",
                 frame: { xPt: 0, yPt: 0, widthPt: 10, heightPt: 10 },
-                anchorRow: 3,
-                anchorColumn: 1,
+                anchorRow,
+                anchorColumn,
                 document: {
                   kind: "wordprocessing",
                   metadata: {},
@@ -575,8 +595,12 @@ describe("writeOdsContent XML shapes", () => {
         ]),
       );
       const table = firstTable(pkg);
-      expect(childrenWithTag(table, "table:table-row")).toHaveLength(4);
-      expect(childrenWithTag(table, "table:table-column")).toHaveLength(2);
+      expect(childrenWithTag(table, "table:table-row")).toHaveLength(
+        anchorRow + 1,
+      );
+      expect(childrenWithTag(table, "table:table-column")).toHaveLength(
+        anchorColumn + 1,
+      );
     });
 
     it("an embedded object with no anchorRow/anchorColumn defaults to position (0,0), not undefined-driven NaN cells", () => {
@@ -614,14 +638,14 @@ describe("writeOdsContent XML shapes", () => {
     });
 
     it("a data-validation rule's range past the last cell extends the grid, unlike a conditional-format rule's range", () => {
+      const endRow = 6;
+      const endColumn = 4;
       const pkg = writeOdsContent(
         documentOf([
           sheetOf([], {
             dataValidations: [
               {
-                ranges: [
-                  { startRow: 0, startColumn: 0, endRow: 6, endColumn: 4 },
-                ],
+                ranges: [{ startRow: 0, startColumn: 0, endRow, endColumn }],
                 type: "list",
                 formula1: '"a,b,c"',
               },
@@ -630,18 +654,24 @@ describe("writeOdsContent XML shapes", () => {
         ]),
       );
       const table = firstTable(pkg);
-      expect(childrenWithTag(table, "table:table-row")).toHaveLength(7);
-      expect(childrenWithTag(table, "table:table-column")).toHaveLength(5);
+      expect(childrenWithTag(table, "table:table-row")).toHaveLength(
+        endRow + 1,
+      );
+      expect(childrenWithTag(table, "table:table-column")).toHaveLength(
+        endColumn + 1,
+      );
     });
 
     it("printSettings.repeatColumns/repeatRows each extend only their own axis (wrapped in their own table:table-header-columns/-rows)", () => {
+      const repeatColumnsEnd = 2;
+      const repeatRowsEnd = 5;
       const pkg = writeOdsContent(
         documentOf([
           sheetOf([], {
             printSettings: {
               ...DEFAULT_PRINT_SETTINGS,
-              repeatColumns: { start: 0, end: 2 },
-              repeatRows: { start: 0, end: 5 },
+              repeatColumns: { start: 0, end: repeatColumnsEnd },
+              repeatRows: { start: 0, end: repeatRowsEnd },
             },
           }),
         ]),
@@ -654,12 +684,16 @@ describe("writeOdsContent XML shapes", () => {
       )[0]!;
       const rowHeader = childrenWithTag(table, "table:table-header-rows")[0]!;
       expect(childrenWithTag(columnHeader, "table:table-column")).toHaveLength(
-        3,
+        repeatColumnsEnd + 1,
       );
-      expect(childrenWithTag(rowHeader, "table:table-row")).toHaveLength(6);
+      expect(childrenWithTag(rowHeader, "table:table-row")).toHaveLength(
+        repeatRowsEnd + 1,
+      );
     });
 
     it("printSettings.printRange extends both axes to its own end position", () => {
+      const printRangeEndRow = 8;
+      const printRangeEndColumn = 3;
       const pkg = writeOdsContent(
         documentOf([
           sheetOf([], {
@@ -668,32 +702,45 @@ describe("writeOdsContent XML shapes", () => {
               printRange: {
                 startRow: 0,
                 startColumn: 0,
-                endRow: 8,
-                endColumn: 3,
+                endRow: printRangeEndRow,
+                endColumn: printRangeEndColumn,
               },
             },
           }),
         ]),
       );
       const table = firstTable(pkg);
-      expect(childrenWithTag(table, "table:table-row")).toHaveLength(9);
-      expect(childrenWithTag(table, "table:table-column")).toHaveLength(4);
+      expect(childrenWithTag(table, "table:table-row")).toHaveLength(
+        printRangeEndRow + 1,
+      );
+      expect(childrenWithTag(table, "table:table-column")).toHaveLength(
+        printRangeEndColumn + 1,
+      );
     });
 
     it("printSettings.manualBreaks rows/columns each extend only their own axis", () => {
+      const rowBreakIndex = 7;
+      const columnBreakIndex = 3;
       const pkg = writeOdsContent(
         documentOf([
           sheetOf([], {
             printSettings: {
               ...DEFAULT_PRINT_SETTINGS,
-              manualBreaks: { rows: [7], columns: [3] },
+              manualBreaks: {
+                rows: [rowBreakIndex],
+                columns: [columnBreakIndex],
+              },
             },
           }),
         ]),
       );
       const table = firstTable(pkg);
-      expect(childrenWithTag(table, "table:table-row")).toHaveLength(8);
-      expect(childrenWithTag(table, "table:table-column")).toHaveLength(4);
+      expect(childrenWithTag(table, "table:table-row")).toHaveLength(
+        rowBreakIndex + 1,
+      );
+      expect(childrenWithTag(table, "table:table-column")).toHaveLength(
+        columnBreakIndex + 1,
+      );
     });
   });
 
@@ -824,6 +871,7 @@ describe("writeOdsContent XML shapes", () => {
         endRow: row,
         endColumn: 0,
       });
+      const fourthRuleRow = 3;
       const pkg = writeOdsContent(
         documentOf([
           sheetOf([], {
@@ -846,7 +894,7 @@ describe("writeOdsContent XML shapes", () => {
                 showErrorMessage: true,
               },
               {
-                ranges: [rangeAt(3)],
+                ranges: [rangeAt(fourthRuleRow)],
                 type: "list",
                 formula1: '"x,y,z"',
               },
@@ -860,7 +908,7 @@ describe("writeOdsContent XML shapes", () => {
         return attrValue(cell, "table:content-validation-name");
       };
       expect(nameOfRow(0)).not.toBe(nameOfRow(1));
-      expect(nameOfRow(2)).not.toBe(nameOfRow(3));
+      expect(nameOfRow(2)).not.toBe(nameOfRow(fourthRuleRow));
     });
 
     it("interns two rules with identical written content to the SAME name, not a fresh one each time", () => {
@@ -1504,6 +1552,10 @@ describe("writeOdsContent: data validation and conditional formatting", () => {
   });
 
   it("writes one calcext:conditional-format wrapper per distinct range list with calcext:condition, colour-scale, data-bar, icon-set, and date-is children", () => {
+    const RGB_CHANNEL_MAX = 255;
+    const quantizedRed = 99;
+    const quantizedGreen = 190;
+    const quantizedBlue = 123;
     const ranges = [{ startRow: 0, startColumn: 0, endRow: 0, endColumn: 0 }];
     const pkg = writeOdsContent(
       documentOf([
@@ -1526,7 +1578,11 @@ describe("writeOdsContent: data validation and conditional formatting", () => {
               ranges,
               min: { type: "min" },
               max: { type: "max" },
-              color: { r: 99 / 255, g: 190 / 255, b: 123 / 255 },
+              color: {
+                r: quantizedRed / RGB_CHANNEL_MAX,
+                g: quantizedGreen / RGB_CHANNEL_MAX,
+                b: quantizedBlue / RGB_CHANNEL_MAX,
+              },
               showValue: false,
             },
           ],
@@ -1848,6 +1904,10 @@ describe("writeOdsContent: boolean and currency cell value boundaries", () => {
   });
 
   it("prefers exactValue's own decimal string over the double when both are present", () => {
+    // The classic floating-point imprecision case: 0.1 + 0.2 !== 0.3 in IEEE 754 double precision, which is exactly why exactValue's own decimal string must win.
+    const firstAddend = 0.1;
+    const secondAddend = 0.2;
+    const impreciseFloatSum = firstAddend + secondAddend;
     const pkg = writeOdsContent(
       documentOf([
         sheetOf([
@@ -1856,7 +1916,7 @@ describe("writeOdsContent: boolean and currency cell value boundaries", () => {
             column: 0,
             value: {
               kind: "number",
-              value: 0.1 + 0.2,
+              value: impreciseFloatSum,
               exactValue: "0.3",
             },
             displayText: "0.3",
@@ -2158,7 +2218,8 @@ describe("canonical* helpers: direct unit coverage (see the note above on why)",
       offsetXPt: 0,
       offsetYPt: 0,
     });
-    const second = imageAt(0, 5);
+    const secondAnchorColumn = 5;
+    const second = imageAt(0, secondAnchorColumn);
     const first = imageAt(0, 1);
     const third = imageAt(2, 0);
     const result = canonicalImages({

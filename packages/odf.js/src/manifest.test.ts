@@ -16,17 +16,58 @@ import {
 } from "./manifest";
 
 const ODT_MEDIA_TYPE = "application/vnd.oasis.opendocument.text";
+
+// The real 8-byte PNG signature (ISO/IEC 15948 5.2), derived from its own ASCII/control-character reading rather than restated as opaque hex.
+const PNG_SIGNATURE_BYTES: readonly number[] = Array.from(
+  "\x89PNG\r\n\x1a\n",
+  (c) => c.charCodeAt(0),
+);
+// A small handful of arbitrary filler bytes standing in for pixel data no test here actually parses.
+const IMAGE_FILLER_BYTES: readonly number[] = Array.from(
+  { length: 5 },
+  (_, i) => i + 1,
+);
+const shortFillerByteCount = 3;
+const shortImageFillerBytes = IMAGE_FILLER_BYTES.slice(0, shortFillerByteCount);
+
 const PNG_BYTES: Uint8Array<ArrayBuffer> = new Uint8Array([
-  0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3, 4, 5,
+  ...PNG_SIGNATURE_BYTES,
+  ...IMAGE_FILLER_BYTES,
 ]);
+
+// The JFIF APP0 marker sequence (SOI 0xFFD8, then an APP0 marker 0xFFE0) that opens a real JPEG file.
+const JPEG_SOI_MARKER = 0xff;
+const JPEG_SOI_MARKER_TYPE = 0xd8;
+const JPEG_APP0_MARKER = 0xff;
+const JPEG_APP0_MARKER_TYPE = 0xe0;
 const JPEG_BYTES: Uint8Array<ArrayBuffer> = new Uint8Array([
-  0xff, 0xd8, 0xff, 0xe0, 1, 2, 3,
+  JPEG_SOI_MARKER,
+  JPEG_SOI_MARKER_TYPE,
+  JPEG_APP0_MARKER,
+  JPEG_APP0_MARKER_TYPE,
+  ...shortImageFillerBytes,
 ]);
+
+// The placeable-WMF Aldus Placeable Metafile magic number (not ASCII-derivable; it predates any text encoding of its own).
+const WMF_MAGIC_BYTE_0 = 0xd7;
+const WMF_MAGIC_BYTE_1 = 0xcd;
+const WMF_MAGIC_BYTE_2 = 0xc6;
+const WMF_MAGIC_BYTE_3 = 0x9a;
 const WMF_BYTES: Uint8Array<ArrayBuffer> = new Uint8Array([
-  0xd7, 0xcd, 0xc6, 0x9a, 1, 2, 3,
+  WMF_MAGIC_BYTE_0,
+  WMF_MAGIC_BYTE_1,
+  WMF_MAGIC_BYTE_2,
+  WMF_MAGIC_BYTE_3,
+  ...shortImageFillerBytes,
 ]);
+
+// The GIF89a signature, derived from its own ASCII reading.
+const GIF_SIGNATURE_BYTES: readonly number[] = Array.from("GIF89a", (c) =>
+  c.charCodeAt(0),
+);
 const GIF_BYTES: Uint8Array<ArrayBuffer> = new Uint8Array([
-  0x47, 0x49, 0x46, 0x38, 0x39, 0x61, 1, 2, 3,
+  ...GIF_SIGNATURE_BYTES,
+  ...shortImageFillerBytes,
 ]);
 const SVG_BYTES: Uint8Array<ArrayBuffer> = new TextEncoder().encode(
   '<?xml version="1.0"?><svg></svg>',
