@@ -1,5 +1,57 @@
 import type { CompoundFileStream } from "./read";
 
+// The CFB header's own field offsets ([MS-CFB] 2.2), the directory entry's own field offsets ([MS-CFB] 2.6.1), the FAT's 4-byte entries, the two major versions' own sector shifts, the 2^32 word a version-4 size's high half comes from, the top bit count below a FAT index, and the signature and byte-order mark the format opens with.
+const U8_MASK = 0xff;
+const FAT_ENTRY_BYTES = 4;
+const WORDS_PER_SIZE_HIGH = 4294967296;
+const TOP_FAT_INDEX_BITS = 31;
+type CfbMajorVersion = 3 | 4;
+const VERSION_3 = 3;
+const VERSION_4 = 4;
+const DEFAULT_MAJOR_VERSION = 3;
+const VERSION_3_SECTOR_SHIFT = 9;
+const VERSION_4_SECTOR_SHIFT = 12;
+const DIRENT_NAME_LENGTH_OFFSET = 0x40;
+const DIRENT_OBJECT_TYPE_OFFSET = 0x42;
+const DIRENT_COLOUR_OFFSET = 0x43;
+const DIRENT_LEFT_OFFSET = 0x44;
+const DIRENT_RIGHT_OFFSET = 0x48;
+const DIRENT_CHILD_OFFSET = 0x4c;
+const DIRENT_START_SECTOR_OFFSET = 0x74;
+const DIRENT_SIZE_OFFSET = 0x78;
+const DIRENT_SIZE_HIGH_OFFSET = 0x7c;
+const HEADER_MINOR_VERSION_OFFSET = 0x18;
+const HEADER_MAJOR_VERSION_OFFSET = 0x1a;
+const HEADER_BYTE_ORDER_OFFSET = 0x1c;
+const HEADER_SECTOR_SHIFT_OFFSET = 0x1e;
+const HEADER_MINI_SECTOR_SHIFT_OFFSET = 0x20;
+const HEADER_DIRECTORY_SECTOR_COUNT_OFFSET = 0x28;
+const HEADER_FAT_SECTOR_COUNT_OFFSET = 0x2c;
+const HEADER_DIRECTORY_START_OFFSET = 0x30;
+const HEADER_MINI_STREAM_CUTOFF_OFFSET = 0x38;
+const HEADER_MINI_FAT_START_OFFSET = 0x3c;
+const HEADER_MINI_FAT_COUNT_OFFSET = 0x40;
+const HEADER_DIFAT_START_OFFSET = 0x44;
+const HEADER_DIFAT_COUNT_OFFSET = 0x48;
+const HEADER_MINOR_VERSION = 0x003e;
+const LITTLE_ENDIAN_BOM = 0xfffe;
+// The signature bytes as numbered spec entries, [MS-CFB] 2.2's own header signature.
+interface SignatureByte {
+  readonly i: number;
+  readonly value: number;
+}
+const CFB_SIGNATURE_ENTRIES: readonly SignatureByte[] = [
+  { i: 1, value: 0xd0 },
+  { i: 2, value: 0xcf },
+  { i: 3, value: 0x11 },
+  { i: 4, value: 0xe0 },
+  { i: 5, value: 0xa1 },
+  { i: 6, value: 0xb1 },
+  { i: 7, value: 0x1a },
+  { i: 8, value: 0xe1 },
+];
+const CFB_SIGNATURE = CFB_SIGNATURE_ENTRIES.map(({ value }) => value);
+
 // The write half of the classic OLE compound-file container ([MS-CFB]): given the same named-stream vocabulary readCompoundFile returns, it emits a conformant compound file — header, FAT, DIFAT (header array and chained DIFAT sectors), directory entries as genuine red-black sibling trees, and the mini-FAT/mini-stream allocation small streams take. It exists because the family's legacy binary codecs (doc-codec, xls-codec, ppt-codec, wpd-codec) can read their [MS-CFB]-contained formats but cannot produce them: a .doc, .xls, or .ppt writer needs a compound file to put its own binary streams into, and that container is structural knowledge exactly as the reader's is — sectors, chains, and directory entries, never that any stream is a document (see documents.js#815, #816, #817).
 //
 // Deliberately the mirror image of readCompoundFile: it takes the array that returns, so writeCompoundFile(readCompoundFile(bytes)) is a well-typed round trip rather than a translation between two vocabularies. Nested storages come with that symmetry — the reader emits slash-joined paths for streams inside storages, so a writer that could not accept one would not be able to re-write what its own package had just read, even though no legacy-format codec needs nesting for its own streams.
@@ -13,7 +65,7 @@ const FATSECT = 0xfffffffd;
 const DIFSECT = 0xfffffffc;
 const NOSTREAM = 0xffffffff;
 // A FREESECT is four 0xFF bytes, so filling a byte range with this is filling it with FREESECT entries — which is how every FAT, mini-FAT, and DIFAT region below starts out, and how the spec's requirement that entries past the end of the file read FREESECT is met without a second pass over the tail.
-const FREESECT_FILL_BYTE = FREESECT & 0xff;
+const FREESECT_FILL_BYTE = FREESECT & U8_MASK;
 // [MS-CFB] 2.2: the header is 512 bytes whatever the sector size, and its own DIFAT array names the first 109 FAT sectors.
 const HEADER_DIFAT_ENTRIES = 109;
 const HEADER_DIFAT_OFFSET = 0x4c;
@@ -47,7 +99,7 @@ export class CompoundFileWriteError extends Error {
 
 export interface WriteCompoundFileOptions {
   // Version 3 (512-byte sectors) unless named otherwise: it is what every legacy Office binary format is written as, and what the four codecs consuming this writer produce. Version 4 (4096-byte sectors) writes the same structures with the header zero-padded out to its full first sector.
-  readonly majorVersion?: 3 | 4;
+  readonly majorVersion?: CfbMajorVersion;
 }
 
 interface StorageNode {
@@ -176,7 +228,7 @@ function addStream(
 
 // The depth of the deepest node in the balanced tree linkSiblings builds over `count` siblings. Each recursion halves the sibling count, so the deepest node sits at floor(log2(count)) — computed by bit length rather than Math.log2, which is a float operation whose rounding at exact powers of two would silently mis-colour a whole level. Exported for direct testing: its sole call site is deepestDepth(children.length), and when children.length is genuinely 0 (an empty storage, e.g. writeCompoundFile([])'s own root), linkSiblings returns undefined before ever reading the `deepest` argument at all — so that one real call site can never observe whether count === 0 is handled correctly.
 export function deepestDepth(count: number): number {
-  return count === 0 ? 0 : 31 - Math.clz32(count);
+  return count === 0 ? 0 : TOP_FAT_INDEX_BITS - Math.clz32(count);
 }
 
 // Builds one storage's sibling red-black tree over its already-sorted children, returning its root, and satisfies every [MS-CFB] 2.6.4 constraint by construction rather than by rebalancing: splitting a sorted list at its midpoint gives a binary search tree whose nodes sit at depths 0..D for D = floor(log2 n) and whose empty positions sit at depths no shallower than floor(log2(n+1)) >= D, so colouring exactly the depth-D nodes red makes every root-to-leaf path carry D + 1 black nodes (a path reaching depth D + 1 does so only through a red node, which adds none) with no two reds adjacent (reds share only black parents at depth D - 1) and a black root (depth 0 is red only when D is 0, the lone-sibling case, which is coloured black instead).
@@ -253,15 +305,15 @@ function planDirectory(root: StorageNode): DirectoryPlan {
 
 // [MS-CFB] 2.6.1: a version 3 stream's size field has no high (>32-bit) half, so its byte length cannot exceed 0x80000000. Exported for direct testing against plain numbers: proving this boundary end to end would otherwise need constructing and writing an actual 2 GiB+ stream for every mutant of the condition itself, not merely the one real test that must still exist for the thrown message's own exact text.
 export function exceedsVersion3StreamCeiling(
-  majorVersion: 3 | 4,
+  majorVersion: CfbMajorVersion,
   byteLength: number,
 ): boolean {
-  return majorVersion === 3 && byteLength > MAX_VERSION_3_STREAM_BYTES;
+  return majorVersion === VERSION_3 && byteLength > MAX_VERSION_3_STREAM_BYTES;
 }
 
 // [MS-CFB] 2.6.1: the directory entry's stream-size field is a 64-bit little-endian quantity split across two 32-bit words; this is the high word (the low 32 bits, `size >>> 0`, need no such helper — that operator has no other numeric reading a mutant could quietly substitute). Exported for direct testing against plain numbers for the same reason as exceedsVersion3StreamCeiling above: proving this arithmetic holds would otherwise need constructing and writing an actual 4 GiB+ stream.
 export function highSizeWord(size: number): number {
-  return Math.floor(size / 4294967296);
+  return Math.floor(size / WORDS_PER_SIZE_HIGH);
 }
 
 // Writes the streams as a compound file. Version 3 (512-byte sectors) unless options say otherwise. Throws CompoundFileWriteError when the request itself cannot be expressed — an illegal name, an empty path segment, colliding siblings, or a version 3 stream past the 2 GB the format allows one — rather than emitting a file that only looks valid.
@@ -269,10 +321,13 @@ export function writeCompoundFile(
   streams: readonly CompoundFileStream[],
   options: WriteCompoundFileOptions = {},
 ): Uint8Array<ArrayBuffer> {
-  const majorVersion = options.majorVersion ?? 3;
-  const sectorShift = majorVersion === 4 ? 12 : 9;
+  const majorVersion = options.majorVersion ?? DEFAULT_MAJOR_VERSION;
+  const sectorShift =
+    majorVersion === VERSION_4
+      ? VERSION_4_SECTOR_SHIFT
+      : VERSION_3_SECTOR_SHIFT;
   const sectorSize = 1 << sectorShift;
-  const entriesPerFatSector = sectorSize / 4;
+  const entriesPerFatSector = sectorSize / FAT_ENTRY_BYTES;
   const entriesPerDirectorySector = sectorSize / DIRECTORY_ENTRY_SIZE;
   // A DIFAT sector spends its last slot on the pointer to the next one ([MS-CFB] 2.5), so it names one fewer FAT sector than a FAT sector holds entries.
   const difatEntriesPerSector = entriesPerFatSector - 1;
@@ -400,13 +455,13 @@ export function writeCompoundFile(
   file.fill(
     FREESECT_FILL_BYTE,
     HEADER_DIFAT_OFFSET,
-    HEADER_DIFAT_OFFSET + HEADER_DIFAT_ENTRIES * 4,
+    HEADER_DIFAT_OFFSET + HEADER_DIFAT_ENTRIES * FAT_ENTRY_BYTES,
   );
 
   const setFat = (sector: number, value: number): void => {
     putU32(
       sectorOffset(Math.floor(sector / entriesPerFatSector)) +
-        (sector % entriesPerFatSector) * 4,
+        (sector % entriesPerFatSector) * FAT_ENTRY_BYTES,
       value,
     );
   };
@@ -432,7 +487,7 @@ export function writeCompoundFile(
 
   // The DIFAT: index n names the (n+1)th FAT sector, the header carrying the first 109 and chained DIFAT sectors the rest, each spending its last slot on the next sector's location and the last of them on ENDOFCHAIN.
   for (let i = 0; i < Math.min(fatSectorCount, HEADER_DIFAT_ENTRIES); i++) {
-    putU32(HEADER_DIFAT_OFFSET + i * 4, i);
+    putU32(HEADER_DIFAT_OFFSET + i * FAT_ENTRY_BYTES, i);
   }
   for (let sector = 0; sector < difatSectorCount; sector++) {
     const base = sectorOffset(difatStart + sector);
@@ -444,11 +499,11 @@ export function writeCompoundFile(
       const fatIndex =
         HEADER_DIFAT_ENTRIES + sector * difatEntriesPerSector + i;
       if (fatIndex < fatSectorCount) {
-        putU32(base + i * 4, fatIndex);
+        putU32(base + i * FAT_ENTRY_BYTES, fatIndex);
       }
     }
     putU32(
-      base + difatEntriesPerSector * 4,
+      base + difatEntriesPerSector * FAT_ENTRY_BYTES,
       sector === difatSectorCount - 1 ? ENDOFCHAIN : difatStart + sector + 1,
     );
   }
@@ -459,7 +514,7 @@ export function writeCompoundFile(
       sectorOffset(
         miniFatStart + Math.floor(miniSector / entriesPerFatSector),
       ) +
-        (miniSector % entriesPerFatSector) * 4,
+        (miniSector % entriesPerFatSector) * FAT_ENTRY_BYTES,
       value,
     );
   };
@@ -497,16 +552,16 @@ export function writeCompoundFile(
       putU16(base + i * 2, name.charCodeAt(i));
     }
     // The already-zero code unit past the name is the terminating null the length counts.
-    putU16(base + 0x40, (name.length + 1) * 2);
-    view.setUint8(base + 0x42, objectTypeOf(entry));
-    view.setUint8(base + 0x43, entry.colour);
-    putU32(base + 0x44, entry.left);
-    putU32(base + 0x48, entry.right);
-    putU32(base + 0x4c, entry.child);
+    putU16(base + DIRENT_NAME_LENGTH_OFFSET, (name.length + 1) * 2);
+    view.setUint8(base + DIRENT_OBJECT_TYPE_OFFSET, objectTypeOf(entry));
+    view.setUint8(base + DIRENT_COLOUR_OFFSET, entry.colour);
+    putU32(base + DIRENT_LEFT_OFFSET, entry.left);
+    putU32(base + DIRENT_RIGHT_OFFSET, entry.right);
+    putU32(base + DIRENT_CHILD_OFFSET, entry.child);
     // CLSID (0x50), state bits (0x60), creation time (0x64), and modified time (0x6c) stay zero: [MS-CFB] 2.6.1 requires that of a stream entry and of the root's timestamps, and an implementation that does not let callers set a storage's class or state bits MUST default them to zero — which is exactly this one, since none of it survives a round trip through the stream vocabulary this writer takes.
-    putU32(base + 0x74, entry.startSector);
-    putU32(base + 0x78, entry.size >>> 0);
-    putU32(base + 0x7c, highSizeWord(entry.size));
+    putU32(base + DIRENT_START_SECTOR_OFFSET, entry.startSector);
+    putU32(base + DIRENT_SIZE_OFFSET, entry.size >>> 0);
+    putU32(base + DIRENT_SIZE_HIGH_OFFSET, highSizeWord(entry.size));
   }
   // Directory entries past the last real one pad their sector out. They stay object type 0 (unallocated) with a zero-length name, and only their links need writing, since NOSTREAM is not the zero the allocation already holds.
   for (
@@ -515,27 +570,36 @@ export function writeCompoundFile(
     id++
   ) {
     const base = entryOffset(id);
-    putU32(base + 0x44, NOSTREAM);
-    putU32(base + 0x48, NOSTREAM);
-    putU32(base + 0x4c, NOSTREAM);
+    putU32(base + DIRENT_LEFT_OFFSET, NOSTREAM);
+    putU32(base + DIRENT_RIGHT_OFFSET, NOSTREAM);
+    putU32(base + DIRENT_CHILD_OFFSET, NOSTREAM);
   }
 
   // The header ([MS-CFB] 2.2). Header CLSID (0x08), reserved (0x22), and the transaction signature number (0x34) stay zero, each because the spec requires it.
-  file.set([0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1], 0);
-  putU16(0x18, 0x003e); // minor version: the value the spec names for major version 3 and 4 alike
-  putU16(0x1a, majorVersion);
-  putU16(0x1c, 0xfffe); // byte order mark: little-endian
-  putU16(0x1e, sectorShift);
-  putU16(0x20, MINI_SECTOR_SHIFT);
+  file.set(CFB_SIGNATURE, 0);
+  putU16(HEADER_MINOR_VERSION_OFFSET, HEADER_MINOR_VERSION); // the value the spec names for major version 3 and 4 alike
+  putU16(HEADER_MAJOR_VERSION_OFFSET, majorVersion);
+  putU16(HEADER_BYTE_ORDER_OFFSET, LITTLE_ENDIAN_BOM); // byte order mark: little-endian
+  putU16(HEADER_SECTOR_SHIFT_OFFSET, sectorShift);
+  putU16(HEADER_MINI_SECTOR_SHIFT_OFFSET, MINI_SECTOR_SHIFT);
   // The directory-sector count MUST be zero in a version 3 file — the field is unsupported there — and carries the real count in version 4.
-  putU32(0x28, majorVersion === 3 ? 0 : directorySectorCount);
-  putU32(0x2c, fatSectorCount);
-  putU32(0x30, directoryStart);
-  putU32(0x38, MINI_STREAM_CUTOFF);
-  putU32(0x3c, miniFatSectorCount === 0 ? ENDOFCHAIN : miniFatStart);
-  putU32(0x40, miniFatSectorCount);
-  putU32(0x44, difatSectorCount === 0 ? ENDOFCHAIN : difatStart);
-  putU32(0x48, difatSectorCount);
+  putU32(
+    HEADER_DIRECTORY_SECTOR_COUNT_OFFSET,
+    majorVersion === VERSION_3 ? 0 : directorySectorCount,
+  );
+  putU32(HEADER_FAT_SECTOR_COUNT_OFFSET, fatSectorCount);
+  putU32(HEADER_DIRECTORY_START_OFFSET, directoryStart);
+  putU32(HEADER_MINI_STREAM_CUTOFF_OFFSET, MINI_STREAM_CUTOFF);
+  putU32(
+    HEADER_MINI_FAT_START_OFFSET,
+    miniFatSectorCount === 0 ? ENDOFCHAIN : miniFatStart,
+  );
+  putU32(HEADER_MINI_FAT_COUNT_OFFSET, miniFatSectorCount);
+  putU32(
+    HEADER_DIFAT_START_OFFSET,
+    difatSectorCount === 0 ? ENDOFCHAIN : difatStart,
+  );
+  putU32(HEADER_DIFAT_COUNT_OFFSET, difatSectorCount);
 
   return file;
 }
