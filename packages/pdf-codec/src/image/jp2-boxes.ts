@@ -10,6 +10,15 @@ const BOX_HEADER_BYTES = 8;
 const BOX_LENGTH_EXTENDED = 1;
 const BOX_LENGTH_TO_END = 0;
 
+// Bits in one byte.
+const BITS_PER_BYTE = 8;
+// The multiplier that places a byte as the highest byte of a big-endian uint32 (2**24); readUint32 below multiplies rather than shifts (`b0 << 24`) because JS's `<<` operates on 32-bit SIGNED integers, and a byte >= 0x80 shifted into the sign bit would produce a negative result.
+const BYTE_0_MULTIPLIER = 0x1000000;
+const BYTE_1_SHIFT = 16;
+// Width of the 32-bit big-endian field readUint32 assembles, and the offset of its last byte (offsets 0-2 need no name, exempt from this rule as structurally self-evident).
+const UINT32_SIZE = 4;
+const UINT32_LAST_BYTE_OFFSET = 3;
+
 // Box types, as the four ASCII characters each is written with.
 const BOX_SIGNATURE = 0x6a502020; // 'jP  '
 const BOX_JP2_HEADER = 0x6a703268; // 'jp2h'
@@ -53,12 +62,20 @@ export interface Jp2ChannelDefinition {
   readonly association: number;
 }
 
+// Every JPEG 2000 codestream marker shares this 0xFF prefix byte (ISO/IEC 15444-1 Annex A.2); SOC (Start Of Codestream) and SIZ (Image and Tile Size) are the two the bare-codestream check below matches on.
+const JPEG2000_MARKER_PREFIX = 0xff;
+const JPEG2000_SOC_LOW_BYTE = 0x4f;
+const JPEG2000_SIZ_LOW_BYTE = 0x51;
+
 // A bare codestream starts with SOC immediately followed by SIZ, which no JP2 file ever can (a JP2 file starts with the signature box's own length field, 0x0000000C). No separate `data.length >= 4` guard is needed: with noUncheckedIndexedAccess, an out-of-bounds index below reads as `undefined`, and `undefined === 0xff` is already false, so a shorter input fails the very same chain of comparisons on its own.
 export function looksLikeBareCodestream(
   data: Uint8Array<ArrayBuffer>,
 ): boolean {
   return (
-    data[0] === 0xff && data[1] === 0x4f && data[2] === 0xff && data[3] === 0x51
+    data[0] === JPEG2000_MARKER_PREFIX &&
+    data[1] === JPEG2000_SOC_LOW_BYTE &&
+    data[2] === JPEG2000_MARKER_PREFIX &&
+    data[3] === JPEG2000_SIZ_LOW_BYTE
   );
 }
 
@@ -73,7 +90,7 @@ function readUint32(data: Uint8Array<ArrayBuffer>, offset: number): number {
   const b0 = data[offset];
   const b1 = data[offset + 1];
   const b2 = data[offset + 2];
-  const b3 = data[offset + 3];
+  const b3 = data[offset + UINT32_LAST_BYTE_OFFSET];
   if (
     b0 === undefined ||
     b1 === undefined ||
@@ -84,7 +101,9 @@ function readUint32(data: Uint8Array<ArrayBuffer>, offset: number): number {
       "JP2 box structure ended in the middle of a 32-bit field",
     );
   }
-  return b0 * 0x1000000 + (b1 << 16) + (b2 << 8) + b3;
+  return (
+    b0 * BYTE_0_MULTIPLIER + (b1 << BYTE_1_SHIFT) + (b2 << BITS_PER_BYTE) + b3
+  );
 }
 
 function readBox(
@@ -96,13 +115,15 @@ function readBox(
     return undefined;
   }
   const declaredLength = readUint32(data, offset);
-  const type = readUint32(data, offset + 4);
+  const type = readUint32(data, offset + UINT32_SIZE);
   let payloadStart = offset + BOX_HEADER_BYTES;
   let boxEnd: number;
   if (declaredLength === BOX_LENGTH_EXTENDED) {
     const high = readUint32(data, payloadStart);
-    const low = readUint32(data, payloadStart + 4);
-    payloadStart += 8;
+    const low = readUint32(data, payloadStart + UINT32_SIZE);
+    // The two additional 32-bit fields (XLBox high + low halves) just read above.
+    const XLBOX_EXTRA_BYTES = 8;
+    payloadStart += XLBOX_EXTRA_BYTES;
     // A box longer than 2^53 bytes cannot be addressed by a JS array anyway; treating it as running to the end of the data is both the only thing that can be done and what such a length would mean in practice.
     boxEnd = high === 0 ? offset + low : limit;
   } else if (declaredLength === BOX_LENGTH_TO_END) {
@@ -128,24 +149,36 @@ function readImageHeader(
   start: number,
   end: number,
 ): Jp2ImageHeader {
-  if (end - start < 14) {
+  // ISO/IEC 15444-1 I.5.3.1: HEIGHT (uint32) + WIDTH (uint32) + NC/component count (uint16) + BPC (uint8), the 14 bytes this box is defined to be.
+  const JP2_IMAGE_HEADER_SIZE = 14;
+  const IMAGE_HEADER_COMPONENT_COUNT_OFFSET = 8;
+  const IMAGE_HEADER_BIT_DEPTH_OFFSET = 10;
+  // BPC's own sentinel value meaning "components differ", per this file's Jp2ImageHeader.bitDepth doc comment.
+  const IMAGE_HEADER_BPC_VARIES = 0xff;
+  // BPC packs a 7-bit depth-minus-one in its low bits and a sign flag in its high bit.
+  const BPC_DEPTH_MASK = 0x7f;
+  const BPC_SIGNED_BIT = 0x80;
+  if (end - start < JP2_IMAGE_HEADER_SIZE) {
     throw new Jpeg2000ParseError(
       "the JP2 image header box is shorter than the 14 bytes ISO/IEC 15444-1 I.5.3.1 defines",
     );
   }
   const height = readUint32(data, start);
-  const width = readUint32(data, start + 4);
-  const componentCount = ((data[start + 8] ?? 0) << 8) | (data[start + 9] ?? 0);
-  const bpc = data[start + 10] ?? 0;
-  if (bpc === 0xff) {
+  const width = readUint32(data, start + UINT32_SIZE);
+  const componentCount =
+    ((data[start + IMAGE_HEADER_COMPONENT_COUNT_OFFSET] ?? 0) <<
+      BITS_PER_BYTE) |
+    (data[start + IMAGE_HEADER_COMPONENT_COUNT_OFFSET + 1] ?? 0);
+  const bpc = data[start + IMAGE_HEADER_BIT_DEPTH_OFFSET] ?? 0;
+  if (bpc === IMAGE_HEADER_BPC_VARIES) {
     return { width, height, componentCount };
   }
   return {
     width,
     height,
     componentCount,
-    bitDepth: (bpc & 0x7f) + 1,
-    signed: (bpc & 0x80) !== 0,
+    bitDepth: (bpc & BPC_DEPTH_MASK) + 1,
+    signed: (bpc & BPC_SIGNED_BIT) !== 0,
   };
 }
 
@@ -155,17 +188,26 @@ function readChannelDefinitions(
   end: number,
 ): Jp2ChannelDefinition[] {
   // No separate "is there room for a count field" guard is needed: a payload under 2 bytes still computes some count value below (from whatever adjacent bytes or `?? 0` fallbacks lie at `start`/`start + 1`), but every entry needs 6 more bytes than the 2-byte count field leaves room for here, so the loop's own `entry + 6 > end` check breaks before pushing anything regardless of what that count came out to.
-  const count = ((data[start] ?? 0) << 8) | (data[start + 1] ?? 0);
+  // One Cdef entry (ISO/IEC 15444-1 I.5.3.6): Cn/channel index, Typ/type, Asoc/association, each a uint16, 6 bytes total.
+  const CHANNEL_DEFINITION_ENTRY_SIZE = 6;
+  const CHANNEL_DEFINITION_TYPE_OFFSET = 2;
+  const CHANNEL_DEFINITION_ASSOCIATION_OFFSET = 4;
+  const count = ((data[start] ?? 0) << BITS_PER_BYTE) | (data[start + 1] ?? 0);
   const definitions: Jp2ChannelDefinition[] = [];
   for (let i = 0; i < count; i++) {
-    const entry = start + 2 + i * 6;
-    if (entry + 6 > end) {
+    const entry = start + 2 + i * CHANNEL_DEFINITION_ENTRY_SIZE;
+    if (entry + CHANNEL_DEFINITION_ENTRY_SIZE > end) {
       break;
     }
     definitions.push({
-      channel: ((data[entry] ?? 0) << 8) | (data[entry + 1] ?? 0),
-      type: ((data[entry + 2] ?? 0) << 8) | (data[entry + 3] ?? 0),
-      association: ((data[entry + 4] ?? 0) << 8) | (data[entry + 5] ?? 0),
+      channel: ((data[entry] ?? 0) << BITS_PER_BYTE) | (data[entry + 1] ?? 0),
+      type:
+        ((data[entry + CHANNEL_DEFINITION_TYPE_OFFSET] ?? 0) << BITS_PER_BYTE) |
+        (data[entry + CHANNEL_DEFINITION_TYPE_OFFSET + 1] ?? 0),
+      association:
+        ((data[entry + CHANNEL_DEFINITION_ASSOCIATION_OFFSET] ?? 0) <<
+          BITS_PER_BYTE) |
+        (data[entry + CHANNEL_DEFINITION_ASSOCIATION_OFFSET + 1] ?? 0),
     });
   }
   return definitions;
@@ -226,27 +268,40 @@ function readColourSpecification(
   into: HeaderBoxContents,
 ): void {
   // No separate "is there room for a method byte" guard is needed: a payload under 3 bytes still computes some `method` value below, but both branches that act on it require at least 7 (method 1) or more than 3 (method 2) bytes, so neither can assign anything when `end - start` is already under 3.
+  // Colour Specification box payload (I.5.3.3): METH (uint8) + PREC (int8) + APPROX (uint8) precede either an EnumCS (uint32, method 1) or a raw ICC profile (method 2).
+  const COLOUR_SPEC_PAYLOAD_PREFIX_SIZE = 3;
+  // Table I.10's own enumerated colour-space codes, each used exactly once below as a Map key.
+  const JP2_ENUM_CS_CMYK = 12;
+  const JP2_ENUM_CS_CIELAB = 14;
+  const JP2_ENUM_CS_SRGB = 16;
+  const JP2_ENUM_CS_GREYSCALE = 17;
+  const JP2_ENUM_CS_SYCC = 18;
+  const JP2_ENUM_CS_E_SRGB = 20;
+  const JP2_ENUM_CS_ROMMRGB = 24;
   const method = data[start] ?? 0;
   if (method === 1) {
-    if (end - start >= 7) {
+    if (end - start >= COLOUR_SPEC_PAYLOAD_PREFIX_SIZE + UINT32_SIZE) {
       // I.5.3.3 Table I.10: the enumerated colour spaces this codec recognises by number. Anything else is reported by its raw value rather than guessed at. Built inside this function rather than as a module-level constant so a mutation to one of its entries is attributed, by Stryker's per-test coverage analysis, to the tests that actually call this function — a module-level `const` here would run once at import time as a static mutant, which Stryker tests against a single arbitrary covering test rather than the full set that genuinely exercises this map.
       const enumeratedColourSpaces = new Map<number, Jp2ColourSpace>([
-        [12, "cmyk"],
-        [14, "cielab"],
-        [16, "srgb"],
-        [17, "greyscale"],
-        [18, "sycc"],
-        [20, "e-srgb"],
-        [24, "rommrgb"],
+        [JP2_ENUM_CS_CMYK, "cmyk"],
+        [JP2_ENUM_CS_CIELAB, "cielab"],
+        [JP2_ENUM_CS_SRGB, "srgb"],
+        [JP2_ENUM_CS_GREYSCALE, "greyscale"],
+        [JP2_ENUM_CS_SYCC, "sycc"],
+        [JP2_ENUM_CS_E_SRGB, "e-srgb"],
+        [JP2_ENUM_CS_ROMMRGB, "rommrgb"],
       ]);
       into.colourSpace = enumeratedColourSpaces.get(
-        readUint32(data, start + 3),
+        readUint32(data, start + COLOUR_SPEC_PAYLOAD_PREFIX_SIZE),
       );
     }
     return;
   }
-  if (method === 2 && end - start > 3) {
-    into.iccProfile = data.subarray(start + 3, end);
+  if (method === 2 && end - start > COLOUR_SPEC_PAYLOAD_PREFIX_SIZE) {
+    into.iccProfile = data.subarray(
+      start + COLOUR_SPEC_PAYLOAD_PREFIX_SIZE,
+      end,
+    );
   }
 }
 
