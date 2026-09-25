@@ -1,16 +1,25 @@
 export type ImageFormat = "png" | "jpeg" | "gif" | "svg";
 
+// A byte with the high bit set (so a 7-bit text-mode transfer corrupts it detectably), then "PNG\r\n\x1a\n": a CRLF, a DOS EOF marker, and a final LF, each chosen to detect a different common file-transfer corruption.
+const PNG_SIGNATURE_HIGH_BIT_MARKER = 0x89;
 const PNG_SIGNATURE: readonly number[] = [
-  0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
+  PNG_SIGNATURE_HIGH_BIT_MARKER,
+  ...Array.from("PNG\r\n\x1a\n", (char) => char.charCodeAt(0)),
 ];
-const JPEG_SIGNATURE: readonly number[] = [0xff, 0xd8, 0xff];
+const JPEG_MARKER_PREFIX = 0xff;
+const JPEG_SOI = 0xd8;
+const JPEG_SIGNATURE: readonly number[] = [
+  JPEG_MARKER_PREFIX,
+  JPEG_SOI,
+  JPEG_MARKER_PREFIX,
+];
 // GIF87a and GIF89a are the only two header versions the format ever defined.
-const GIF87A_SIGNATURE: readonly number[] = [
-  0x47, 0x49, 0x46, 0x38, 0x37, 0x61,
-];
-const GIF89A_SIGNATURE: readonly number[] = [
-  0x47, 0x49, 0x46, 0x38, 0x39, 0x61,
-];
+const GIF87A_SIGNATURE: readonly number[] = Array.from("GIF87a", (char) =>
+  char.charCodeAt(0),
+);
+const GIF89A_SIGNATURE: readonly number[] = Array.from("GIF89a", (char) =>
+  char.charCodeAt(0),
+);
 
 // No separate "bytes too short" guard: when bytes.length < signature.length, some index i in the loop below reads past the end of bytes, and an out-of-bounds array read is `undefined` in JS — which is never strictly equal to signature[i] (always a real 0-255 byte value), so the loop's own mismatch check already returns false for every too-short input. A dedicated length guard would only ever produce a result the loop already produces on its own.
 function startsWith(
