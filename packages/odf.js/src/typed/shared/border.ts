@@ -25,7 +25,9 @@ export function parseBorderEdge(
   value: string,
 ): { border: ContentBorder } | { none: true } | undefined {
   const tokens = value.trim().split(/\s+/);
-  if (tokens.length !== 3) {
+  // fo:border(-*)'s own shorthand grammar: exactly width, style, colour, in that order.
+  const borderTokenCount = 3;
+  if (tokens.length !== borderTokenCount) {
     return undefined;
   }
   const [widthToken, styleToken, colorToken] = tokens;

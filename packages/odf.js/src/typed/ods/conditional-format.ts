@@ -396,7 +396,8 @@ function readColorScale(
   ranges: readonly ContentSheetRange[],
 ): ContentSheetConditionalFormat | undefined {
   const entryEls = childrenWithTag(colorScaleEl, "calcext:color-scale-entry");
-  if (entryEls.length < 2 || entryEls.length > 3) {
+  const maxColorScaleEntries = 3;
+  if (entryEls.length < 2 || entryEls.length > maxColorScaleEntries) {
     return undefined;
   }
   const stops: { value: ContentSheetConditionalFormatValue; color: Color }[] =

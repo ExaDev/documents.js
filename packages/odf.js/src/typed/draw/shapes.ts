@@ -377,13 +377,14 @@ type OdfFillRule = "nonzero" | "evenodd";
 
 // A plain ODF percentage ("50%") into a 0..1 unit fraction — shared by draw:opacity (always a percentage) and svg:stroke-opacity (a percentage OR a bare [0,1] double, see readOdfStrokeOpacityValue below).
 const PERCENT_PATTERN = /^(-?(?:\d+(?:\.\d+)?|\.\d+))%$/;
+const PERCENT_SCALE = 100;
 function parseOdfPercentUnit(value: string): number | undefined {
   const match = PERCENT_PATTERN.exec(value);
   if (match === null) {
     return undefined;
   }
   // match[1]'s own group has no `?` quantifier of its own (only the alternation inside it does), so it always matches once `match` itself is non-null — the same mandatory-group guarantee typed/shared/units.ts's parseOdfLength/parseOdfAngleDeg rely on for their own match[1]!.
-  return Number(match[1]!) / 100;
+  return Number(match[1]!) / PERCENT_SCALE;
 }
 
 // svg:stroke-opacity's own value grammar (OASIS ODF 1.3, style:graphic-properties): "a value of type double 18.2 in the range [0,1] or a value of type zeroToHundredPercent 18.3.41" — unlike draw:opacity, which is always a percentage.
@@ -861,10 +862,13 @@ function readDrawPathVector(
 // - 'rectangle' -> the plain rect variant; 'ellipse' -> the plain ellipse variant.
 // - 'round-rectangle' (ExaDev/documents.js#954's own named example) -> a REAL rounded-corner path when a corner radius can be derived from the shape's own draw:handle/draw:modifiers (readRoundRectangleRadiusPt below — the one genuinely resolvable number this reader reads out of enhanced-geometry without a general formula evaluator, since a handle's position/range is a small, fixed micro-grammar, not the open-ended path formula language); when no handle/modifier is present to derive one from, this still falls back to the plain rect variant exactly as before — there is no ODF-declared default radius to fabricate one from (see readRoundRectangleRadiusPt's own note).
 // - 'diamond'/'isosceles-triangle'/'right-triangle'/'pentagon'/'hexagon'/'octagon' -> a fixed polygon inscribed in the shape's own frame (fixedPresetSubpath below) — these six have no adjustment handle in LibreOffice's own unadjusted gallery defaults, so a frame-derived idealised polygon is a stable, well-defined approximation of "a diamond"/"a hexagon"/etc, not a guess at any one producer's own stored coordinates. 'parallelogram' and 'trapezoid' are NOT included here: LibreOffice's own defaults for both DO carry an adjustable slant via exactly the same kind of handle round-rectangle uses, and approximating them without reading that handle would produce a wrong shape (a fixed default slant this reader invented) rather than a documented bound on a right one — left unresolved, deliberately, alongside the general enhanced-path formula language, rather than guessed.
+const PENTAGON_SIDES = 5;
+const HEXAGON_SIDES = 6;
+const OCTAGON_SIDES = 8;
 const REGULAR_POLYGON_SIDES: ReadonlyMap<string, number> = new Map([
-  ["pentagon", 5],
-  ["hexagon", 6],
-  ["octagon", 8],
+  ["pentagon", PENTAGON_SIDES],
+  ["hexagon", HEXAGON_SIDES],
+  ["octagon", OCTAGON_SIDES],
 ]);
 const FIXED_POLYGON_PRESETS: ReadonlySet<string> = new Set([
   "diamond",
