@@ -1,3 +1,17 @@
+## [1.1.106](https://github.com/ExaDev/documents.js/compare/document-operations%401.1.105...document-operations%401.1.106) (2026-09-25)
+
+### Miscellaneous Chores
+
+* **lint:** drop the rule-debt lists that are now empty ([cb3449b](https://github.com/ExaDev/documents.js/commit/cb3449bc3a444ae3a3676e82b09a4d14f5e9501d))
+
+
+### Dependencies
+
+- Updated odf.js to 11.1.12
+- Updated document-outline.js to 3.10.23
+- Updated documents.js to 14.4.43
+- Updated document-compute.js to 1.6.53
+
 ## [1.1.105](https://github.com/ExaDev/documents.js/compare/document-operations%401.1.104...document-operations%401.1.105) (2026-09-25)
 
 

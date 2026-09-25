@@ -1,3 +1,13 @@
+## [14.4.43](https://github.com/ExaDev/documents.js/compare/documents.js%4014.4.42...documents.js%4014.4.43) (2026-09-25)
+
+
+### Dependencies
+
+- Updated epub-codec to 5.1.12
+- Updated odf.js to 11.1.12
+- Updated ooxml.js to 12.2.26
+- Updated xls-codec to 4.15.39
+
 ## [14.4.42](https://github.com/ExaDev/documents.js/compare/documents.js%4014.4.41...documents.js%4014.4.42) (2026-09-25)
 
 ### Miscellaneous Chores

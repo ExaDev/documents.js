@@ -1,3 +1,9 @@
+## [3.10.23](https://github.com/ExaDev/documents.js/compare/document-outline.js%403.10.22...document-outline.js%403.10.23) (2026-09-25)
+
+### Miscellaneous Chores
+
+* **lint:** drop the rule-debt lists that are now empty ([cb3449b](https://github.com/ExaDev/documents.js/commit/cb3449bc3a444ae3a3676e82b09a4d14f5e9501d))
+
 ## [3.10.22](https://github.com/ExaDev/documents.js/compare/document-outline.js%403.10.21...document-outline.js%403.10.22) (2026-09-25)
 
 ### Bug Fixes
