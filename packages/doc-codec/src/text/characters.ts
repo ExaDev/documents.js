@@ -10,32 +10,42 @@ import { characterOffset, type PieceTable } from "./piece-table";
 // [MS-DOC] 2.8.25 (FcCompressed): "the text starts at offset fc/2 and is an array of 8-bit Unicode characters, except for the values which are mapped to Unicode characters as follows". Every byte not listed maps to itself.
 //
 // This is Windows-1252's high range, but NOT identically: 0x80 (euro), 0x8E (Z with caron), 0x9E (z with caron) and 0x9D are assigned by Windows-1252 and absent from the specification's own table, so this reader leaves them mapping to themselves. Reaching for a Windows-1252 codec instead of the published table would silently substitute four different characters for four the specification does not define — a small, plausible, and permanent divergence from the format it claims to implement.
-export const COMPRESSED_CHARACTER_MAP: ReadonlyMap<number, number> = new Map([
-  [0x82, 0x201a],
-  [0x83, 0x0192],
-  [0x84, 0x201e],
-  [0x85, 0x2026],
-  [0x86, 0x2020],
-  [0x87, 0x2021],
-  [0x88, 0x02c6],
-  [0x89, 0x2030],
-  [0x8a, 0x0160],
-  [0x8b, 0x2039],
-  [0x8c, 0x0152],
-  [0x91, 0x2018],
-  [0x92, 0x2019],
-  [0x93, 0x201c],
-  [0x94, 0x201d],
-  [0x95, 0x2022],
-  [0x96, 0x2013],
-  [0x97, 0x2014],
-  [0x98, 0x02dc],
-  [0x99, 0x2122],
-  [0x9a, 0x0161],
-  [0x9b, 0x203a],
-  [0x9c, 0x0153],
-  [0x9f, 0x0178],
-]);
+// Each pair as a numbered spec entry, [MS-DOC] 2.8.25's own table: the compressed byte and the Unicode code point it maps to.
+interface CompressedCharacterMapping {
+  readonly byte: number;
+  readonly codePoint: number;
+}
+const COMPRESSED_CHARACTER_ENTRIES: readonly CompressedCharacterMapping[] = [
+  { byte: 0x82, codePoint: 0x201a },
+  { byte: 0x83, codePoint: 0x0192 },
+  { byte: 0x84, codePoint: 0x201e },
+  { byte: 0x85, codePoint: 0x2026 },
+  { byte: 0x86, codePoint: 0x2020 },
+  { byte: 0x87, codePoint: 0x2021 },
+  { byte: 0x88, codePoint: 0x02c6 },
+  { byte: 0x89, codePoint: 0x2030 },
+  { byte: 0x8a, codePoint: 0x0160 },
+  { byte: 0x8b, codePoint: 0x2039 },
+  { byte: 0x8c, codePoint: 0x0152 },
+  { byte: 0x91, codePoint: 0x2018 },
+  { byte: 0x92, codePoint: 0x2019 },
+  { byte: 0x93, codePoint: 0x201c },
+  { byte: 0x94, codePoint: 0x201d },
+  { byte: 0x95, codePoint: 0x2022 },
+  { byte: 0x96, codePoint: 0x2013 },
+  { byte: 0x97, codePoint: 0x2014 },
+  { byte: 0x98, codePoint: 0x02dc },
+  { byte: 0x99, codePoint: 0x2122 },
+  { byte: 0x9a, codePoint: 0x0161 },
+  { byte: 0x9b, codePoint: 0x203a },
+  { byte: 0x9c, codePoint: 0x0153 },
+  { byte: 0x9f, codePoint: 0x0178 },
+];
+export const COMPRESSED_CHARACTER_MAP: ReadonlyMap<number, number> = new Map(
+  COMPRESSED_CHARACTER_ENTRIES.map(
+    ({ byte, codePoint }) => [byte, codePoint] as const,
+  ),
+);
 
 export interface TextRange {
   /** The reconstructed characters, one UTF-16 code unit per character position. */
