@@ -39,14 +39,21 @@ type ResolvedColorSpace =
     }
   | { readonly kind: "unsupported"; readonly name: string };
 
+// Component/channel counts this module converts between: PDF DeviceCMYK's own four components, and the three channels every raster this module ever outputs (RawImage is always RGB or gray, never CMYK).
+const CMYK_COMPONENT_COUNT = 4;
+const RGB_CHANNEL_COUNT = 3;
+// One PDF sample byte's full range (ISO 32000-1 7.4.9's implicit 8-bit-per-sample assumption once BitsPerComponent is scaled up to it), and the width of one byte in bits.
+const MAX_BYTE_VALUE = 255;
+const BITS_PER_BYTE = 8;
+
 function componentsOf(cs: ResolvedColorSpace): number {
   if (cs.kind === "gray") {
     return 1;
   }
   if (cs.kind === "cmyk") {
-    return 4;
+    return CMYK_COMPONENT_COUNT;
   }
-  return 3; // rgb, and indexed's own per-pixel sample count (handled separately — this is only used for a resolved *base* space)
+  return RGB_CHANNEL_COUNT; // rgb, and indexed's own per-pixel sample count (handled separately — this is only used for a resolved *base* space)
 }
 
 function resolveColorSpace(
@@ -90,7 +97,7 @@ function resolveColorSpace(
     if (n === 1) {
       return { kind: "gray" };
     }
-    if (n === 4) {
+    if (n === CMYK_COMPONENT_COUNT) {
       return { kind: "cmyk" };
     }
     return { kind: "rgb" }; // 3-component ICC (by far the common case) and any unlabelled profile both treated as RGB
@@ -128,11 +135,13 @@ function unpackSamples(
   componentsPerPixel: number,
   bitsPerComponent: number,
 ): number[] {
-  if (bitsPerComponent === 8) {
+  if (bitsPerComponent === BITS_PER_BYTE) {
     return Array.from(data.subarray(0, width * height * componentsPerPixel));
   }
   const samplesPerRow = width * componentsPerPixel;
-  const bytesPerRow = Math.ceil((samplesPerRow * bitsPerComponent) / 8);
+  const bytesPerRow = Math.ceil(
+    (samplesPerRow * bitsPerComponent) / BITS_PER_BYTE,
+  );
   const out: number[] = [];
   for (let row = 0; row < height; row++) {
     const rowStart = row * bytesPerRow;
@@ -140,8 +149,9 @@ function unpackSamples(
     for (let s = 0; s < samplesPerRow; s++) {
       let value = 0;
       for (let b = 0; b < bitsPerComponent; b++) {
-        const byteIndex = rowStart + Math.floor(bitPos / 8);
-        const bitIndex = 7 - (bitPos % 8);
+        const byteIndex = rowStart + Math.floor(bitPos / BITS_PER_BYTE);
+        // Bits pack MSB-first within each byte, so the bit at position `bitPos` within the row sits this many places from that byte's own high bit.
+        const bitIndex = BITS_PER_BYTE - 1 - (bitPos % BITS_PER_BYTE);
         const bit = ((data[byteIndex] ?? 0) >> bitIndex) & 1;
         value = (value << 1) | bit;
         bitPos++;
@@ -158,7 +168,9 @@ function scaleToByte(
   inverted: boolean,
 ): number {
   const v = inverted ? maxValue - value : value;
-  return maxValue === 255 ? v : Math.round((v * 255) / maxValue);
+  return maxValue === MAX_BYTE_VALUE
+    ? v
+    : Math.round((v * MAX_BYTE_VALUE) / maxValue);
 }
 
 function cmykToRgbByte(
@@ -168,9 +180,9 @@ function cmykToRgbByte(
   k: number,
 ): { r: number; g: number; b: number } {
   return {
-    r: Math.round(255 * (1 - c) * (1 - k)),
-    g: Math.round(255 * (1 - m) * (1 - k)),
-    b: Math.round(255 * (1 - y) * (1 - k)),
+    r: Math.round(MAX_BYTE_VALUE * (1 - c) * (1 - k)),
+    g: Math.round(MAX_BYTE_VALUE * (1 - m) * (1 - k)),
+    b: Math.round(MAX_BYTE_VALUE * (1 - y) * (1 - k)),
   };
 }
 
@@ -185,10 +197,10 @@ function sampleFromPalette(
   }
   if (base.kind === "cmyk") {
     return cmykToRgbByte(
-      (lookup[offset] ?? 0) / 255,
-      (lookup[offset + 1] ?? 0) / 255,
-      (lookup[offset + 2] ?? 0) / 255,
-      (lookup[offset + 3] ?? 0) / 255,
+      (lookup[offset] ?? 0) / MAX_BYTE_VALUE,
+      (lookup[offset + 1] ?? 0) / MAX_BYTE_VALUE,
+      (lookup[offset + 2] ?? 0) / MAX_BYTE_VALUE,
+      (lookup[offset + (CMYK_COMPONENT_COUNT - 1)] ?? 0) / MAX_BYTE_VALUE,
     );
   }
   return {
@@ -212,7 +224,9 @@ function buildRawImage(
     const indices = unpackSamples(data, width, height, 1, bitsPerComponent);
     const baseComponents = componentsOf(colorSpace.base);
     const out = new Uint8Array(
-      width * height * (colorSpace.base.kind === "gray" ? 1 : 3),
+      width *
+        height *
+        (colorSpace.base.kind === "gray" ? 1 : RGB_CHANNEL_COUNT),
     );
     let outIdx = 0;
     for (const index of indices) {
@@ -232,7 +246,7 @@ function buildRawImage(
     return {
       width,
       height,
-      channels: colorSpace.base.kind === "gray" ? 1 : 3,
+      channels: colorSpace.base.kind === "gray" ? 1 : RGB_CHANNEL_COUNT,
       data: out,
     };
   }
@@ -246,27 +260,56 @@ function buildRawImage(
   }
 
   if (colorSpace.kind === "rgb") {
-    const samples = unpackSamples(data, width, height, 3, bitsPerComponent);
+    const samples = unpackSamples(
+      data,
+      width,
+      height,
+      RGB_CHANNEL_COUNT,
+      bitsPerComponent,
+    );
     const out = Uint8Array.from(samples, (v) =>
       scaleToByte(v, maxValue, inverted),
     );
-    return { width, height, channels: 3, data: out };
+    return { width, height, channels: RGB_CHANNEL_COUNT, data: out };
   }
 
   // cmyk
-  const samples = unpackSamples(data, width, height, 4, bitsPerComponent);
-  const out = new Uint8Array(width * height * 3);
+  const samples = unpackSamples(
+    data,
+    width,
+    height,
+    CMYK_COMPONENT_COUNT,
+    bitsPerComponent,
+  );
+  const out = new Uint8Array(width * height * RGB_CHANNEL_COUNT);
   for (let px = 0; px < width * height; px++) {
-    const c = scaleToByte(samples[px * 4] ?? 0, maxValue, inverted) / 255;
-    const m = scaleToByte(samples[px * 4 + 1] ?? 0, maxValue, inverted) / 255;
-    const y = scaleToByte(samples[px * 4 + 2] ?? 0, maxValue, inverted) / 255;
-    const k = scaleToByte(samples[px * 4 + 3] ?? 0, maxValue, inverted) / 255;
+    const c =
+      scaleToByte(samples[px * CMYK_COMPONENT_COUNT] ?? 0, maxValue, inverted) /
+      MAX_BYTE_VALUE;
+    const m =
+      scaleToByte(
+        samples[px * CMYK_COMPONENT_COUNT + 1] ?? 0,
+        maxValue,
+        inverted,
+      ) / MAX_BYTE_VALUE;
+    const y =
+      scaleToByte(
+        samples[px * CMYK_COMPONENT_COUNT + 2] ?? 0,
+        maxValue,
+        inverted,
+      ) / MAX_BYTE_VALUE;
+    const k =
+      scaleToByte(
+        samples[px * CMYK_COMPONENT_COUNT + (CMYK_COMPONENT_COUNT - 1)] ?? 0,
+        maxValue,
+        inverted,
+      ) / MAX_BYTE_VALUE;
     const rgb = cmykToRgbByte(c, m, y, k);
-    out[px * 3] = rgb.r;
-    out[px * 3 + 1] = rgb.g;
-    out[px * 3 + 2] = rgb.b;
+    out[px * RGB_CHANNEL_COUNT] = rgb.r;
+    out[px * RGB_CHANNEL_COUNT + 1] = rgb.g;
+    out[px * RGB_CHANNEL_COUNT + 2] = rgb.b;
   }
-  return { width, height, channels: 3, data: out };
+  return { width, height, channels: RGB_CHANNEL_COUNT, data: out };
 }
 
 function readSoftMaskAlpha(
@@ -286,8 +329,13 @@ function readSoftMaskAlpha(
   }
   const smaskWidth = asNumber(dictGet(smaskObj.dict, "Width")) ?? width;
   const smaskHeight = asNumber(dictGet(smaskObj.dict, "Height")) ?? height;
-  const smaskBpc = asNumber(dictGet(smaskObj.dict, "BitsPerComponent")) ?? 8;
-  if (smaskWidth !== width || smaskHeight !== height || smaskBpc !== 8) {
+  const smaskBpc =
+    asNumber(dictGet(smaskObj.dict, "BitsPerComponent")) ?? BITS_PER_BYTE;
+  if (
+    smaskWidth !== width ||
+    smaskHeight !== height ||
+    smaskBpc !== BITS_PER_BYTE
+  ) {
     return undefined; // a differently-sized or differently-depthed mask needs resampling this module doesn't do
   }
   return decoded.bytes.subarray(0, width * height);
@@ -326,9 +374,9 @@ function jpeg2000ChannelKind(
     return "rgb";
   }
   // A bare codestream carries no colour specification of its own, so the component count is the only thing left to go on — the same fallback every JPEG 2000 reader makes.
-  return image.components.length >= 4
+  return image.components.length >= CMYK_COMPONENT_COUNT
     ? "cmyk"
-    : image.components.length >= 3
+    : image.components.length >= RGB_CHANNEL_COUNT
       ? "rgb"
       : "gray";
 }
@@ -360,7 +408,12 @@ function readJpeg2000Image(
   }
 
   const kind = jpeg2000ChannelKind(image, dict, resolver, sink);
-  const required = kind === "cmyk" ? 4 : kind === "rgb" ? 3 : 1;
+  const required =
+    kind === "cmyk"
+      ? CMYK_COMPONENT_COUNT
+      : kind === "rgb"
+        ? RGB_CHANNEL_COUNT
+        : 1;
   if (image.components.length < required) {
     sink({
       code: "image/jpx-undecodable",
@@ -381,21 +434,24 @@ function readJpeg2000Image(
   // The codestream's own sample depth is whatever it declares; a RawImage is always eight bits per channel, so anything else is scaled onto that range.
   const maximum = (1 << image.bitDepth) - 1;
   const scale = (value: number): number =>
-    image.bitDepth === 8 ? value : Math.round((value * 255) / maximum);
+    image.bitDepth === BITS_PER_BYTE
+      ? value
+      : Math.round((value * MAX_BYTE_VALUE) / maximum);
   const pixels = image.width * image.height;
-  const channels = kind === "gray" ? 1 : 3;
+  const channels = kind === "gray" ? 1 : RGB_CHANNEL_COUNT;
   const data = new Uint8Array(pixels * channels);
   if (kind === "cmyk") {
     for (let i = 0; i < pixels; i++) {
       const rgb = cmykToRgbByte(
-        scale(image.components[0]?.[i] ?? 0) / 255,
-        scale(image.components[1]?.[i] ?? 0) / 255,
-        scale(image.components[2]?.[i] ?? 0) / 255,
-        scale(image.components[3]?.[i] ?? 0) / 255,
+        scale(image.components[0]?.[i] ?? 0) / MAX_BYTE_VALUE,
+        scale(image.components[1]?.[i] ?? 0) / MAX_BYTE_VALUE,
+        scale(image.components[2]?.[i] ?? 0) / MAX_BYTE_VALUE,
+        scale(image.components[CMYK_COMPONENT_COUNT - 1]?.[i] ?? 0) /
+          MAX_BYTE_VALUE,
       );
-      data[i * 3] = rgb.r;
-      data[i * 3 + 1] = rgb.g;
-      data[i * 3 + 2] = rgb.b;
+      data[i * RGB_CHANNEL_COUNT] = rgb.r;
+      data[i * RGB_CHANNEL_COUNT + 1] = rgb.g;
+      data[i * RGB_CHANNEL_COUNT + 2] = rgb.b;
     }
   } else {
     for (let channel = 0; channel < channels; channel++) {
@@ -509,12 +565,15 @@ export function readImageXObject(
   }
 
   const bitsPerComponent =
-    asNumber(dictGet(dict, "BitsPerComponent") ?? dictGet(dict, "BPC")) ?? 8;
+    asNumber(dictGet(dict, "BitsPerComponent") ?? dictGet(dict, "BPC")) ??
+    BITS_PER_BYTE;
+  // The third of PDF's four legal /BitsPerComponent depths (1, 2, 4, 8 — ISO 32000-1 Table 89, or Table 6 in later editions); 1 and 2 need no name of their own, exempt from this rule as structurally self-evident, and 8 reuses BITS_PER_BYTE.
+  const FOUR_BIT_DEPTH = 4;
   if (
     bitsPerComponent !== 1 &&
     bitsPerComponent !== 2 &&
-    bitsPerComponent !== 4 &&
-    bitsPerComponent !== 8
+    bitsPerComponent !== FOUR_BIT_DEPTH &&
+    bitsPerComponent !== BITS_PER_BYTE
   ) {
     sink({
       code: "image/unsupported-bit-depth",
