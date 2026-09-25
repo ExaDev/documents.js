@@ -10,6 +10,9 @@ export interface AllocatedObject {
 }
 
 // `objects` must number its entries contiguously from 1 (no gaps, no repeats) — both this file's callers allocate that way already, matching write.ts's own fixed-order allocation, so the xref table below can record one offset per object as it is written rather than re-deriving the count from whatever numbers happen to appear.
+// A classic cross-reference table entry (ISO 32000-1 7.5.4) is a fixed 20-byte record: a 10-digit zero-padded offset, a space, a 5-digit generation number, a space, and a 2-byte "n \n" or "f \n" keyword-plus-EOL.
+const XREF_OFFSET_DIGITS = 10;
+
 export function assemblePdf(
   objects: readonly AllocatedObject[],
   rootNum: number,
@@ -31,7 +34,9 @@ export function assemblePdf(
   writer.writeAscii(`0 ${maxObjNum + 1}\n`);
   writer.writeAscii("0000000000 65535 f \n");
   for (const { offset } of written) {
-    writer.writeAscii(`${offset.toString().padStart(10, "0")} 00000 n \n`);
+    writer.writeAscii(
+      `${offset.toString().padStart(XREF_OFFSET_DIGITS, "0")} 00000 n \n`,
+    );
   }
   writer.writeAscii("trailer\n");
   writeObject(
