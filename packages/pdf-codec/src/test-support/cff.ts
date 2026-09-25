@@ -1,6 +1,36 @@
 import { STIX_TWO_MATH_FONT_BASE64 } from "../assets/stix-two-math-font";
+import {
+  CFF_DICT_OP_CHARSET,
+  CFF_DICT_OP_CHARSTRINGS,
+  CFF_DICT_OP_ENCODING,
+  CFF_DICT_OP_PRIVATE,
+  CFF_DICT_OP_SUBRS,
+} from "../cff";
 import { parseSfnt, sfntTableBytes } from "../sfnt";
 import { base64ToBytes } from "byte-codec";
+
+// Byte-splitting constants shared by every fixture builder below.
+const BITS_PER_BYTE = 8;
+const BYTE_MASK = 0xff;
+const TWO_BYTE_SHIFT = 16;
+const THREE_BYTE_SHIFT = 24;
+// A DICT/charstring 16-bit int operand's own prefix byte (spec Table 3 / TN 5177 section 3.2, operand 28): the same encoding in both a DICT and a charstring, so one name covers cffIndex's own callers below and csInt16.
+const OPERAND_INT16_PREFIX = 28;
+// Masks a value down to its low 16 bits, the range a 16-bit int16 operand's own two's-complement wraparound needs.
+const UINT16_MASK = 0xffff;
+// A DICT small-int operand's own bias (spec Table 3): the byte value alone (with no following byte) encodes value - 139, so 139 by itself encodes 0.
+const DICT_OPERAND_SMALL_BIAS = 139;
+// The escape byte that introduces a two-byte DICT operator (spec Table 9), and the second byte that selects ROS specifically, matching CFF_DICT_OP_ROS's own definition as CFF_ESCAPED_OPERATOR_BASE + 30 in cff.ts.
+const DICT_OPERATOR_ESCAPE = 12;
+const CFF_ESCAPED_OP_ROS_BYTE = 30;
+// A DICT 32-bit int operand's own prefix byte (spec Table 3, operand 29): dictInt32 below always uses this fixed-width form.
+const DICT_OPERAND_INT32 = 29;
+// The high bit of an Encoding's own format byte (spec section 12), set when supplementary code -> SID entries follow the base encoding.
+const ENCODING_SUPPLEMENT_FLAG = 0x80;
+// charset, Encoding, and CharStrings: the three Top DICT entries cffFontWithBuiltinEncoding's own topDict always carries.
+const TOP_DICT_ENTRY_COUNT = 3;
+// The Type 2 charstring `endchar` operator (TN 5177 Appendix A): a bare endchar is the minimal valid charstring, drawing nothing.
+const CS_OP_ENDCHAR = 14;
 
 // Fixtures for the two CFF readers (cff-probe.ts and cff-bounds.ts): the real vendored font's own 'CFF ' table, plus a builder for the small hand-made programs that font does not happen to contain (a CID-keyed Top DICT, and the malformed shapes).
 
@@ -30,6 +60,13 @@ export function stixMathCffBytes(): Uint8Array<ArrayBuffer> {
   );
 }
 
+// CFF INDEX offSize thresholds (spec Table 2): the largest unsigned value representable in 1/2/3 bytes, used to pick the smallest offSize (1-4) that holds the INDEX's own last offset.
+const OFFSET_1_BYTE_MAX = 0xff;
+const OFFSET_2_BYTE_MAX = 0xffff;
+const OFFSET_3_BYTE_MAX = 0xffffff;
+const OFFSET_SIZE_3 = 3;
+const OFFSET_SIZE_4 = 4;
+
 // A CFF INDEX (spec section 5). offSize is computed from the largest offset actually needed (spec Table 2: the smallest of 1/2/3/4 bytes that holds it), not hardcoded to 1 — a fixture with enough entries or entry bytes to push the final offset past 255 (this package's own subrBias tests need a Local Subrs INDEX of over a thousand entries to reach the 1240-entry medium-bias threshold) still needs a spec-conformant INDEX, not a truncated one-byte offset that wraps.
 export function cffIndex(entries: readonly (readonly number[])[]): number[] {
   if (entries.length === 0) {
@@ -41,22 +78,22 @@ export function cffIndex(entries: readonly (readonly number[])[]): number[] {
   }
   const lastOffset = offsets[offsets.length - 1]!;
   const offSize =
-    lastOffset <= 0xff
+    lastOffset <= OFFSET_1_BYTE_MAX
       ? 1
-      : lastOffset <= 0xffff
+      : lastOffset <= OFFSET_2_BYTE_MAX
         ? 2
-        : lastOffset <= 0xffffff
-          ? 3
-          : 4;
+        : lastOffset <= OFFSET_3_BYTE_MAX
+          ? OFFSET_SIZE_3
+          : OFFSET_SIZE_4;
   const offsetBytes: number[] = [];
   for (const offset of offsets) {
     for (let byteIndex = offSize - 1; byteIndex >= 0; byteIndex--) {
-      offsetBytes.push((offset >>> (byteIndex * 8)) & 0xff);
+      offsetBytes.push((offset >>> (byteIndex * BITS_PER_BYTE)) & BYTE_MASK);
     }
   }
   return [
-    (entries.length >> 8) & 0xff,
-    entries.length & 0xff,
+    (entries.length >> BITS_PER_BYTE) & BYTE_MASK,
+    entries.length & BYTE_MASK,
     offSize,
     ...offsetBytes,
     ...entries.flat(),
@@ -65,11 +102,17 @@ export function cffIndex(entries: readonly (readonly number[])[]): number[] {
 
 // A charstring operand in its 3-byte int16 form (TN 5177 section 3.2, operand 28): valid for any value in [-32768, 32767], which is every integer a curve-bounds test needs to place a control point at. Deliberately uniform rather than picking the shortest single-byte encoding a real font toolchain would choose — cff-bounds.ts's own readOperand already has dedicated tests for its other operand forms, so a charstring built purely to drive the curve-extrema math needs only one encoding it never has to think about.
 export function csInt16(value: number): number[] {
-  const unsigned = value & 0xffff;
-  return [28, (unsigned >>> 8) & 0xff, unsigned & 0xff];
+  const unsigned = value & UINT16_MASK;
+  return [
+    OPERAND_INT16_PREFIX,
+    (unsigned >>> BITS_PER_BYTE) & BYTE_MASK,
+    unsigned & BYTE_MASK,
+  ];
 }
 
-export const CFF_HEADER = [1, 0, 4, 1]; // major 1, minor 0, hdrSize 4, offSize 1
+// CFF header bytes (spec Table 1): major 1, minor 0, hdrSize 4, offSize 1. hdrSize is the only one outside this rule's own ignored range (-1..2).
+const CFF_HEADER_SIZE = 4;
+export const CFF_HEADER = [1, 0, CFF_HEADER_SIZE, 1];
 
 // A minimal CFF program: header, a Name INDEX holding `name`, and a Top DICT INDEX holding `topDict`. Deliberately stops there — the String and Global Subr INDEXes that a real program carries next are only reached by a reader that gets past the Top DICT, which is exactly what the fixtures built from this are testing does not happen.
 export function cffFont(
@@ -84,19 +127,31 @@ export function cffFont(
   ]);
 }
 
+// Arbitrary but realistic-looking test SIDs for the ROS operator's own registry and ordering operands below; the exact values carry no meaning beyond being valid, distinct SIDs a test can assert against.
+const ROS_REGISTRY_SID = 0x0187;
+const ROS_ORDERING_SID = 0x0188;
+
 // The ROS operator with the three operands it really takes (registry SID, ordering SID, supplement): two 16-bit operands and one small integer, then the escaped operator 12 30.
 export const ROS_OPERANDS_AND_OPERATOR = [
-  28, 0x01, 0x87, 28, 0x01, 0x88, 139, 12, 30,
+  OPERAND_INT16_PREFIX,
+  (ROS_REGISTRY_SID >>> BITS_PER_BYTE) & BYTE_MASK,
+  ROS_REGISTRY_SID & BYTE_MASK,
+  OPERAND_INT16_PREFIX,
+  (ROS_ORDERING_SID >>> BITS_PER_BYTE) & BYTE_MASK,
+  ROS_ORDERING_SID & BYTE_MASK,
+  DICT_OPERAND_SMALL_BIAS,
+  DICT_OPERATOR_ESCAPE,
+  CFF_ESCAPED_OP_ROS_BYTE,
 ];
 
 // A DICT operand always written in the 5-byte 32-bit integer form (spec Table 3, operand 29), so an offset operand occupies the same space whatever its value — which is what lets the builder below lay a whole font out in one pass rather than iterating until the Top DICT's own size stops changing.
 export function dictInt32(value: number): number[] {
   return [
-    29,
-    (value >>> 24) & 0xff,
-    (value >>> 16) & 0xff,
-    (value >>> 8) & 0xff,
-    value & 0xff,
+    DICT_OPERAND_INT32,
+    (value >>> THREE_BYTE_SHIFT) & BYTE_MASK,
+    (value >>> TWO_BYTE_SHIFT) & BYTE_MASK,
+    (value >>> BITS_PER_BYTE) & BYTE_MASK,
+    value & BYTE_MASK,
   ];
 }
 
@@ -108,7 +163,11 @@ function charsetFormat1(glyphCount: number, rangeSize: number): number[] {
   for (let glyphId = 1; glyphId < glyphCount;) {
     const firstSid = CFF_STANDARD_STRING_COUNT + (glyphId - 1);
     const nLeft = Math.min(rangeSize, glyphCount - glyphId) - 1;
-    bytes.push((firstSid >> 8) & 0xff, firstSid & 0xff, nLeft);
+    bytes.push(
+      (firstSid >> BITS_PER_BYTE) & BYTE_MASK,
+      firstSid & BYTE_MASK,
+      nLeft,
+    );
     glyphId += nLeft + 1;
   }
   return bytes;
@@ -121,10 +180,10 @@ function charsetFormat2(glyphCount: number, rangeSize: number): number[] {
     const firstSid = CFF_STANDARD_STRING_COUNT + (glyphId - 1);
     const nLeft = Math.min(rangeSize, glyphCount - glyphId) - 1;
     bytes.push(
-      (firstSid >> 8) & 0xff,
-      firstSid & 0xff,
-      (nLeft >> 8) & 0xff,
-      nLeft & 0xff,
+      (firstSid >> BITS_PER_BYTE) & BYTE_MASK,
+      firstSid & BYTE_MASK,
+      (nLeft >> BITS_PER_BYTE) & BYTE_MASK,
+      nLeft & BYTE_MASK,
     );
     glyphId += nLeft + 1;
   }
@@ -173,7 +232,7 @@ export function cffFontWithBuiltinEncoding(options: {
             0,
             ...options.glyphNames.flatMap((_, index) => {
               const sid = CFF_STANDARD_STRING_COUNT + index;
-              return [(sid >> 8) & 0xff, sid & 0xff];
+              return [(sid >> BITS_PER_BYTE) & BYTE_MASK, sid & BYTE_MASK];
             }),
           ];
   const codesByGlyph = [...options.glyphNames.keys()].map((index) => {
@@ -186,10 +245,11 @@ export function cffFontWithBuiltinEncoding(options: {
   });
   const supplementBytes = (options.encodingSupplement ?? []).flatMap((s) => [
     s.code,
-    (s.sid >> 8) & 0xff,
-    s.sid & 0xff,
+    (s.sid >> BITS_PER_BYTE) & BYTE_MASK,
+    s.sid & BYTE_MASK,
   ]);
-  const supplementFlag = options.encodingSupplement === undefined ? 0 : 0x80;
+  const supplementFlag =
+    options.encodingSupplement === undefined ? 0 : ENCODING_SUPPLEMENT_FLAG;
   const encodingBody =
     options.encodingFormat === 1
       ? encodingFormat1(codesByGlyph)
@@ -202,11 +262,13 @@ export function cffFontWithBuiltinEncoding(options: {
       : [options.encodingSupplement.length, ...supplementBytes]),
   ];
   const charStrings = cffIndex([
-    [14],
-    ...options.glyphNames.map(() => [14]), // one bare `endchar` charstring per glyph: the CharStrings INDEX count is what sizes the charset
+    [CS_OP_ENDCHAR],
+    ...options.glyphNames.map(() => [CS_OP_ENDCHAR]), // one bare `endchar` charstring per glyph: the CharStrings INDEX count is what sizes the charset
   ]);
 
-  const topDictEntrySize = 3 * dictInt32(0).length + 3; // charset, Encoding and CharStrings, each a 5-byte operand plus its one-byte operator
+  // charset, Encoding and CharStrings: three Top DICT entries, each a 5-byte dictInt32 operand plus its one-byte operator.
+  const topDictEntrySize =
+    TOP_DICT_ENTRY_COUNT * dictInt32(0).length + TOP_DICT_ENTRY_COUNT;
   const topDictIndexSize = cffIndex([
     new Array<number>(topDictEntrySize).fill(0),
   ]).length;
@@ -220,11 +282,11 @@ export function cffFontWithBuiltinEncoding(options: {
   const charStringsOffset = encodingOffset + encoding.length;
   const topDict = [
     ...dictInt32(charsetOffset),
-    15,
+    CFF_DICT_OP_CHARSET,
     ...dictInt32(encodingOffset),
-    16,
+    CFF_DICT_OP_ENCODING,
     ...dictInt32(charStringsOffset),
-    17,
+    CFF_DICT_OP_CHARSTRINGS,
   ];
 
   return new Uint8Array([
@@ -275,7 +337,7 @@ export function cffFontWithCharstrings(options: {
   // A Private DICT holding only a Subrs operator (19), whose own offset is relative to the Private DICT's own start (spec Table 23) — fixed at the Private DICT's own byte length, since the Local Subrs INDEX immediately follows it. The Private DICT itself starts right where the Global Subr INDEX ends.
   const privateDictBytes =
     options.privateDict === undefined
-      ? [...dictInt32(6), 19]
+      ? [...dictInt32(dictInt32(0).length + 1), CFF_DICT_OP_SUBRS]
       : [...options.privateDict];
   // Narrowed directly on options.localSubrs itself, not on the separately-computed hasPrivate boolean above — hasPrivate is already defined as this exact check, so a `?? []` fallback here could never actually fire; checking the real value lets TypeScript rule that branch out entirely instead of leaving an always-unreachable default in the code.
   const localSubrIndex =
@@ -289,12 +351,12 @@ export function cffFontWithCharstrings(options: {
   const topDict = hasPrivate
     ? [
         ...dictInt32(charStringsOffset),
-        17,
+        CFF_DICT_OP_CHARSTRINGS,
         ...dictInt32(privateSize),
         ...dictInt32(afterGlobalSubrs),
-        18,
+        CFF_DICT_OP_PRIVATE,
       ]
-    : [...dictInt32(charStringsOffset), 17];
+    : [...dictInt32(charStringsOffset), CFF_DICT_OP_CHARSTRINGS];
 
   const charStringsIndex = cffIndex(options.charStrings);
 
