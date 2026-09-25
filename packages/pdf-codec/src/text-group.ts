@@ -54,10 +54,14 @@ export interface PdfTextGroupingOptions {
 }
 
 // Two runs share a baseline when their baselines sit within this fraction of an em of each other, measured against the SMALLER of the two runs. The interval this has to land in is bounded on both sides by real typography. Above: two consecutive lines are never closer than solid setting puts them, leading equal to the font size, one full em, so the fraction must stay below 1 or two lines of the same size can merge. Below: a superscript is raised by at most a third of its parent's size and is set at no less than half that size, so its baseline shift is at most (1/3)/(1/2) of its own em, and a fraction under two thirds starts cutting footnote markers off the line they annotate. Two thirds is the tightest value that admits every such superscript, and the tight end of the interval is the right end to sit at: splitting one line into two loses nothing a consumer cannot rejoin, while merging two lines produces run-together text that nothing downstream can undo.
-export const DEFAULT_BASELINE_TOLERANCE_EM = 2 / 3;
+// Denominator of the two-thirds baseline-tolerance fraction derived above: the tightest value that still admits a superscript raised by a third of its parent's size and set at half that size.
+const BASELINE_TOLERANCE_DENOMINATOR = 3;
+export const DEFAULT_BASELINE_TOLERANCE_EM = 2 / BASELINE_TOLERANCE_DENOMINATOR;
 
 // A gap at least this wide, in em of the smaller of the two runs, is a word space. The standard fourteen PDF faces set their space glyph at 250/1000 em, and justified setting compresses word spacing to no less than half its nominal width, so the narrowest genuine inter-word gap is an eighth of an em. Anything below that is a kerning adjustment or positioning noise inside one word.
-export const DEFAULT_WORD_GAP_EM = 1 / 8;
+// Denominator of the eighth-of-an-em word-gap fraction derived above: justified setting compresses the standard 250/1000 em space glyph to no less than half its nominal width, giving an eighth of an em as the narrowest genuine inter-word gap.
+const WORD_GAP_EM_DENOMINATOR = 8;
+export const DEFAULT_WORD_GAP_EM = 1 / WORD_GAP_EM_DENOMINATOR;
 
 // A gap wider than this many em of the smaller of the two runs is a column boundary rather than a word space. The widest single space character typography has is the em space, exactly one em, so a gap wider than that was produced by positioning rather than by a space, and the two sides are separated deliberately: a table's columns, or a tab-aligned label and its value. Keeping the threshold at the em space rather than some multiple of it is what stops a table's own columns being read as one running sentence, which is the whole reason a consumer asks where the columns are.
 export const DEFAULT_COLUMN_GAP_EM = 1;
