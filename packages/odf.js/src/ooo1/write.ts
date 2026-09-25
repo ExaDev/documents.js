@@ -1,6 +1,6 @@
 import type { ContentDocument, DocumentTree } from "document-schema.js";
 import type { Package } from "../model/package";
-import { transformToOoo1Package } from "./transform";
+import { transformToOoo1Package } from "./transform-reverse";
 import {
   writeOdt,
   writeOdtContent,
