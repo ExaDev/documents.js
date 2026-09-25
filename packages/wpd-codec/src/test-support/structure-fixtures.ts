@@ -92,15 +92,20 @@ export function paragraphAlignment(cell: ContentTableCell): string | undefined {
 }
 
 // The Form function's eighty-two-byte non-deletable region, per WPFF D1 Page: the desired length at offset 3, the desired width at offset 5, and the orientation at offset 8.
+const PAGE_FORM_NON_DELETABLE_SIZE = 82;
+const PAGE_FORM_LENGTH_OFFSET = 3;
+const PAGE_FORM_WIDTH_OFFSET = 5;
+const PAGE_FORM_ORIENTATION_OFFSET = 8;
+
 export function pageForm(options: {
   readonly lengthWpu: number;
   readonly widthWpu: number;
   readonly orientation?: number;
 }): number[] {
-  const nonDeletable = new Array<number>(82).fill(0);
-  nonDeletable.splice(3, 2, ...word(options.lengthWpu));
-  nonDeletable.splice(5, 2, ...word(options.widthWpu));
-  nonDeletable[8] = options.orientation ?? 0;
+  const nonDeletable = new Array<number>(PAGE_FORM_NON_DELETABLE_SIZE).fill(0);
+  nonDeletable.splice(PAGE_FORM_LENGTH_OFFSET, 2, ...word(options.lengthWpu));
+  nonDeletable.splice(PAGE_FORM_WIDTH_OFFSET, 2, ...word(options.widthWpu));
+  nonDeletable[PAGE_FORM_ORIENTATION_OFFSET] = options.orientation ?? 0;
   return variableFunction({ group: PAGE_GROUP, subgroup: 0x11, nonDeletable });
 }
 
@@ -113,8 +118,12 @@ export function marginFunction(
 }
 
 // A Table Column function: "[size of non-deletable information = 17]", with the width as the word at offset 1.
+const TABLE_COLUMN_NON_DELETABLE_SIZE = 17;
+
 export function tableColumn(widthWpu: number): number[] {
-  const nonDeletable = new Array<number>(17).fill(0);
+  const nonDeletable = new Array<number>(TABLE_COLUMN_NON_DELETABLE_SIZE).fill(
+    0,
+  );
   nonDeletable.splice(1, 2, ...word(widthWpu));
   return variableFunction({
     group: CHARACTER_GROUP,

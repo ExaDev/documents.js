@@ -136,7 +136,17 @@ export function readDisplayNumberLevel(
 export const PACKET_TYPE_NORMAL_STYLE = 0x30;
 
 const PID_COUNT_OFFSET = 0;
-const TEXT_BLOCK_HEADER_SIZE = 2 + 4 * 4; // [number of text blocks] then four LONG sizes/offsets
+const PID_COUNT_FIELD_SIZE = 2;
+const PID_ENTRY_SIZE = 2;
+const LONG_SIZE = 4;
+const TEXT_BLOCK_LONG_COUNT = 4;
+// [number of text blocks] then four LONG sizes/offsets.
+const TEXT_BLOCK_HEADER_SIZE =
+  PID_COUNT_FIELD_SIZE + LONG_SIZE * TEXT_BLOCK_LONG_COUNT;
+// Offsets of the first three of the four LONG fields, relative to afterPids: relative offset, paragraph text size, beginning style text size.
+
+const PARAGRAPH_TEXT_SIZE_FIELD = PID_COUNT_FIELD_SIZE + LONG_SIZE;
+const BEGINNING_STYLE_TEXT_SIZE_FIELD = PARAGRAPH_TEXT_SIZE_FIELD + LONG_SIZE;
 
 export function readStyleBeginBlock(
   packet: Uint8Array,
@@ -144,13 +154,19 @@ export function readStyleBeginBlock(
   // uint16At throws (via byteAt) rather than returning undefined for a read that runs past packet's own end, caught below — so the PID count word itself needs no separate room check ahead of reading it. The afterPids + TEXT_BLOCK_HEADER_SIZE guard just below stays a plain comparison, not a throw-and-catch substitute: it checks room for the whole four-LONG text-block header even though only three of those four longs are ever read here, so a bare throw on the actual reads alone cannot stand in for it.
   try {
     const pidCount = uint16At(packet, PID_COUNT_OFFSET);
-    const afterPids = 2 + pidCount * 2;
+    const afterPids = PID_COUNT_FIELD_SIZE + pidCount * PID_ENTRY_SIZE;
     if (afterPids + TEXT_BLOCK_HEADER_SIZE > packet.length) {
       return undefined;
     }
-    const relativeOffset = uint32At(packet, afterPids + 2);
-    const paragraphTextSize = uint32At(packet, afterPids + 6);
-    const beginningStyleTextSize = uint32At(packet, afterPids + 10);
+    const relativeOffset = uint32At(packet, afterPids + PID_COUNT_FIELD_SIZE);
+    const paragraphTextSize = uint32At(
+      packet,
+      afterPids + PARAGRAPH_TEXT_SIZE_FIELD,
+    );
+    const beginningStyleTextSize = uint32At(
+      packet,
+      afterPids + BEGINNING_STYLE_TEXT_SIZE_FIELD,
+    );
     if (beginningStyleTextSize === 0) {
       return undefined;
     }
