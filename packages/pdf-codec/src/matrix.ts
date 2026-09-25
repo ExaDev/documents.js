@@ -36,9 +36,12 @@ export function scaleMatrix(sx: number, sy: number): Matrix {
 // 4/3 * (sqrt(2) - 1): the standard cubic-Bezier approximation of a quarter circle, the control-point offset every ellipse-as-Beziers construction uses since neither PDF nor PostScript has a native ellipse (or even circle) path operator. It lives here, in the shared pure-geometry module, rather than in either half of the codec, because both halves genuinely need it: content-write.ts's writeEllipse emits an ellipse with it, and interpret.ts's read-side ellipse detection recognises one by it.
 export const BEZIER_KAPPA = 0.5522847498;
 
+// Degrees in a half turn (pi radians), the conversion factor between degrees and radians used in both directions below.
+const DEGREES_PER_HALF_TURN = 180;
+
 // A rotation matrix for `degrees` measured counter-clockwise (the PDF/PostScript convention).
 export function rotationMatrix(degrees: number): Matrix {
-  const radians = (degrees * Math.PI) / 180;
+  const radians = (degrees * Math.PI) / DEGREES_PER_HALF_TURN;
   const cos = Math.cos(radians);
   const sin = Math.sin(radians);
   return [cos, sin, -sin, cos, 0, 0];
@@ -54,7 +57,7 @@ export function matrixScaleY(m: Matrix): number {
 }
 
 export function matrixRotationDegrees(m: Matrix): number {
-  return (Math.atan2(m[1], m[0]) * 180) / Math.PI;
+  return (Math.atan2(m[1], m[0]) * DEGREES_PER_HALF_TURN) / Math.PI;
 }
 
 // Rotates `point` about `center` by `degrees` (counter-clockwise, this module's own convention). Used to reconcile two different rotation pivots: DrawingML rotates a shape about its own bounding-box centre (a:xfrm/@rot), but content-write.ts's writeText/writeImage rotate about the anchor point passed as xPt/yPt — which is invariant under that rotation by construction (translationMatrix is applied after rotationMatrix, so whatever anchor is passed is exactly where it ends up). Feeding this function the shape's UNROTATED corner and its centre computes the corner position a caller must pass as xPt/yPt so the centre-pivot rotation PowerPoint actually performs comes out identical, without needing to change how the writer itself rotates.
