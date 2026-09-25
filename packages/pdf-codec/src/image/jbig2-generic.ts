@@ -14,92 +14,94 @@ export interface Jbig2AtPixel {
   readonly y: number;
 }
 
-// One template position: either a fixed offset from the pixel being decoded, or the nth adaptive (AT) pixel, whose offset the segment header supplies.
+// One template position: either a fixed offset from the pixel being decoded, or the nth adaptive (AT) pixel, whose offset the segment header supplies. Written as object literals directly, rather than through a `fixed(dx, dy)`/`at(index)` helper, because each field is then a plain object-literal property value the coordinate table below can state without a wrapping function call around every entry.
 type TemplatePosition =
   | { readonly kind: "fixed"; readonly dx: number; readonly dy: number }
   | { readonly kind: "at"; readonly index: number };
-
-function fixed(dx: number, dy: number): TemplatePosition {
-  return { kind: "fixed", dx, dy };
-}
-
-function at(index: number): TemplatePosition {
-  return { kind: "at", index };
-}
 
 // T.88 Figures 4-7. Listed most-significant context bit first.
 const GENERIC_TEMPLATES: readonly (readonly TemplatePosition[])[] = [
   // GBTEMPLATE 0 (Figure 4): 16 pixels, four of them adaptive. Nominal AT offsets are A1 (+3,-1), A2 (-3,-1), A3 (+2,-2), A4 (-2,-2).
   [
-    at(3),
-    fixed(-1, -2),
-    fixed(0, -2),
-    fixed(1, -2),
-    at(2),
-    at(1),
-    fixed(-2, -1),
-    fixed(-1, -1),
-    fixed(0, -1),
-    fixed(1, -1),
-    fixed(2, -1),
-    at(0),
-    fixed(-4, 0),
-    fixed(-3, 0),
-    fixed(-2, 0),
-    fixed(-1, 0),
+    { kind: "at", index: 3 },
+    { kind: "fixed", dx: -1, dy: -2 },
+    { kind: "fixed", dx: 0, dy: -2 },
+    { kind: "fixed", dx: 1, dy: -2 },
+    { kind: "at", index: 2 },
+    { kind: "at", index: 1 },
+    { kind: "fixed", dx: -2, dy: -1 },
+    { kind: "fixed", dx: -1, dy: -1 },
+    { kind: "fixed", dx: 0, dy: -1 },
+    { kind: "fixed", dx: 1, dy: -1 },
+    { kind: "fixed", dx: 2, dy: -1 },
+    { kind: "at", index: 0 },
+    { kind: "fixed", dx: -4, dy: 0 },
+    { kind: "fixed", dx: -3, dy: 0 },
+    { kind: "fixed", dx: -2, dy: 0 },
+    { kind: "fixed", dx: -1, dy: 0 },
   ],
   // GBTEMPLATE 1 (Figure 5): 13 pixels, one adaptive. Nominal A1 (+3,-1).
   [
-    fixed(-1, -2),
-    fixed(0, -2),
-    fixed(1, -2),
-    fixed(2, -2),
-    fixed(-2, -1),
-    fixed(-1, -1),
-    fixed(0, -1),
-    fixed(1, -1),
-    fixed(2, -1),
-    at(0),
-    fixed(-3, 0),
-    fixed(-2, 0),
-    fixed(-1, 0),
+    { kind: "fixed", dx: -1, dy: -2 },
+    { kind: "fixed", dx: 0, dy: -2 },
+    { kind: "fixed", dx: 1, dy: -2 },
+    { kind: "fixed", dx: 2, dy: -2 },
+    { kind: "fixed", dx: -2, dy: -1 },
+    { kind: "fixed", dx: -1, dy: -1 },
+    { kind: "fixed", dx: 0, dy: -1 },
+    { kind: "fixed", dx: 1, dy: -1 },
+    { kind: "fixed", dx: 2, dy: -1 },
+    { kind: "at", index: 0 },
+    { kind: "fixed", dx: -3, dy: 0 },
+    { kind: "fixed", dx: -2, dy: 0 },
+    { kind: "fixed", dx: -1, dy: 0 },
   ],
   // GBTEMPLATE 2 (Figure 6): 10 pixels, one adaptive. Nominal A1 (+2,-1).
   [
-    fixed(-1, -2),
-    fixed(0, -2),
-    fixed(1, -2),
-    fixed(-2, -1),
-    fixed(-1, -1),
-    fixed(0, -1),
-    fixed(1, -1),
-    at(0),
-    fixed(-2, 0),
-    fixed(-1, 0),
+    { kind: "fixed", dx: -1, dy: -2 },
+    { kind: "fixed", dx: 0, dy: -2 },
+    { kind: "fixed", dx: 1, dy: -2 },
+    { kind: "fixed", dx: -2, dy: -1 },
+    { kind: "fixed", dx: -1, dy: -1 },
+    { kind: "fixed", dx: 0, dy: -1 },
+    { kind: "fixed", dx: 1, dy: -1 },
+    { kind: "at", index: 0 },
+    { kind: "fixed", dx: -2, dy: 0 },
+    { kind: "fixed", dx: -1, dy: 0 },
   ],
   // GBTEMPLATE 3 (Figure 7): 10 pixels, one adaptive, a single reference row. Nominal A1 (+2,-1).
   [
-    fixed(-3, -1),
-    fixed(-2, -1),
-    fixed(-1, -1),
-    fixed(0, -1),
-    fixed(1, -1),
-    at(0),
-    fixed(-4, 0),
-    fixed(-3, 0),
-    fixed(-2, 0),
-    fixed(-1, 0),
+    { kind: "fixed", dx: -3, dy: -1 },
+    { kind: "fixed", dx: -2, dy: -1 },
+    { kind: "fixed", dx: -1, dy: -1 },
+    { kind: "fixed", dx: 0, dy: -1 },
+    { kind: "fixed", dx: 1, dy: -1 },
+    { kind: "at", index: 0 },
+    { kind: "fixed", dx: -4, dy: 0 },
+    { kind: "fixed", dx: -3, dy: 0 },
+    { kind: "fixed", dx: -2, dy: 0 },
+    { kind: "fixed", dx: -1, dy: 0 },
   ],
 ];
 
 // T.88 6.2.5.7: the fixed pseudo-context each template uses for the typical-prediction (SLTP) decision that precedes every row when TPGDON is set. Each value is expressed in that template's own context bit ordering above, so the two must move together.
 //
-// Each is the same picture read off the corresponding figure: 0x9b25 splits into the 5, 7 and 4 pixel rows of GBTEMPLATE 0 as 10011 0110010 0101, 0x0795 into GBTEMPLATE 1's 4, 6 and 3 as 0011 110010 101, 0x00e5 into GBTEMPLATE 2's 3, 5 and 2 as 001 11001 01, and 0x0195 into GBTEMPLATE 3's 6 and 4 as 011001 0101. The GBTEMPLATE 0 pairing is confirmed empirically as well, by decoding real `jbig2 -d` output from jbig2enc — an encoder using the specification's own constant, so a mismatch here would corrupt those fixtures rather than round-trip.
+// Each is the same picture read off the corresponding figure: 0x9b25 splits into the 5, 7 and 4 pixel rows of GBTEMPLATE 0 as 10011 0110010 0101, 0x0795 into GBTEMPLATE 1's 4, 6 and 3 as 0011 110010 101, 0x00e5 into GBTEMPLATE 2's 3, 5 and 2 as 001 11001 01, and 0x0195 into GBTEMPLATE 3's 6 and 4 as 011001 0101. The GBTEMPLATE 0 pairing is confirmed empirically as well, by decoding real `jbig2 -d` output from jbig2enc, an encoder using the specification's own constant, so a mismatch here would corrupt those fixtures rather than round-trip.
+const GENERIC_SLTP_CONTEXT_TEMPLATE_0 = 0x9b25;
+const GENERIC_SLTP_CONTEXT_TEMPLATE_1 = 0x0795;
+const GENERIC_SLTP_CONTEXT_TEMPLATE_2 = 0x00e5;
+const GENERIC_SLTP_CONTEXT_TEMPLATE_3 = 0x0195;
 const GENERIC_SLTP_CONTEXT: readonly number[] = [
-  0x9b25, 0x0795, 0x00e5, 0x0195,
+  GENERIC_SLTP_CONTEXT_TEMPLATE_0,
+  GENERIC_SLTP_CONTEXT_TEMPLATE_1,
+  GENERIC_SLTP_CONTEXT_TEMPLATE_2,
+  GENERIC_SLTP_CONTEXT_TEMPLATE_3,
 ];
 
-export const GENERIC_CONTEXT_BITS: readonly number[] = [16, 13, 10, 10];
+// The context bit width of each GBTEMPLATE, derived from the templates themselves above rather than restated as a parallel literal list, so the two can never drift out of step.
+export const GENERIC_CONTEXT_BITS: readonly number[] = GENERIC_TEMPLATES.map(
+  (positions) => positions.length,
+);
 
 export interface GenericRegionParams {
   readonly template: number;
@@ -254,7 +256,9 @@ const REFINEMENT_TEMPLATES: readonly (readonly RefinementPosition[])[] = [
 const TPGRON_UNSUPPORTED =
   "JBIG2 refinement region sets TPGRON (typical prediction, T.88 6.3.5.6), whose per-template pseudo-context constants this decoder has no way to verify against a real encoder; refusing rather than risking a silently wrong bitmap";
 
-export const REFINEMENT_CONTEXT_BITS: readonly number[] = [13, 10];
+// The context bit width of each GRTEMPLATE, derived from the templates themselves above rather than restated as a parallel literal list, so the two can never drift out of step.
+export const REFINEMENT_CONTEXT_BITS: readonly number[] =
+  REFINEMENT_TEMPLATES.map((positions) => positions.length);
 
 // The nominal adaptive-pixel offsets for GRTEMPLATE 0 (T.88 Figure 12): A1 relative to the destination, A2 relative to the reference.
 export const NOMINAL_REFINEMENT_AT: readonly Jbig2AtPixel[] = [
