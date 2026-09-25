@@ -23,12 +23,20 @@ type PairPosSubtable = (
 ) => number | undefined;
 
 const GPOS_HEADER_SIZE = 10; // uint16 majorVersion + uint16 minorVersion + three Offset16s (ScriptList, FeatureList, LookupList); version 1.1's trailing Offset32 featureVariationsOffset is not read, since feature variations only select alternate feature tables per design-variation instance and this package never instantiates a variable font
+const GPOS_SCRIPT_LIST_OFFSET_FIELD = 4; // byte offset of the ScriptList Offset16 within the GPOS header
+const GPOS_FEATURE_LIST_OFFSET_FIELD = 6; // byte offset of the FeatureList Offset16 within the GPOS header
+const GPOS_LOOKUP_LIST_OFFSET_FIELD = 8; // byte offset of the LookupList Offset16 within the GPOS header
 const SCRIPT_RECORD_SIZE = 6; // Tag scriptTag + Offset16 scriptOffset
+const SCRIPT_RECORD_OFFSET_FIELD = 4; // byte offset of a ScriptRecord's Offset16, after its 4-byte Tag
 const FEATURE_RECORD_SIZE = 6; // Tag featureTag + Offset16 featureOffset
+const FEATURE_RECORD_OFFSET_FIELD = 4; // byte offset of a FeatureRecord's Offset16, after its 4-byte Tag
 const LANG_SYS_HEADER_SIZE = 6; // Offset16 lookupOrderOffset (reserved, always NULL) + uint16 requiredFeatureIndex + uint16 featureIndexCount
+const LANG_SYS_FEATURE_INDEX_COUNT_FIELD = 4; // byte offset of featureIndexCount within a LangSys record
 const FEATURE_HEADER_SIZE = 4; // Offset16 featureParamsOffset + uint16 lookupIndexCount
 const LOOKUP_HEADER_SIZE = 6; // uint16 lookupType + uint16 lookupFlag + uint16 subTableCount
+const LOOKUP_SUB_TABLE_COUNT_FIELD = 4; // byte offset of subTableCount within a Lookup table
 const EXTENSION_POS_HEADER_SIZE = 8; // uint16 posFormat + uint16 extensionLookupType + Offset32 extensionOffset
+const EXTENSION_POS_OFFSET_FIELD = 4; // byte offset of the Offset32 extensionOffset within an ExtensionPos subtable
 
 const LOOKUP_TYPE_PAIR_POS = 2;
 const LOOKUP_TYPE_EXTENSION_POS = 9;
@@ -37,13 +45,15 @@ const KERN_FEATURE_TAG = "kern";
 // The script this package resolves kerning for, best first. Latin is what the vendored text fonts are for and what this codec's own layout engine lays out; 'DFLT' is the spec's own script-independent fallback. Carlito is the concrete reason the fallback chain has to end in "whatever script the font does list" rather than requiring one of these two: it declares 'cyrl', 'grek', and 'latn' and no 'DFLT' at all, so a font that happened to omit 'latn' as well would otherwise silently lose all of its kerning.
 const PREFERRED_SCRIPT_TAGS = ["latn", "DFLT"] as const;
 
+const TAG_LENGTH_BYTES = 4; // an OpenType Tag is always 4 ASCII bytes (OpenType spec, "Data Types")
+
 // A four-byte OpenType Tag read as its literal ASCII, for comparing against a script or feature tag. Callers have already bounds-checked the record this sits in, so `u8`'s own throw-on-overrun is the right behaviour here rather than a second check.
 function readTag(bytes: Uint8Array<ArrayBuffer>, offset: number): string {
   return String.fromCharCode(
     u8(bytes, offset),
     u8(bytes, offset + 1),
     u8(bytes, offset + 2),
-    u8(bytes, offset + 3),
+    u8(bytes, offset + TAG_LENGTH_BYTES - 1),
   );
 }
 
@@ -71,6 +81,9 @@ function xAdvanceOffset(valueFormat: number): number | undefined {
 }
 
 const PAIR_POS_FORMAT_1_HEADER_SIZE = 10; // uint16 posFormat + Offset16 coverageOffset + uint16 valueFormat1 + uint16 valueFormat2 + uint16 pairSetCount
+const PAIR_POS_FORMAT_1_VALUE_FORMAT_1_FIELD = 4; // byte offset of valueFormat1 within a PairPos format 1 header
+const PAIR_POS_FORMAT_1_VALUE_FORMAT_2_FIELD = 6; // byte offset of valueFormat2 within a PairPos format 1 header
+const PAIR_POS_FORMAT_1_PAIR_SET_COUNT_FIELD = 8; // byte offset of pairSetCount within a PairPos format 1 header
 const PAIR_VALUE_RECORD_GLYPH_SIZE = 2; // the uint16 secondGlyph each PairValueRecord opens with, before its one or two ValueRecords
 
 // PairPos format 1: an explicit list of second glyphs per covered first glyph, each with its own ValueRecord. Caladea reaches real pairs ('a'+'v', 'F'+'C', 'm'+'y', ...) through this format.
@@ -88,9 +101,18 @@ function parsePairPosFormat1(
   if (coverage === undefined) {
     return undefined;
   }
-  const valueFormat1 = u16(bytes, subtableOffset + 4);
-  const valueFormat2 = u16(bytes, subtableOffset + 6);
-  const pairSetCount = u16(bytes, subtableOffset + 8);
+  const valueFormat1 = u16(
+    bytes,
+    subtableOffset + PAIR_POS_FORMAT_1_VALUE_FORMAT_1_FIELD,
+  );
+  const valueFormat2 = u16(
+    bytes,
+    subtableOffset + PAIR_POS_FORMAT_1_VALUE_FORMAT_2_FIELD,
+  );
+  const pairSetCount = u16(
+    bytes,
+    subtableOffset + PAIR_POS_FORMAT_1_PAIR_SET_COUNT_FIELD,
+  );
   const pairSetOffsetsOffset = subtableOffset + PAIR_POS_FORMAT_1_HEADER_SIZE;
   if (!hasBytes(bytes, pairSetOffsetsOffset, pairSetCount * 2)) {
     return undefined;
@@ -142,6 +164,12 @@ function parsePairPosFormat1(
 }
 
 const PAIR_POS_FORMAT_2_HEADER_SIZE = 16; // uint16 posFormat + Offset16 coverageOffset + two uint16 valueFormats + two Offset16 classDefs + uint16 class1Count + uint16 class2Count
+const PAIR_POS_FORMAT_2_VALUE_FORMAT_1_FIELD = 4; // byte offset of valueFormat1 within a PairPos format 2 header
+const PAIR_POS_FORMAT_2_VALUE_FORMAT_2_FIELD = 6; // byte offset of valueFormat2 within a PairPos format 2 header
+const PAIR_POS_FORMAT_2_CLASS_DEF_1_FIELD = 8; // byte offset of the classDef1 Offset16 within a PairPos format 2 header
+const PAIR_POS_FORMAT_2_CLASS_DEF_2_FIELD = 10; // byte offset of the classDef2 Offset16 within a PairPos format 2 header
+const PAIR_POS_FORMAT_2_CLASS_1_COUNT_FIELD = 12; // byte offset of class1Count within a PairPos format 2 header
+const PAIR_POS_FORMAT_2_CLASS_2_COUNT_FIELD = 14; // byte offset of class2Count within a PairPos format 2 header
 
 // PairPos format 2: both glyphs of the pair are mapped to a class, and the adjustment is read out of a class1Count x class2Count matrix. This is how real fonts keep a large kerning table compact, and it is the only format Carlito uses at all.
 function parsePairPosFormat2(
@@ -157,11 +185,13 @@ function parsePairPosFormat2(
   );
   const classDef1 = parseClassDef(
     bytes,
-    subtableOffset + u16(bytes, subtableOffset + 8),
+    subtableOffset +
+      u16(bytes, subtableOffset + PAIR_POS_FORMAT_2_CLASS_DEF_1_FIELD),
   );
   const classDef2 = parseClassDef(
     bytes,
-    subtableOffset + u16(bytes, subtableOffset + 10),
+    subtableOffset +
+      u16(bytes, subtableOffset + PAIR_POS_FORMAT_2_CLASS_DEF_2_FIELD),
   );
   if (
     coverage === undefined ||
@@ -170,10 +200,22 @@ function parsePairPosFormat2(
   ) {
     return undefined;
   }
-  const valueFormat1 = u16(bytes, subtableOffset + 4);
-  const valueFormat2 = u16(bytes, subtableOffset + 6);
-  const class1Count = u16(bytes, subtableOffset + 12);
-  const class2Count = u16(bytes, subtableOffset + 14);
+  const valueFormat1 = u16(
+    bytes,
+    subtableOffset + PAIR_POS_FORMAT_2_VALUE_FORMAT_1_FIELD,
+  );
+  const valueFormat2 = u16(
+    bytes,
+    subtableOffset + PAIR_POS_FORMAT_2_VALUE_FORMAT_2_FIELD,
+  );
+  const class1Count = u16(
+    bytes,
+    subtableOffset + PAIR_POS_FORMAT_2_CLASS_1_COUNT_FIELD,
+  );
+  const class2Count = u16(
+    bytes,
+    subtableOffset + PAIR_POS_FORMAT_2_CLASS_2_COUNT_FIELD,
+  );
   const class2RecordSize =
     valueRecordSize(valueFormat1) + valueRecordSize(valueFormat2);
   const class1RecordSize = class2Count * class2RecordSize;
@@ -226,7 +268,7 @@ function parseSubtable(
     return parseSubtable(
       bytes,
       extensionLookupType,
-      subtableOffset + u32(bytes, subtableOffset + 4),
+      subtableOffset + u32(bytes, subtableOffset + EXTENSION_POS_OFFSET_FIELD),
     );
   }
   if (lookupType !== LOOKUP_TYPE_PAIR_POS) {
@@ -254,7 +296,7 @@ function parseLookupSubtables(
     return [];
   }
   const lookupType = u16(bytes, lookupOffset);
-  const subTableCount = u16(bytes, lookupOffset + 4);
+  const subTableCount = u16(bytes, lookupOffset + LOOKUP_SUB_TABLE_COUNT_FIELD);
   const offsetsOffset = lookupOffset + LOOKUP_HEADER_SIZE;
   if (!hasBytes(bytes, offsetsOffset, subTableCount * 2)) {
     return [];
@@ -289,7 +331,10 @@ function parseDefaultLangSysFeatureIndices(
   if (!hasBytes(bytes, langSysOffset, LANG_SYS_HEADER_SIZE)) {
     return [];
   }
-  const featureIndexCount = u16(bytes, langSysOffset + 4);
+  const featureIndexCount = u16(
+    bytes,
+    langSysOffset + LANG_SYS_FEATURE_INDEX_COUNT_FIELD,
+  );
   const indicesOffset = langSysOffset + LANG_SYS_HEADER_SIZE;
   if (!hasBytes(bytes, indicesOffset, featureIndexCount * 2)) {
     return [];
@@ -321,11 +366,16 @@ function findScriptOffset(
     for (let i = 0; i < scriptCount; i++) {
       const recordOffset = recordsOffset + i * SCRIPT_RECORD_SIZE;
       if (readTag(bytes, recordOffset) === wanted) {
-        return scriptListOffset + u16(bytes, recordOffset + 4);
+        return (
+          scriptListOffset +
+          u16(bytes, recordOffset + SCRIPT_RECORD_OFFSET_FIELD)
+        );
       }
     }
   }
-  return scriptListOffset + u16(bytes, recordsOffset + 4);
+  return (
+    scriptListOffset + u16(bytes, recordsOffset + SCRIPT_RECORD_OFFSET_FIELD)
+  );
 }
 
 // The lookup indices every 'kern' feature the chosen script enables points at, in feature order and de-duplicated. A script's language systems routinely enable several separate 'kern' feature records that all reference the same lookup (Carlito declares seven), so the same lookup must not be walked — or applied — more than once.
@@ -352,7 +402,9 @@ function collectKernLookupIndices(
     if (readTag(bytes, recordOffset) !== KERN_FEATURE_TAG) {
       continue;
     }
-    const featureOffset = featureListOffset + u16(bytes, recordOffset + 4);
+    const featureOffset =
+      featureListOffset +
+      u16(bytes, recordOffset + FEATURE_RECORD_OFFSET_FIELD);
     if (!hasBytes(bytes, featureOffset, FEATURE_HEADER_SIZE)) {
       continue;
     }
@@ -384,20 +436,23 @@ export function buildGposKernLookup(
   ) {
     return undefined;
   }
-  const scriptOffset = findScriptOffset(bytes, u16(bytes, 4));
+  const scriptOffset = findScriptOffset(
+    bytes,
+    u16(bytes, GPOS_SCRIPT_LIST_OFFSET_FIELD),
+  );
   if (scriptOffset === undefined) {
     return undefined;
   }
   const lookupIndices = collectKernLookupIndices(
     bytes,
-    u16(bytes, 6),
+    u16(bytes, GPOS_FEATURE_LIST_OFFSET_FIELD),
     parseDefaultLangSysFeatureIndices(bytes, scriptOffset),
   );
   if (lookupIndices.length === 0) {
     return undefined;
   }
 
-  const lookupListOffset = u16(bytes, 8);
+  const lookupListOffset = u16(bytes, GPOS_LOOKUP_LIST_OFFSET_FIELD);
   if (!hasBytes(bytes, lookupListOffset, 2)) {
     return undefined;
   }
