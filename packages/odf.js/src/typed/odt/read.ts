@@ -26,23 +26,27 @@ import {
 } from "../shared/list";
 import {
   addOdfPackageResidue,
-  collectOdfDataStyleDefinitions,
-  collectOdfFieldMasterDefinitions,
-  collectOdfFontFaceDefinitions,
   collectOdfNonContentPartResidue,
   collectOdfProvenanceRegions,
-  insertOdfConstructMarkers,
   isOdfExtensionElement,
   isOdfIndexWrapper,
   odfDivisionDescriptor,
   odfIndexControlDescriptor,
+} from "../shared/constructs";
+import {
+  insertOdfConstructMarkers,
   odfMarkerHalfEventIndex,
   resolveOdfMarkerEvents,
   type OdfConstructExtent,
-  type OdfDefinitionsSink,
   type OdfMarkerEvent,
   type OdfMarkerHalf,
-} from "../shared/constructs";
+} from "../shared/constructs-markers";
+import {
+  collectOdfDataStyleDefinitions,
+  collectOdfFieldMasterDefinitions,
+  collectOdfFontFaceDefinitions,
+  type OdfDefinitionsSink,
+} from "../shared/constructs-definitions";
 import {
   readOdfParagraph,
   readOdfConstructBodyBlocks,
