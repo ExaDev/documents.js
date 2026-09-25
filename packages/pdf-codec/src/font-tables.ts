@@ -22,32 +22,42 @@ const HEAD_MAGIC_NUMBER = 0x5f0f3cf5;
 // The design grid a font's own outlines are expressed on. The spec's stated bounds (clause 5.2.2): a power of two between 16 and 16384 is required for TrueType outlines, and any value in that range is permitted for CFF ones — a value outside it means these are not head-table bytes at all.
 const MIN_UNITS_PER_EM = 16;
 const MAX_UNITS_PER_EM = 16384;
+// Byte offsets of the 'head' table's own fields, clause 5.2.2.
+const HEAD_CHECKSUM_ADJUSTMENT_OFFSET = 8;
+const HEAD_MAGIC_NUMBER_OFFSET = 12;
+const HEAD_UNITS_PER_EM_OFFSET = 18;
+const HEAD_X_MIN_OFFSET = 36;
+const HEAD_Y_MIN_OFFSET = 38;
+const HEAD_X_MAX_OFFSET = 40;
+const HEAD_Y_MAX_OFFSET = 42;
+const HEAD_MAC_STYLE_OFFSET = 44;
+const HEAD_INDEX_TO_LOC_FORMAT_OFFSET = 50;
 
 export function parseHead(font: SfntFont): HeadTable | undefined {
   const bytes = sfntTableBytes(font, "head");
   if (bytes === undefined || !hasBytes(bytes, 0, HEAD_TABLE_SIZE)) {
     return undefined;
   }
-  if (u32(bytes, 12) !== HEAD_MAGIC_NUMBER) {
+  if (u32(bytes, HEAD_MAGIC_NUMBER_OFFSET) !== HEAD_MAGIC_NUMBER) {
     return undefined;
   }
-  const unitsPerEm = u16(bytes, 18);
+  const unitsPerEm = u16(bytes, HEAD_UNITS_PER_EM_OFFSET);
   if (unitsPerEm < MIN_UNITS_PER_EM || unitsPerEm > MAX_UNITS_PER_EM) {
     return undefined;
   }
-  const indexToLocFormat = i16(bytes, 50);
+  const indexToLocFormat = i16(bytes, HEAD_INDEX_TO_LOC_FORMAT_OFFSET);
   if (indexToLocFormat !== 0 && indexToLocFormat !== 1) {
     return undefined;
   }
   return {
     unitsPerEm,
-    checkSumAdjustment: u32(bytes, 8),
-    xMin: i16(bytes, 36),
-    yMin: i16(bytes, 38),
-    xMax: i16(bytes, 40),
-    yMax: i16(bytes, 42),
+    checkSumAdjustment: u32(bytes, HEAD_CHECKSUM_ADJUSTMENT_OFFSET),
+    xMin: i16(bytes, HEAD_X_MIN_OFFSET),
+    yMin: i16(bytes, HEAD_Y_MIN_OFFSET),
+    xMax: i16(bytes, HEAD_X_MAX_OFFSET),
+    yMax: i16(bytes, HEAD_Y_MAX_OFFSET),
     indexToLocFormat,
-    macStyle: u16(bytes, 44),
+    macStyle: u16(bytes, HEAD_MAC_STYLE_OFFSET),
   };
 }
 
@@ -56,13 +66,14 @@ export interface MaxpTable {
 }
 
 const MAXP_HEADER_SIZE = 6; // version (Fixed) + numGlyphs — the whole of a version 0.5 'maxp', and the only part of a version 1.0 one anything here reads
+const MAXP_NUM_GLYPHS_OFFSET = 4; // after the 4-byte Fixed version field
 
 export function parseMaxp(font: SfntFont): MaxpTable | undefined {
   const bytes = sfntTableBytes(font, "maxp");
   if (bytes === undefined || !hasBytes(bytes, 0, MAXP_HEADER_SIZE)) {
     return undefined;
   }
-  return { numGlyphs: u16(bytes, 4) };
+  return { numGlyphs: u16(bytes, MAXP_NUM_GLYPHS_OFFSET) };
 }
 
 export interface Os2Table {
@@ -85,6 +96,15 @@ const OS2_VERSION_2_SIZE = 96; // through usMaxContext, covering sxHeight/sCapHe
 const OS2_VERSION_WITH_HEIGHTS = 2;
 const OS2_PANOSE_OFFSET = 32;
 const OS2_PANOSE_SIZE = 10;
+// Byte offsets of the 'OS/2' table's own fields, clause 5.2.8.
+const OS2_FS_SELECTION_OFFSET = 62;
+const OS2_S_TYPO_ASCENDER_OFFSET = 68;
+const OS2_S_TYPO_DESCENDER_OFFSET = 70;
+const OS2_S_TYPO_LINE_GAP_OFFSET = 72;
+const OS2_US_WIN_ASCENT_OFFSET = 74;
+const OS2_US_WIN_DESCENT_OFFSET = 76;
+const OS2_SX_HEIGHT_OFFSET = 86;
+const OS2_S_CAP_HEIGHT_OFFSET = 88;
 
 export function parseOs2(font: SfntFont): Os2Table | undefined {
   const bytes = sfntTableBytes(font, "OS/2");
@@ -97,17 +117,17 @@ export function parseOs2(font: SfntFont): Os2Table | undefined {
     hasBytes(bytes, 0, OS2_VERSION_2_SIZE);
   return {
     version,
-    fsSelection: u16(bytes, 62),
+    fsSelection: u16(bytes, OS2_FS_SELECTION_OFFSET),
     panose: [
       ...bytes.subarray(OS2_PANOSE_OFFSET, OS2_PANOSE_OFFSET + OS2_PANOSE_SIZE),
     ],
-    sTypoAscender: i16(bytes, 68),
-    sTypoDescender: i16(bytes, 70),
-    sTypoLineGap: i16(bytes, 72),
-    usWinAscent: u16(bytes, 74),
-    usWinDescent: u16(bytes, 76),
-    sxHeight: hasHeights ? i16(bytes, 86) : undefined,
-    sCapHeight: hasHeights ? i16(bytes, 88) : undefined,
+    sTypoAscender: i16(bytes, OS2_S_TYPO_ASCENDER_OFFSET),
+    sTypoDescender: i16(bytes, OS2_S_TYPO_DESCENDER_OFFSET),
+    sTypoLineGap: i16(bytes, OS2_S_TYPO_LINE_GAP_OFFSET),
+    usWinAscent: u16(bytes, OS2_US_WIN_ASCENT_OFFSET),
+    usWinDescent: u16(bytes, OS2_US_WIN_DESCENT_OFFSET),
+    sxHeight: hasHeights ? i16(bytes, OS2_SX_HEIGHT_OFFSET) : undefined,
+    sCapHeight: hasHeights ? i16(bytes, OS2_S_CAP_HEIGHT_OFFSET) : undefined,
   };
 }
 
@@ -120,6 +140,10 @@ export interface PostTable {
 
 const POST_HEADER_SIZE = 32;
 const FIXED_16_16_SCALE = 65536;
+// Byte offsets of the 'post' header's own fields, clause 5.2.5.
+const POST_ITALIC_ANGLE_OFFSET = 4;
+const POST_UNDERLINE_POSITION_OFFSET = 8;
+const POST_UNDERLINE_THICKNESS_OFFSET = 10;
 
 export function parsePost(font: SfntFont): PostTable | undefined {
   const bytes = sfntTableBytes(font, "post");
@@ -128,9 +152,9 @@ export function parsePost(font: SfntFont): PostTable | undefined {
   }
   return {
     version: u32(bytes, 0),
-    italicAngle: i32(bytes, 4) / FIXED_16_16_SCALE, // a Fixed 16.16, not an integer degree count
-    underlinePosition: i16(bytes, 8),
-    underlineThickness: i16(bytes, 10),
+    italicAngle: i32(bytes, POST_ITALIC_ANGLE_OFFSET) / FIXED_16_16_SCALE, // a Fixed 16.16, not an integer degree count
+    underlinePosition: i16(bytes, POST_UNDERLINE_POSITION_OFFSET),
+    underlineThickness: i16(bytes, POST_UNDERLINE_THICKNESS_OFFSET),
   };
 }
 
@@ -201,6 +225,11 @@ export interface NameTable {
 
 const NAME_HEADER_SIZE = 6; // version, count, storageOffset
 const NAME_RECORD_SIZE = 12;
+const NAME_HEADER_STORAGE_OFFSET_FIELD_OFFSET = 4; // after the 2-byte version and 2-byte count fields
+// Byte offsets, within one 12-byte name record, of its own fields (clause 5.2.7): platformID (0), encodingID (2), languageID (4), then these three.
+const NAME_RECORD_NAME_ID_OFFSET = 6;
+const NAME_RECORD_LENGTH_OFFSET = 8;
+const NAME_RECORD_STRING_OFFSET_FIELD_OFFSET = 10;
 const NAME_ID_FAMILY = 1;
 const NAME_ID_POSTSCRIPT = 6;
 const NAME_ID_TYPOGRAPHIC_FAMILY = 16;
@@ -218,6 +247,9 @@ interface NameRecord {
   readonly length: number;
 }
 
+// Bit width of one byte, the shift needed to combine a UTF-16BE code unit's high byte with its low byte.
+const BITS_PER_BYTE = 8;
+
 // UTF-16BE, the string encoding of every Windows-platform and Unicode-platform name record.
 function decodeUtf16Be(
   bytes: Uint8Array<ArrayBuffer>,
@@ -227,7 +259,7 @@ function decodeUtf16Be(
   let text = "";
   for (let i = 0; i + 1 < length; i += 2) {
     text += String.fromCharCode(
-      (bytes[offset + i]! << 8) | bytes[offset + i + 1]!,
+      (bytes[offset + i]! << BITS_PER_BYTE) | bytes[offset + i + 1]!,
     );
   }
   return text;
@@ -246,6 +278,9 @@ function decodeMacRoman(
   return text;
 }
 
+// One past the best-ranked recognised platform/encoding pair (0, 1, 2 above): platformRank's own fallback for anything not preferred, and readName's own cutoff for "not a supported platform at all".
+const PLATFORM_RANK_UNSUPPORTED = 3;
+
 // Windows/Unicode UTF-16BE records are preferred over Macintosh/Roman ones: they are what every modern font tool writes, and the Mac records some fonts still carry alongside them are the legacy copy.
 function platformRank(record: NameRecord): number {
   if (
@@ -263,7 +298,7 @@ function platformRank(record: NameRecord): number {
   ) {
     return 2;
   }
-  return 3;
+  return PLATFORM_RANK_UNSUPPORTED;
 }
 
 function readName(
@@ -272,7 +307,11 @@ function readName(
   nameId: number,
 ): string | undefined {
   const matches = records
-    .filter((record) => record.nameId === nameId && platformRank(record) < 3)
+    .filter(
+      (record) =>
+        record.nameId === nameId &&
+        platformRank(record) < PLATFORM_RANK_UNSUPPORTED,
+    )
     .sort((a, b) => platformRank(a) - platformRank(b));
   for (const record of matches) {
     if (!hasBytes(bytes, record.stringOffset, record.length)) {
@@ -295,7 +334,7 @@ export function parseName(font: SfntFont): NameTable | undefined {
     return undefined;
   }
   const count = u16(bytes, 2);
-  const storageOffset = u16(bytes, 4);
+  const storageOffset = u16(bytes, NAME_HEADER_STORAGE_OFFSET_FIELD_OFFSET);
   if (!hasBytes(bytes, NAME_HEADER_SIZE, count * NAME_RECORD_SIZE)) {
     return undefined;
   }
@@ -306,9 +345,11 @@ export function parseName(font: SfntFont): NameTable | undefined {
     records.push({
       platformId: u16(bytes, recordOffset),
       encodingId: u16(bytes, recordOffset + 2),
-      nameId: u16(bytes, recordOffset + 6),
-      length: u16(bytes, recordOffset + 8),
-      stringOffset: storageOffset + u16(bytes, recordOffset + 10),
+      nameId: u16(bytes, recordOffset + NAME_RECORD_NAME_ID_OFFSET),
+      length: u16(bytes, recordOffset + NAME_RECORD_LENGTH_OFFSET),
+      stringOffset:
+        storageOffset +
+        u16(bytes, recordOffset + NAME_RECORD_STRING_OFFSET_FIELD_OFFSET),
     });
   }
 
