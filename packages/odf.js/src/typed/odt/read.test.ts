@@ -38,6 +38,9 @@ function knownLength(value: string): number {
   return parsed;
 }
 
+// Every knownLength()-derived expectation in this file compares against the same precision, since they all go through the same cm/mm -> pt floating-point conversion.
+const LENGTH_PRECISION_DIGITS = 5;
+
 function isParagraph(
   block: ContentBlock | undefined,
 ): block is ContentParagraph {
@@ -83,12 +86,30 @@ describe("readOdtContent: kitchen-sink.odt (real LibreOffice output)", () => {
   });
 
   it("reads the explicitly-set page size and margins from the first master page", () => {
-    expect(section.pageSize.widthPt).toBeCloseTo(knownLength("20.001cm"), 5);
-    expect(section.pageSize.heightPt).toBeCloseTo(knownLength("25cm"), 5);
-    expect(section.margins.topPt).toBeCloseTo(knownLength("2cm"), 5);
-    expect(section.margins.bottomPt).toBeCloseTo(knownLength("2cm"), 5);
-    expect(section.margins.leftPt).toBeCloseTo(knownLength("1.499cm"), 5);
-    expect(section.margins.rightPt).toBeCloseTo(knownLength("1.499cm"), 5);
+    expect(section.pageSize.widthPt).toBeCloseTo(
+      knownLength("20.001cm"),
+      LENGTH_PRECISION_DIGITS,
+    );
+    expect(section.pageSize.heightPt).toBeCloseTo(
+      knownLength("25cm"),
+      LENGTH_PRECISION_DIGITS,
+    );
+    expect(section.margins.topPt).toBeCloseTo(
+      knownLength("2cm"),
+      LENGTH_PRECISION_DIGITS,
+    );
+    expect(section.margins.bottomPt).toBeCloseTo(
+      knownLength("2cm"),
+      LENGTH_PRECISION_DIGITS,
+    );
+    expect(section.margins.leftPt).toBeCloseTo(
+      knownLength("1.499cm"),
+      LENGTH_PRECISION_DIGITS,
+    );
+    expect(section.margins.rightPt).toBeCloseTo(
+      knownLength("1.499cm"),
+      LENGTH_PRECISION_DIGITS,
+    );
   });
 
   it('maps a level-1 heading (text:h, text:outline-level="1") onto styleId "Heading1" and headingLevel 1', () => {
@@ -124,7 +145,8 @@ describe("readOdtContent: kitchen-sink.odt (real LibreOffice output)", () => {
         b.kind === "paragraph" && b.runs.some((r) => r.text === "bold text"),
     );
     const paragraph = asParagraph(mixed);
-    expect(paragraph.runs.length).toBeGreaterThanOrEqual(6);
+    const minimumRunCount = 6;
+    expect(paragraph.runs.length).toBeGreaterThanOrEqual(minimumRunCount);
     const boldRun = paragraph.runs.find((r) => r.text === "bold text");
     const italicRun = paragraph.runs.find((r) => r.text === "italic text");
     const boldItalicRun = paragraph.runs.find((r) => r.text === "bold italic");
@@ -236,12 +258,14 @@ describe("readOdtContent: kitchen-sink.odt (real LibreOffice output)", () => {
 
   it("reads a table with a genuinely merged cell: colSpan on the anchor cell, an empty placeholder cell for the covered cell (mirroring ooxml.js's own vMerge-continuation convention), and the third cell unaffected", () => {
     const table = asTable(blocks.find((b) => b.kind === "table"));
-    expect(table.columns).toHaveLength(3);
+    const columnCount = 3;
+    const rowCount = 3;
+    expect(table.columns).toHaveLength(columnCount);
     expect(table.columns.every((c) => c.widthPt > 0)).toBe(true);
-    expect(table.rows).toHaveLength(3);
+    expect(table.rows).toHaveLength(rowCount);
 
     const headerRow = table.rows[0];
-    expect(headerRow?.cells).toHaveLength(3);
+    expect(headerRow?.cells).toHaveLength(columnCount);
     expect(headerRow?.cells[0]?.colSpan).toBe(2);
     expect(asParagraph(headerRow?.cells[0]?.blocks[0]).runs[0]?.text).toBe(
       "Merged Header",
@@ -291,10 +315,22 @@ describe("readOdtContent: minimal.odt (real LibreOffice output, default/unmodifi
   });
 
   it("reads LibreOffice's own default (unmodified) page geometry from the first master page — A4, 2cm margins", () => {
-    expect(section.pageSize.widthPt).toBeCloseTo(knownLength("21.001cm"), 5);
-    expect(section.pageSize.heightPt).toBeCloseTo(knownLength("29.7cm"), 5);
-    expect(section.margins.topPt).toBeCloseTo(knownLength("2cm"), 5);
-    expect(section.margins.leftPt).toBeCloseTo(knownLength("2cm"), 5);
+    expect(section.pageSize.widthPt).toBeCloseTo(
+      knownLength("21.001cm"),
+      LENGTH_PRECISION_DIGITS,
+    );
+    expect(section.pageSize.heightPt).toBeCloseTo(
+      knownLength("29.7cm"),
+      LENGTH_PRECISION_DIGITS,
+    );
+    expect(section.margins.topPt).toBeCloseTo(
+      knownLength("2cm"),
+      LENGTH_PRECISION_DIGITS,
+    );
+    expect(section.margins.leftPt).toBeCloseTo(
+      knownLength("2cm"),
+      LENGTH_PRECISION_DIGITS,
+    );
   });
 
   it("reads a heading and a single body paragraph, with no list and no table", () => {
@@ -423,7 +459,10 @@ describe("readOdtContent: master pages after the first, and header/footer conten
     );
     const { sections, sectionMasterPages } = readOdtContent(pkg);
     expect(sections).toHaveLength(1);
-    expect(sections[0]?.pageSize.widthPt).toBeCloseTo(knownLength("297mm"), 5);
+    expect(sections[0]?.pageSize.widthPt).toBeCloseTo(
+      knownLength("297mm"),
+      LENGTH_PRECISION_DIGITS,
+    );
     expect(sectionMasterPages).toEqual(["Landscape"]);
   });
 
@@ -562,7 +601,10 @@ describe("readOdtContent: error and fallback paths (synthetic packages — not s
     };
     const { sections } = readOdtContent(pkg);
     expect(sections[0]?.pageSize).toEqual(PAGE_SIZE_A4);
-    expect(sections[0]?.margins.topPt).toBeCloseTo(knownLength("2cm"), 5);
+    expect(sections[0]?.margins.topPt).toBeCloseTo(
+      knownLength("2cm"),
+      LENGTH_PRECISION_DIGITS,
+    );
   });
 
   it("reads an empty office:text as a section with no blocks, rather than throwing", () => {

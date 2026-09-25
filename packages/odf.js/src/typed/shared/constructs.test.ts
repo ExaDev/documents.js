@@ -209,6 +209,7 @@ describe("odfDivisionDescriptor", () => {
   });
 
   it("resolves a section's own column count only from the exact style matching both family and name", () => {
+    const expectedColumnCount = 3;
     const styles = [
       // right name, wrong family — must not match
       el(
@@ -229,7 +230,7 @@ describe("odfDivisionDescriptor", () => {
       // right family and name — the real match
       el("style:style", { "style:family": "section", "style:name": "Sect1" }, [
         el("style:section-properties", {}, [
-          el("style:columns", { "fo:column-count": "3" }),
+          el("style:columns", { "fo:column-count": `${expectedColumnCount}` }),
         ]),
       ]),
     ];
@@ -237,7 +238,7 @@ describe("odfDivisionDescriptor", () => {
       el("text:section", { "text:style-name": "Sect1" }),
       sectionPackage(styles),
     );
-    expect(descriptor.columnCount).toBe(3);
+    expect(descriptor.columnCount).toBe(expectedColumnCount);
   });
 
   it("treats a zero column count as no fact", () => {
@@ -302,6 +303,7 @@ function paragraphWithSiblings(
 }
 
 describe("isContentBearingNode (via odfMarkerHalfEventIndex)", () => {
+  const baseEventIndex = 5;
   // A half is judged NOT at a paragraph edge (interior) exactly when a genuinely content-bearing sibling precedes it — so each case below plants exactly one such sibling before the half and checks the half stops qualifying as "leading".
   const contentBearingBefore: { label: string; sibling: XmlNode }[] = [
     { label: "a non-empty text node", sibling: txt("hi") },
@@ -333,7 +335,9 @@ describe("isContentBearingNode (via odfMarkerHalfEventIndex)", () => {
         order: 0,
         descriptor: () => undefined,
       };
-      expect(odfMarkerHalfEventIndex(marker, paragraph, 5)).toBeUndefined();
+      expect(
+        odfMarkerHalfEventIndex(marker, paragraph, baseEventIndex),
+      ).toBeUndefined();
     },
   );
 
@@ -352,7 +356,9 @@ describe("isContentBearingNode (via odfMarkerHalfEventIndex)", () => {
       order: 0,
       descriptor: () => undefined,
     };
-    expect(odfMarkerHalfEventIndex(marker, paragraph, 5)).toBe(5);
+    expect(odfMarkerHalfEventIndex(marker, paragraph, baseEventIndex)).toBe(
+      baseEventIndex,
+    );
   });
 
   it("a non-content-bearing element (e.g. another bookmark half) preceding the half does not move it off the leading edge", () => {
@@ -368,7 +374,9 @@ describe("isContentBearingNode (via odfMarkerHalfEventIndex)", () => {
       order: 0,
       descriptor: () => undefined,
     };
-    expect(odfMarkerHalfEventIndex(marker, paragraph, 5)).toBe(5);
+    expect(odfMarkerHalfEventIndex(marker, paragraph, baseEventIndex)).toBe(
+      baseEventIndex,
+    );
   });
 
   it("a comment node (neither text nor element) preceding the half does not move it off the leading edge", () => {
@@ -387,7 +395,9 @@ describe("isContentBearingNode (via odfMarkerHalfEventIndex)", () => {
       order: 0,
       descriptor: () => undefined,
     };
-    expect(odfMarkerHalfEventIndex(marker, paragraph, 5)).toBe(5);
+    expect(odfMarkerHalfEventIndex(marker, paragraph, baseEventIndex)).toBe(
+      baseEventIndex,
+    );
   });
 
   it("returns undefined when the half's own recorded parent is not the paragraph passed in, even though the half is a genuine child of that other parent", () => {
@@ -405,7 +415,9 @@ describe("isContentBearingNode (via odfMarkerHalfEventIndex)", () => {
       descriptor: () => undefined,
     };
     const paragraph = el("text:p", {});
-    expect(odfMarkerHalfEventIndex(marker, paragraph, 5)).toBeUndefined();
+    expect(
+      odfMarkerHalfEventIndex(marker, paragraph, baseEventIndex),
+    ).toBeUndefined();
   });
 
   it("returns undefined when the half element is not actually among its own recorded parent's children", () => {
@@ -421,7 +433,9 @@ describe("isContentBearingNode (via odfMarkerHalfEventIndex)", () => {
       order: 0,
       descriptor: () => undefined,
     };
-    expect(odfMarkerHalfEventIndex(marker, paragraph, 5)).toBeUndefined();
+    expect(
+      odfMarkerHalfEventIndex(marker, paragraph, baseEventIndex),
+    ).toBeUndefined();
   });
 });
 
@@ -1226,10 +1240,11 @@ describe("odfRunConstructWriteKind", () => {
       anchorType: "bookmark",
       name: "b",
     };
+    const rangeEndRun = 4;
     expect(odfRunConstructWriteKind(extent(descriptor, 2, 2))).toBe(
       "bookmarkPoint",
     );
-    expect(odfRunConstructWriteKind(extent(descriptor, 2, 4))).toBe(
+    expect(odfRunConstructWriteKind(extent(descriptor, 2, rangeEndRun))).toBe(
       "bookmarkRange",
     );
   });
@@ -1346,11 +1361,21 @@ describe("odfRunConstructWriteKind", () => {
     const changeIds = new Map<ProvenanceDescriptor, string>([
       [descriptor, "id1"],
     ]);
+    const changePointRun = 3;
+    const changeRangeEndRun = 5;
     expect(
-      odfRunConstructWriteKind(extent(descriptor, 3, 3), {}, changeIds),
+      odfRunConstructWriteKind(
+        extent(descriptor, changePointRun, changePointRun),
+        {},
+        changeIds,
+      ),
     ).toBe("changePoint");
     expect(
-      odfRunConstructWriteKind(extent(descriptor, 3, 5), {}, changeIds),
+      odfRunConstructWriteKind(
+        extent(descriptor, changePointRun, changeRangeEndRun),
+        {},
+        changeIds,
+      ),
     ).toBe("changeRange");
   });
 });
