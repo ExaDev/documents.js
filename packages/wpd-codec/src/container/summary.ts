@@ -29,6 +29,19 @@ const GROUP_HEADER_SIZE = 6;
 
 // "10-Byte Date Structure: [year] <month> <day> <hour> <minute> <second> <day of week> (not implemented) <time zone> (not implemented) <unused>" — a year short then eight bytes.
 const DATE_FIELD_SIZE = 10;
+const DATE_FIELD_MONTH_OFFSET = 2;
+const DATE_FIELD_DAY_OFFSET = 3;
+const DATE_FIELD_HOUR_OFFSET = 4;
+const DATE_FIELD_MINUTE_OFFSET = 5;
+const DATE_FIELD_SECOND_OFFSET = 6;
+
+// ISO-8601 field widths: a 4-digit year, everything else 2 digits.
+const ISO_YEAR_WIDTH = 4;
+const ISO_FIELD_WIDTH = 2;
+
+// "[size] [tag] [type]", three shorts: size at offset 0, tag at offset 2, type at offset 4.
+const GROUP_HEADER_TAG_OFFSET = 2;
+const GROUP_HEADER_TYPE_OFFSET = 4;
 
 // "The extended summary data group occurs for up to 100 times". A packet claiming more groups than that is either malformed or not a summary packet at all, and the bound keeps a corrupted size field from turning the walk into an unbounded loop.
 const MAX_SUMMARY_GROUPS = 100;
@@ -43,11 +56,11 @@ function readDateField(bytes: Uint8Array, offset: number): string | undefined {
     return undefined;
   }
   const year = uint16At(bytes, offset);
-  const month = bytes[offset + 2];
-  const day = bytes[offset + 3];
-  const hour = bytes[offset + 4];
-  const minute = bytes[offset + 5];
-  const second = bytes[offset + 6];
+  const month = bytes[offset + DATE_FIELD_MONTH_OFFSET];
+  const day = bytes[offset + DATE_FIELD_DAY_OFFSET];
+  const hour = bytes[offset + DATE_FIELD_HOUR_OFFSET];
+  const minute = bytes[offset + DATE_FIELD_MINUTE_OFFSET];
+  const second = bytes[offset + DATE_FIELD_SECOND_OFFSET];
   if (
     month === undefined ||
     day === undefined ||
@@ -61,7 +74,7 @@ function readDateField(bytes: Uint8Array, offset: number): string | undefined {
     // An unset date, which the summary carries as a zeroed field rather than by omitting the group.
     return undefined;
   }
-  return `${pad(year, 4)}-${pad(month, 2)}-${pad(day, 2)}T${pad(hour, 2)}:${pad(minute, 2)}:${pad(second, 2)}`;
+  return `${pad(year, ISO_YEAR_WIDTH)}-${pad(month, ISO_FIELD_WIDTH)}-${pad(day, ISO_FIELD_WIDTH)}T${pad(hour, ISO_FIELD_WIDTH)}:${pad(minute, ISO_FIELD_WIDTH)}:${pad(second, ISO_FIELD_WIDTH)}`;
 }
 
 // A single-line Keywords field split into the shared schema's keyword array. The SDK gives the field one line and no separator vocabulary, so the comma every interface that shows this field uses is the reading — and an entry that is only whitespace is dropped rather than kept as an empty keyword.
@@ -91,8 +104,8 @@ export function readDocumentSummary(packet: Uint8Array): LayoutMetadata {
     let type: number;
     try {
       size = uint16At(packet, cursor);
-      tag = uint16At(packet, cursor + 2);
-      type = uint16At(packet, cursor + 4);
+      tag = uint16At(packet, cursor + GROUP_HEADER_TAG_OFFSET);
+      type = uint16At(packet, cursor + GROUP_HEADER_TYPE_OFFSET);
     } catch {
       break;
     }
