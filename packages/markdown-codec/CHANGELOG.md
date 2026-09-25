@@ -1,3 +1,9 @@
+## [11.1.11](https://github.com/ExaDev/documents.js/compare/markdown-codec%4011.1.10...markdown-codec%4011.1.11) (2026-09-25)
+
+### Documentation
+
+* **lint:** withdraw the claim that a numeric literal type union cannot be named ([716aaa2](https://github.com/ExaDev/documents.js/commit/716aaa267a04fb0b109c177ab33d8224b294d974))
+
 ## [11.1.10](https://github.com/ExaDev/documents.js/compare/markdown-codec%4011.1.9...markdown-codec%4011.1.10) (2026-09-24)
 
 ### Bug Fixes

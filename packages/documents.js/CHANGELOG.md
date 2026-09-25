@@ -1,3 +1,15 @@
+## [14.4.38](https://github.com/ExaDev/documents.js/compare/documents.js%4014.4.37...documents.js%4014.4.38) (2026-09-25)
+
+### Tests
+
+* **documents.js:** close two reconstruct.ts link-reconciliation mutation gaps ([dc0d6d2](https://github.com/ExaDev/documents.js/commit/dc0d6d29be81cda731dbd286f7d17c1db499fe0c))
+
+
+### Dependencies
+
+- Updated markdown-codec to 11.1.11
+- Updated ppt-codec to 2.2.18
+
 ## [14.4.37](https://github.com/ExaDev/documents.js/compare/documents.js%4014.4.36...documents.js%4014.4.37) (2026-09-25)
 
 

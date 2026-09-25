@@ -1,3 +1,13 @@
+## [2.2.18](https://github.com/ExaDev/documents.js/compare/ppt-codec%402.2.17...ppt-codec%402.2.18) (2026-09-25)
+
+### Code Refactoring
+
+* **ppt-codec:** state a slide list name once per resolver ([291c363](https://github.com/ExaDev/documents.js/commit/291c363dae2fe39f5ee330aba81fe0d2e14c9e13))
+
+### Tests
+
+* **ppt-codec:** cover the record-walking test-support helpers ([4dcdc8b](https://github.com/ExaDev/documents.js/commit/4dcdc8bd003b75ca4ac40826bf345596426eba9c))
+
 ## [2.2.17](https://github.com/ExaDev/documents.js/compare/ppt-codec%402.2.16...ppt-codec%402.2.17) (2026-09-24)
 
 ### Code Refactoring
