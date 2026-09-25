@@ -25,6 +25,11 @@ function toPdfY(positioned: PositionedFormula, itemYPt: number): number {
   return positioned.yPt + positioned.box.heightPt - itemYPt;
 }
 
+// The bit width of one byte, used to split a 16-bit glyph ID or UTF-16 code unit into its high and low bytes below.
+const BITS_PER_BYTE = 8;
+// Isolates the low 8 bits of a value, i.e. its low byte.
+const BYTE_MASK = 0xff;
+
 function writeRgbOperator(
   writer: ByteWriter,
   color: Readonly<MathColor>,
@@ -53,8 +58,8 @@ function encodeGlyphRunToCids(
   }
   const bytes = new Uint8Array(gids.length * 2);
   gids.forEach((gid, index) => {
-    bytes[index * 2] = (gid >> 8) & 0xff;
-    bytes[index * 2 + 1] = gid & 0xff;
+    bytes[index * 2] = (gid >> BITS_PER_BYTE) & BYTE_MASK;
+    bytes[index * 2 + 1] = gid & BYTE_MASK;
   });
   return bytes;
 }
@@ -81,15 +86,22 @@ function writeGlyphRun(
 }
 
 function cidBytes(glyphId: number): Uint8Array<ArrayBuffer> {
-  return new Uint8Array([(glyphId >> 8) & 0xff, glyphId & 0xff]);
+  return new Uint8Array([
+    (glyphId >> BITS_PER_BYTE) & BYTE_MASK,
+    glyphId & BYTE_MASK,
+  ]);
 }
 
 // A PDF text string (ISO 32000-1 7.9.2.2) in UTF-16BE with the leading U+FEFF byte-order mark that identifies it as such — the encoding /ActualText needs to carry arbitrary Unicode. String.charCodeAt already yields UTF-16 code units, surrogate pairs included, so this needs no surrogate arithmetic of its own. Built by appending each code unit's two bytes in turn rather than pre-sizing a typed array and writing by computed offset: there is then no `2 + i * 2` index arithmetic to get right, and the length of the result falls out of how many bytes were actually appended instead of being asserted up front.
+// The two bytes of U+FEFF, the byte-order mark ISO 32000-1 7.9.2.2 requires at the start of a UTF-16BE PDF text string.
+const UTF16_BOM_HIGH_BYTE = 0xfe;
+const UTF16_BOM_LOW_BYTE = 0xff;
+
 function utf16BeWithBom(text: string): Uint8Array<ArrayBuffer> {
-  const bytes: number[] = [0xfe, 0xff];
+  const bytes: number[] = [UTF16_BOM_HIGH_BYTE, UTF16_BOM_LOW_BYTE];
   for (let i = 0; i < text.length; i++) {
     const unit = text.charCodeAt(i);
-    bytes.push((unit >> 8) & 0xff, unit & 0xff);
+    bytes.push((unit >> BITS_PER_BYTE) & BYTE_MASK, unit & BYTE_MASK);
   }
   return new Uint8Array(bytes);
 }
