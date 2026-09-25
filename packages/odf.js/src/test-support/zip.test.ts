@@ -6,7 +6,21 @@ import {
   readUint32LE,
 } from "./zip";
 
-// Builds a single synthetic local file header (signature 0x04034b50) plus a body of `compressedSize` zero bytes, with an arbitrary filename and extra-field length, entirely by hand rather than through fflate — fflate's own zipSync never emits a non-empty extra field, so exercising the `extraLength` term in localFileHeaderNames's offset arithmetic needs bytes built directly.
+const BYTE_1_SHIFT = 8;
+const BYTE_2_SHIFT = 16;
+const BYTE_3_SHIFT = 24;
+
+// A zip local file header's own fixed field layout (PKWARE APPNOTE.TXT section 4.3.7), mirroring test-support/zip.ts's own private constants.
+const LFH_SIGNATURE = 0x04034b50;
+const LFH_COMPRESSION_METHOD_OFFSET = 8;
+const LFH_COMPRESSED_SIZE_OFFSET = 18;
+const LFH_FILENAME_LENGTH_OFFSET = 26;
+const LFH_EXTRA_LENGTH_OFFSET = 28;
+const LFH_FIXED_SIZE = 30;
+const STORED_COMPRESSION_METHOD = 0;
+const DEFLATED_COMPRESSION_METHOD = 8;
+
+// Builds a single synthetic local file header (signature LFH_SIGNATURE) plus a body of `compressedSize` zero bytes, with an arbitrary filename and extra-field length, entirely by hand rather than through fflate — fflate's own zipSync never emits a non-empty extra field, so exercising the `extraLength` term in localFileHeaderNames's offset arithmetic needs bytes built directly.
 function buildLocalFileHeader(
   options: Readonly<{
     filename: string;
@@ -16,15 +30,22 @@ function buildLocalFileHeader(
 ): Uint8Array {
   const nameBytes = new TextEncoder().encode(options.filename);
   const total =
-    30 + nameBytes.length + options.extraLength + options.compressedSize;
+    LFH_FIXED_SIZE +
+    nameBytes.length +
+    options.extraLength +
+    options.compressedSize;
   const bytes = new Uint8Array(total);
   const view = new DataView(bytes.buffer);
-  view.setUint32(0, 0x04034b50, true);
-  view.setUint16(8, 0, true); // compression method
-  view.setUint32(18, options.compressedSize, true);
-  view.setUint16(26, nameBytes.length, true);
-  view.setUint16(28, options.extraLength, true);
-  bytes.set(nameBytes, 30);
+  view.setUint32(0, LFH_SIGNATURE, true);
+  view.setUint16(
+    LFH_COMPRESSION_METHOD_OFFSET,
+    STORED_COMPRESSION_METHOD,
+    true,
+  );
+  view.setUint32(LFH_COMPRESSED_SIZE_OFFSET, options.compressedSize, true);
+  view.setUint16(LFH_FILENAME_LENGTH_OFFSET, nameBytes.length, true);
+  view.setUint16(LFH_EXTRA_LENGTH_OFFSET, options.extraLength, true);
+  bytes.set(nameBytes, LFH_FIXED_SIZE);
   return bytes;
 }
 
@@ -40,14 +61,21 @@ function concatBytes(chunks: readonly Uint8Array[]): Uint8Array {
 }
 
 describe("readUint16LE", () => {
+  // Transposing the bytes or negating the shift below would give a different value, which is the entire point of these two tests.
+  const lowByte = 0x02;
+  const highByte = 0x01;
+  const combined16 = (highByte << BYTE_1_SHIFT) | lowByte;
+
   it("combines two distinct bytes little-endian", () => {
-    // 0x02 | (0x01 << 8) = 0x0102 — transposing the bytes or negating the shift would give a different value.
-    expect(readUint16LE(new Uint8Array([0x02, 0x01]), 0)).toBe(0x0102);
+    expect(readUint16LE(new Uint8Array([lowByte, highByte]), 0)).toBe(
+      combined16,
+    );
   });
 
   it("reads from a non-zero offset (offset + 1, not offset - 1, addresses the high byte)", () => {
-    const bytes = new Uint8Array([0xff, 0x02, 0x01, 0xff]);
-    expect(readUint16LE(bytes, 1)).toBe(0x0102);
+    const paddingByte = 0xff;
+    const bytes = new Uint8Array([paddingByte, lowByte, highByte, paddingByte]);
+    expect(readUint16LE(bytes, 1)).toBe(combined16);
   });
 
   it("throws when both bytes are missing", () => {
@@ -57,38 +85,59 @@ describe("readUint16LE", () => {
   });
 
   it("throws when only the high byte is missing", () => {
-    expect(() => readUint16LE(new Uint8Array([0x42]), 0)).toThrow(
+    const arbitraryByte = 0x42;
+    expect(() => readUint16LE(new Uint8Array([arbitraryByte]), 0)).toThrow(
       "truncated zip bytes while reading a uint16 at offset 0",
     );
   });
 
   it("throws when only the low byte is missing (negative offset)", () => {
     // offset=-1 makes bytes[-1] (the low byte) undefined while bytes[0] (the high byte) is defined.
-    expect(() => readUint16LE(new Uint8Array([0x42, 0x43]), -1)).toThrow(
-      "truncated zip bytes while reading a uint16 at offset -1",
-    );
+    const arbitraryByteA = 0x42;
+    const arbitraryByteB = 0x43;
+    expect(() =>
+      readUint16LE(new Uint8Array([arbitraryByteA, arbitraryByteB]), -1),
+    ).toThrow("truncated zip bytes while reading a uint16 at offset -1");
   });
 
   it("reports the exact offset that failed, not a neighbouring one", () => {
-    expect(() => readUint16LE(new Uint8Array([1, 2, 3]), 5)).toThrow(
-      "truncated zip bytes while reading a uint16 at offset 5",
+    const arbitraryThirdByte = 3;
+    const failingOffset = 5;
+    expect(() =>
+      readUint16LE(new Uint8Array([1, 2, arbitraryThirdByte]), failingOffset),
+    ).toThrow(
+      `truncated zip bytes while reading a uint16 at offset ${failingOffset}`,
     );
   });
 });
 
 describe("readUint32LE", () => {
   it("combines four distinct bytes little-endian, unsigned", () => {
-    // 0x04 | (0x03 << 8) | (0x02 << 16) | (0x01 << 24) = 0x01020304
-    expect(readUint32LE(new Uint8Array([0x04, 0x03, 0x02, 0x01]), 0)).toBe(
-      0x01020304,
+    // (byte3 << 24) | (byte2 << 16) | (byte1 << 8) | byte0 — transposing the bytes or reordering the shifts would give a different value.
+    const byte0 = 0x04;
+    const byte1 = 0x03;
+    const byte2 = 0x02;
+    const byte3 = 0x01;
+    const combined32 =
+      (byte3 << BYTE_3_SHIFT) |
+      (byte2 << BYTE_2_SHIFT) |
+      (byte1 << BYTE_1_SHIFT) |
+      byte0;
+    expect(readUint32LE(new Uint8Array([byte0, byte1, byte2, byte3]), 0)).toBe(
+      combined32,
     );
   });
 
   it("stays unsigned even when the top byte would set the sign bit", () => {
     // Without the >>> 0 conversion this would read as a negative number.
-    expect(readUint32LE(new Uint8Array([0x00, 0x00, 0x00, 0xff]), 0)).toBe(
-      0xff000000,
-    );
+    const zeroByte = 0x00;
+    const highSignBitByte = 0xff;
+    expect(
+      readUint32LE(
+        new Uint8Array([zeroByte, zeroByte, zeroByte, highSignBitByte]),
+        0,
+      ),
+    ).toBe((highSignBitByte << BYTE_3_SHIFT) >>> 0);
   });
 
   it("throws when all four bytes are missing", () => {
@@ -98,9 +147,10 @@ describe("readUint32LE", () => {
   });
 
   it("throws when only the last byte is missing", () => {
-    expect(() => readUint32LE(new Uint8Array([1, 2, 3]), 0)).toThrow(
-      "truncated zip bytes while reading a uint32 at offset 0",
-    );
+    const arbitraryThirdByte = 3;
+    expect(() =>
+      readUint32LE(new Uint8Array([1, 2, arbitraryThirdByte]), 0),
+    ).toThrow("truncated zip bytes while reading a uint32 at offset 0");
   });
 
   it("throws when only the third byte is missing", () => {
@@ -117,9 +167,10 @@ describe("readUint32LE", () => {
 
   it("throws when only the first byte is missing (negative offset)", () => {
     // offset=-1 makes bytes[-1] (b0) undefined while b1..b3 (bytes[0..2]) are defined.
-    expect(() => readUint32LE(new Uint8Array([1, 2, 3]), -1)).toThrow(
-      "truncated zip bytes while reading a uint32 at offset -1",
-    );
+    const arbitraryThirdByte = 3;
+    expect(() =>
+      readUint32LE(new Uint8Array([1, 2, arbitraryThirdByte]), -1),
+    ).toThrow("truncated zip bytes while reading a uint32 at offset -1");
   });
 });
 
@@ -197,7 +248,16 @@ describe("localFileHeaderNames", () => {
       extraLength: 0,
       compressedSize: 0,
     });
-    const trailer = new Uint8Array([0x50, 0x4b, 0x01, 0x02]); // central directory signature, not a local file header
+    // A central directory record signature ("PK\x01\x02"), not a local file header.
+    const CENTRAL_DIRECTORY_SIGNATURE_PREFIX: readonly number[] = Array.from(
+      "PK",
+      (c) => c.charCodeAt(0),
+    );
+    const trailer = new Uint8Array([
+      ...CENTRAL_DIRECTORY_SIGNATURE_PREFIX,
+      1,
+      2,
+    ]);
     const bytes = concatBytes([header, trailer]);
     expect(localFileHeaderNames(bytes)).toEqual(["only.xml"]);
   });
@@ -205,13 +265,15 @@ describe("localFileHeaderNames", () => {
 
 describe("assertMimetypeEntryLayout", () => {
   const mediaType = "application/vnd.oasis.opendocument.text";
+  const mimetypeFilename = "mimetype";
 
   function validLayout(): Uint8Array {
+    // Header only, then the content bytes appended below.
     return buildLocalFileHeader({
-      filename: "mimetype",
+      filename: mimetypeFilename,
       extraLength: 0,
       compressedSize: 0,
-    }).slice(0, 30 + 8); // header only, then the content bytes appended below
+    }).slice(0, LFH_FIXED_SIZE + mimetypeFilename.length);
   }
 
   function withMimetypeContent(content: string): Uint8Array {
@@ -235,7 +297,7 @@ describe("assertMimetypeEntryLayout", () => {
 
   it("rejects a non-zero compression method", () => {
     const bytes = withMimetypeContent(mediaType);
-    bytes[8] = 8; // DEFLATE, not stored
+    bytes[LFH_COMPRESSION_METHOD_OFFSET] = DEFLATED_COMPRESSION_METHOD; // DEFLATE, not stored
     expect(() => {
       assertMimetypeEntryLayout(bytes, mediaType);
     }).toThrow(/compression method/);
