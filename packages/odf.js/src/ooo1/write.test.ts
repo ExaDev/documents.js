@@ -455,9 +455,10 @@ describe("writeSxwContent produces genuine OpenOffice.org 1.x XML, not merely so
   });
 
   it("wraps every meta:keyword under one meta:keywords element", () => {
+    const keywords = ["a", "b", "c"];
     const withKeywords = writeSxwContent({
       kind: "wordprocessing",
-      metadata: { keywords: ["a", "b", "c"] },
+      metadata: { keywords },
       sections: [{ pageSize: PAGE_SIZE_A4, margins: MARGINS, blocks: [] }],
     });
     const meta = withKeywords.parts["meta.xml"];
@@ -478,7 +479,7 @@ describe("writeSxwContent produces genuine OpenOffice.org 1.x XML, not merely so
     }
     expect(
       wrapper.children.filter((child) => child.type === "element"),
-    ).toHaveLength(3);
+    ).toHaveLength(keywords.length);
     expect(
       findChildElement(officeMeta.children, "meta:keyword"),
     ).toBeUndefined();
@@ -1145,22 +1146,28 @@ describe("the sxi round-trip law", () => {
 
   // A rotated shape's own frame/rotationDeg is an exact algebraic inverse (typed/draw/write-shapes.ts's own frameGeometryAttrs) verified with a numeric tolerance rather than the blanket expectPresentationRoundTrip helper above, exactly mirroring typed/odp/write-round-trip.test.ts's own identical exception (two independent trig evaluations on either side of a real round trip — here run through transformToOoo1Package/transformOoo1Package on top of writeOdp/readOdp — are not guaranteed bit-identical).
   it("round-trips a rotated shape's geometry within floating-point tolerance", () => {
+    const frame = { xPt: 60, yPt: 200, widthPt: 200, heightPt: 80 };
+    const rotationDeg = 30;
+    const rotationPrecisionDigits = 9;
+    const framePrecisionDigits = 6;
     const written = presentationRoundTrip(
-      presentationDocumentOf([
-        slideOf([
-          shapeOf({
-            frame: { xPt: 60, yPt: 200, widthPt: 200, heightPt: 80 },
-            rotationDeg: 30,
-          }),
-        ]),
-      ]),
+      presentationDocumentOf([slideOf([shapeOf({ frame, rotationDeg })])]),
     );
     const writtenShape = written.slides[0]!.shapes[0]!;
-    expect(writtenShape.rotationDeg).toBeCloseTo(30, 9);
-    expect(writtenShape.frame.xPt).toBeCloseTo(60, 6);
-    expect(writtenShape.frame.yPt).toBeCloseTo(200, 6);
-    expect(writtenShape.frame.widthPt).toBeCloseTo(200, 6);
-    expect(writtenShape.frame.heightPt).toBeCloseTo(80, 6);
+    expect(writtenShape.rotationDeg).toBeCloseTo(
+      rotationDeg,
+      rotationPrecisionDigits,
+    );
+    expect(writtenShape.frame.xPt).toBeCloseTo(frame.xPt, framePrecisionDigits);
+    expect(writtenShape.frame.yPt).toBeCloseTo(frame.yPt, framePrecisionDigits);
+    expect(writtenShape.frame.widthPt).toBeCloseTo(
+      frame.widthPt,
+      framePrecisionDigits,
+    );
+    expect(writtenShape.frame.heightPt).toBeCloseTo(
+      frame.heightPt,
+      framePrecisionDigits,
+    );
   });
 
   it("holds through the tree form as well as the flat one", () => {
@@ -1464,35 +1471,59 @@ describe("the sxd round-trip law", () => {
   // A rotated shape's and a rotated vector's own frame/rotationDeg is an exact algebraic inverse (typed/draw/write-shapes.ts's own frameGeometryAttrs) verified with a numeric tolerance rather than the blanket expectDrawingRoundTrip helper above, exactly mirroring typed/odg/write-round-trip.test.ts's own identical exception (two independent trig evaluations on either side of a real round trip — here run through transformToOoo1Package/transformOoo1Package on top of writeOdg/readOdg — are not guaranteed bit-identical).
   it("round-trips a rotated vector's geometry within floating-point tolerance", () => {
     const frame = { xPt: 60, yPt: 200, widthPt: 200, heightPt: 80 };
+    const rotationDeg = 30;
+    const rotationPrecisionDigits = 9;
+    const framePrecisionDigits = 6;
     const written = drawingRoundTrip(
       drawingDocumentOf([
-        drawPageOf([{ kind: "rect", frame, rotationDeg: 30, fill: SXD_BLUE }]),
+        drawPageOf([{ kind: "rect", frame, rotationDeg, fill: SXD_BLUE }]),
       ]),
     );
     const vector = written.pages[0]!.vectors[0]!;
     if (vector.kind !== "rect") {
       throw new Error(`expected a rect back, got '${vector.kind}'`);
     }
-    expect(vector.rotationDeg).toBeCloseTo(30, 9);
-    expect(vector.frame.xPt).toBeCloseTo(frame.xPt, 6);
-    expect(vector.frame.yPt).toBeCloseTo(frame.yPt, 6);
-    expect(vector.frame.widthPt).toBeCloseTo(frame.widthPt, 6);
-    expect(vector.frame.heightPt).toBeCloseTo(frame.heightPt, 6);
+    expect(vector.rotationDeg).toBeCloseTo(
+      rotationDeg,
+      rotationPrecisionDigits,
+    );
+    expect(vector.frame.xPt).toBeCloseTo(frame.xPt, framePrecisionDigits);
+    expect(vector.frame.yPt).toBeCloseTo(frame.yPt, framePrecisionDigits);
+    expect(vector.frame.widthPt).toBeCloseTo(
+      frame.widthPt,
+      framePrecisionDigits,
+    );
+    expect(vector.frame.heightPt).toBeCloseTo(
+      frame.heightPt,
+      framePrecisionDigits,
+    );
   });
 
   it("round-trips a rotated shape's geometry within floating-point tolerance", () => {
     const frame = { xPt: 36, yPt: 48, widthPt: 240, heightPt: 80 };
+    const rotationDeg = 30;
+    const rotationPrecisionDigits = 9;
+    const framePrecisionDigits = 6;
     const written = drawingRoundTrip(
       drawingDocumentOf([
-        drawPageOf([], [drawShapeOf({ frame, rotationDeg: 30 })]),
+        drawPageOf([], [drawShapeOf({ frame, rotationDeg })]),
       ]),
     );
     const writtenShape = written.pages[0]!.shapes[0]!;
-    expect(writtenShape.rotationDeg).toBeCloseTo(30, 9);
-    expect(writtenShape.frame.xPt).toBeCloseTo(frame.xPt, 6);
-    expect(writtenShape.frame.yPt).toBeCloseTo(frame.yPt, 6);
-    expect(writtenShape.frame.widthPt).toBeCloseTo(frame.widthPt, 6);
-    expect(writtenShape.frame.heightPt).toBeCloseTo(frame.heightPt, 6);
+    expect(writtenShape.rotationDeg).toBeCloseTo(
+      rotationDeg,
+      rotationPrecisionDigits,
+    );
+    expect(writtenShape.frame.xPt).toBeCloseTo(frame.xPt, framePrecisionDigits);
+    expect(writtenShape.frame.yPt).toBeCloseTo(frame.yPt, framePrecisionDigits);
+    expect(writtenShape.frame.widthPt).toBeCloseTo(
+      frame.widthPt,
+      framePrecisionDigits,
+    );
+    expect(writtenShape.frame.heightPt).toBeCloseTo(
+      frame.heightPt,
+      framePrecisionDigits,
+    );
   });
 
   it("holds through the tree form as well as the flat one", () => {
