@@ -225,6 +225,9 @@ const XLSX_BORDER_STYLE: Readonly<
   slantDashDot: { weight: "medium", pattern: "dashed" },
 };
 
+// The RGB portion's own digit count in both spellings the rgb attribute can carry: 8 hex digits "AARRGGBB" with a leading alpha prefix, or 6 "RRGGBB" alone.
+const RGB_HEX_DIGITS = 6;
+
 // A <color> element already located by its caller (one of a <border> edge's own colour, a <patternFill>'s <fgColor>/<bgColor>, or one of a colorScale's own several <color> siblings, which readColorRgb below cannot reach since it only ever takes the FIRST child of a given tag): only the rgb attribute is mapped (8 hex digits "AARRGGBB" with a leading alpha prefix, or 6 "RRGGBB" — the last 6 digits are the real RGB in both forms). theme/indexed/tint/auto carry real colours this reader deliberately does not resolve: theme and indexed require a separate workbook-theme/table resolution this package does not model, and silently substituting black or any other fixed colour would misreport them, so the edge/fill reads as carrying no colour instead.
 export function colorFromElement(
   colorEl: XmlElement | undefined,
@@ -236,8 +239,8 @@ export function colorFromElement(
   if (raw === undefined) {
     return undefined;
   }
-  // Excel writes "FFRRGGBB" (alpha + RGB); a 6-digit "RRGGBB" is also spec-legal. Take the LAST six hex digits in both cases, since the alpha channel has no ContentSheetCell.background representation and a leading "FF" is the only prefix real producers emit. slice(-6) alone already covers every raw.length: a string shorter than 6 characters clamps to the whole, unchanged string, exactly what a separate "too short, leave it alone" branch would have returned.
-  const hex = raw.slice(-6);
+  // Excel writes "FFRRGGBB" (alpha + RGB); a 6-digit "RRGGBB" is also spec-legal. Take the LAST six hex digits in both cases, since the alpha channel has no ContentSheetCell.background representation and a leading "FF" is the only prefix real producers emit. slice(-RGB_HEX_DIGITS) alone already covers every raw.length: a string shorter than 6 characters clamps to the whole, unchanged string, exactly what a separate "too short, leave it alone" branch would have returned.
+  const hex = raw.slice(-RGB_HEX_DIGITS);
   // No local hex-pattern guard: rgbHexToColor validates its own argument against this exact 6-digit pattern and throws for anything that doesn't match, which the catch below turns into the same undefined a local guard would otherwise have returned directly.
   try {
     return rgbHexToColor(hex);
@@ -576,6 +579,9 @@ function fillSignature(fill: ContentCellFill): string {
     : `pattern:${fill.patternType}:${fill.foregroundColor === undefined ? undefined : colorToRgbHex(fill.foregroundColor)}:${fill.backgroundColor === undefined ? undefined : colorToRgbHex(fill.backgroundColor)}`;
 }
 
+// Decimal places widthPt is encoded with below: enough to round-trip the named-weight widths above (0.5/0.75/1.5/2.25) without floating-point drift producing spurious distinct entries.
+const BORDER_WIDTH_SIGNATURE_PRECISION = 4;
+
 // A deterministic signature for a decoration, so two cells carrying identical decoration share one xf entry. widthPt is encoded with enough precision to round-trip the named-weight widths above (0.5/0.75/1.5/2.25) without floating-point drift producing spurious distinct entries.
 function signatureOfDecoration(decoration: CellFormatDecoration): string {
   // The font segment is always present, never conditional: a font normalising back to the default (an absent font, or one restating only default values) must collide with the no-font signature exactly as it collides with entry 0 inside internFont, or a cell restating the default would mint a redundant xf of its own.
@@ -588,7 +594,7 @@ function signatureOfDecoration(decoration: CellFormatDecoration): string {
     for (const edge of ["left", "right", "top", "bottom"] as const) {
       const border = borders[edge];
       if (border !== undefined) {
-        sig += `|${edge}:${border.style ?? "solid"}:${colorToRgbHex(border.color)}:${border.widthPt.toFixed(4)}`;
+        sig += `|${edge}:${border.style ?? "solid"}:${colorToRgbHex(border.color)}:${border.widthPt.toFixed(BORDER_WIDTH_SIGNATURE_PRECISION)}`;
       }
     }
   }

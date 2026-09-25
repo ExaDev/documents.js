@@ -67,7 +67,13 @@ describe("readPrintSettings: page size resolution", () => {
 
 describe("DEFAULT_HEADER_FOOTER_MARGIN_PT", () => {
   it("is Excel's Normal-preset 0.3in, exported for typed/xlsx/build.ts to reuse", () => {
-    expect(DEFAULT_HEADER_FOOTER_MARGIN_PT).toBeCloseTo(21.6, 5);
+    // 0.3in * 72pt/in, and the number of decimal places toBeCloseTo checks agreement to.
+    const NORMAL_HEADER_FOOTER_MARGIN_PT = 21.6;
+    const CLOSE_TO_DECIMAL_PLACES = 5;
+    expect(DEFAULT_HEADER_FOOTER_MARGIN_PT).toBeCloseTo(
+      NORMAL_HEADER_FOOTER_MARGIN_PT,
+      CLOSE_TO_DECIMAL_PLACES,
+    );
   });
 });
 
@@ -112,15 +118,21 @@ describe("readPrintSettings: margins", () => {
     const worksheet = el("worksheet", {}, [
       el("pageMargins", { right: "1", bottom: "1", left: "1" }),
     ]);
-    expect(readPrintSettings(worksheet, 0, new Map()).margins.topPt).toBe(54);
+    // Excel's Normal preset: 0.75in * 72pt/in.
+    const NORMAL_MARGIN_TOP_BOTTOM_PT = 54;
+    expect(readPrintSettings(worksheet, 0, new Map()).margins.topPt).toBe(
+      NORMAL_MARGIN_TOP_BOTTOM_PT,
+    );
   });
 
   it("falls back to the default left margin specifically when left alone is absent", () => {
     const worksheet = el("worksheet", {}, [
       el("pageMargins", { top: "1", right: "1", bottom: "1" }),
     ]);
+    // Excel's Normal preset: 0.7in * 72pt/in.
+    const NORMAL_MARGIN_LEFT_RIGHT_PT = 50.4;
     expect(readPrintSettings(worksheet, 0, new Map()).margins.leftPt).toBe(
-      50.4,
+      NORMAL_MARGIN_LEFT_RIGHT_PT,
     );
   });
 });
@@ -185,12 +197,21 @@ describe("readPrintSettings: manual breaks", () => {
   });
 
   it("reads row and column break indices independently", () => {
+    // The row-break ids in the fixture below, reused for the expected rows array so the two stay in lockstep by construction.
+    const ROW_BREAK_ID_A = 3;
+    const ROW_BREAK_ID_B = 7;
     const worksheet = el("worksheet", {}, [
-      el("rowBreaks", {}, [el("brk", { id: "3" }), el("brk", { id: "7" })]),
+      el("rowBreaks", {}, [
+        el("brk", { id: String(ROW_BREAK_ID_A) }),
+        el("brk", { id: String(ROW_BREAK_ID_B) }),
+      ]),
       el("colBreaks", {}, [el("brk", { id: "1" })]),
     ]);
     const settings = readPrintSettings(worksheet, 0, new Map());
-    expect(settings.manualBreaks).toEqual({ rows: [3, 7], columns: [1] });
+    expect(settings.manualBreaks).toEqual({
+      rows: [ROW_BREAK_ID_A, ROW_BREAK_ID_B],
+      columns: [1],
+    });
   });
 
   it("skips a <brk> whose id does not parse as a non-negative integer", () => {
@@ -225,9 +246,12 @@ describe("readPrintSettings: manual breaks", () => {
 
 describe("readPrintSettings: fit-to-page vs scale", () => {
   it("reads an explicit scalePercent when fitToPage is not set", () => {
-    const worksheet = el("worksheet", {}, [el("pageSetup", { scale: "75" })]);
+    const FIXTURE_SCALE_PERCENT = 75;
+    const worksheet = el("worksheet", {}, [
+      el("pageSetup", { scale: String(FIXTURE_SCALE_PERCENT) }),
+    ]);
     const settings = readPrintSettings(worksheet, 0, new Map());
-    expect(settings.scalePercent).toBe(75);
+    expect(settings.scalePercent).toBe(FIXTURE_SCALE_PERCENT);
     expect(Object.hasOwn(settings, "fitToPages")).toBe(false);
   });
 

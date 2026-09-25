@@ -18,15 +18,21 @@ import {
 // Reads a worksheet's own <pageSetup>/<printOptions>/<pageMargins>/<rowBreaks>/<colBreaks>, plus its sheet-scoped _xlnm.Print_Area/_xlnm.Print_Titles defined names (see defined-names.ts), into a ContentSheetPrintSettings. Every attribute name and structural shape below was confirmed against real LibreOffice output (typed/xlsx/content.test.ts's own kitchen-sink.xlsx fixture, itself a genuine LibreOffice xlsx-export of odf.js's own kitchen-sink.ods — see that test file's own top-of-file note), not assumed from memory.
 
 // Excel's own "Normal" margin preset — the fallback used only when a worksheet has no <pageMargins> element at all (real producers always write one; this covers a hand-built or minimally-conformant xlsx). Confirmed via multiple independent references (e.g. XlsxWriter's own Page Setup documentation, which documents Excel's Normal/Wide/Narrow presets identically): top/bottom 0.75in, left/right 0.7in, header/footer 0.3in. This module models only top/right/bottom/left (Margins has no header/footer fields of its own); the header/footer distance is not read at all — ContentSheetPrintSettings has no field for it.
+// Excel's own "Normal" preset margins, in inches, per the same XlsxWriter reference cited above: top/bottom, left/right, and header/footer each get their own constant since the three distances differ from one another.
+const NORMAL_MARGIN_TOP_BOTTOM_IN = 0.75;
+const NORMAL_MARGIN_LEFT_RIGHT_IN = 0.7;
+const NORMAL_MARGIN_HEADER_FOOTER_IN = 0.3;
+
 const DEFAULT_MARGINS: Margins = {
-  topPt: 0.75 * POINTS_PER_INCH,
-  rightPt: 0.7 * POINTS_PER_INCH,
-  bottomPt: 0.75 * POINTS_PER_INCH,
-  leftPt: 0.7 * POINTS_PER_INCH,
+  topPt: NORMAL_MARGIN_TOP_BOTTOM_IN * POINTS_PER_INCH,
+  rightPt: NORMAL_MARGIN_LEFT_RIGHT_IN * POINTS_PER_INCH,
+  bottomPt: NORMAL_MARGIN_TOP_BOTTOM_IN * POINTS_PER_INCH,
+  leftPt: NORMAL_MARGIN_LEFT_RIGHT_IN * POINTS_PER_INCH,
 };
 
 // The SAME Normal-preset header/footer distance (0.3in), exported for typed/xlsx/build.ts — pageMargins' header/footer attributes are REQUIRED by CT_PageMargins even though ContentSheetPrintSettings has no field to source a real value from, so the writer needs this identical constant rather than inventing its own.
-export const DEFAULT_HEADER_FOOTER_MARGIN_PT = 0.3 * POINTS_PER_INCH;
+export const DEFAULT_HEADER_FOOTER_MARGIN_PT =
+  NORMAL_MARGIN_HEADER_FOOTER_IN * POINTS_PER_INCH;
 
 // fitToWidth/fitToHeight both default to 1 per ECMA-376's own CT_PageSetup when the attribute is absent but fitToPage mode is active.
 const DEFAULT_FIT_TO_PAGES = 1;

@@ -16,6 +16,10 @@ export function writeXmlBool(value: boolean): string {
 
 const UNIVERSAL_MEASURE_RE = /^(-?\d+(?:\.\d+)?)(mm|cm|in|pt|pc|pi)$/;
 
+const MM_PER_INCH = 25.4;
+const CM_PER_INCH = 2.54;
+const POINTS_PER_PICA = 12; // 1 pica = 1/6 inch = 12pt.
+
 // ST_PositiveUniversalMeasure (ECMA-376 Part 1 SS22.9.2.15 and its non-negative-only sibling): a decimal number immediately followed by a unit suffix, used by <pageSetup>'s own paperWidth/paperHeight attributes for a paper size ECMA-376's own ST_PaperSize enumeration has no code for. Only the units real producers actually emit for this attribute are supported (mm/cm/in/pt/pica); "pc" and "pi" are both accepted spellings for a pica (1/6 inch = 12pt) per the same schema clause.
 export function parseUniversalMeasureToPt(value: string): number | undefined {
   const match = UNIVERSAL_MEASURE_RE.exec(value.trim());
@@ -28,16 +32,16 @@ export function parseUniversalMeasureToPt(value: string): number | undefined {
   const amount = Number(amountRaw);
   switch (unit) {
     case "mm":
-      return (amount / 25.4) * POINTS_PER_INCH;
+      return (amount / MM_PER_INCH) * POINTS_PER_INCH;
     case "cm":
-      return (amount / 2.54) * POINTS_PER_INCH;
+      return (amount / CM_PER_INCH) * POINTS_PER_INCH;
     case "in":
       return amount * POINTS_PER_INCH;
     case "pt":
       return amount;
     case "pc":
     case "pi":
-      return amount * 12;
+      return amount * POINTS_PER_PICA;
     default:
       return undefined;
   }
@@ -45,7 +49,7 @@ export function parseUniversalMeasureToPt(value: string): number | undefined {
 
 // The write-side counterpart of parseUniversalMeasureToPt: formats a point value as a centimetre-suffixed ST_PositiveUniversalMeasure string (matching the unit real producers use most often for this attribute), rounded to two decimal places.
 export function ptToUniversalMeasure(pt: number): string {
-  const cm = (pt / POINTS_PER_INCH) * 2.54;
+  const cm = (pt / POINTS_PER_INCH) * CM_PER_INCH;
   return `${cm.toFixed(2)}cm`;
 }
 

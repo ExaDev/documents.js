@@ -226,6 +226,9 @@ interface ColorScaleStop {
   color: Color;
 }
 
+// SpreadsheetML's own colorScale carries 2 or 3 stops; anything else is not a valid color scale.
+const MAX_COLOR_SCALE_STOPS = 3;
+
 function readColorScaleStops(
   colorScaleEl: XmlElement,
 ): ColorScaleStop[] | undefined {
@@ -234,7 +237,7 @@ function readColorScaleStops(
   if (
     cfvoEls.length !== colorEls.length ||
     cfvoEls.length < 2 ||
-    cfvoEls.length > 3
+    cfvoEls.length > MAX_COLOR_SCALE_STOPS
   ) {
     return undefined;
   }
