@@ -178,14 +178,18 @@ function parseDictOrStreamBody(
   return dict;
 }
 
+// ASCII CR and LF, the two bytes ISO 32000-1's permitted end-of-line markers (CRLF or bare LF, per 7.3.8.1 and 7.5.4) are built from.
+const CARRIAGE_RETURN = 0x0d;
+const LINE_FEED = 0x0a;
+
 // Per ISO 32000-1 7.3.8.1, "stream" must be followed by CRLF or a bare LF (never a bare CR) before the stream's bytes begin. Real producers occasionally get this wrong; tolerate it with a diagnostic rather than throwing, since the /Length-driven read below doesn't actually depend on getting this exactly right.
 function skipStreamDataStart(
   reader: ByteReader,
   sink: PdfDiagnosticSink,
 ): void {
-  if (reader.peek() === 0x0d) {
+  if (reader.peek() === CARRIAGE_RETURN) {
     reader.next();
-    if (reader.peek() === 0x0a) {
+    if (reader.peek() === LINE_FEED) {
       reader.next();
     } else {
       sink({
@@ -197,7 +201,7 @@ function skipStreamDataStart(
     }
     return;
   }
-  if (reader.peek() === 0x0a) {
+  if (reader.peek() === LINE_FEED) {
     reader.next();
     return;
   }
@@ -315,15 +319,15 @@ function trimTrailingStreamEol(
   );
   if (
     precedingTwo.length >= 2 &&
-    precedingTwo[precedingTwo.length - 2] === 0x0d &&
-    precedingTwo[precedingTwo.length - 1] === 0x0a
+    precedingTwo[precedingTwo.length - 2] === CARRIAGE_RETURN &&
+    precedingTwo[precedingTwo.length - 1] === LINE_FEED
   ) {
     return endstreamOffset - 2;
   }
   if (
     precedingTwo.length >= 1 &&
-    (precedingTwo[precedingTwo.length - 1] === 0x0a ||
-      precedingTwo[precedingTwo.length - 1] === 0x0d)
+    (precedingTwo[precedingTwo.length - 1] === LINE_FEED ||
+      precedingTwo[precedingTwo.length - 1] === CARRIAGE_RETURN)
   ) {
     return endstreamOffset - 1;
   }
