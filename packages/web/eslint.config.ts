@@ -8,6 +8,7 @@ import { packageLintConfig } from "../../eslint.shared.ts";
 export default tseslint.config(
   ...packageLintConfig({
     tsconfigRootDir: import.meta.dirname,
+    magicNumbers: "error",
     // Off: 781 sites across every package are debt from this same @exadev/eslint-config 2.1.2->2.12.1 bump (see PackageLintOptions.newRuleDebt in eslint.shared.ts), not something this bump's own PR fixes. This package's own measured subset:
     newRuleDebt: [
       "@typescript-eslint/consistent-return",
@@ -90,7 +91,7 @@ export default tseslint.config(
     },
   },
   {
-    // useOpenDocument is a hook exported alongside its own OpenDocumentProvider component -- every consumer nested under the '/_document' layout route needs both from the one module, and route files (which are the exempted case above) never see this file directly.
+    // useOpenDocument is a hook exported alongside its own OpenDocumentProvider component, and every consumer nested under the '/_document' layout route needs both from the one module, and route files (which are the exempted case above) never see this file directly.
     files: ["src/document/OpenDocumentContext.tsx"],
     rules: {
       "react-refresh/only-export-components": [
@@ -100,7 +101,7 @@ export default tseslint.config(
     },
   },
   {
-    // A test-only helper, never served through Vite's dev server, so fast-refresh boundaries are not a real concern here the way they are for RecentFilesPanel.tsx's own override above -- this file's actual public API is the plain functions it exports (resetOpenDocumentCapture/openDocument/mountWithOpenDocument); OpenDocumentCapture is an internal, unexported component that exists purely to read openDocument out of context for those functions to capture.
+    // A test-only helper, never served through Vite's dev server, so fast-refresh boundaries are not a real concern here the way they are for RecentFilesPanel.tsx's own override above. This file's actual public API is the plain functions it exports (resetOpenDocumentCapture/openDocument/mountWithOpenDocument); OpenDocumentCapture is an internal, unexported component that exists purely to read openDocument out of context for those functions to capture.
     files: ["src/test/openDocumentHarness.tsx"],
     rules: { "react-refresh/only-export-components": "off" },
   },

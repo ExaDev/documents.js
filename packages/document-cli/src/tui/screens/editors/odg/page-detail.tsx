@@ -28,6 +28,11 @@ import {
   type PageItem,
 } from "./shared.js";
 
+// The size a newly added shape takes, and how far a new line reaches, when the operator leaves the field blank.
+const DEFAULT_SHAPE_WIDTH_PT = 100;
+const DEFAULT_SHAPE_HEIGHT_PT = 60;
+const DEFAULT_LINE_END_X_PT = 100;
+
 type AddKind = "rect" | "ellipse" | "line" | "path" | "textbox" | "image";
 
 const ADD_KIND_OPTIONS: readonly {
@@ -96,8 +101,14 @@ function readFrame(values: Readonly<Record<string, string>>): GeometryBox {
   return {
     xPt: parseNumberField(requireFieldValue(values, "xPt"), 0),
     yPt: parseNumberField(requireFieldValue(values, "yPt"), 0),
-    widthPt: parseNumberField(requireFieldValue(values, "widthPt"), 100),
-    heightPt: parseNumberField(requireFieldValue(values, "heightPt"), 60),
+    widthPt: parseNumberField(
+      requireFieldValue(values, "widthPt"),
+      DEFAULT_SHAPE_WIDTH_PT,
+    ),
+    heightPt: parseNumberField(
+      requireFieldValue(values, "heightPt"),
+      DEFAULT_SHAPE_HEIGHT_PT,
+    ),
   };
 }
 
@@ -172,7 +183,10 @@ async function applyAddKind(
         yPt: parseNumberField(requireFieldValue(values, "fromYPt"), 0),
       };
       const to = {
-        xPt: parseNumberField(requireFieldValue(values, "toXPt"), 100),
+        xPt: parseNumberField(
+          requireFieldValue(values, "toXPt"),
+          DEFAULT_LINE_END_X_PT,
+        ),
         yPt: parseNumberField(requireFieldValue(values, "toYPt"), 0),
       };
       const stroke: ContentStroke = parseStrokeField(

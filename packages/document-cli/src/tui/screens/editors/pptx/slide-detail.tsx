@@ -31,6 +31,11 @@ import {
   parseStrokeField,
 } from "../../shared/vector-fields.js";
 
+// The size a newly added shape takes, and how far a new line reaches, when the operator leaves the field blank.
+const DEFAULT_SHAPE_WIDTH_PT = 160;
+const DEFAULT_SHAPE_HEIGHT_PT = 100;
+const DEFAULT_LINE_END_X_PT = 100;
+
 export interface SlideDetailScreenProps {
   readonly screen: Extract<Screen, { kind: "slideDetail" }>;
 }
@@ -103,8 +108,14 @@ function readVectorFrame(
   return {
     xPt: parseNumberField(requireFieldValue(values, "xPt"), 0),
     yPt: parseNumberField(requireFieldValue(values, "yPt"), 0),
-    widthPt: parseNumberField(requireFieldValue(values, "widthPt"), 160),
-    heightPt: parseNumberField(requireFieldValue(values, "heightPt"), 100),
+    widthPt: parseNumberField(
+      requireFieldValue(values, "widthPt"),
+      DEFAULT_SHAPE_WIDTH_PT,
+    ),
+    heightPt: parseNumberField(
+      requireFieldValue(values, "heightPt"),
+      DEFAULT_SHAPE_HEIGHT_PT,
+    ),
   };
 }
 
@@ -141,7 +152,10 @@ function buildVectorAction(
         yPt: parseNumberField(requireFieldValue(values, "fromYPt"), 0),
       };
       const to = {
-        xPt: parseNumberField(requireFieldValue(values, "toXPt"), 100),
+        xPt: parseNumberField(
+          requireFieldValue(values, "toXPt"),
+          DEFAULT_LINE_END_X_PT,
+        ),
         yPt: parseNumberField(requireFieldValue(values, "toYPt"), 0),
       };
       const stroke: ContentStroke = parseStrokeField(
