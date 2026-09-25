@@ -16,7 +16,12 @@ import type {
   ParsedPathSegment,
   ParsedPathSubpath,
 } from "./path";
-import { parseSvgLengthPt, parseSvgUserUnits, parseSvgViewBox } from "./units";
+import {
+  PT_PER_PX,
+  parseSvgLengthPt,
+  parseSvgUserUnits,
+  parseSvgViewBox,
+} from "./units";
 import type { SvgViewBox } from "./units";
 import {
   applyMatrix,
@@ -31,6 +36,11 @@ import type { AffineMatrix } from "./transform";
 import { parseXml } from "odf.js";
 import type { XmlElement, XmlNode } from "odf.js";
 import { decodeEntities } from "ooxml.js";
+
+// Numbers in a single x,y pair; an aspect ratio quoted in a diagnostic to four decimals; and how far apart two aspect ratios may sit before the viewBox counts as stretched.
+const POINT_PAIR_COUNT = 2;
+const ASPECT_DISPLAY_DECIMALS = 4;
+const ASPECT_COMPARE_TOLERANCE = 1e-6;
 
 // SVG text -> ContentDocument (the drawing variant): the fifth adapter family, sharing the drawing variant with odg. The walk maps the six vector shape primitives (rect/circle/ellipse/line/polyline/polygon/path) onto ContentVector, carrying group transforms and the root viewBox -> viewport map as one affine matrix every coordinate passes through, so SVG rides the existing drawing layout engine with zero new layout code. Scope is vector graphics only, and every limit is named through onSvgDiagnostic rather than silently dropped: text, images, use references, gradients, filters, CSS styling, and opacity are all out of scope (see src/svg/diagnostics.ts for the full vocabulary).
 //
@@ -52,11 +62,15 @@ export class SvgMissingRootElementError extends Error {
 }
 
 // The CSS default replaced-element size every browser assumes for an <svg> with no intrinsic size (CSS sizing level 3's default object size): 300x150 px, i.e. 225x112.5 pt at the exact 0.75 pt/px ratio. Assumed only when the root carries neither usable width/height nor a usable viewBox, and named through the svg/default-size-assumed diagnostic when it is.
-const DEFAULT_WIDTH_PT = 300 * 0.75;
-const DEFAULT_HEIGHT_PT = 150 * 0.75;
+const DEFAULT_VIEWPORT_WIDTH_PX = 300;
+const DEFAULT_VIEWPORT_HEIGHT_PX = 150;
+const DEFAULT_WIDTH_PT = DEFAULT_VIEWPORT_WIDTH_PX * PT_PER_PX;
+const DEFAULT_HEIGHT_PT = DEFAULT_VIEWPORT_HEIGHT_PX * PT_PER_PX;
 
-// The circle-to-cubic control-point ratio shared with src/layout/drawing.ts's own CIRCLE_CUBIC_RATIO: 4/3 * (sqrt(2) - 1), derived by forcing a cubic through a quarter arc's own 45-degree midpoint.
-const KAPPA = (4 / 3) * (Math.SQRT2 - 1);
+// The circle-to-cubic control-point ratio shared with src/layout/drawing.ts's own CIRCLE_CUBIC_RATIO, derived by forcing a cubic through a quarter arc's own 45-degree midpoint: 4/3 * (sqrt(2) - 1).
+const KAPPA_NUMERATOR = 4;
+const KAPPA_DENOMINATOR = 3;
+const KAPPA = (KAPPA_NUMERATOR / KAPPA_DENOMINATOR) * (Math.SQRT2 - 1);
 
 // Namespace-agnostic by design: real-world SVG files mix prefixed and unprefixed names (svg:rect and rect), and the namespaces that matter here (SVG, xlink, dc metadata) carry no same-local-name collisions a walk keyed on local names could confuse.
 function localName(tag: string): string {
@@ -611,7 +625,8 @@ function readShape(
       );
       return;
     }
-    if (numbers.length < 4) {
+    // A points entry is pairs: fewer than four numbers is fewer than two points.
+    if (numbers.length < POINT_PAIR_COUNT * 2) {
       report(state, "svg/element-skipped", `${detail}: fewer than two points`);
       return;
     }
@@ -838,12 +853,12 @@ function resolveRootGeometry(
     const pageAspect = widthPt / heightPt;
     if (
       Math.abs(viewBoxAspect - pageAspect) >
-      1e-6 * Math.max(viewBoxAspect, pageAspect)
+      ASPECT_COMPARE_TOLERANCE * Math.max(viewBoxAspect, pageAspect)
     ) {
       report(
         state,
         "svg/preserve-aspect-ratio-stretched",
-        `viewBox aspect ${viewBoxAspect.toFixed(4)} stretched onto page aspect ${pageAspect.toFixed(4)} under preserveAspectRatio="${preserveAspectRatio.trim()}" (letterboxing is out of scope)`,
+        `viewBox aspect ${viewBoxAspect.toFixed(ASPECT_DISPLAY_DECIMALS)} stretched onto page aspect ${pageAspect.toFixed(ASPECT_DISPLAY_DECIMALS)} under preserveAspectRatio="${preserveAspectRatio.trim()}" (letterboxing is out of scope)`,
       );
     }
   }

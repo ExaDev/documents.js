@@ -6,6 +6,19 @@
 // - T (smooth quadratic): reflects the previous quadratic's control the way S does; when the previous command was not Q/T the SVG spec itself defines the reflected control as the current point, degenerating to a straight line — exact either way.
 // - A (elliptical arc): the one genuinely approximate conversion. The standard endpoint-to-centre parameterisation (SVG 2, F.6.5) recovers the arc's centre and angles exactly; the arc is then split into segments of at most 90 degrees, each emitted as one cubic whose controls sit kappa = 4/3*tan(delta/4) along the segment's own boundary tangents — the same bounded construction every Bezier-based renderer uses for circular arcs (the 90-degree worst case is the classical kappa approximation, accurate to a fraction of a point at document scale, and the error shrinks as segments shorten).
 
+// Two thirds: where a quadratic's single control lands once elevated to a cubic, one third of the way in from each endpoint.
+const CUBIC_CONTROL_NUMERATOR = 2;
+const CUBIC_CONTROL_DENOMINATOR = 3;
+const CUBIC_CONTROL_STEP = CUBIC_CONTROL_NUMERATOR / CUBIC_CONTROL_DENOMINATOR;
+
+// Pi radians expressed in degrees: the degrees-to-radians conversion factor.
+const PI_RADIANS_IN_DEGREES = 180;
+
+// The arc-splitting kappa construction, 4/3 * tan(delta/4), where both numbers come from forcing a cubic through a bounded arc (the construction whose whole-circle value gives src/layout/drawing.ts's CIRCLE_CUBIC_RATIO).
+const KAPPA_NUMERATOR = 4;
+const KAPPA_DENOMINATOR = 3;
+const KAPPA_ARG_QUARTER = 4;
+
 export interface ParsedPathPoint {
   readonly x: number;
   readonly y: number;
@@ -136,12 +149,12 @@ function addQuad(
     cursor,
     acc,
     {
-      x: from.x + (2 / 3) * (control.x - from.x),
-      y: from.y + (2 / 3) * (control.y - from.y),
+      x: from.x + CUBIC_CONTROL_STEP * (control.x - from.x),
+      y: from.y + CUBIC_CONTROL_STEP * (control.y - from.y),
     },
     {
-      x: to.x + (2 / 3) * (control.x - to.x),
-      y: to.y + (2 / 3) * (control.y - to.y),
+      x: to.x + CUBIC_CONTROL_STEP * (control.x - to.x),
+      y: to.y + CUBIC_CONTROL_STEP * (control.y - to.y),
     },
     to,
   );
@@ -168,7 +181,7 @@ function addArc(
     }
     return;
   }
-  const xRot = (xRotDeg * Math.PI) / 180;
+  const xRot = (xRotDeg * Math.PI) / PI_RADIANS_IN_DEGREES;
   const cosRot = Math.cos(xRot);
   const sinRot = Math.sin(xRot);
   const dx = (from.x - to.x) / 2;
@@ -235,7 +248,9 @@ function addArc(
     Math.ceil(Math.abs(deltaTheta) / (Math.PI / 2)),
   );
   const deltaPerSegment = deltaTheta / segmentCount;
-  const kappa = (4 / 3) * Math.tan(deltaPerSegment / 4);
+  const kappa =
+    (KAPPA_NUMERATOR / KAPPA_DENOMINATOR) *
+    Math.tan(deltaPerSegment / KAPPA_ARG_QUARTER);
 
   // The arc's own parametrisation and tangent in user space: point(t) = centre + R(rot) * (rx cos t, ry sin t), tangent(t) = R(rot) * (-rx sin t, ry cos t). A cubic segment from t0 to t1 takes its controls kappa times the tangent length away from each endpoint (P1 = P0 + kappa*T(t0), P2 = P3 - kappa*T(t1)) — the standard bounded arc-to-cubic construction.
   const pointAt = (t: number): ParsedPathPoint => ({
