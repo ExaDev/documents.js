@@ -108,7 +108,9 @@ describe("readPptxContent: main part named by the officeDocument relationship", 
 
   it("reads the slide size from the renamed presentation part", () => {
     const doc = readPptxContent(renamedPresentationPackage());
-    expect(doc.slides[0]?.size.widthPt).toBe(720);
+    // The fixture's own p:sldSz cx (9144000 EMU, standard 4:3), converted to points.
+    const FIXTURE_SLIDE_WIDTH_PT = 720;
+    expect(doc.slides[0]?.size.widthPt).toBe(FIXTURE_SLIDE_WIDTH_PT);
   });
 
   it("still reads a presentation at the conventional path when the package declares no root relationships", () => {
