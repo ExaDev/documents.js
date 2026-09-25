@@ -17,8 +17,9 @@ import { readManifest } from "../../manifest";
 import { readMimetype } from "../../mimetype";
 import { decodeXmlText } from "../../xml/entities";
 import { buildXml } from "../../xml/build";
+import { writeOdsContent } from "./write";
 import {
-  writeOdsContent,
+  assertNeverContentCellValueKind,
   canonicalColor,
   canonicalCellFill,
   canonicalRun,
@@ -33,8 +34,7 @@ import {
   canonicalDataValidations,
   canonicalConditionalFormatStyle,
   canonicalConditionalFormats,
-  assertNeverContentCellValueKind,
-} from "./write";
+} from "./write-canonical";
 
 // The write side's XML-shape suite: what writeOdsContent actually emits, construct by construct — the sibling suite (write-round-trip.test.ts) proves the output reads back as the document it came from; this one proves the output is the ODF a real consumer expects, which a round trip through this package's own reader cannot (a writer and reader that agreed on the same wrong spelling would round-trip perfectly and open nowhere). This mirrors typed/odt/write.test.ts's own stated split of responsibility.
 
