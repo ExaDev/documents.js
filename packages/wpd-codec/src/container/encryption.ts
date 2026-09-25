@@ -13,17 +13,35 @@ import { WPD_PREFIX_HEADER_SIZE, type WpdFileHeader } from "./header";
 //
 // What is NOT covered, stated outright: libwpd itself refuses WP 6 encrypted files outright (WP6Header.cpp: "FIXME: we do not handle encrypted documents"), so no open-source reference implementation of the 6.x wiring exists to cross-check the 512 boundary or the checksum verification against a real WordPerfect-produced encrypted file — this module's round-trip tests validate the cipher and the pipeline wiring, not the 6.x specifics against ground truth. The 9-and-later "enhanced encryption" mode is a different, unpublished cipher and stays refused (see WpdWrongPasswordError's own comment for how a non-matching checksum is reported).
 
+const BITS_PER_BYTE = 8;
+const MAX_LATIN1_CODE_UNIT = 0xff;
+const CODE_UNIT_HEX_RADIX = 16;
+const CODE_UNIT_HEX_WIDTH = 4;
+const ASCII_LOWERCASE_A = 0x61;
+const ASCII_LOWERCASE_Z = 0x7a;
+const ASCII_UPPERCASE_A = 0x41;
+const UINT16_MASK = 0xffff;
+const BYTE_MASK = 0xff;
+const CHECKSUM_LOW_BYTE_OFFSET = 12;
+const CHECKSUM_HIGH_BYTE_OFFSET = 13;
+// Rotate-right-by-one on a 16-bit value: the bit that falls off the bottom (>>> 1) re-enters at the top, one bit short of the full 16-bit width.
+const UINT16_ROTATE_RIGHT_ONE_REENTRY_SHIFT = 15;
+
 // libwpd uppercases ASCII lowercase only (`if (password[i] >= 'a' && password[i] <= 'z')`), leaving every other byte verbatim. A JavaScript string is UTF-16, not a C byte string: code units beyond Latin-1 have no byte this cipher can key with, and silently truncating them would decrypt to garbage while appearing to work, so they throw instead.
 export function normaliseWpdPassword(password: string): number[] {
   const normalised: number[] = [];
   for (let i = 0; i < password.length; i++) {
     const unit = password.charCodeAt(i);
-    if (unit > 0xff) {
+    if (unit > MAX_LATIN1_CODE_UNIT) {
       throw new WpdFormatError(
-        `A password with characters outside Latin-1 cannot be encoded into the byte-keyed WordPerfect cipher (code unit U+${unit.toString(16).toUpperCase().padStart(4, "0")} at position ${i}).`,
+        `A password with characters outside Latin-1 cannot be encoded into the byte-keyed WordPerfect cipher (code unit U+${unit.toString(CODE_UNIT_HEX_RADIX).toUpperCase().padStart(CODE_UNIT_HEX_WIDTH, "0")} at position ${i}).`,
       );
     }
-    normalised.push(unit >= 0x61 && unit <= 0x7a ? unit - 0x61 + 0x41 : unit);
+    normalised.push(
+      unit >= ASCII_LOWERCASE_A && unit <= ASCII_LOWERCASE_Z
+        ? unit - ASCII_LOWERCASE_A + ASCII_UPPERCASE_A
+        : unit,
+    );
   }
   return normalised;
 }
@@ -32,8 +50,10 @@ export function normaliseWpdPassword(password: string): number[] {
 export function wpdPasswordChecksum16(normalised: readonly number[]): number {
   let checksum = 0;
   for (const unit of normalised) {
-    checksum = ((checksum >>> 1) | (checksum << 15)) ^ (unit << 8);
-    checksum &= 0xffff;
+    checksum =
+      ((checksum >>> 1) | (checksum << UINT16_ROTATE_RIGHT_ONE_REENTRY_SHIFT)) ^
+      (unit << BITS_PER_BYTE);
+    checksum &= UINT16_MASK;
   }
   return checksum;
 }
@@ -63,12 +83,12 @@ export function applyWpdStandardEncryption(
       "The WordPerfect cipher is keyed by the password's own bytes, so an empty password decrypts nothing.",
     );
   }
-  const maskBase = (normalised.length + 1) & 0xff;
+  const maskBase = (normalised.length + 1) & BYTE_MASK;
   const output = new Uint8Array(bytes.length);
   output.set(bytes.subarray(0, startOffset));
   for (let pos = startOffset; pos < bytes.length; pos++) {
     const relative = pos - startOffset;
-    const mask = (maskBase + relative) & 0xff;
+    const mask = (maskBase + relative) & BYTE_MASK;
     output[pos] =
       byteAt(bytes, pos) ^ passwordByteAt(normalised, relative) ^ mask;
   }
@@ -106,7 +126,7 @@ export function encryptWpdDocumentForTests(
   );
   const output = new Uint8Array(encrypted.length);
   output.set(encrypted);
-  output[12] = checksum & 0xff;
-  output[13] = (checksum >>> 8) & 0xff;
+  output[CHECKSUM_LOW_BYTE_OFFSET] = checksum & BYTE_MASK;
+  output[CHECKSUM_HIGH_BYTE_OFFSET] = (checksum >>> BITS_PER_BYTE) & BYTE_MASK;
   return output;
 }
