@@ -7,6 +7,9 @@ import type { PdfDict, PdfObject } from "./objects";
 import { asArray, asBool, asDict, asName, asNumber, dictGet } from "./objects";
 import { applyPredictor, readPredictorParams } from "./predictors";
 
+const BITS_PER_BYTE = 8;
+const BYTE_MASK = 0xff; // an all-ones byte: used both to bit-invert a byte (XOR) and to keep only its low 8 bits after a wider shift (AND)
+
 export interface DecodedStream {
   readonly bytes: Uint8Array<ArrayBuffer>;
   // Set when decoding stopped before exhausting the /Filter chain: DCTDecode's deliberate JPEG passthrough (the encoded bytes ARE the deliverable — see src/image/*'s own module docs), JPXDecode's own passthrough (a JPEG 2000 codestream carries its own component count and sample depth, which no plain byte array can express — src/images-read.ts decodes it where those are meaningful), a filter this codec doesn't implement (Crypt), or a JBIG2Decode stream using a JBIG2 feature src/image/jbig2.ts does not decode. `bytes` is still encoded per this filter name either way.
@@ -163,7 +166,8 @@ function jbig2Decode(
       },
     });
     return {
-      bytes: Uint8Array.from(image.bytes, (byte) => byte ^ 0xff),
+      // JBIG2's own polarity (T.88 3.29) has a 1 bit meaning black; PDF's filter output convention is the inverse, so every byte is bit-inverted here (see src/image/jbig2.ts's own header comment on the same distinction).
+      bytes: Uint8Array.from(image.bytes, (byte) => byte ^ BYTE_MASK),
       globals,
     };
   } catch (error) {
@@ -227,6 +231,9 @@ function decodeParmsList(
 const LZW_CLEAR_TABLE = 256;
 const LZW_EOD = 257;
 const LZW_INITIAL_CODE_WIDTH = 9;
+const LZW_CODE_WIDTH_10 = 10;
+const LZW_CODE_WIDTH_11 = 11;
+const LZW_CODE_WIDTH_12 = 12; // ISO 32000-1 7.4.4's own cap on LZW code width
 const LZW_FIRST_NEW_CODE = 258;
 
 function initialLzwDictionary(): Uint8Array<ArrayBuffer>[] {
@@ -264,9 +271,9 @@ export function lzwDecode(
       if (pos >= data.length) {
         return undefined;
       }
-      bitBuffer = (bitBuffer << 8) | data[pos]!;
+      bitBuffer = (bitBuffer << BITS_PER_BYTE) | data[pos]!;
       pos++;
-      bitCount += 8;
+      bitCount += BITS_PER_BYTE;
     }
     const value =
       (bitBuffer >>> (bitCount - codeWidth)) & ((1 << codeWidth) - 1);
@@ -306,12 +313,12 @@ export function lzwDecode(
     if (prevEntry !== undefined) {
       dict[nextCode] = concatTwo(prevEntry, new Uint8Array([entry[0] ?? 0]));
       nextCode++;
-      if (nextCode + bias === 2 ** 9) {
-        codeWidth = 10;
-      } else if (nextCode + bias === 2 ** 10) {
-        codeWidth = 11;
-      } else if (nextCode + bias === 2 ** 11) {
-        codeWidth = 12;
+      if (nextCode + bias === 2 ** LZW_INITIAL_CODE_WIDTH) {
+        codeWidth = LZW_CODE_WIDTH_10;
+      } else if (nextCode + bias === 2 ** LZW_CODE_WIDTH_10) {
+        codeWidth = LZW_CODE_WIDTH_11;
+      } else if (nextCode + bias === 2 ** LZW_CODE_WIDTH_11) {
+        codeWidth = LZW_CODE_WIDTH_12;
       }
     }
     prevEntry = entry;
@@ -328,6 +335,11 @@ const ASCII85_END_MARKER = 0x7e; // '~'
 const ASCII85_MIN_DIGIT = 0x21; // '!'
 const ASCII85_MAX_DIGIT = 0x75; // 'u'
 const ASCII85_MAX_DIGIT_VALUE = ASCII85_MAX_DIGIT - ASCII85_MIN_DIGIT; // 84 — the padding value for a final, partial group
+const ASCII85_RADIX = 85; // five base-85 digits (85^5 > 2^32) represent one 32-bit value
+const ASCII85_GROUP_DIGITS = 5; // a full group is five ASCII85 digits, encoding ASCII85_GROUP_BYTES bytes
+const ASCII85_OPTIONAL_PREFIX_LT = 0x3c; // '<', the first byte of the optional leading "<~" some producers include
+const ASCII85_BYTE_3_SHIFT = 24; // bit position of the most significant of the four decoded bytes within the 32-bit group value
+const ASCII85_BYTE_2_SHIFT = 16;
 
 function ascii85GroupBytes(
   digits: readonly number[],
@@ -335,13 +347,13 @@ function ascii85GroupBytes(
 ): number[] {
   let value = 0;
   for (const digit of digits) {
-    value = value * 85 + digit;
+    value = value * ASCII85_RADIX + digit;
   }
   const bytes = [
-    (value >>> 24) & 0xff,
-    (value >>> 16) & 0xff,
-    (value >>> 8) & 0xff,
-    value & 0xff,
+    (value >>> ASCII85_BYTE_3_SHIFT) & BYTE_MASK,
+    (value >>> ASCII85_BYTE_2_SHIFT) & BYTE_MASK,
+    (value >>> BITS_PER_BYTE) & BYTE_MASK,
+    value & BYTE_MASK,
   ];
   return bytes.slice(0, byteCount);
 }
@@ -352,7 +364,11 @@ export function ascii85Decode(
   const out: number[] = [];
   let tuple: number[] = [];
   let i = 0;
-  if (data.length >= 2 && data[0] === 0x3c && data[1] === 0x7e) {
+  if (
+    data.length >= 2 &&
+    data[0] === ASCII85_OPTIONAL_PREFIX_LT &&
+    data[1] === ASCII85_END_MARKER
+  ) {
     i = 2; // an optional leading "<~" some producers include, even though only the trailing "~>" is part of PDF's own framing
   }
   for (; i < data.length; i++) {
@@ -371,14 +387,14 @@ export function ascii85Decode(
       continue; // outside the ASCII85 alphabet — skip rather than treat as fatal
     }
     tuple.push(byte - ASCII85_MIN_DIGIT);
-    if (tuple.length === 5) {
+    if (tuple.length === ASCII85_GROUP_DIGITS) {
       out.push(...ascii85GroupBytes(tuple, ASCII85_GROUP_BYTES));
       tuple = [];
     }
   }
   if (tuple.length > 1) {
     const padded = tuple.slice();
-    while (padded.length < 5) {
+    while (padded.length < ASCII85_GROUP_DIGITS) {
       padded.push(ASCII85_MAX_DIGIT_VALUE);
     }
     out.push(...ascii85GroupBytes(padded, tuple.length - 1));
@@ -388,15 +404,25 @@ export function ascii85Decode(
 
 // --- ASCIIHexDecode (ISO 32000-1 7.4.2): hex digits, whitespace ignored, terminated by '>', an odd trailing digit zero-padded. ---
 
+const ASCII_DIGIT_ZERO = 0x30; // '0'
+const ASCII_DIGIT_NINE = 0x39; // '9'
+const ASCII_UPPER_A = 0x41; // 'A'
+const ASCII_UPPER_F = 0x46; // 'F'
+const ASCII_LOWER_A = 0x61; // 'a'
+const ASCII_LOWER_F = 0x66; // 'f'
+const HEX_LETTER_DIGIT_OFFSET = 10; // the digit value 'A'/'a' represents; hex digits 'A'-'F'/'a'-'f' continue 10-15 after '0'-'9'
+const ASCII_HEX_TERMINATOR = 0x3e; // '>'
+const HEX_NIBBLE_BITS = 4; // width of a hex digit in bits, the shift that places the high nibble of a decoded byte
+
 function hexDigitValue(byte: number): number | undefined {
-  if (byte >= 0x30 && byte <= 0x39) {
-    return byte - 0x30;
+  if (byte >= ASCII_DIGIT_ZERO && byte <= ASCII_DIGIT_NINE) {
+    return byte - ASCII_DIGIT_ZERO;
   }
-  if (byte >= 0x41 && byte <= 0x46) {
-    return byte - 0x41 + 10;
+  if (byte >= ASCII_UPPER_A && byte <= ASCII_UPPER_F) {
+    return byte - ASCII_UPPER_A + HEX_LETTER_DIGIT_OFFSET;
   }
-  if (byte >= 0x61 && byte <= 0x66) {
-    return byte - 0x61 + 10;
+  if (byte >= ASCII_LOWER_A && byte <= ASCII_LOWER_F) {
+    return byte - ASCII_LOWER_A + HEX_LETTER_DIGIT_OFFSET;
   }
   return undefined;
 }
@@ -406,7 +432,7 @@ export function asciiHexDecode(
 ): Uint8Array<ArrayBuffer> {
   const digits: number[] = [];
   for (const byte of data) {
-    if (byte === 0x3e) {
+    if (byte === ASCII_HEX_TERMINATOR) {
       break; // '>' terminator
     }
     const value = hexDigitValue(byte);
@@ -419,7 +445,7 @@ export function asciiHexDecode(
   }
   const out = new Uint8Array(digits.length / 2);
   for (let i = 0; i < out.length; i++) {
-    out[i] = (digits[i * 2]! << 4) | digits[i * 2 + 1]!;
+    out[i] = (digits[i * 2]! << HEX_NIBBLE_BITS) | digits[i * 2 + 1]!;
   }
   return out;
 }
@@ -427,6 +453,7 @@ export function asciiHexDecode(
 // --- RunLengthDecode (ISO 32000-1 7.4.5): PackBits-style run-length encoding. ---
 
 const RUN_LENGTH_EOD = 128;
+const RUN_LENGTH_REPEAT_COUNT_BASE = 257; // one past the maximum byte value (256) plus one: a length byte in 129-255, read as a repeat marker, yields a repeat count of 2-128 via (this constant) - length
 
 export function runLengthDecode(
   data: Uint8Array<ArrayBuffer>,
@@ -445,7 +472,7 @@ export function runLengthDecode(
         out.push(data[i]!);
       }
     } else {
-      const count = 257 - length;
+      const count = RUN_LENGTH_REPEAT_COUNT_BASE - length;
       const byte = data[i] ?? 0;
       i++;
       for (let j = 0; j < count; j++) {
