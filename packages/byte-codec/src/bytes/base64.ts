@@ -23,8 +23,23 @@ const DECODE: Uint8Array<ArrayBuffer> = (() => {
  */
 const MAX_CALL_ARGUMENTS = 65_536;
 
+const CALL_ARGUMENTS_CHUNK_DIVISOR = 2;
+
 /** Output characters converted by one `String.fromCharCode.apply` call: half of MAX_CALL_ARGUMENTS, which is also the quantum MDN's own chunked-apply example uses, leaving the engine room for whatever else it puts on its argument stack. It is divisible by four, so every chunk holds whole four-character groups. Exported so the tests can place inputs on and around a chunk boundary without repeating the figure. */
-export const BASE64_ENCODE_CHUNK_CHARS = MAX_CALL_ARGUMENTS / 2;
+export const BASE64_ENCODE_CHUNK_CHARS =
+  MAX_CALL_ARGUMENTS / CALL_ARGUMENTS_CHUNK_DIVISOR;
+
+// The RFC 4648 group: three input bytes pack into four 6-bit base64 digits.
+const BASE64_GROUP_INPUT_BYTES = 3;
+const BASE64_GROUP_OUTPUT_CHARS = 4;
+const BASE64_GROUP_LAST_CHAR_OFFSET = 3;
+// Bit-shift amounts for splicing a byte's high/low bits across the 6-bit digit boundaries the group packs into, and the masks that isolate a byte's own low N bits before shifting them into the next digit.
+const TWO_BIT_SHIFT = 2;
+const FOUR_BIT_SHIFT = 4;
+const SIX_BIT_SHIFT = 6;
+const LOW_TWO_BITS_MASK = 0x03;
+const LOW_FOUR_BITS_MASK = 0x0f;
+const LOW_SIX_BITS_MASK = 0x3f;
 
 /**
  * Encodes bytes as padded standard-alphabet base64 (RFC 4648 section 4).
@@ -38,26 +53,34 @@ export function bytesToBase64(bytes: Uint8Array): string {
   // One buffer for every chunk, and the chunk size is read back from its length so the two cannot disagree. Only positions below `filled` hold the current chunk's characters; the slice below takes exactly those.
   const codes = new Array<number>(BASE64_ENCODE_CHUNK_CHARS);
   // Three input bytes per four output characters, so a chunk boundary never falls inside a three-byte group and only the final chunk can end in padding.
-  const chunkBytes = (codes.length / 4) * 3;
+  const chunkBytes =
+    (codes.length / BASE64_GROUP_OUTPUT_CHARS) * BASE64_GROUP_INPUT_BYTES;
   return Array.from(
     { length: Math.ceil(len / chunkBytes) },
     (_unused, chunk) => {
       const start = chunk * chunkBytes;
       const end = Math.min(start + chunkBytes, len);
       let filled = 0;
-      for (let index = start; index < end; index += 3) {
+      for (let index = start; index < end; index += BASE64_GROUP_INPUT_BYTES) {
         // No bounds check needed on top of the `?? 0` fallback: reading a TypedArray past its own length already yields `undefined`, the same as reading before this trailing group has actually begun, so a manual `index + 1 < len` guard would only ever duplicate what indexing out of range already does.
         const b0 = bytes[index] ?? 0;
         const b1 = bytes[index + 1] ?? 0;
         const b2 = bytes[index + 2] ?? 0;
-        codes[filled++] = TABLE.charCodeAt(b0 >> 2);
-        codes[filled++] = TABLE.charCodeAt(((b0 & 0x03) << 4) | (b1 >> 4));
+        codes[filled++] = TABLE.charCodeAt(b0 >> TWO_BIT_SHIFT);
+        codes[filled++] = TABLE.charCodeAt(
+          ((b0 & LOW_TWO_BITS_MASK) << FOUR_BIT_SHIFT) | (b1 >> FOUR_BIT_SHIFT),
+        );
         codes[filled++] =
           index + 1 < len
-            ? TABLE.charCodeAt(((b1 & 0x0f) << 2) | (b2 >> 6))
+            ? TABLE.charCodeAt(
+                ((b1 & LOW_FOUR_BITS_MASK) << TWO_BIT_SHIFT) |
+                  (b2 >> SIX_BIT_SHIFT),
+              )
             : PADDING_CODE;
         codes[filled++] =
-          index + 2 < len ? TABLE.charCodeAt(b2 & 0x3f) : PADDING_CODE;
+          index + 2 < len
+            ? TABLE.charCodeAt(b2 & LOW_SIX_BITS_MASK)
+            : PADDING_CODE;
       }
       return String.fromCharCode.apply(null, codes.slice(0, filled));
     },
@@ -76,21 +99,27 @@ export function base64ToBytes(base64: string): Uint8Array<ArrayBuffer> {
   const clean = base64.replace(/[^A-Za-z0-9+/=]/g, "");
   // Collected rather than written into a pre-sized Uint8Array: the exact final length depends on how many quartets end in padding, known only once every quartet has been walked, so a pre-sized buffer would need its own capacity arithmetic that nothing here would ever actually observe (Uint8Array.from below sizes itself exactly from what was pushed).
   const out: number[] = [];
-  for (let index = 0; index < clean.length; index += 4) {
+  for (
+    let index = 0;
+    index < clean.length;
+    index += BASE64_GROUP_OUTPUT_CHARS
+  ) {
     const c0 = DECODE[clean.charCodeAt(index)] ?? DECODE_MISS;
     const c1 = DECODE[clean.charCodeAt(index + 1)] ?? DECODE_MISS;
     const c2 = clean.charCodeAt(index + 2);
-    const c3 = clean.charCodeAt(index + 3);
+    const c3 = clean.charCodeAt(index + BASE64_GROUP_LAST_CHAR_OFFSET);
     if (c0 === DECODE_MISS || c1 === DECODE_MISS) {
       throw new Error("invalid base64 input");
     }
-    out.push((c0 << 2) | (c1 >> 4));
+    out.push((c0 << TWO_BIT_SHIFT) | (c1 >> FOUR_BIT_SHIFT));
     if (c2 !== PADDING_CODE) {
       const d2 = DECODE[c2] ?? DECODE_MISS;
-      out.push(((c1 & 0x0f) << 4) | (d2 >> 2));
+      out.push(
+        ((c1 & LOW_FOUR_BITS_MASK) << FOUR_BIT_SHIFT) | (d2 >> TWO_BIT_SHIFT),
+      );
       if (c3 !== PADDING_CODE) {
         const d3 = DECODE[c3] ?? DECODE_MISS;
-        out.push(((d2 & 0x03) << 6) | d3);
+        out.push(((d2 & LOW_TWO_BITS_MASK) << SIX_BIT_SHIFT) | d3);
       }
     }
   }

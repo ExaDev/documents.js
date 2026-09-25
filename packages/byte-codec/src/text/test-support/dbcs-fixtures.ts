@@ -45,54 +45,124 @@ export function twoByteBytesForPointer(
   return [leading, trail];
 }
 
+const SHIFT_JIS_COLUMNS = 188;
+const SHIFT_JIS_TRAIL_SPLIT_COLUMN = 63;
+const SHIFT_JIS_LOW_TRAIL_START = 0x40;
+const SHIFT_JIS_HIGH_TRAIL_START = 0x41;
+const SHIFT_JIS_LOW_LEAD_START = 0x81;
+const SHIFT_JIS_LOW_LEAD_END = 0x9f;
+const SHIFT_JIS_HIGH_LEAD_START = 0xc1;
+
 export function shiftJisBytesForPointer(
   pointer: number,
 ): readonly [number, number] {
   // Two disjoint lead-byte bands (0x81-0x9F, 0xE0-0xFC) share one 188-column pointer space, so the lead offset has to be picked from whichever band the reconstructed lead byte actually falls in, not assumed up front the way every other encoding's single contiguous lead band lets twoByteBytesForPointer assume it.
-  const leadIndex = Math.floor(pointer / 188);
-  const column = pointer % 188;
-  const trail = column < 63 ? 0x40 + column : 0x41 + column;
-  const lowBandLeading = 0x81 + leadIndex;
-  if (lowBandLeading <= 0x9f) {
+  const leadIndex = Math.floor(pointer / SHIFT_JIS_COLUMNS);
+  const column = pointer % SHIFT_JIS_COLUMNS;
+  const trail =
+    column < SHIFT_JIS_TRAIL_SPLIT_COLUMN
+      ? SHIFT_JIS_LOW_TRAIL_START + column
+      : SHIFT_JIS_HIGH_TRAIL_START + column;
+  const lowBandLeading = SHIFT_JIS_LOW_LEAD_START + leadIndex;
+  if (lowBandLeading <= SHIFT_JIS_LOW_LEAD_END) {
     return [lowBandLeading, trail];
   }
-  return [0xc1 + leadIndex, trail];
+  return [SHIFT_JIS_HIGH_LEAD_START + leadIndex, trail];
 }
+
+const EUC_JIS0208_START = 0xa1;
+const EUC_JIS0208_COLUMNS = 94;
 
 export function eucJis0208BytesForPointer(
   pointer: number,
 ): readonly [number, number] {
-  return [0xa1 + Math.floor(pointer / 94), 0xa1 + (pointer % 94)];
+  return [
+    EUC_JIS0208_START + Math.floor(pointer / EUC_JIS0208_COLUMNS),
+    EUC_JIS0208_START + (pointer % EUC_JIS0208_COLUMNS),
+  ];
 }
+
+const EUC_KR_LEAD_START = 0x81;
+const EUC_KR_COLUMNS = 190;
+const EUC_KR_TRAIL_START = 0x41;
 
 export function eucKrBytesForPointer(
   pointer: number,
 ): readonly [number, number] {
-  return twoByteBytesForPointer(pointer, 0x81, 190, 190, 0x41, 0x41);
+  return twoByteBytesForPointer(
+    pointer,
+    EUC_KR_LEAD_START,
+    EUC_KR_COLUMNS,
+    EUC_KR_COLUMNS,
+    EUC_KR_TRAIL_START,
+    EUC_KR_TRAIL_START,
+  );
 }
+
+const BIG5_LEAD_START = 0x81;
+const BIG5_COLUMNS = 157;
+const BIG5_TRAIL_SPLIT_COLUMN = 63;
+const BIG5_LOW_TRAIL_START = 0x40;
+const BIG5_HIGH_TRAIL_START = 0xa1;
 
 export function big5BytesForPointer(
   pointer: number,
 ): readonly [number, number] {
-  return twoByteBytesForPointer(pointer, 0x81, 157, 63, 0x40, 0xa1);
+  return twoByteBytesForPointer(
+    pointer,
+    BIG5_LEAD_START,
+    BIG5_COLUMNS,
+    BIG5_TRAIL_SPLIT_COLUMN,
+    BIG5_LOW_TRAIL_START,
+    BIG5_HIGH_TRAIL_START,
+  );
 }
+
+const GB18030_LEAD_START = 0x81;
+const GB18030_COLUMNS = 190;
+const GB18030_TRAIL_SPLIT_COLUMN = 63;
+const GB18030_LOW_TRAIL_START = 0x40;
+const GB18030_HIGH_TRAIL_START = 0x80;
 
 export function gb18030TwoByteBytesForPointer(
   pointer: number,
 ): readonly [number, number] {
-  return twoByteBytesForPointer(pointer, 0x81, 190, 63, 0x40, 0x80);
+  return twoByteBytesForPointer(
+    pointer,
+    GB18030_LEAD_START,
+    GB18030_COLUMNS,
+    GB18030_TRAIL_SPLIT_COLUMN,
+    GB18030_LOW_TRAIL_START,
+    GB18030_HIGH_TRAIL_START,
+  );
 }
 
 /** The four raw bytes gb18030's own algorithmic four-byte form needs to produce `pointer`, the inverse of the arithmetic decode-dbcs.ts's decodeGb18030 computes forwards from a real byte sequence. */
+const GB18030_FOUR_BYTE_FIRST_START = 0x81;
+const GB18030_FOUR_BYTE_FIRST_COLUMNS = 12600;
+const GB18030_FOUR_BYTE_SECOND_START = 0x30;
+const GB18030_FOUR_BYTE_SECOND_COLUMNS = 1260;
+const GB18030_FOUR_BYTE_THIRD_START = 0x81;
+const GB18030_FOUR_BYTE_THIRD_COLUMNS = 10;
+const GB18030_FOUR_BYTE_FOURTH_START = 0x30;
+
 export function gb18030FourBytesForPointer(
   pointer: number,
 ): readonly [number, number, number, number] {
-  const first = 0x81 + Math.floor(pointer / 12600);
-  const remainder1 = pointer % 12600;
-  const second = 0x30 + Math.floor(remainder1 / 1260);
-  const remainder2 = remainder1 % 1260;
-  const third = 0x81 + Math.floor(remainder2 / 10);
-  const fourth = 0x30 + (remainder2 % 10);
+  const first =
+    GB18030_FOUR_BYTE_FIRST_START +
+    Math.floor(pointer / GB18030_FOUR_BYTE_FIRST_COLUMNS);
+  const remainder1 = pointer % GB18030_FOUR_BYTE_FIRST_COLUMNS;
+  const second =
+    GB18030_FOUR_BYTE_SECOND_START +
+    Math.floor(remainder1 / GB18030_FOUR_BYTE_SECOND_COLUMNS);
+  const remainder2 = remainder1 % GB18030_FOUR_BYTE_SECOND_COLUMNS;
+  const third =
+    GB18030_FOUR_BYTE_THIRD_START +
+    Math.floor(remainder2 / GB18030_FOUR_BYTE_THIRD_COLUMNS);
+  const fourth =
+    GB18030_FOUR_BYTE_FOURTH_START +
+    (remainder2 % GB18030_FOUR_BYTE_THIRD_COLUMNS);
   return [first, second, third, fourth];
 }
 

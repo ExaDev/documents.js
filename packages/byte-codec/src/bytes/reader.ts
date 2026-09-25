@@ -1,4 +1,16 @@
-const ASCII_WHITESPACE_BYTES = new Set([0x00, 0x09, 0x0a, 0x0c, 0x0d, 0x20]);
+const ASCII_TAB = 0x09;
+const ASCII_LINE_FEED = 0x0a;
+const ASCII_FORM_FEED = 0x0c;
+const ASCII_CARRIAGE_RETURN = 0x0d;
+const ASCII_SPACE = 0x20;
+const ASCII_WHITESPACE_BYTES = new Set([
+  0x00,
+  ASCII_TAB,
+  ASCII_LINE_FEED,
+  ASCII_FORM_FEED,
+  ASCII_CARRIAGE_RETURN,
+  ASCII_SPACE,
+]);
 
 export function isAsciiWhitespace(byte: number | undefined): boolean {
   return byte !== undefined && ASCII_WHITESPACE_BYTES.has(byte);
