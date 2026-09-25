@@ -82,6 +82,10 @@ export function parseLoca(
 }
 
 const GLYPH_HEADER_SIZE = 10; // numberOfContours, xMin, yMin, xMax, yMax
+// Byte offsets of the glyph header's int16 fields after numberOfContours (0) and xMin (2).
+const GLYPH_HEADER_Y_MIN_OFFSET = 4;
+const GLYPH_HEADER_X_MAX_OFFSET = 6;
+const GLYPH_HEADER_Y_MAX_OFFSET = 8;
 
 const ARG_1_AND_2_ARE_WORDS = 0x0001;
 const ARGS_ARE_XY_VALUES = 0x0002;
@@ -99,8 +103,28 @@ const MAX_COMPOSITE_DEPTH = 5;
 
 const COMPONENT_RECORD_HEADER_SIZE = 4; // flags + glyphIndex
 
+// Size in bytes of one F2Dot14 fixed-point value (clause 5.3.3.2's own scale/transform fields).
+const F2DOT14_SIZE = 2;
+// WE_HAVE_AN_X_AND_Y_SCALE's transform: xScale and yScale, two F2Dot14 values.
+const X_AND_Y_SCALE_SIZE = 2 * F2DOT14_SIZE;
+// Byte offset of scale10 (the third of the two-by-two transform's four F2Dot14 values) from the start of that transform.
+const TWO_BY_TWO_SCALE10_OFFSET = 4;
+// Byte offset of yScale (the fourth and final of the two-by-two transform's four F2Dot14 values) from the start of that transform.
+const TWO_BY_TWO_Y_SCALE_OFFSET = 6;
+// WE_HAVE_A_TWO_BY_TWO's transform: xScale, scale01, scale10, yScale, four F2Dot14 values, i.e. yScale's own offset plus its own size.
+const TWO_BY_TWO_SIZE = TWO_BY_TWO_Y_SCALE_OFFSET + F2DOT14_SIZE;
+// clause 5.3.3.2's argument sizes: two int16 (word) arguments, or two int8/uint8 (byte) arguments.
+const WORD_ARGS_SIZE = 4;
+const BYTE_ARGS_SIZE = 2;
+
+// The two's-complement byte threshold and modulus: a byte value at or above SIGNED_BYTE_SIGN_THRESHOLD represents a negative signed value, recovered by subtracting SIGNED_BYTE_MODULUS.
+const SIGNED_BYTE_SIGN_THRESHOLD = 0x80;
+const SIGNED_BYTE_MODULUS = 0x100;
+
 function signedByte(value: number): number {
-  return value >= 0x80 ? value - 0x100 : value;
+  return value >= SIGNED_BYTE_SIGN_THRESHOLD
+    ? value - SIGNED_BYTE_MODULUS
+    : value;
 }
 
 function readComponents(
@@ -118,7 +142,7 @@ function readComponents(
 
     const argsAreWords = (flags & ARG_1_AND_2_ARE_WORDS) !== 0;
     const argsAreXyValues = (flags & ARGS_ARE_XY_VALUES) !== 0;
-    const argsSize = argsAreWords ? 4 : 2;
+    const argsSize = argsAreWords ? WORD_ARGS_SIZE : BYTE_ARGS_SIZE;
     if (!hasBytes(glyph, offset, argsSize)) {
       return undefined;
     }
@@ -149,22 +173,22 @@ function readComponents(
       transform = [scale, 0, 0, scale];
       offset += 2;
     } else if ((flags & WE_HAVE_AN_X_AND_Y_SCALE) !== 0) {
-      if (!hasBytes(glyph, offset, 4)) {
+      if (!hasBytes(glyph, offset, X_AND_Y_SCALE_SIZE)) {
         return undefined;
       }
       transform = [f2dot14(glyph, offset), 0, 0, f2dot14(glyph, offset + 2)];
-      offset += 4;
+      offset += X_AND_Y_SCALE_SIZE;
     } else if ((flags & WE_HAVE_A_TWO_BY_TWO) !== 0) {
-      if (!hasBytes(glyph, offset, 8)) {
+      if (!hasBytes(glyph, offset, TWO_BY_TWO_SIZE)) {
         return undefined;
       }
       transform = [
         f2dot14(glyph, offset),
         f2dot14(glyph, offset + 2),
-        f2dot14(glyph, offset + 4),
-        f2dot14(glyph, offset + 6),
+        f2dot14(glyph, offset + TWO_BY_TWO_SCALE10_OFFSET),
+        f2dot14(glyph, offset + TWO_BY_TWO_Y_SCALE_OFFSET),
       ];
-      offset += 8;
+      offset += TWO_BY_TWO_SIZE;
     }
 
     components.push({
@@ -251,9 +275,9 @@ export function parseGlyf(
     return {
       numberOfContours: i16(glyph, 0),
       xMin: i16(glyph, 2),
-      yMin: i16(glyph, 4),
-      xMax: i16(glyph, 6),
-      yMax: i16(glyph, 8),
+      yMin: i16(glyph, GLYPH_HEADER_Y_MIN_OFFSET),
+      xMax: i16(glyph, GLYPH_HEADER_X_MAX_OFFSET),
+      yMax: i16(glyph, GLYPH_HEADER_Y_MAX_OFFSET),
     };
   };
 
