@@ -93,10 +93,38 @@ describe("buildOfficeMath: token elements", () => {
     expect(mathText(oMath([token("mo", " + ")]))).toEqual(["+"]);
   });
 
-  it("writes mtext as OMML normal text (m:nor), the run kind that renders in the paragraph font rather than the math font", () => {
-    const root = oMath([token("mtext", "where")]);
-    expect(elementsWithTag([root], "m:nor")).toHaveLength(1);
-    expect(elementsWithTag([root], "m:sty")).toHaveLength(0);
+  it("does NOT trim an mn's own surrounding whitespace, unlike mo", () => {
+    expect(mathText(oMath([token("mn", " 42 ")]))).toEqual([" 42 "]);
+  });
+
+  it("writes mtext as OMML normal text (m:nor), the run kind that renders in the paragraph font rather than the math font, and reports no diagnostic for it", () => {
+    const { element, diagnostics } = buildOfficeMath([token("mtext", "where")]);
+    if (element === undefined) {
+      throw new Error("expected OMML content");
+    }
+    expect(elementsWithTag([element], "m:nor")).toHaveLength(1);
+    expect(elementsWithTag([element], "m:sty")).toHaveLength(0);
+    expect(diagnostics).toEqual([]);
+  });
+
+  it("an mtext carrying an explicit mathvariant is styled like any other token, not written as m:nor", () => {
+    const root = oMath([token("mtext", "x", { mathvariant: "bold" })]);
+    expect(elementsWithTag([root], "m:nor")).toHaveLength(0);
+    expect(attr(firstByTag(root, "m:sty"), "m:val")).toBe("b");
+  });
+
+  it("writes no run at all for a token with empty text content", () => {
+    expect(buildOfficeMath([token("mi", "")]).element).toBeUndefined();
+    // Alongside real content, the empty token contributes nothing: exactly one run, not two.
+    const root = oMath([token("mi", ""), token("mi", "x")]);
+    expect(elementsWithTag([root], "m:r")).toHaveLength(1);
+  });
+
+  it("marks a run's own m:t with xml:space=preserve exactly when the text has leading/trailing whitespace, never otherwise", () => {
+    const padded = firstByTag(oMath([token("mtext", " x ")]), "m:t");
+    expect(attr(padded, "xml:space")).toBe("preserve");
+    const bare = firstByTag(oMath([token("mtext", "x")]), "m:t");
+    expect(attr(bare, "xml:space")).toBeUndefined();
   });
 
   it("maps every mathvariant onto OMML's own m:scr script and m:sty style axes", () => {
@@ -310,6 +338,89 @@ describe("buildOfficeMath: limits", () => {
     ]);
     expect(elementsWithTag([root], "m:limUpp")).toHaveLength(1);
   });
+
+  it("the same movablelimits-outside-display-style rule applies to munder (-> m:sSub) and mover (-> m:sSup), not only munderover", () => {
+    const under = oMath([
+      mel("mstyle", { displaystyle: "false" }, [
+        mel("munder", {}, [token("mo", "∑"), token("mi", "i")]),
+      ]),
+    ]);
+    expect(elementsWithTag([under], "m:limLow")).toHaveLength(0);
+    expect(childTags(firstByTag(under, "m:sSub"))).toEqual(["m:e", "m:sub"]);
+
+    const over = oMath([
+      mel("mstyle", { displaystyle: "false" }, [
+        mel("mover", {}, [token("mo", "∑"), token("mi", "n")]),
+      ]),
+    ]);
+    expect(elementsWithTag([over], "m:limUpp")).toHaveLength(0);
+    expect(childTags(firstByTag(over, "m:sSup"))).toEqual(["m:e", "m:sup"]);
+  });
+
+  it("an explicit displaystyle=true behaves exactly like the default (root) display style", () => {
+    const root = oMath([
+      mel("mstyle", { displaystyle: "true" }, [
+        mel("munderover", {}, [
+          token("mo", "∑"),
+          token("mi", "i"),
+          token("mi", "n"),
+        ]),
+      ]),
+    ]);
+    expect(elementsWithTag([root], "m:limUpp")).toHaveLength(1);
+    expect(elementsWithTag([root], "m:sSubSup")).toHaveLength(0);
+  });
+
+  it("an mstyle with neither displaystyle nor mathvariant set leaves the inherited display style untouched (still the root's own true)", () => {
+    const root = oMath([
+      mel("mstyle", { id: "irrelevant" }, [
+        mel("munderover", {}, [
+          token("mo", "∑"),
+          token("mi", "i"),
+          token("mi", "n"),
+        ]),
+      ]),
+    ]);
+    expect(elementsWithTag([root], "m:limUpp")).toHaveLength(1);
+    expect(elementsWithTag([root], "m:sSubSup")).toHaveLength(0);
+  });
+
+  it("trims a movable-limits operator's own surrounding whitespace before matching it against the operator dictionary, same as an ordinary mo", () => {
+    const root = oMath([
+      mel("mstyle", { displaystyle: "false" }, [
+        mel("munderover", {}, [
+          mel("mo", {}, [mtxt(" ∑ ")]),
+          token("mi", "i"),
+          token("mi", "n"),
+        ]),
+      ]),
+    ]);
+    expect(childTags(firstByTag(root, "m:sSubSup"))).toEqual([
+      "m:e",
+      "m:sub",
+      "m:sup",
+    ]);
+  });
+
+  it("a munder/mover with no base at all is not mistaken for a movable-limits operator, and does not throw", () => {
+    expect(() => oMath([mel("munder", {}, [])])).not.toThrow();
+    const root = oMath([
+      mel("mstyle", { displaystyle: "false" }, [mel("munder", {}, [])]),
+    ]);
+    // With no base element, isMovableLimitsOperator is false regardless of display style, so this still takes the ordinary m:limLow path.
+    expect(elementsWithTag([root], "m:limLow")).toHaveLength(1);
+  });
+
+  it("only treats an actual mo element as a movable-limits operator, not any element whose text happens to match one", () => {
+    const root = oMath([
+      mel("mstyle", { displaystyle: "false" }, [
+        mel("munder", {}, [mel("mi", {}, [mtxt("∑")]), token("mi", "i")]),
+      ]),
+    ]);
+    // The base is an mi, not an mo, so isMovableLimitsOperator must be false here even though its text is a real movable-limits operator: this still takes the ordinary m:limLow path, not m:sSub.
+    expect(elementsWithTag([root], "m:sSub")).toHaveLength(0);
+    expect(elementsWithTag([root], "m:limLow")).toHaveLength(1);
+  });
 });
 
 describe("buildOfficeMath: mtable -> m:m", () => {
@@ -365,6 +476,84 @@ describe("buildOfficeMath: mtable -> m:m", () => {
     ]);
     expect(attr(firstByTag(oMath([plain]), "m:mcJc"), "m:val")).toBe("center");
   });
+
+  it("resolves an explicit columnalign of center the same as the unrecognised-value fallback, and rejects anything else it does not know", () => {
+    const explicit = mel("mtable", { columnalign: "center" }, [
+      mel("mtr", {}, [mel("mtd", {}, [token("mn", "1")])]),
+    ]);
+    expect(attr(firstByTag(oMath([explicit]), "m:mcJc"), "m:val")).toBe(
+      "center",
+    );
+    const unrecognised = mel("mtable", { columnalign: "justify" }, [
+      mel("mtr", {}, [mel("mtd", {}, [token("mn", "1")])]),
+    ]);
+    expect(attr(firstByTag(oMath([unrecognised]), "m:mcJc"), "m:val")).toBe(
+      "center",
+    );
+  });
+
+  it("counts only mtr children as rows and only mtd children within a row as cells, ignoring anything else present", () => {
+    const withNoise = mel("mtable", {}, [
+      mel("mtr", {}, [
+        mel("mtd", {}, [token("mn", "1")]),
+        mel("mstyle", {}, [token("mn", "99")]), // not an mtd: must not become a second cell
+      ]),
+      mel("mstyle", {}, [token("mn", "0")]), // not an mtr: must not become a second row
+    ]);
+    const table = firstByTag(oMath([withNoise]), "m:m");
+    const rows = childrenWithTag(table, "m:mr");
+    expect(rows).toHaveLength(1);
+    expect(childrenWithTag(rows[0]!, "m:e")).toHaveLength(1);
+    expect(rows.flatMap(mathText)).toEqual(["1"]);
+  });
+
+  it("collapses runs of whitespace and trims the columnalign attribute itself before splitting it into column tokens", () => {
+    const spaced = mel("mtable", { columnalign: "  left    right  " }, [
+      mel("mtr", {}, [
+        mel("mtd", {}, [token("mn", "1")]),
+        mel("mtd", {}, [token("mn", "2")]),
+      ]),
+    ]);
+    const aligns = childrenWithTag(
+      firstByTag(oMath([spaced]), "m:mcs"),
+      "m:mc",
+    ).map((column) => attr(firstByTag(column, "m:mcJc"), "m:val"));
+    expect(aligns).toEqual(["left", "right"]);
+  });
+
+  it("wraps each column's own count/justification in its own m:mcPr, not floating loose in the m:mc", () => {
+    const table = firstByTag(oMath([matrix]), "m:m");
+    const columns = childrenWithTag(firstByTag(table, "m:mcs"), "m:mc");
+    for (const column of columns) {
+      expect(childTags(column)).toEqual(["m:mcPr"]);
+      expect(childTags(firstByTag(column, "m:mcPr"))).toEqual([
+        "m:count",
+        "m:mcJc",
+      ]);
+    }
+  });
+
+  it("emits no m:mPr/m:mcs at all when no row has any cells", () => {
+    const empty = mel("mtable", { columnalign: "left" }, [
+      mel("mtr", {}, []),
+      mel("mtr", {}, []),
+    ]);
+    const table = firstByTag(oMath([empty]), "m:m");
+    expect(elementsWithTag([table], "m:mPr")).toHaveLength(0);
+    expect(elementsWithTag([table], "m:mcs")).toHaveLength(0);
+  });
+
+  it("pads a row with no mtd cells at all with a single empty m:e, per CT_MR's own requirement for at least one", () => {
+    const withEmptyRow = mel("mtable", {}, [
+      mel("mtr", {}, [mel("mtd", {}, [token("mn", "1")])]),
+      mel("mtr", {}, []),
+    ]);
+    const table = firstByTag(oMath([withEmptyRow]), "m:m");
+    const rows = childrenWithTag(table, "m:mr");
+    expect(rows).toHaveLength(2);
+    expect(childTags(rows[1]!)).toEqual(["m:e"]);
+    expect(mathText(rows[1]!)).toEqual([]);
+  });
 });
 
 describe("buildOfficeMath: rows, mstyle, and semantics flatten", () => {
@@ -386,11 +575,33 @@ describe("buildOfficeMath: rows, mstyle, and semantics flatten", () => {
     expect(mathText(numerator)).toEqual(["a", "+", "b"]);
   });
 
-  it("renders semantics' own first non-annotation child and skips every annotation", () => {
+  it("never applies its own displaystyle/mathvariant attributes (nonstandard on mrow), unlike mstyle", () => {
+    const root = oMath([
+      mel("mrow", { mathvariant: "bold" }, [token("mi", "x")]),
+    ]);
+    // A real mrow ignores its own mathvariant entirely: no m:scr at all, and the default italic single-letter styling still applies.
+    expect(elementsWithTag([root], "m:scr")).toHaveLength(0);
+    expect(attr(firstByTag(root, "m:sty"), "m:val")).toBe("i");
+  });
+
+  it("renders semantics' own first non-annotation child and skips every annotation, even when the annotation comes FIRST", () => {
     const root = oMath([
       mel("semantics", {}, [
-        mel("mfrac", {}, [token("mi", "a"), token("mi", "b")]),
         mel("annotation", { encoding: "StarMath 5.0" }, [mtxt("{a} over {b}")]),
+        mel("mfrac", {}, [token("mi", "a"), token("mi", "b")]),
+      ]),
+    ]);
+    expect(elementsWithTag([root], "m:f")).toHaveLength(1);
+    expect(mathText(root)).toEqual(["a", "b"]);
+  });
+
+  it("skips an annotation-xml exactly the same way it skips annotation, even when it comes FIRST", () => {
+    const root = oMath([
+      mel("semantics", {}, [
+        mel("annotation-xml", { encoding: "MathML-Presentation" }, [
+          token("mi", "should-not-appear"),
+        ]),
+        mel("mfrac", {}, [token("mi", "a"), token("mi", "b")]),
       ]),
     ]);
     expect(elementsWithTag([root], "m:f")).toHaveLength(1);
@@ -424,6 +635,40 @@ describe("buildOfficeMath: degradation", () => {
     ]);
   });
 
+  it("degrades a construct to a normal-text run (m:nor), the same run kind mtext uses, not a math-styled one", () => {
+    const { element } = buildOfficeMath([
+      mel("mmultiscripts", {}, [token("mi", "F")]),
+    ]);
+    if (element === undefined) {
+      throw new Error("expected OMML content");
+    }
+    expect(elementsWithTag([element], "m:nor")).toHaveLength(1);
+    expect(elementsWithTag([element], "m:sty")).toHaveLength(0);
+  });
+
+  it("reached directly, with no enclosing mtable, mtr/mtd flatten into an implicit row of their own children rather than being unsupported", () => {
+    const { element: fromRow, diagnostics: rowDiagnostics } = buildOfficeMath([
+      mel("mtr", {}, [token("mi", "a"), token("mi", "b")]),
+    ]);
+    if (fromRow === undefined) {
+      throw new Error("expected OMML content");
+    }
+    expect(mathText(fromRow)).toEqual(["a", "b"]);
+    expect(rowDiagnostics).toEqual([]);
+
+    const { element: fromCell, diagnostics: cellDiagnostics } = buildOfficeMath(
+      [mel("mtd", {}, [token("mi", "c")])],
+    );
+    if (fromCell === undefined) {
+      throw new Error("expected OMML content");
+    }
+    expect(mathText(fromCell)).toEqual(["c"]);
+    expect(cellDiagnostics).toEqual([]);
+    // Genuinely dispatched through mi's own conversion (single-letter italic), not degraded to a flat unsupported-element run: proves this reaches convertElement per child rather than tokenRun-ing the cell's own concatenated text.
+    expect(attr(firstByTag(fromCell, "m:sty"), "m:val")).toBe("i");
+    expect(elementsWithTag([fromCell], "m:nor")).toHaveLength(0);
+  });
+
   it("degrades only the unsupported construct, leaving the rest of the formula real OMML", () => {
     const { element, diagnostics } = buildOfficeMath([
       mel("mrow", {}, [
@@ -455,6 +700,12 @@ describe("buildOfficeMath: degradation", () => {
     ]);
   });
 
+  it("wraps the approximating space in the same m:rPr/m:nor 'normal text' run properties mtext uses, not left unstyled or styled as math", () => {
+    const root = oMath([mel("mspace", { width: "1em" })]);
+    expect(elementsWithTag([root], "m:rPr")).toHaveLength(1);
+    expect(elementsWithTag([root], "m:nor")).toHaveLength(1);
+  });
+
   it("writes nothing at all, and reports nothing, for a zero-width mspace", () => {
     const { element, diagnostics } = buildOfficeMath([
       mel("mspace", { width: "0em" }),
@@ -466,6 +717,19 @@ describe("buildOfficeMath: degradation", () => {
   it("reports no element at all for an empty formula, so a caller can fall back to its own stand-in", () => {
     expect(buildOfficeMath([]).element).toBeUndefined();
     expect(buildOfficeMathParagraph([]).element).toBeUndefined();
+  });
+});
+
+describe("buildOfficeMath: root element", () => {
+  it("declares the OMML namespace on its own m:oMath root, not only on buildOfficeMathParagraph's wrapper", () => {
+    const { element } = buildOfficeMath([token("mi", "x")]);
+    if (element === undefined) {
+      throw new Error("expected an m:oMath element");
+    }
+    expect(element.tag).toBe("m:oMath");
+    expect(attr(element, "xmlns:m")).toBe(
+      "http://schemas.openxmlformats.org/officeDocument/2006/math",
+    );
   });
 });
 
