@@ -18,19 +18,26 @@ import { CALADEA_REGULAR_FONT_DEFLATED_BASE64 } from "pdf-codec/assets/caladea-r
 import { base64ToBytes } from "ooxml.js";
 import { inflateSync } from "fflate";
 
+// A hex string's each two characters are one byte, decoded in order.
+function bytesFromHex(hex: string): readonly number[] {
+  const bytes: number[] = [];
+  for (let i = 0; i < hex.length; i += 2) {
+    bytes.push(Number.parseInt(hex.slice(i, i + 2), 16));
+  }
+  return bytes;
+}
+
 // ECMA-376 Part 4, 2.8.1's own worked example: this GUID and these key bytes are quoted from the specification, not computed here. deriveFontKey must reproduce SPEC_FONT_KEY_BYTES from SPEC_FONT_KEY_GUID exactly.
 export const SPEC_FONT_KEY_GUID = "{001B70DC-AA60-4AD5-90EC-18A0948E1EAE}";
-export const SPEC_FONT_KEY_BYTES: readonly number[] = [
-  0xae, 0x1e, 0x8e, 0x94, 0xa0, 0x18, 0xec, 0x90, 0xd5, 0x4a, 0x60, 0xaa, 0xdc,
-  0x70, 0x1b, 0x00,
-];
+export const SPEC_FONT_KEY_BYTES: readonly number[] = bytesFromHex(
+  "ae1e8e94a018ec90d54a60aadc701b00",
+);
 
 // A second, unrelated GUID, so a fixture can prove two faces of the same family are deobfuscated with their own separate keys rather than one shared one.
 export const SECOND_FONT_KEY_GUID = "{7B2F4E11-C3A9-4D68-8F05-2E6D1A9C4B37}";
-export const SECOND_FONT_KEY_BYTES: readonly number[] = [
-  0x37, 0x4b, 0x9c, 0x1a, 0x6d, 0x2e, 0x05, 0x8f, 0x68, 0x4d, 0xa9, 0xc3, 0x11,
-  0x4e, 0x2f, 0x7b,
-];
+export const SECOND_FONT_KEY_BYTES: readonly number[] = bytesFromHex(
+  "374b9c1a6d2e058f684da9c3114e2f7b",
+);
 
 const OBFUSCATED_PREFIX_LENGTH = 32;
 
