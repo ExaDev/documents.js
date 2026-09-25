@@ -105,6 +105,13 @@ export interface WritePdfOptions {
 // A PDF file identifier (trailer /ID) is only ever written when encryption is requested — an unencrypted document has never needed one from this writer, and adding it unconditionally would change every existing golden-byte test's output. 16 bytes matches the ID this writer's own qpdf-produced test fixtures carry (src/test-support/encrypted-pdfs.ts).
 const FILE_ID_BYTES = 16;
 
+// Shared byte-packing facts, used by the UTF-16BE string encoder, the PNG image writer, and the bilevel-to-CCITT bit packer below.
+const BITS_PER_BYTE = 8;
+const BYTE_SHIFT = Math.log2(BITS_PER_BYTE); // 3: shifting right by this divides by BITS_PER_BYTE, converting a bit position into a byte offset
+const BYTE_MASK = (1 << BITS_PER_BYTE) - 1; // 0xff: masks a value down to its low 8 bits; also the brightest possible sample an 8-bit channel can hold
+const PACKED_BIT_MSB_MASK = 1 << (BITS_PER_BYTE - 1); // 0x80: the leftmost (most significant) pixel bit within a byte packed MSB-first
+const BIT_INDEX_MASK = BITS_PER_BYTE - 1; // 7: x & this extracts which of the 8 bits within its byte a given pixel column occupies
+
 // PDF's UTF-16BE-with-BOM convention for text strings outside PDFDocEncoding's range (ISO 32000-1 7.9.2.2) — JS strings are already UTF-16 internally, so this is a direct byte-pair re-encoding of each existing code unit (surrogate pairs included), not a decode/re-encode round trip.
 function textToPdfString(text: string): PdfObject {
   const bytes = new Uint8Array(2 + text.length * 2);
@@ -114,8 +121,8 @@ function textToPdfString(text: string): PdfObject {
   let offset = 2;
   for (const unit of text.split("")) {
     const code = unit.charCodeAt(0);
-    bytes[offset] = (code >> 8) & 0xff;
-    bytes[offset + 1] = code & 0xff;
+    bytes[offset] = (code >> BITS_PER_BYTE) & BYTE_MASK;
+    bytes[offset + 1] = code & BYTE_MASK;
     offset += 2;
   }
   return pdfHexString(bytes);
@@ -242,12 +249,15 @@ interface PreparedImage {
   };
 }
 
+// A JPEG SOF marker's own component count (ISO/IEC 10918-1 B.2.2): 1 is grayscale, 3 is YCbCr/RGB, and 4 is CMYK, the shape a colour-managed CMYK scan or print workflow emits.
+const JPEG_COMPONENTS_CMYK = 4;
+
 function prepareJpegImage(bytes: Uint8Array<ArrayBuffer>): PreparedImage {
   const info = readJpegInfo(bytes);
   const colorSpace =
     info.components === 1
       ? "DeviceGray"
-      : info.components === 4
+      : info.components === JPEG_COMPONENTS_CMYK
         ? "DeviceCMYK"
         : "DeviceRGB";
   const entries = new Map<string, PdfObject>([
@@ -261,7 +271,7 @@ function prepareJpegImage(bytes: Uint8Array<ArrayBuffer>): PreparedImage {
   ]);
   // A 4-component JPEG is CMYK data; Adobe's APP14 transform 2 (YCCK) or an untagged 4-component stream almost always needs this inversion to render with correct colours (see src/image/jpeg-info.ts's own note on adobeTransform) — transform 0 explicitly means "CMYK as-is", no inversion.
   if (
-    info.components === 4 &&
+    info.components === JPEG_COMPONENTS_CMYK &&
     (info.adobeTransform === 2 || info.adobeTransform === undefined)
   ) {
     entries.set(
@@ -284,7 +294,7 @@ function pngImageDict(
     ["Width", pdfNum(width)],
     ["Height", pdfNum(height)],
     ["ColorSpace", pdfName(colorSpace)],
-    ["BitsPerComponent", pdfNum(8)],
+    ["BitsPerComponent", pdfNum(BITS_PER_BYTE)],
   ]);
   if (compress) {
     entries.set("Filter", pdfName("FlateDecode"));
@@ -300,20 +310,25 @@ function packBilevel(raw: {
   readonly height: number;
   readonly data: Uint8Array;
 }): Uint8Array | undefined {
-  const rowBytes = (raw.width + 7) >> 3;
+  const rowBytes = (raw.width + BIT_INDEX_MASK) >> BYTE_SHIFT;
   const packed = new Uint8Array(rowBytes * raw.height);
   // Accumulated through a DataView so a byte already holding earlier bits is read back as a
   // plain number, never as the undefined an out-of-range typed-array read reports.
   const view = new DataView(packed.buffer);
   for (let index = 0; index < raw.data.length; index++) {
     const sample = raw.data[index];
-    if (sample !== 0 && sample !== 255) {
+    if (sample !== 0 && sample !== BYTE_MASK) {
       return undefined;
     }
-    if (sample === 255) {
+    if (sample === BYTE_MASK) {
       const x = index % raw.width;
-      const byteIndex = Math.floor(index / raw.width) * rowBytes + (x >> 3);
-      view.setUint8(byteIndex, view.getUint8(byteIndex) | (0x80 >> (x & 7)));
+      const byteIndex =
+        Math.floor(index / raw.width) * rowBytes + (x >> BYTE_SHIFT);
+      view.setUint8(
+        byteIndex,
+        view.getUint8(byteIndex) |
+          (PACKED_BIT_MSB_MASK >> (x & BIT_INDEX_MASK)),
+      );
     }
   }
   return packed;
@@ -564,8 +579,11 @@ interface AllocatedObject {
 }
 
 // Writes a fixed 20-byte classic xref entry: 10-digit offset, space, 5-digit generation, space, 'n'/'f', space, LF — exactly 10+1+5+1+1+1+1 = 20 bytes, one of the three EOL forms the spec permits (ISO 32000-1 7.5.4).
+const XREF_OFFSET_DIGITS = 10;
+const XREF_GENERATION_DIGITS = 5;
+
 function xrefEntry(offset: number, generation: number, inUse: boolean): string {
-  return `${offset.toString().padStart(10, "0")} ${generation.toString().padStart(5, "0")} ${inUse ? "n" : "f"} \n`;
+  return `${offset.toString().padStart(XREF_OFFSET_DIGITS, "0")} ${generation.toString().padStart(XREF_GENERATION_DIGITS, "0")} ${inUse ? "n" : "f"} \n`;
 }
 
 // #967 residue parse-back: the inverse of serializeObjectToText the read side's readDocumentResidue used to quarantine each row. One object from the row's text through the ordinary lexer/parser; a row that does not parse at all restores as nothing (skip, never throw — residue is opacity, not data this writer depends on).
@@ -1649,7 +1667,9 @@ export function writePdf(
   const xrefOffset = writer.length;
   writer.writeAscii("xref\n");
   writer.writeAscii(`0 ${maxObjNum + 1}\n`);
-  writer.writeAscii(xrefEntry(0, 65535, false));
+  // ISO 32000-1 7.5.4: object number 0 is always free, and its entry's own generation number is always this constant, the largest value a 5-digit generation field can hold.
+  const XREF_FREE_LIST_HEAD_GENERATION = 65535;
+  writer.writeAscii(xrefEntry(0, XREF_FREE_LIST_HEAD_GENERATION, false));
   for (let num = 1; num <= maxObjNum; num++) {
     const offset = offsets.get(num);
     if (offset === undefined) {
