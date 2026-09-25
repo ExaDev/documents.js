@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { decodePackage, encodePackage, zipPackage } from "./index";
+import { PNG_SIGNATURE } from "./image/sniff";
 
 function enc(s: string): Uint8Array<ArrayBuffer> {
   return new TextEncoder().encode(s);
@@ -25,8 +26,14 @@ const ROOT_RELS_XLSX = enc(
   '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>',
 );
 
+// The genuine PNG signature followed by five arbitrary trailing bytes standing in for whatever real image data would normally follow it — their exact values carry no meaning, so they simply count upward.
+const ARBITRARY_TRAILING_BYTE_COUNT = 5;
 const PNG_BYTES: Uint8Array<ArrayBuffer> = new Uint8Array([
-  0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3, 4, 5,
+  ...PNG_SIGNATURE,
+  ...Array.from(
+    { length: ARBITRARY_TRAILING_BYTE_COUNT },
+    (_unused, index) => index + 1,
+  ),
 ]);
 
 function docxParts(): Record<string, Uint8Array<ArrayBuffer>> {
