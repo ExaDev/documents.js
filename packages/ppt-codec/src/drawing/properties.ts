@@ -9,10 +9,18 @@ import { concatBytes, u16le, u32le, writeAtom } from "../record/write";
 
 // The [MS-ODRAW] shape property table: the one mechanism a shape states anything about itself beyond its identity and anchor — which blip a picture displays, how far a shape is rotated, and the fact that a group of shapes is a table. Every table shares the identical framing: recVer 0x3, rh.recInstance = the property count, a run of 6-byte OfficeArtFOPTE entries (a 2-byte OfficeArtFOPTEOPID header plus a 4-byte value), then the pooled bytes of whichever entries declared themselves complex. OfficeArtFOPT 2.2.9: https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-odraw/10dc2fe1-9e69-48dc-a1d1-2921dfb9c28e OfficeArtSecondaryFOPT 2.2.10: https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-odraw/a7b26490-a8c7-4087-904e-417b10839f77 OfficeArtTertiaryFOPT 2.2.11: https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-odraw/a687e90c-1748-4f57-8758-be31cfb36185 OfficeArtFOPTE 2.2.7: https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-odraw/2841bed9-1ff1-4981-807e-ffb9592c046d OfficeArtFOPTEOPID 2.2.8: https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-odraw/1de69035-9084-4f76-9d95-701f410bed2e
 
-// OfficeArtFOPTEOPID's own field split: a 14-bit property identifier in the low bits, then fComplex (bit 14), then fBid (bit 15). fComplex says this entry's 4-byte value is a byte length and its real payload sits in the pooled complex data after the entry run; fBid says the value is a one-based reference into the document's blip store rather than a plain integer.
+// OfficeArtFOPTEOPID's own field split: a 14-bit property identifier in the low bits, then fComplex (bit 14), then fBid (bit 15). fComplex says this entry's 4-byte value is a byte length and its real payload sits in the pooled complex data after the entry run; fBid says the value is a one-based reference into the document's blip store rather than a plain integer. Each flag's own bit position is named separately from the flag, since @typescript-eslint/no-magic-numbers checks a shift amount's own literal independently of the constant it composes.
 const OPID_MASK = 0x3fff;
-const OPID_FCOMPLEX = 1 << 14;
-const OPID_FBID = 1 << 15;
+const OPID_BIT_FCOMPLEX = 14;
+const OPID_BIT_FBID = 15;
+const OPID_FCOMPLEX = 1 << OPID_BIT_FCOMPLEX;
+const OPID_FBID = 1 << OPID_BIT_FBID;
+
+// OfficeArtFOPTE's own fixed size: a 2-byte OfficeArtFOPTEOPID header plus a 4-byte value.
+const FOPTE_ENTRY_BYTES = 6;
+// IMsoArray's own fixed header: nElems (2 bytes), nElemsAlloc (2 bytes), cbElem (2 bytes) — 6 bytes before the element data begins, with cbElem itself starting 4 bytes in.
+const IMSO_ARRAY_HEADER_BYTES = 6;
+const IMSO_ARRAY_ELEMENT_SIZE_OFFSET = 4;
 
 // The property identifiers this package reads or writes — each taken from its own specification page rather than from a neighbour's numbering. rotation 2.3.18.5: https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-odraw/9ecbf9c9-9774-4669-94b1-55c2eb365901 pib 2.3.23.5: https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-odraw/a12e8c5e-a764-49d5-b407-c27bf933920d tableProperties 2.3.4.36: https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-odraw/376e9c97-16df-45f2-bd6b-a67ba657ef4c tableRowProperties 2.3.4.37: https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-odraw/45891407-a4b1-4f26-93a8-ded15531c62c
 export const PROPERTY_ROTATION = 0x0004;
@@ -44,9 +52,9 @@ export const TABLE_FLAG_IS_TABLE = 1 << 0;
 export function readIMsoArray(
   complex: Uint8Array<ArrayBuffer>,
 ): readonly number[] {
-  if (complex.length < 6) {
+  if (complex.length < IMSO_ARRAY_HEADER_BYTES) {
     throw new PptFormatError(
-      `a complex property's IMsoArray carries ${complex.length} bytes, fewer than the 6 its three count fields need`,
+      `a complex property's IMsoArray carries ${complex.length} bytes, fewer than the ${IMSO_ARRAY_HEADER_BYTES} its three count fields need`,
     );
   }
   const view = new DataView(
@@ -55,8 +63,8 @@ export function readIMsoArray(
     complex.byteLength,
   );
   const elementCount = view.getUint16(0, true);
-  const elementSize = view.getUint16(4, true);
-  const data = complex.subarray(6);
+  const elementSize = view.getUint16(IMSO_ARRAY_ELEMENT_SIZE_OFFSET, true);
+  const data = complex.subarray(IMSO_ARRAY_HEADER_BYTES);
   if (data.length < elementCount * elementSize) {
     throw new PptFormatError(
       `a complex property's IMsoArray declares ${elementCount} elements of ${elementSize} bytes but only ${data.length} remain`,
@@ -64,7 +72,9 @@ export function readIMsoArray(
   }
   const elements: number[] = [];
   for (let index = 0; index < elementCount; index += 1) {
-    elements.push(view.getInt32(6 + index * elementSize, true));
+    elements.push(
+      view.getInt32(IMSO_ARRAY_HEADER_BYTES + index * elementSize, true),
+    );
   }
   return elements;
 }
@@ -105,7 +115,7 @@ export function readShapeProperties(
       continue;
     }
     const count = record.header.recInstance;
-    const needed = count * 6;
+    const needed = count * FOPTE_ENTRY_BYTES;
     if (record.data.length < needed) {
       throw new PptFormatError(
         `a shape property table declares ${count} properties but its ${record.data.length} bytes of data cannot hold the ${needed} its entries need`,
@@ -118,7 +128,7 @@ export function readShapeProperties(
     );
     let complexAt = needed;
     for (let index = 0; index < count; index += 1) {
-      const at = index * 6;
+      const at = index * FOPTE_ENTRY_BYTES;
       const opid = view.getUint16(at, true);
       const value = view.getInt32(at + 2, true);
       const isComplex = (opid & OPID_FCOMPLEX) !== 0;
