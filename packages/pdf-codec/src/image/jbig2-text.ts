@@ -17,6 +17,12 @@ import {
   decodeRefinementRegion,
 } from "./jbig2-generic";
 
+// Generic-region coding template 0 (T.88 7.4.3.1.1) uses this many context pixels, the most of any generic template and the same value GENERIC_CONTEXT_BITS[0] above states. genericTemplate is always decoded from a 2-bit field (0-3), so GENERIC_CONTEXT_BITS[genericTemplate] can never actually be undefined; this exists only because noUncheckedIndexedAccess types the array read as possibly undefined regardless.
+const GENERIC_TEMPLATE_0_CONTEXT_BITS = 16;
+
+// Refinement-region coding template 0 (T.88 7.4.4.1.1) uses this many context pixels, the same value REFINEMENT_CONTEXT_BITS[0] above states. refinementTemplate is always decoded from a 1-bit field (0-1), so this fallback is likewise unreachable in practice.
+const REFINEMENT_TEMPLATE_0_CONTEXT_BITS = 13;
+
 // The symbol dictionary decoding procedure (ITU-T T.88 6.5) and the text region decoding procedure (6.4): how a scanned page of text is actually coded in practice. Rather than coding every pixel of the page through a generic region, an encoder collects the distinct connected components ("symbols") into a dictionary, codes each one once, and then codes the page as a sequence of (symbol, position) instances.
 //
 // Only the arithmetic variants are implemented here (SDHUFF = 0, SBHUFF = 0). The Huffman variants are a wholly separate coding path — standard tables B.1-B.15 plus optional custom table segments — and no mainstream JBIG2 encoder that targets PDF emits them; a stream that uses one raises Jbig2UnsupportedError rather than being silently mis-decoded.
@@ -92,9 +98,12 @@ export function createTextArithContexts(
     iardx: createIntegerContexts(),
     iardy: createIntegerContexts(),
     iaid: createSymbolIdContexts(symbolIdBits),
-    generic: createArithContexts(GENERIC_CONTEXT_BITS[genericTemplate] ?? 16),
+    generic: createArithContexts(
+      GENERIC_CONTEXT_BITS[genericTemplate] ?? GENERIC_TEMPLATE_0_CONTEXT_BITS,
+    ),
     refinement: createArithContexts(
-      REFINEMENT_CONTEXT_BITS[refinementTemplate] ?? 13,
+      REFINEMENT_CONTEXT_BITS[refinementTemplate] ??
+        REFINEMENT_TEMPLATE_0_CONTEXT_BITS,
     ),
   };
 }
