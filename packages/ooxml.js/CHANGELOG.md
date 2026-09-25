@@ -1,3 +1,40 @@
+## [12.2.25](https://github.com/ExaDev/documents.js/compare/ooxml.js%4012.2.24...ooxml.js%4012.2.25) (2026-09-25)
+
+### Code Refactoring
+
+* **ooxml.js:** enable magicNumbers, now that every site is named ([e1537f1](https://github.com/ExaDev/documents.js/commit/e1537f1b4108e7f1440aac279d627ab12f270b20)), references [#1275](https://github.com/ExaDev/documents.js/issues/1275)
+* **ooxml.js:** name compact.ts's tuple type-code discriminants ([ac1ae82](https://github.com/ExaDev/documents.js/commit/ac1ae827b0dcf29105c5c7fc719f34c40e03a453)), references [#1275](https://github.com/ExaDev/documents.js/issues/1275)
+* **ooxml.js:** name image signature bytes and reuse them in fixtures ([b05468e](https://github.com/ExaDev/documents.js/commit/b05468ea1152e8361f6dc0c5b9b087abd5721e1a)), references [#1275](https://github.com/ExaDev/documents.js/issues/1275)
+* **ooxml.js:** name magic numbers in compact.test.ts ([9289653](https://github.com/ExaDev/documents.js/commit/9289653badbcbe9facb966898acc3e823b97c940)), references [#1275](https://github.com/ExaDev/documents.js/issues/1275)
+* **ooxml.js:** name magic numbers in core zip and xml modules ([b0334a5](https://github.com/ExaDev/documents.js/commit/b0334a5e7d7694d064bcc7521e82010e524867fe)), references [#1275](https://github.com/ExaDev/documents.js/issues/1275)
+* **ooxml.js:** name magic numbers in docx modules ([adc47d1](https://github.com/ExaDev/documents.js/commit/adc47d126d1e013214ce96f9a52ed8301547488d)), references [#1275](https://github.com/ExaDev/documents.js/issues/1275)
+* **ooxml.js:** name magic numbers in docx styles.test.ts ([2899833](https://github.com/ExaDev/documents.js/commit/2899833ac0f9883dabb4de9edafbadaaac0c1813)), references [#1275](https://github.com/ExaDev/documents.js/issues/1275)
+* **ooxml.js:** name magic numbers in docx write.test.ts ([950d7e0](https://github.com/ExaDev/documents.js/commit/950d7e0719b0c1db7a3689386586d746040fd5b2)), references [#1275](https://github.com/ExaDev/documents.js/issues/1275)
+* **ooxml.js:** name magic numbers in image sniff.test.ts ([ec78fcd](https://github.com/ExaDev/documents.js/commit/ec78fcdf0f193e9c6a6f3aff720cc9a9d76096b1)), references [#1275](https://github.com/ExaDev/documents.js/issues/1275)
+* **ooxml.js:** name magic numbers in package-io read.test.ts ([5d4e3d2](https://github.com/ExaDev/documents.js/commit/5d4e3d22d54b73ea3e0180a48e421784a3a7fabc))
+* **ooxml.js:** name magic numbers in pptx modules ([f32bbda](https://github.com/ExaDev/documents.js/commit/f32bbda93d3a55c087949d85134288e25c3f3416)), references [#1275](https://github.com/ExaDev/documents.js/issues/1275)
+* **ooxml.js:** name magic numbers in pptx read.test.ts ([ca76508](https://github.com/ExaDev/documents.js/commit/ca765087a3a2bf0074523b037a4e7b76f2303552)), references [#1275](https://github.com/ExaDev/documents.js/issues/1275)
+* **ooxml.js:** name magic numbers in pptx reading-order.test.ts ([25ac03d](https://github.com/ExaDev/documents.js/commit/25ac03d422cdabc7bcbf13058821e430c395e683)), references [#1275](https://github.com/ExaDev/documents.js/issues/1275)
+* **ooxml.js:** name magic numbers in pptx/package-io modules ([54cdeb9](https://github.com/ExaDev/documents.js/commit/54cdeb95dd5e07a9023ff0093988372ceec67285)), references [#1275](https://github.com/ExaDev/documents.js/issues/1275)
+* **ooxml.js:** name magic numbers in shared DrawingML/unit helpers ([9dc2582](https://github.com/ExaDev/documents.js/commit/9dc258221bb531f94d365818cf470c2988adfab0)), references [#1275](https://github.com/ExaDev/documents.js/issues/1275)
+* **ooxml.js:** name magic numbers in styles.ts and its tests ([58a402b](https://github.com/ExaDev/documents.js/commit/58a402b31420a1b27f322981b7285e1cdcce1e40)), references [#1275](https://github.com/ExaDev/documents.js/issues/1275)
+* **ooxml.js:** name magic numbers in the sRGB/HSL colour helpers ([ded8240](https://github.com/ExaDev/documents.js/commit/ded8240e2785adbba075e9cb07e1a179c1a7c6e5)), references [#1275](https://github.com/ExaDev/documents.js/issues/1275)
+* **ooxml.js:** name magic numbers in the test-support CFB builder and its tests ([ac41ae3](https://github.com/ExaDev/documents.js/commit/ac41ae303031ac144dd86ac165b6f9de306e5c0f)), references [#1275](https://github.com/ExaDev/documents.js/issues/1275)
+* **ooxml.js:** name magic numbers in typed/docx read.test.ts ([79c8ba8](https://github.com/ExaDev/documents.js/commit/79c8ba8be69824bfb05d7a3cb7daf3095030907a))
+* **ooxml.js:** name magic numbers in typed/shared color.test.ts ([420f9cb](https://github.com/ExaDev/documents.js/commit/420f9cbc48b4a096c230963fd9c1d0ddabe4e1a9))
+* **ooxml.js:** name magic numbers in typed/shared drawingml.test.ts ([590c2b8](https://github.com/ExaDev/documents.js/commit/590c2b8acc9c91055dc4ceadcb6162b432037293))
+* **ooxml.js:** name magic numbers in typed/xlsx content.test.ts ([0d95a57](https://github.com/ExaDev/documents.js/commit/0d95a576a1d8ba170391a34cfb6b5aa5ec1ec250))
+* **ooxml.js:** name magic numbers in xlsx build.test.ts ([2789776](https://github.com/ExaDev/documents.js/commit/2789776823ffee0d90b483f226af7945f63f9921)), references [#1275](https://github.com/ExaDev/documents.js/issues/1275)
+* **ooxml.js:** name magic numbers in xlsx modules ([75f1aee](https://github.com/ExaDev/documents.js/commit/75f1aee68f07eabf6193dfffed179ddc02b920ca)), references [#1275](https://github.com/ExaDev/documents.js/issues/1275)
+* **ooxml.js:** name magic numbers in xlsx serial.test.ts ([6586573](https://github.com/ExaDev/documents.js/commit/6586573265e16da1519710060315b315a44195aa)), references [#1275](https://github.com/ExaDev/documents.js/issues/1275)
+* **ooxml.js:** name magic numbers in xlsx units.test.ts ([c18de98](https://github.com/ExaDev/documents.js/commit/c18de983cfdaf7af58f6b56021fad97312550abc)), references [#1275](https://github.com/ExaDev/documents.js/issues/1275)
+* **ooxml.js:** name magic numbers in xlsx util.ts and its tests ([8b21978](https://github.com/ExaDev/documents.js/commit/8b21978d262c4d3fc94d61ed8846f845219a7af7)), references [#1275](https://github.com/ExaDev/documents.js/issues/1275)
+
+
+### Dependencies
+
+- Updated archive-codec to 1.11.23
+
 ## [12.2.24](https://github.com/ExaDev/documents.js/compare/ooxml.js%4012.2.23...ooxml.js%4012.2.24) (2026-09-24)
 
 ### Bug Fixes

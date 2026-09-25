@@ -1,6 +1,6 @@
 {
   "name": "documents.js",
-  "version": "14.4.39",
+  "version": "14.4.40",
   "description": "Bidirectional docx/pptx <-> PDF conversion and a read+write editable OOXML document model, built on ooxml.js and Zod 4 codecs.",
   "type": "module",
   "repository": {
@@ -102,21 +102,21 @@
   "license": "MIT",
   "packageManager": "pnpm@12.4.1+sha512.2e81e399d73fe8390dab25e06aa788ab7a5908248d2f5a370f82b481147a6a7a367bf8048f9a6fdb6460f21a66f0542dedb8b94ca2c8723596741920b1656d4c",
   "dependencies": {
-    "archive-codec": "1.11.22",
+    "archive-codec": "1.11.23",
     "byte-codec": "2.0.1",
-    "doc-codec": "6.1.17",
+    "doc-codec": "6.1.18",
     "document-schema.js": "7.15.3",
     "epub-codec": "5.1.11",
     "fflate": "0.8.3",
     "markdown-codec": "11.1.11",
-    "odf.js": "11.1.10",
-    "ooxml.js": "12.2.24",
+    "odf.js": "11.1.11",
+    "ooxml.js": "12.2.25",
     "pdf-codec": "5.2.27",
-    "ppt-codec": "2.2.18",
-    "rtf-codec": "8.1.18",
+    "ppt-codec": "2.2.19",
+    "rtf-codec": "8.1.19",
     "temml": "0.13.4",
-    "wpd-codec": "5.1.17",
-    "xls-codec": "4.15.37",
+    "wpd-codec": "5.1.18",
+    "xls-codec": "4.15.38",
     "zod": "4.4.3"
   },
   "devDependencies": {

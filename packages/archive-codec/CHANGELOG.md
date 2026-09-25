@@ -1,3 +1,9 @@
+## [1.11.23](https://github.com/ExaDev/documents.js/compare/archive-codec%401.11.22...archive-codec%401.11.23) (2026-09-25)
+
+### Code Refactoring
+
+* **ooxml.js:** name image signature bytes and reuse them in fixtures ([b05468e](https://github.com/ExaDev/documents.js/commit/b05468ea1152e8361f6dc0c5b9b087abd5721e1a)), references [#1275](https://github.com/ExaDev/documents.js/issues/1275)
+
 ## [1.11.22](https://github.com/ExaDev/documents.js/compare/archive-codec%401.11.21...archive-codec%401.11.22) (2026-09-24)
 
 

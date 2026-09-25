@@ -1,3 +1,33 @@
+## [11.1.11](https://github.com/ExaDev/documents.js/compare/odf.js%4011.1.10...odf.js%4011.1.11) (2026-09-25)
+
+### Bug Fixes
+
+* **odf.js:** name magic numbers in seven small test files ([c70fbf6](https://github.com/ExaDev/documents.js/commit/c70fbf6edd2ef5f1268c80c9b7081f26c0eecf98)), references [#1275](https://github.com/ExaDev/documents.js/issues/1275)
+* **odf.js:** name magic numbers in the remaining small source files ([c038660](https://github.com/ExaDev/documents.js/commit/c038660c3de6e431ae4604a4a74b9dd2ec4926a6)), references [#1275](https://github.com/ExaDev/documents.js/issues/1275)
+
+### Code Refactoring
+
+* **odf.js:** name magic numbers in a1 notation and zip byte-parsing tests ([cec0266](https://github.com/ExaDev/documents.js/commit/cec0266329ec4ec4186d6ca44a320428417482a4))
+* **odf.js:** name magic numbers in draw shapes read/write tests ([977d0fb](https://github.com/ExaDev/documents.js/commit/977d0fbb0e456119313423bc1ca0a4d783b5b711))
+* **odf.js:** name magic numbers in geometry parsing tests ([122a415](https://github.com/ExaDev/documents.js/commit/122a415ab38692837f9ad1bc5b1c16a9a0f20c07))
+* **odf.js:** name magic numbers in manifest and ods write tests ([6f081d8](https://github.com/ExaDev/documents.js/commit/6f081d843ca59847b63a90694a34188ffedc12ee))
+* **odf.js:** name magic numbers in odg round-trip tests ([10b904b](https://github.com/ExaDev/documents.js/commit/10b904bb3685c7a3465c8a4c42fea111c17b3cc5))
+* **odf.js:** name magic numbers in odp round-trip tests ([3a18ac0](https://github.com/ExaDev/documents.js/commit/3a18ac041d5881efbaf67beb4a1a9ba9b89de268))
+* **odf.js:** name magic numbers in ods read tests ([cfc8293](https://github.com/ExaDev/documents.js/commit/cfc8293c60ce2dd885d942e657a85125dc3eb6bc))
+* **odf.js:** name magic numbers in ooo1 write and styles properties tests ([210d20f](https://github.com/ExaDev/documents.js/commit/210d20f17107f77fcd63472a1d1af05cac7591d4))
+* **odf.js:** name magic numbers in package-io read tests ([8149371](https://github.com/ExaDev/documents.js/commit/81493711de5f86161cb44131fbc2e214eaf17e66))
+* **odf.js:** name magic numbers in package-io, draw, odg, odt and shared list/expression tests ([676755d](https://github.com/ExaDev/documents.js/commit/676755d0bfa1cfe05b3ce32862c5ceafcdc48155))
+* **odf.js:** name magic numbers in shape/round-trip/odp/paragraph tests ([7f5b264](https://github.com/ExaDev/documents.js/commit/7f5b264c57ac8ca589af3cf74abdf658069fb1ef))
+* **odf.js:** name magic numbers in shared constructs and odt read tests ([e5f655a](https://github.com/ExaDev/documents.js/commit/e5f655a761d5d54bd5bc96da38bfd1add6c1f8a4))
+* **odf.js:** name magic numbers in span text-wrapping tests ([e452e9b](https://github.com/ExaDev/documents.js/commit/e452e9bc7de9b51929fd09d25e8eb3bd361975c4))
+* **odf.js:** name magic numbers in table read/write tests ([68b23ae](https://github.com/ExaDev/documents.js/commit/68b23ae224a1b63333507d60e69421d41c029c45))
+* **odf.js:** name magic numbers in transform tests ([b119f93](https://github.com/ExaDev/documents.js/commit/b119f9326bc02830025795de857eb1eac8857380))
+* **odf.js:** name magic numbers in units conversion tests ([14fceaa](https://github.com/ExaDev/documents.js/commit/14fceaa92978066e7b161eabfb6593305f7b8857))
+
+### Miscellaneous Chores
+
+* **odf.js:** enable no-magic-numbers and name sniff/zip constants ([8c1e8e6](https://github.com/ExaDev/documents.js/commit/8c1e8e66afa9d859c7fc1ec3e66fc63e3cc7eb2c)), references [#1275](https://github.com/ExaDev/documents.js/issues/1275)
+
 ## [11.1.10](https://github.com/ExaDev/documents.js/compare/odf.js%4011.1.9...odf.js%4011.1.10) (2026-09-24)
 
 ### Bug Fixes
