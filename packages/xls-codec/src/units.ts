@@ -17,6 +17,10 @@ const MILLIMETRES_PER_INCH = 25.4;
  */
 const MAX_DIGIT_WIDTH_PX = 7;
 
+/** A ColInfo record's coldx is in 1/256ths of a character width ([MS-XLS] 2.4.53), exported so workbook/drawing-writer.ts's own default-column-width fallback states its width in the identical unit rather than restating 256 as an unrelated literal. COLDX_ROUNDING_ALLOWANCE (half of that scale) is columnWidthToPoints/pointsToColumnWidth's own shared rounding-to-nearest-pixel term. */
+export const COLDX_PER_CHAR = 256;
+const COLDX_ROUNDING_ALLOWANCE = 128;
+
 /**
  * Excel's own "Normal" style column width (8.43 characters) and default row height (15pt), for a worksheet grid cell a drawing shape's own anchor names but that carries no explicit ColInfo/Row record of its own to size it — the identical fallback constants ooxml.js's own xlsx drawing reader uses for the same reason (no font-metrics engine to derive a workbook's real default from), so a shape anchored to an undeclared cell places identically whether it arrived as .xls or .xlsx.
  */
@@ -49,10 +53,13 @@ export function millimetresToPoints(millimetres: number): number {
  * The pixel step reproduces Excel's own integer-pixel-grid truncation rather than smoothing it into a continuous formula, so a width read here matches the pixel count Excel itself would render, and matches what ooxml.js computes for the equivalent xlsx column.
  */
 export function columnWidthToPoints(coldx: number): number {
-  const chars = coldx / 256;
-  const digitWidthAllowance = Math.trunc(128 / MAX_DIGIT_WIDTH_PX);
+  const chars = coldx / COLDX_PER_CHAR;
+  const digitWidthAllowance = Math.trunc(
+    COLDX_ROUNDING_ALLOWANCE / MAX_DIGIT_WIDTH_PX,
+  );
   const pixels = Math.trunc(
-    ((256 * chars + digitWidthAllowance) / 256) * MAX_DIGIT_WIDTH_PX,
+    ((COLDX_PER_CHAR * chars + digitWidthAllowance) / COLDX_PER_CHAR) *
+      MAX_DIGIT_WIDTH_PX,
   );
   return (pixels / PIXELS_PER_INCH) * POINTS_PER_INCH;
 }
@@ -71,10 +78,12 @@ export function pointsToTwips(points: number): number {
  * Derived directly from columnWidthToPoints's own forward formula: pixels(coldx) = floor((coldx + digitWidthAllowance) * MAX_DIGIT_WIDTH_PX / 256). Solving for the smallest coldx with `pixels(coldx) >= targetPixels` gives coldx = ceil(targetPixels * 256 / MAX_DIGIT_WIDTH_PX) - digitWidthAllowance.
  */
 export function pointsToColumnWidth(points: number): number {
-  const digitWidthAllowance = Math.trunc(128 / MAX_DIGIT_WIDTH_PX);
+  const digitWidthAllowance = Math.trunc(
+    COLDX_ROUNDING_ALLOWANCE / MAX_DIGIT_WIDTH_PX,
+  );
   const targetPixels = Math.round((points / POINTS_PER_INCH) * PIXELS_PER_INCH);
   const coldx = Math.ceil(
-    (targetPixels * 256) / MAX_DIGIT_WIDTH_PX - digitWidthAllowance,
+    (targetPixels * COLDX_PER_CHAR) / MAX_DIGIT_WIDTH_PX - digitWidthAllowance,
   );
   return Math.max(coldx, 0);
 }
