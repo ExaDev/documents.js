@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import type { EpubDiagnostic, EpubDiagnosticSink } from "../diagnostics";
-import { readXhtmlBody, scanXhtmlAnchors } from "./read";
+import { scanXhtmlAnchors } from "./read-block-helpers";
+import { readXhtmlBody } from "./read";
 
 const CONTENT_WIDTH_PT = 451.28; // A4 minus 1in margins each side, matching src/read.ts's own default section geometry
 

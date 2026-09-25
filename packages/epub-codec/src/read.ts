@@ -24,11 +24,8 @@ import { parseOpf } from "./opf/parse";
 import { attrValue } from "./xml/query";
 import type { ResolvedAnchorTarget } from "./xhtml/context";
 import { isFootnoteReference } from "./xhtml/footnote";
-import {
-  BLOCK_LEVEL_TAGS,
-  readXhtmlBody,
-  scanXhtmlAnchors,
-} from "./xhtml/read";
+import { BLOCK_LEVEL_TAGS, scanXhtmlAnchors } from "./xhtml/read-block-helpers";
+import { readXhtmlBody } from "./xhtml/read";
 import { resolveHrefTarget } from "./xhtml/link-target";
 import { dirname, resolvePackagePath } from "./path";
 import { parsePackage } from "./package-io/read";
