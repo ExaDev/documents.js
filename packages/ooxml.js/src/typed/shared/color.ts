@@ -14,13 +14,25 @@ export function clamp01(x: number): number {
   return Math.max(0, Math.min(1, x));
 }
 
+// The IEC 61966-2-1 sRGB transfer-function constants, shared by both directions below: the linear-light slope below each threshold, the gamma-space offset/scale applied to the power-law segment, and its exponent. SRGB_TO_LINEAR_THRESHOLD (gamma space) and LINEAR_TO_SRGB_THRESHOLD (linear space) are genuinely different numbers, not the same constant used twice — they mark the same physical crossover point expressed in each function's own input space.
+const SRGB_LINEAR_SLOPE = 12.92;
+const SRGB_GAMMA_OFFSET = 0.055;
+const SRGB_GAMMA_SCALE = 1.055;
+const SRGB_GAMMA_EXPONENT = 2.4;
+const SRGB_TO_LINEAR_THRESHOLD = 0.04045;
+const LINEAR_TO_SRGB_THRESHOLD = 0.0031308;
+
 // The sRGB electro-optical transfer function (IEC 61966-2-1): gamma-encoded 0..1 component -> linear light. DrawingML's shade/tint transforms operate in this linear (scRGB) space, not directly on the gamma-encoded byte values — verified against Apache POI's DrawPaint.java (RGB2SCRGB/SCRGB2RGB), a mature, independent OOXML rendering implementation, since guessing this from memory risks silently applying shade/tint in the wrong colour space.
 function srgbToLinear(c: number): number {
-  return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+  return c <= SRGB_TO_LINEAR_THRESHOLD
+    ? c / SRGB_LINEAR_SLOPE
+    : ((c + SRGB_GAMMA_OFFSET) / SRGB_GAMMA_SCALE) ** SRGB_GAMMA_EXPONENT;
 }
 
 function linearToSrgb(c: number): number {
-  return c <= 0.0031308 ? c * 12.92 : 1.055 * c ** (1 / 2.4) - 0.055;
+  return c <= LINEAR_TO_SRGB_THRESHOLD
+    ? c * SRGB_LINEAR_SLOPE
+    : SRGB_GAMMA_SCALE * c ** (1 / SRGB_GAMMA_EXPONENT) - SRGB_GAMMA_OFFSET;
 }
 
 // shade: 10% shade is 10% of the (linearised) input colour combined with 90% black — i.e. linear *= pct. tint: 10% tint is 10% of the (linearised) input colour combined with 90% white — i.e. linear = 1 - (1 - linear) * pct. Both formulas and the linear-space requirement are verified against Apache POI's DrawPaint.applyColorTransform.
@@ -61,28 +73,36 @@ export function rgbToHsl(color: Readonly<Color>): Hsl {
   // 1 - |2l - 1| equals max+min when l <= 0.5 and 2-max-min when l >= 0.5, matching both branches exactly
   // by construction rather than needing to pick one at the one point where they coincide anyway.
   const s = d / (1 - Math.abs(2 * l - 1));
+  // Hue is computed as an offset in 60deg sectors, six of which make a full turn: the max-is-red branch adds a full turn (HUE_SECTOR_COUNT) when the raw ratio would otherwise land negative, and the max-is-blue branch offsets by four sectors (240deg) — the max-is-green branch's own two-sector offset is exempt from naming (it falls inside this rule's own ignored small-integer range).
+  const HUE_SECTOR_COUNT = 6;
+  const BLUE_MAX_HUE_SECTOR_OFFSET = 4;
+  const DEGREES_PER_HUE_SECTOR = 60;
   let h: number;
   if (max === r) {
-    h = (g - b) / d + (g < b ? 6 : 0);
+    h = (g - b) / d + (g < b ? HUE_SECTOR_COUNT : 0);
   } else if (max === g) {
     h = (b - r) / d + 2;
   } else {
-    h = (r - g) / d + 4;
+    h = (r - g) / d + BLUE_MAX_HUE_SECTOR_OFFSET;
   }
-  return { h: h * 60, s, l };
+  return { h: h * DEGREES_PER_HUE_SECTOR, s, l };
 }
 
 function hueToRgbComponent(p: number, q: number, hue: number): number {
   // Wraps into [0, 1) via a floor-based mod rather than a pair of "< 0 add 1" / "> 1 subtract 1" guards: this function is only ever called (from hslToRgb below) with hue already within one turn of that range (hk-1/3 .. hk+1/3, hk itself in [0, 1)), so a single wrap always suffices — but AT hue exactly 0 or exactly 1, an explicit guard's own two branches evaluate to the SAME final result regardless of which one runs (both ultimately reach the p+(q-p)*6*0 === p case below, since 0 and 1 are the same point on the wheel), making a strict-vs-inclusive choice between "< 0"/"> 1" and their own inclusive counterparts genuinely untestable there. hue - Math.floor(hue) needs no such comparison at all, and — unlike the more familiar ((hue % 1) + 1) % 1 double-mod — leaves an already-in-range value bit- exact rather than perturbing it by a rounding epsilon, which matters just below: the two remaining (genuinely non-equivalent) piece boundaries at t === 1/6 and t === 1/2 are tested at that exact value.
+  // The same six-sectors-per-turn constant rgbToHsl's own hue computation above shares, here used both as the piecewise interpolation's own boundary denominator (1/6, 2/3) and its slope multiplier.
+  const HUE_SECTOR_COUNT = 6;
   const t = hue - Math.floor(hue);
-  if (t < 1 / 6) {
-    return p + (q - p) * 6 * t;
+  if (t < 1 / HUE_SECTOR_COUNT) {
+    return p + (q - p) * HUE_SECTOR_COUNT * t;
   }
   if (t < 1 / 2) {
     return q;
   }
   // The final two pieces (t < 2/3 vs t >= 2/3) meet at the SAME value by construction — the piecewise interpolation is continuous there, so (2/3 - t) is exactly 0 at t === 2/3 and the two formulas agree regardless of which side of that single point "< 2/3" is written to include. Clamping (2/3 - t) to never go negative folds both pieces into one expression without a boundary comparison to mutate: for t < 2/3 the max is a no-op (2/3 - t is already positive) and this is the earlier formula unchanged; for t >= 2/3, 2/3 - t is zero or negative, so the clamp collapses the whole term to p, matching the former "return p" fallback exactly.
-  return p + (q - p) * Math.max(0, 2 / 3 - t) * 6;
+  const THIRD_TURN_DENOMINATOR = 3;
+  const TWO_THIRDS_BOUNDARY = 2 / THIRD_TURN_DENOMINATOR;
+  return p + (q - p) * Math.max(0, TWO_THIRDS_BOUNDARY - t) * HUE_SECTOR_COUNT;
 }
 
 export function hslToRgb(hsl: Hsl): Color {
@@ -92,11 +112,15 @@ export function hslToRgb(hsl: Hsl): Color {
   // Unconditional equivalent of the textbook piecewise "l*(1+s) below the midpoint, l+s-l*s at or above it": at l === 0.5 exactly, both give l+0.5*s, the same value HSL's "L=0.5" pivot is defined to produce — so a strict-vs-inclusive boundary comparison there is untestable by this result no matter which side of 0.5 it is written to include. Math.min(l, 1-l) is l below the midpoint and 1-l at or above it, matching both branches exactly (l + s*l === l*(1+s); l + s*(1-l) === l+s-l*s) without ever comparing l to 0.5 at all.
   const q = l + s * Math.min(l, 1 - l);
   const p = 2 * l - q;
-  const hk = h / 360;
+  const DEGREES_PER_FULL_CIRCLE = 360;
+  const hk = h / DEGREES_PER_FULL_CIRCLE;
+  // The RGB channels sit a third of a turn apart on the hue wheel (red, green, blue in that cyclic order), matching CSS Color Module Level 3's own hslToRgb reference algorithm.
+  const THIRD_TURN_DENOMINATOR = 3;
+  const CHANNEL_HUE_SPACING = 1 / THIRD_TURN_DENOMINATOR;
   return {
-    r: clamp01(hueToRgbComponent(p, q, hk + 1 / 3)),
+    r: clamp01(hueToRgbComponent(p, q, hk + CHANNEL_HUE_SPACING)),
     g: clamp01(hueToRgbComponent(p, q, hk)),
-    b: clamp01(hueToRgbComponent(p, q, hk - 1 / 3)),
+    b: clamp01(hueToRgbComponent(p, q, hk - CHANNEL_HUE_SPACING)),
   };
 }
 
