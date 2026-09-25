@@ -11,30 +11,49 @@ export class HsqldbRowFormatError extends Error {
   }
 }
 
-// org.hsqldb.Types' own java.sql.Types-based type codes, including HSQLDB's own VARCHAR_IGNORECASE=100 extension — verified against the decompiled org.hsqldb.Types class (its typeAliases/typeNames static initializers) bundled in the same hsqldb.jar. A column's declared SQL type name (from CREATE CACHED TABLE's own DDL text, already available via src/hsqldb/script.ts's HsqldbColumn.type) resolves to one of these codes to select the right binary decoder — the row bytes themselves carry no per-field type tag of their own (RowOutputBase.writeData dispatches purely from the table's own declared column types, and RowInputBase.readData must be handed the identical types back to read the same bytes).
+// org.hsqldb.Types' own java.sql.Types-based type codes, including HSQLDB's own VARCHAR_IGNORECASE=100 extension — verified against the decompiled org.hsqldb.Types class (its typeAliases/typeNames static initializers) bundled in the same hsqldb.jar. Named here (rather than left as literals in SQL_TYPE_NAME_TO_CODE below) so readHsqldbColumnValue's own switch, further down this file, can dispatch on the identical constant rather than a second, separately-transcribed copy of each code.
+const SQL_CHAR = 1;
+const SQL_NUMERIC = 2;
+const SQL_DECIMAL = 3;
+const SQL_INTEGER = 4;
+const SQL_SMALLINT = 5;
+const SQL_FLOAT = 6;
+const SQL_REAL = 7;
+const SQL_DOUBLE = 8;
+const SQL_VARCHAR = 12;
+const SQL_BOOLEAN_BIT = 16;
+const SQL_DATE = 91;
+const SQL_TIME = 92;
+const SQL_TIMESTAMP = 93;
+const SQL_VARCHAR_IGNORECASE = 100;
+const SQL_BIGINT = -5;
+const SQL_TINYINT = -6;
+const SQL_LONGVARCHAR = -1;
+
+// A column's declared SQL type name (from CREATE CACHED TABLE's own DDL text, already available via src/hsqldb/script.ts's HsqldbColumn.type) resolves to one of the codes above to select the right binary decoder — the row bytes themselves carry no per-field type tag of their own (RowOutputBase.writeData dispatches purely from the table's own declared column types, and RowInputBase.readData must be handed the identical types back to read the same bytes).
 const SQL_TYPE_NAME_TO_CODE: Readonly<Record<string, number>> = {
-  INTEGER: 4,
-  INT: 4,
-  IDENTITY: 4,
-  DOUBLE: 8,
-  FLOAT: 6,
-  REAL: 7,
-  VARCHAR: 12,
-  CHAR: 1,
-  CHARACTER: 1,
-  LONGVARCHAR: -1,
-  VARCHAR_IGNORECASE: 100,
-  DATE: 91,
-  TIME: 92,
-  TIMESTAMP: 93,
-  DATETIME: 93,
-  DECIMAL: 3,
-  NUMERIC: 2,
-  BIT: 16,
-  BOOLEAN: 16,
-  TINYINT: -6,
-  SMALLINT: 5,
-  BIGINT: -5,
+  INTEGER: SQL_INTEGER,
+  INT: SQL_INTEGER,
+  IDENTITY: SQL_INTEGER,
+  DOUBLE: SQL_DOUBLE,
+  FLOAT: SQL_FLOAT,
+  REAL: SQL_REAL,
+  VARCHAR: SQL_VARCHAR,
+  CHAR: SQL_CHAR,
+  CHARACTER: SQL_CHAR,
+  LONGVARCHAR: SQL_LONGVARCHAR,
+  VARCHAR_IGNORECASE: SQL_VARCHAR_IGNORECASE,
+  DATE: SQL_DATE,
+  TIME: SQL_TIME,
+  TIMESTAMP: SQL_TIMESTAMP,
+  DATETIME: SQL_TIMESTAMP,
+  DECIMAL: SQL_DECIMAL,
+  NUMERIC: SQL_NUMERIC,
+  BIT: SQL_BOOLEAN_BIT,
+  BOOLEAN: SQL_BOOLEAN_BIT,
+  TINYINT: SQL_TINYINT,
+  SMALLINT: SQL_SMALLINT,
+  BIGINT: SQL_BIGINT,
 };
 
 // Column types RowInputBase.readData genuinely supports but ContentCellValue has no matching kind for at all (no binary/blob/object kind anywhere in document-schema.js's cell-value union) — named here so resolveHsqldbTypeCode fails with a specific, honest diagnosis rather than the generic "unrecognised type" message a plain lookup miss would give.
@@ -119,6 +138,20 @@ export class HsqldbDataCursor {
   }
 }
 
+// A byte's top bit (value 128): below it, a lead byte is plain single-byte ASCII; at or above it, a lead byte starts a multi-byte sequence; masked onto a continuation byte, it is exactly the required 10xxxxxx continuation tag; and, on the top byte of a two's-complement magnitude, it is the sign bit signedBigIntFromBytes below tests.
+const HIGH_BIT = 0x80;
+const UTF8_CONTINUATION_MASK = 0xc0; // isolates a continuation byte's own top two bits, which must read 10 (i.e. equal HIGH_BIT once masked)
+const UTF8_TWO_BYTE_LEAD_NIBBLE_LOW = 0xc; // a 110xxxxx lead byte's high nibble is 0xC or 0xD
+const UTF8_TWO_BYTE_LEAD_NIBBLE_HIGH = 0xd;
+const UTF8_TWO_BYTE_DATA_MASK = 0x1f; // the 5 data bits a 110xxxxx lead byte carries
+const UTF8_THREE_BYTE_LEAD_NIBBLE = 0xe; // a 1110xxxx lead byte's high nibble
+const UTF8_THREE_BYTE_DATA_MASK = 0xf; // the 4 data bits a 1110xxxx lead byte carries
+const UTF8_CONTINUATION_DATA_MASK = 0x3f; // the 6 data bits every 10xxxxxx continuation byte carries
+const UTF8_CONTINUATION_BITS = 6; // width, in bits, of one continuation byte's own data field
+const UTF8_THREE_BYTE_SEQUENCE_LENGTH = 3;
+const HEX_RADIX = 16;
+const NIBBLE_BITS = 4; // width, in bits, of a lead byte's high nibble, isolated by a right-shift
+
 // Java's own "modified UTF-8" encoding (java.io.DataOutput.writeUTF's per-character scheme, reused verbatim by HSQLDB's own org.hsqldb.lib.StringConverter.writeUTF/readUTF for every CHAR/VARCHAR row field) — deliberately NOT plain UTF-8: the NUL character always encodes as the 2-byte sequence 0xC0 0x80 rather than a bare 0x00 byte, and a supplementary-plane character (outside the Basic Multilingual Plane) encodes as two independent 3-byte sequences over its own UTF-16 surrogate pair rather than one real 4-byte UTF-8 sequence. TextDecoder('utf-8') would silently misdecode either case, so this is a dedicated decoder rather than a shortcut — each decoded UTF-16 code unit is appended via String.fromCharCode, so a genuine surrogate pair (two consecutive 3-byte sequences) still recombines into the correct JS string exactly as it would in Java, with no special-casing needed here.
 export function readModifiedUtf8(bytes: Uint8Array<ArrayBuffer>): string {
   let result = "";
@@ -128,66 +161,81 @@ export function readModifiedUtf8(bytes: Uint8Array<ArrayBuffer>): string {
     if (b0 === undefined) {
       throw new HsqldbRowFormatError("truncated modified-UTF-8 byte sequence");
     }
-    if (b0 > 0 && b0 < 0x80) {
+    if (b0 > 0 && b0 < HIGH_BIT) {
       result += String.fromCharCode(b0);
       i += 1;
       continue;
     }
-    const leadNibble = b0 >> 4;
-    if (leadNibble === 0xc || leadNibble === 0xd) {
+    const leadNibble = b0 >> NIBBLE_BITS;
+    if (
+      leadNibble === UTF8_TWO_BYTE_LEAD_NIBBLE_LOW ||
+      leadNibble === UTF8_TWO_BYTE_LEAD_NIBBLE_HIGH
+    ) {
       const b1 = bytes[i + 1];
-      if (b1 === undefined || (b1 & 0xc0) !== 0x80) {
+      if (b1 === undefined || (b1 & UTF8_CONTINUATION_MASK) !== HIGH_BIT) {
         throw new HsqldbRowFormatError(
           "malformed modified-UTF-8 2-byte sequence",
         );
       }
-      result += String.fromCharCode(((b0 & 0x1f) << 6) | (b1 & 0x3f));
+      result += String.fromCharCode(
+        ((b0 & UTF8_TWO_BYTE_DATA_MASK) << UTF8_CONTINUATION_BITS) |
+          (b1 & UTF8_CONTINUATION_DATA_MASK),
+      );
       i += 2;
       continue;
     }
-    if (leadNibble === 0xe) {
+    if (leadNibble === UTF8_THREE_BYTE_LEAD_NIBBLE) {
       const b1 = bytes[i + 1];
       const b2 = bytes[i + 2];
       if (
         b1 === undefined ||
         b2 === undefined ||
-        (b1 & 0xc0) !== 0x80 ||
-        (b2 & 0xc0) !== 0x80
+        (b1 & UTF8_CONTINUATION_MASK) !== HIGH_BIT ||
+        (b2 & UTF8_CONTINUATION_MASK) !== HIGH_BIT
       ) {
         throw new HsqldbRowFormatError(
           "malformed modified-UTF-8 3-byte sequence",
         );
       }
       result += String.fromCharCode(
-        ((b0 & 0xf) << 12) | ((b1 & 0x3f) << 6) | (b2 & 0x3f),
+        ((b0 & UTF8_THREE_BYTE_DATA_MASK) << (UTF8_CONTINUATION_BITS * 2)) |
+          ((b1 & UTF8_CONTINUATION_DATA_MASK) << UTF8_CONTINUATION_BITS) |
+          (b2 & UTF8_CONTINUATION_DATA_MASK),
       );
-      i += 3;
+      i += UTF8_THREE_BYTE_SEQUENCE_LENGTH;
       continue;
     }
     throw new HsqldbRowFormatError(
-      `malformed modified-UTF-8 lead byte 0x${b0.toString(16)}`,
+      `malformed modified-UTF-8 lead byte 0x${b0.toString(HEX_RADIX)}`,
     );
   }
   return result;
 }
 
+const ZERO_BIGINT = 0n;
+const ONE_BIGINT = 1n;
+const BITS_PER_BYTE = 8;
+const BITS_PER_BYTE_BIGINT = 8n;
+
 // The write side of this is java.math.BigInteger.toByteArray(): a minimal big-endian two's-complement encoding (Java always emits at least one byte, adding a leading 0x00 pad byte only when needed to keep an otherwise high-bit-set positive value unambiguous). Decoding is the standard two's-complement inverse: accumulate the magnitude as if unsigned, then subtract 2^(8*byteLength) when the top bit says the value is negative.
 function signedBigIntFromBytes(bytes: Uint8Array<ArrayBuffer>): bigint {
   if (bytes.length === 0) {
-    return 0n;
+    return ZERO_BIGINT;
   }
-  let magnitude = 0n;
+  let magnitude = ZERO_BIGINT;
   for (const byte of bytes) {
-    magnitude = (magnitude << 8n) | BigInt(byte);
+    magnitude = (magnitude << BITS_PER_BYTE_BIGINT) | BigInt(byte);
   }
   const firstByte = bytes[0];
-  const isNegative = firstByte !== undefined && (firstByte & 0x80) !== 0;
-  return isNegative ? magnitude - (1n << BigInt(8 * bytes.length)) : magnitude;
+  const isNegative = firstByte !== undefined && (firstByte & HIGH_BIT) !== 0;
+  return isNegative
+    ? magnitude - (ONE_BIGINT << BigInt(BITS_PER_BYTE * bytes.length))
+    : magnitude;
 }
 
 // unscaled * 10^-scale, built as a decimal STRING via BigInt digit manipulation (never a floating multiplication/division, which would risk rounding for a large unscaled magnitude) — matching how src/hsqldb/script.ts's own Tier 1 NUMBER_LITERAL_RE-based DECIMAL/NUMERIC literal parsing already keeps a numeric SQL literal's own source text intact rather than reconstructing it from a parsed float. This is the exact digit string document-schema.js's own DecimalStringSchema (ContentCellValueSchema's exactValue sidecar) expects, before any trailing-zero normalisation.
 function exactDecimalDigits(unscaled: bigint, scale: number): string {
-  const isNegative = unscaled < 0n;
+  const isNegative = unscaled < ZERO_BIGINT;
   const magnitudeDigits = (isNegative ? -unscaled : unscaled).toString();
   const sign = isNegative ? "-" : "";
   if (scale <= 0) {
@@ -303,9 +351,14 @@ function calendarFieldsAt(
   };
 }
 
+const MILLIS_PER_SECOND_BIGINT = 1000n;
+
 // The instant's own sub-second remainder, which is timezone-independent (every IANA zone offset is a whole number of minutes) and so is taken straight off the epoch value rather than through calendarFieldsAt.
 function millisOfSecond(epochMillis: bigint): number {
-  return Number(((epochMillis % 1000n) + 1000n) % 1000n);
+  return Number(
+    ((epochMillis % MILLIS_PER_SECOND_BIGINT) + MILLIS_PER_SECOND_BIGINT) %
+      MILLIS_PER_SECOND_BIGINT,
+  );
 }
 
 function formatDate(epochMillis: bigint, timeZone: string | undefined): string {
@@ -313,12 +366,18 @@ function formatDate(epochMillis: bigint, timeZone: string | undefined): string {
   return `${year}-${pad2(month)}-${pad2(day)}`;
 }
 
+const MILLIS_DIGIT_WIDTH = 3;
+
 function formatTime(epochMillis: bigint, timeZone: string | undefined): string {
   const { hours, minutes, seconds } = calendarFieldsAt(epochMillis, timeZone);
   const base = `${pad2(hours)}:${pad2(minutes)}:${pad2(seconds)}`;
   const millis = millisOfSecond(epochMillis);
-  return millis === 0 ? base : `${base}.${String(millis).padStart(3, "0")}`;
+  return millis === 0
+    ? base
+    : `${base}.${String(millis).padStart(MILLIS_DIGIT_WIDTH, "0")}`;
 }
+
+const NANOS_DIGIT_WIDTH = 9;
 
 // TIMESTAMP's own on-disk pair is [epoch-millis long][nanos int] (org.hsqldb.rowio.RowOutputBinary.writeTimestamp: writeLong(timestamp.getTime()); writeInt(timestamp.getNanos())) — java.sql.Timestamp.getNanos() carries the value's FULL nanosecond-resolution fractional-second component independently of getTime()'s own millisecond-rounded one, so the fractional suffix below is built from nanos directly rather than from the millis value's own sub-second part (only the whole-second date/time-of-day fields come from the instant).
 function formatTimestamp(
@@ -331,7 +390,9 @@ function formatTimestamp(
     timeZone,
   );
   const base = `${year}-${pad2(month)}-${pad2(day)} ${pad2(hours)}:${pad2(minutes)}:${pad2(seconds)}`;
-  return nanos === 0 ? base : `${base}.${String(nanos).padStart(9, "0")}`;
+  return nanos === 0
+    ? base
+    : `${base}.${String(nanos).padStart(NANOS_DIGIT_WIDTH, "0")}`;
 }
 
 // Reads one column's own binary field: the shared 1-byte present-flag, then (if present) the type-specific payload — mirrors org.hsqldb.rowio.RowInputBase.readData()'s per-column dispatch exactly, one SQL type code at a time. BIGINT converts through a bigint and is only cast to a JS number at the very end via Number(): a BIGINT value beyond Number.MAX_SAFE_INTEGER loses precision doing this, the same class of limitation every 'number'-kind ContentCellValue in this package already has (DECIMAL/NUMERIC included) — see the README's Gotchas entry. TIMESTAMP maps onto ContentCellValue's 'date' kind, matching src/hsqldb/script.ts's own Tier 1 TIMESTAMP-literal handling: ContentCellValue has no timestamp kind of its own.
@@ -345,50 +406,47 @@ export function readHsqldbColumnValue(
     return { kind: "empty" };
   }
   switch (typeCode) {
-    case 1: // CHAR
-    case 12: // VARCHAR
-    case -1: // LONGVARCHAR
-    case 100: {
-      // VARCHAR_IGNORECASE
+    case SQL_CHAR:
+    case SQL_VARCHAR:
+    case SQL_LONGVARCHAR:
+    case SQL_VARCHAR_IGNORECASE: {
       const byteLength = cursor.readInt32();
       return {
         kind: "string",
         value: readModifiedUtf8(cursor.readBytes(byteLength)),
       };
     }
-    case 5: // SMALLINT
-    case -6: // TINYINT (also read as a 2-byte short, not 1 byte — RowInputBase.readData routes both -6 and 5 to readSmallint())
+    case SQL_SMALLINT:
+    case SQL_TINYINT: // also read as a 2-byte short, not 1 byte — RowInputBase.readData routes both to readSmallint()
       return { kind: "number", value: cursor.readInt16() };
-    case 4: // INTEGER
+    case SQL_INTEGER:
       return { kind: "number", value: cursor.readInt32() };
-    case -5: // BIGINT
+    case SQL_BIGINT:
       return numericCellValue(cursor.readBigInt64(), 0);
-    case 6: // FLOAT
-    case 7: // REAL
-    case 8: // DOUBLE (all three read as an 8-byte IEEE754 double, per RowInputBinary.readReal)
+    case SQL_FLOAT:
+    case SQL_REAL:
+    case SQL_DOUBLE: // all three read as an 8-byte IEEE754 double, per RowInputBinary.readReal
       return { kind: "number", value: cursor.readFloat64() };
-    case 2: // NUMERIC
-    case 3: {
-      // DECIMAL
+    case SQL_NUMERIC:
+    case SQL_DECIMAL: {
       const byteLength = cursor.readInt32();
       const magnitudeBytes = cursor.readBytes(byteLength);
       const scale = cursor.readInt32();
       return numericCellValue(signedBigIntFromBytes(magnitudeBytes), scale);
     }
-    case 16: // BOOLEAN/BIT
+    case SQL_BOOLEAN_BIT:
       return { kind: "boolean", value: cursor.readUint8() !== 0 };
-    case 91: // DATE
+    case SQL_DATE:
       return {
         kind: "date",
         value: formatDate(cursor.readBigInt64(), options?.timeZone),
       };
-    case 92: // TIME
+    case SQL_TIME:
       return {
         kind: "time",
         value: formatTime(cursor.readBigInt64(), options?.timeZone),
       };
-    case 93: {
-      // TIMESTAMP
+    case SQL_TIMESTAMP: {
       const millis = cursor.readBigInt64();
       const nanos = cursor.readInt32();
       return {
