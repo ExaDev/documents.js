@@ -10,34 +10,65 @@ import { writeXLUnicodeString } from "../biff/string-writer";
 import { RecordBuilder } from "../biff/builder";
 import type { SheetRuleOperator } from "document-schema.js";
 
+// The genuinely-custom valType code; 0x0 names no check at all.
+const CUSTOM_VAL_TYPE_CODE = 0x7;
+const VAL_TYPE_NAMES = [
+  "whole",
+  "decimal",
+  "list",
+  "date",
+  "time",
+  "textLength",
+] as const;
+
+// The flags word the reader side of this pair unpacks, packed here bit by bit: errStyle occupies bits 4-6, the allow-blank, show-input and show-error flags are single bits at 8, 18 and 19, and typOperator occupies bits 20-23.
+const ERR_STYLE_SHIFT = 4;
+const NO_ERR_STYLE_CODE = 0x0;
+const ALLOW_BLANK_SHIFT = 8;
+const ALLOW_BLANK_FLAG = 0x1 << ALLOW_BLANK_SHIFT;
+const SHOW_INPUT_MSG_SHIFT = 18;
+const SHOW_INPUT_MSG_FLAG = 0x1 << SHOW_INPUT_MSG_SHIFT;
+const SHOW_ERROR_MSG_SHIFT = 19;
+const SHOW_ERROR_MSG_FLAG = 0x1 << SHOW_ERROR_MSG_SHIFT;
+const TYP_OPERATOR_SHIFT = 20;
+
+// A DV sqref cell list stores no boundaries: the u32 is all ones, and row and column indexes must fit their own fields.
+const NO_BOUNDARY = ~0;
+const MAX_ROW = 0xffff;
+const MAX_COLUMN = 0xff;
+
 // The write-side inverse of data-validation.ts's readDv ([MS-XLS] 2.4.95): one Dv record per ContentSheetDataValidation rule, preceded by the one Dval record ([MS-XLS] 2.4.96) the worksheet substream's own DataValidationTable grammar names as its wrapper. Everything here is the exact mirror of the reader's own field walk — the flags word bit-for-bit, the four XLUnicodeStrings in their declared order, the two DVParsedFormula structures (cce, the unused word, then the rgce bytes compileFormulaText produces), and the trailing SqRefU range list — so a Dv this writer emits reads back through readDv with every field intact.
 
 const VAL_TYPE_BY_TYPE: ReadonlyMap<
   ContentSheetDataValidation["type"],
   number
-> = new Map([
-  ["whole", 0x1],
-  ["decimal", 0x2],
-  ["list", 0x3],
-  ["date", 0x4],
-  ["time", 0x5],
-  ["textLength", 0x6],
-  // The schema's 'custom' covers both of the reader's own no-real-type-signal values: 0x0 ("any type, no check") and 0x7 (custom). The write side states the genuinely custom one — 0x0 names no check at all, which would weaken a rule whose formula the schema does carry.
-  ["custom", 0x7],
-]);
+> = new Map(
+  // The valType codes in [MS-XLS] order, one per schema type: 'whole' is 0x1 through 'textLength' at 0x6. The schema's 'custom' covers both of the reader's own no-real-type-signal values, 0x0 ("any type, no check") and 0x7, and the write side states the genuinely custom one because 0x0 names no check at all, which would weaken a rule whose formula the schema does carry.
+  VAL_TYPE_NAMES.map(
+    (type, index): readonly [ContentSheetDataValidation["type"], number] => [
+      type,
+      index + 1,
+    ],
+  ).concat([["custom", CUSTOM_VAL_TYPE_CODE] as const]),
+);
 
 // Dv's own typOperator enumeration is ZERO-based ([MS-XLS] 2.4.95's own field table: 0x0 Between through 0x7 Less than or equal) — deliberately unlike a CF record's own 1-based cp, a distinction the reader's own OPERATOR_BY_TYP_OPERATOR already encodes and this inverse mirrors.
 const TYP_OPERATOR_BY_OPERATOR: ReadonlyMap<SheetRuleOperator, number> =
-  new Map([
-    ["between", 0x0],
-    ["notBetween", 0x1],
-    ["equal", 0x2],
-    ["notEqual", 0x3],
-    ["greaterThan", 0x4],
-    ["lessThan", 0x5],
-    ["greaterThanOrEqual", 0x6],
-    ["lessThanOrEqual", 0x7],
-  ]);
+  new Map(
+    // The zero-based typOperator values in [MS-XLS] 2.4.95's own order.
+    (
+      [
+        "between",
+        "notBetween",
+        "equal",
+        "notEqual",
+        "greaterThan",
+        "lessThan",
+        "greaterThanOrEqual",
+        "lessThanOrEqual",
+      ] as const
+    ).map((operator, index) => [operator, index] as const),
+  );
 
 const ERR_STYLE_CODE: ReadonlyMap<
   NonNullable<ContentSheetDataValidation["errorStyle"]>,
@@ -70,15 +101,17 @@ function writeDvRecord(
   }
   // The flags word, mirroring readDv's own bit extraction exactly: valType (bits 0-3), errStyle (4-6), fAllowBlank (8), fShowInputMsg (18), fShowErrorMsg (19), typOperator (20-23).
   let flags = valType;
-  flags |= (ERR_STYLE_CODE.get(validation.errorStyle ?? "stop") ?? 0x0) << 4;
+  flags |=
+    (ERR_STYLE_CODE.get(validation.errorStyle ?? "stop") ??
+      NO_ERR_STYLE_CODE) << ERR_STYLE_SHIFT;
   if (validation.allowBlank === true) {
-    flags |= 0x1 << 8;
+    flags |= ALLOW_BLANK_FLAG;
   }
   if (validation.showInputMessage === true) {
-    flags |= 0x1 << 18;
+    flags |= SHOW_INPUT_MSG_FLAG;
   }
   if (validation.showErrorMessage === true) {
-    flags |= 0x1 << 19;
+    flags |= SHOW_ERROR_MSG_FLAG;
   }
   // 'list' and 'custom' have no comparison operator in the schema's own contract (its comment: "absent for 'list' and 'custom'"), matching the reader's own rule; every other type requires one, and a rule carrying none is a malformed model rather than a default to guess.
   const hasOperator =
@@ -95,7 +128,7 @@ function writeDvRecord(
         `data validation operator "${validation.operator}" has no Dv typOperator value`,
       );
     }
-    flags |= typOperator << 20;
+    flags |= typOperator << TYP_OPERATOR_SHIFT;
   }
   const isTwoOperand =
     validation.operator === "between" || validation.operator === "notBetween";
@@ -142,7 +175,7 @@ function writeDvalRecord(ruleCount: number): Uint8Array<ArrayBuffer> {
     .u16(0)
     .u32(0)
     .u32(0)
-    .u32(0xffffffff)
+    .u32(NO_BOUNDARY)
     .u32(ruleCount);
   return writeRecord(RECORD_DVAL, writer.build());
 }
@@ -157,10 +190,10 @@ export function writeSheetDataValidations(
   for (const validation of validations) {
     for (const range of validation.ranges) {
       if (
-        range.startRow > 0xffff ||
-        range.endRow > 0xffff ||
-        range.startColumn > 0xff ||
-        range.endColumn > 0xff
+        range.startRow > MAX_ROW ||
+        range.endRow > MAX_ROW ||
+        range.startColumn > MAX_COLUMN ||
+        range.endColumn > MAX_COLUMN
       ) {
         throw new BiffWriteError(
           `a data validation range (rows ${range.startRow}-${range.endRow}, columns ${range.startColumn}-${range.endColumn}) is outside BIFF8's own grid; a .xls workbook cannot address it`,
