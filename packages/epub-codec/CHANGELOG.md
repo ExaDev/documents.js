@@ -1,3 +1,18 @@
+## [5.1.14](https://github.com/ExaDev/documents.js/compare/epub-codec%405.1.13...epub-codec%405.1.14) (2026-09-25)
+
+### Code Refactoring
+
+* **epub-codec:** enforce max-lines and split the pre-walk helpers ([9958b68](https://github.com/ExaDev/documents.js/commit/9958b686a01d05ce17e32f218dce6455c248b8b7))
+
+### Tests
+
+* **epub-codec:** split the footnote write suites out of write.test.ts ([39b2d6f](https://github.com/ExaDev/documents.js/commit/39b2d6fd64c604d469d6eb139b78b3b0c1e8ff76))
+* **epub-codec:** split the media and footnote suites out of read.test.ts ([a8f6d20](https://github.com/ExaDev/documents.js/commit/a8f6d20b8caaf39d3771e11663682e9c4aaaf103))
+* **epub-codec:** split the spans suite in half ([26b4502](https://github.com/ExaDev/documents.js/commit/26b4502fa0208d1dc7ed7bc25080eb94d775d72b))
+* **epub-codec:** split the spans, inert and definition-list suites ([1729e0a](https://github.com/ExaDev/documents.js/commit/1729e0a7cee5226c28a72b3a1245226859fb82f0))
+* **epub-codec:** split the table and list suites out of read.test.ts ([9cf9573](https://github.com/ExaDev/documents.js/commit/9cf9573b1dca32112494bc654aad782ebedf0a95))
+* **epub-codec:** split the table write suites out of write.test.ts ([99974f7](https://github.com/ExaDev/documents.js/commit/99974f784499bb6733a7508042157e1196b55a1d))
+
 ## [5.1.13](https://github.com/ExaDev/documents.js/compare/epub-codec%405.1.12...epub-codec%405.1.13) (2026-09-25)
 
 
