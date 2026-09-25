@@ -4,7 +4,19 @@ import { writePdf } from "./write";
 import { LayoutDocumentSchema } from "./layout";
 
 // '%PDF-' — the PDF header (ISO 32000-1 section 7.5.2). Per the spec it may be preceded by arbitrary bytes (some producers prepend a comment or BOM), so this checks for the signature within the first kilobyte rather than requiring it at offset 0. A standalone, independently-duplicated copy of documents.js's own src/model/bytes.ts PdfBytesSchema logic — that file is co-located there alongside unrelated docx/pptx/odt schemas which must stay in documents.js, so this package owns its own narrow ~20-line copy of just the PDF-specific check rather than importing the whole thing.
-const PDF_HEADER = [0x25, 0x50, 0x44, 0x46, 0x2d];
+// The five ASCII bytes of the literal string '%PDF-': percent, 'P', 'D', 'F', hyphen.
+const PDF_HEADER_PERCENT = 0x25;
+const PDF_HEADER_P = 0x50;
+const PDF_HEADER_D = 0x44;
+const PDF_HEADER_F = 0x46;
+const PDF_HEADER_HYPHEN = 0x2d;
+const PDF_HEADER = [
+  PDF_HEADER_PERCENT,
+  PDF_HEADER_P,
+  PDF_HEADER_D,
+  PDF_HEADER_F,
+  PDF_HEADER_HYPHEN,
+];
 const PDF_HEADER_SEARCH_WINDOW = 1024;
 
 function containsBytesWithin(
