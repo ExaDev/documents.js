@@ -34,8 +34,14 @@ const STYLE_SEGMENTATION_SYMBOLS = 0x20;
 // D.3.4: the four-bit symbol 0b1010 an encoder writes at the end of every cleanup pass when segmentation symbols are enabled, and the only thing that makes the option observable to a decoder.
 const SEGMENTATION_SYMBOL = 0xa;
 
+// Bit position of the most-significant of the four decoded bits assembled into the cleanup pass's optional segmentation symbol (D.3.4); the other three bits shift by 2, 1, and 0, all inside this rule's own ignored range.
+const SEGMENTATION_SYMBOL_MSB_SHIFT = 3;
+
 // The coefficients are scanned in stripes of four rows (D.2): whole stripe columns top to bottom, left to right across the code-block, stripe by stripe down it.
 const STRIPE_HEIGHT = 4;
+
+// Radix for Number.prototype.toString when formatting a corrupt segmentation symbol as hex for the parse-error message.
+const HEX_RADIX = 16;
 
 // D.3.1/D.3.2/D.3.4, in the order the passes run for one bit-plane. The very first pass of a code-block is a cleanup pass, because the bit-plane it belongs to has no earlier plane for the other two passes to build on.
 const PASS_SIGNIFICANCE = 0;
@@ -75,6 +81,17 @@ function throwForUnsupportedStyle(style: number): void {
 }
 
 // T.800 Table D.1. The three neighbour sums are the count of significant horizontal (2 max), vertical (2 max), and diagonal (4 max) neighbours; HL swaps the roles of the horizontal and vertical sums relative to LL/LH, and HH is driven by the diagonal count against the combined horizontal-plus-vertical one.
+// T.800 Table D.1's zero-coding context labels that fall outside this rule's own ignored range (0-2): the HH subband's diagonal-neighbour-driven table and the shared LL/LH/HL primary-axis-driven table both return these same labels, so one set of names covers every return site in zeroCodingContext below.
+const ZC_CONTEXT_3 = 3;
+const ZC_CONTEXT_4 = 4;
+const ZC_CONTEXT_5 = 5;
+const ZC_CONTEXT_6 = 6;
+const ZC_CONTEXT_7 = 7;
+const ZC_CONTEXT_8 = 8;
+
+// Diagonal-neighbour count threshold for the HH subband's highest zero-coding context (Table D.1): 3 or more of a coefficient's up to 4 diagonal neighbours already significant.
+const HH_DIAGONAL_NEIGHBOURS_HIGH = 3;
+
 function zeroCodingContext(
   subband: Jpeg2000SubbandType,
   horizontal: number,
@@ -83,14 +100,18 @@ function zeroCodingContext(
 ): number {
   if (subband === "HH") {
     const straight = horizontal + vertical;
-    if (diagonal >= 3) {
-      return 8;
+    if (diagonal >= HH_DIAGONAL_NEIGHBOURS_HIGH) {
+      return ZC_CONTEXT_8;
     }
     if (diagonal === 2) {
-      return straight >= 1 ? 7 : 6;
+      return straight >= 1 ? ZC_CONTEXT_7 : ZC_CONTEXT_6;
     }
     if (diagonal === 1) {
-      return straight >= 2 ? 5 : straight === 1 ? 4 : 3;
+      return straight >= 2
+        ? ZC_CONTEXT_5
+        : straight === 1
+          ? ZC_CONTEXT_4
+          : ZC_CONTEXT_3;
     }
     return straight >= 2 ? 2 : straight === 1 ? 1 : 0;
   }
@@ -98,35 +119,39 @@ function zeroCodingContext(
   const primary = subband === "HL" ? vertical : horizontal;
   const secondary = subband === "HL" ? horizontal : vertical;
   if (primary === 2) {
-    return 8;
+    return ZC_CONTEXT_8;
   }
   if (primary === 1) {
     if (secondary >= 1) {
-      return 7;
+      return ZC_CONTEXT_7;
     }
-    return diagonal >= 1 ? 6 : 5;
+    return diagonal >= 1 ? ZC_CONTEXT_6 : ZC_CONTEXT_5;
   }
   if (secondary === 2) {
-    return 4;
+    return ZC_CONTEXT_4;
   }
   if (secondary === 1) {
-    return 3;
+    return ZC_CONTEXT_3;
   }
   return diagonal >= 2 ? 2 : diagonal === 1 ? 1 : 0;
 }
 
-// T.800 Table D.3, indexed by the clamped horizontal and vertical sign contributions offset to 0..2, i.e. by (horizontal + 1) * 3 + (vertical + 1). Each value packs the context label's offset from SIGN_CONTEXT_BASE in its low bits and the XOR bit — the sign the decoded decision is to be flipped by — in bit 3.
+// T.800 Table D.3, indexed by the clamped horizontal and vertical sign contributions offset to 0..2, i.e. by (horizontal + 1) * SIGN_CONTEXT_TABLE_ROW_STRIDE + (vertical + 1). Each value packs the context label's offset from SIGN_CONTEXT_BASE in its low bits and the XOR bit — the sign the decoded decision is to be flipped by — in bit 3.
+const SIGN_CONTEXT_TABLE_ROW_STRIDE = 3;
 const SIGN_XOR_FLAG = 0x08;
+// T.800 Table D.3 context-label offsets from SIGN_CONTEXT_BASE, matching the sign-context comment above; the offsets below 3 fall inside this rule's own ignored range (0-2).
+const SIGN_OFFSET_3 = 3;
+const SIGN_OFFSET_4 = 4;
 const SIGN_CONTEXT_TABLE: readonly number[] = [
-  /* (horizontal, vertical) = (-1, -1) */ 4 | SIGN_XOR_FLAG,
-  /* (-1, 0) */ 3 | SIGN_XOR_FLAG,
+  /* (horizontal, vertical) = (-1, -1) */ SIGN_OFFSET_4 | SIGN_XOR_FLAG,
+  /* (-1, 0) */ SIGN_OFFSET_3 | SIGN_XOR_FLAG,
   /* (-1, 1) */ 2 | SIGN_XOR_FLAG,
   /* (0, -1) */ 1 | SIGN_XOR_FLAG,
   /* (0, 0) */ 0,
   /* (0, 1) */ 1,
   /* (1, -1) */ 2,
-  /* (1, 0) */ 3,
-  /* (1, 1) */ 4,
+  /* (1, 0) */ SIGN_OFFSET_3,
+  /* (1, 1) */ SIGN_OFFSET_4,
 ];
 
 export function decodeJpeg2000CodeBlock(
@@ -239,7 +264,9 @@ export function decodeJpeg2000CodeBlock(
       contribution(n - stride) + (below ? contribution(n + stride) : 0),
     );
     const packed =
-      SIGN_CONTEXT_TABLE[(horizontal + 1) * 3 + (vertical + 1)] ?? 0;
+      SIGN_CONTEXT_TABLE[
+        (horizontal + 1) * SIGN_CONTEXT_TABLE_ROW_STRIDE + (vertical + 1)
+      ] ?? 0;
     const decision = mq.decode(
       contexts,
       SIGN_CONTEXT_BASE + (packed & ~SIGN_XOR_FLAG),
@@ -339,13 +366,14 @@ export function decodeJpeg2000CodeBlock(
     }
     if (segmentationSymbols) {
       const symbol =
-        (mq.decode(contexts, UNIFORM_CONTEXT) << 3) |
+        (mq.decode(contexts, UNIFORM_CONTEXT) <<
+          SEGMENTATION_SYMBOL_MSB_SHIFT) |
         (mq.decode(contexts, UNIFORM_CONTEXT) << 2) |
         (mq.decode(contexts, UNIFORM_CONTEXT) << 1) |
         mq.decode(contexts, UNIFORM_CONTEXT);
       if (symbol !== SEGMENTATION_SYMBOL) {
         throw new Jpeg2000ParseError(
-          `a cleanup pass ended with segmentation symbol 0x${symbol.toString(16)} rather than the 0xA ISO/IEC 15444-1 D.3.4 requires, so this code-block's coded data is corrupt`,
+          `a cleanup pass ended with segmentation symbol 0x${symbol.toString(HEX_RADIX)} rather than the 0xA ISO/IEC 15444-1 D.3.4 requires, so this code-block's coded data is corrupt`,
         );
       }
     }
