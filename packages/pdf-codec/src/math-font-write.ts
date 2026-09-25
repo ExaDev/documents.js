@@ -45,9 +45,12 @@ function buildWidthsArray(
   return pdfArray(entries);
 }
 
+// PDF glyph space (ISO 32000-1 9.8.1): FontDescriptor geometry fields are always expressed in this 1000-units-per-em space regardless of the font's own unitsPerEm — matches content-write.ts's and embedded-font.ts's own GLYPH_SPACE_UNITS_PER_EM.
+const GLYPH_SPACE_UNITS_PER_EM = 1000;
+
 function buildFontDescriptor(font: MathFont, fontFileRef: PdfObject): PdfDict {
   const d = font.descriptor;
-  const scale = 1000 / d.unitsPerEm; // FontDescriptor geometry fields are always expressed in a 1000-units-per-em glyph space regardless of the font's own unitsPerEm (ISO 32000-1 9.8.1) — STIX Two Math already uses 1000, so this is an identity scale in practice, but computed for real rather than assumed.
+  const scale = GLYPH_SPACE_UNITS_PER_EM / d.unitsPerEm; // STIX Two Math already uses 1000, so this is an identity scale in practice, but computed for real rather than assumed.
   return pdfDict({
     Type: pdfName("FontDescriptor"),
     FontName: pdfName("STIXTwoMath-Regular"),
