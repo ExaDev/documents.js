@@ -128,8 +128,10 @@ describe("runRangeMarkerExtents: isBlockScopedHalf", () => {
       firstContentIndex: -1,
       lastContentIndex: 100,
     };
+    // Arbitrary: the -1 shortcut this test exercises fires regardless of the end half's own array position.
+    const END_HALF_POSITION = 5;
     const extents = runRangeMarkerExtents(
-      [half(startEl, "start", 0), half(endEl, "end", 5)],
+      [half(startEl, "start", 0), half(endEl, "end", END_HALF_POSITION)],
       index,
     );
     expect(extents).toEqual([]);
@@ -142,13 +144,15 @@ describe("runRangeMarkerExtents: isBlockScopedHalf", () => {
     // The start half sits at array position 0, exactly firstContentIndex (0): leading must be false there (strictly less than, not less-than-or-equal), or the pair would be wrongly dropped. The end half sits at array position 5, past a lastContentIndex of 2 by a wide margin, pinning IT as block-scoped (via trailing) regardless of either boundary mutant here or in the sibling test below — so the pair's own "both block-scoped" AND hinges entirely on the start half's own leading value.
     const startEl = el("w:bookmarkStart", { "w:id": "z", "w:name": "bm" }, []);
     const endEl = el("w:bookmarkEnd", { "w:id": "z" }, []);
+    // endEl's own actual array position below: startEl (0), four fillers (1-4), endEl (5).
+    const END_HALF_ARRAY_POSITION = 5;
     const index: ParagraphContentIndex = {
       elements: [startEl, filler(), filler(), filler(), filler(), endEl],
       firstContentIndex: 0,
       lastContentIndex: 2,
     };
     const extents = runRangeMarkerExtents(
-      [half(startEl, "start", 0), half(endEl, "end", 5)],
+      [half(startEl, "start", 0), half(endEl, "end", END_HALF_ARRAY_POSITION)],
       index,
     );
     expect(extents).toEqual([
@@ -161,13 +165,15 @@ describe("runRangeMarkerExtents: isBlockScopedHalf", () => {
     const startEl = el("w:bookmarkStart", { "w:id": "z", "w:name": "bm" }, []);
     const endEl = el("w:bookmarkEnd", { "w:id": "z" }, []);
     const elements = [startEl, ...Array.from({ length: 14 }, filler), endEl];
+    // endEl's own actual array position: startEl (0), fourteen fillers (1-14), endEl (15).
+    const END_HALF_ARRAY_POSITION = 15;
     const index: ParagraphContentIndex = {
       elements,
       firstContentIndex: 10,
-      lastContentIndex: 15,
+      lastContentIndex: END_HALF_ARRAY_POSITION,
     };
     const extents = runRangeMarkerExtents(
-      [half(startEl, "start", 0), half(endEl, "end", 15)],
+      [half(startEl, "start", 0), half(endEl, "end", END_HALF_ARRAY_POSITION)],
       index,
     );
     expect(extents).toEqual([
