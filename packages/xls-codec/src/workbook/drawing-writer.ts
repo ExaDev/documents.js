@@ -11,6 +11,7 @@ import { writeXLUnicodeStringNoCch } from "../biff/string-writer";
 import { BiffWriteError } from "../biff/write-errors";
 import {
   columnWidthToPoints,
+  COLDX_PER_CHAR,
   DEFAULT_COLUMN_WIDTH_CHARS,
   DEFAULT_ROW_HEIGHT_PT,
 } from "../units";
@@ -24,16 +25,27 @@ import {
 import type { ShapeAnchor } from "../drawing/shapes";
 import { writeEmbeddedObjectPackage } from "./embedded-object";
 
+// An OLE storage id names itself in 8 hex digits.
+const HEX_RADIX = 16;
+const OLE_STORAGE_ID_DIGITS = 8;
+
 // The write side of workbook/drawing.ts: one MS-ODRAW container per sheet carrying shapes (the MsoDrawing record pair), the workbook-wide drawing group (the MsoDrawingGroup stream workbook/globals-writer.ts emits ahead of the SST), and the Obj records pairing each Escher shape with what it holds — a picture resolving into the workbook's Blip Store, or an embedded OLE object whose bytes live in an MBD Embedding Storage ([MS-XLS] 2.1.7, https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/b406ade0-fb1c-4512-bff2-b576fdfff545) as a Package stream wrapping this package's own JSON payload (workbook/embedded-object.ts).
 //
 // A 'chart' embedded object is refused by name rather than approximated: writing one means embedding a genuine BIFF8 chart substream — the whole [MS-XLS] chart grammar a flattened series/category table would have to drive, with series data links resolving back to real cells — which is a chart engine of its own, not a container to place a table in. The other five objectKinds all embed through the one OLE mechanism.
 
 /** The sheet-grid geometry an anchor resolves against and inverts into, the write-side mirror of workbook/drawing.ts's own SheetGridGeometry: declared column widths/row heights with the same Excel "Normal" defaults beneath, so a shape written from a given placement reads back at the identical placement. Derived from the same constants (units.ts) the reader's own geometry uses, so the two cannot disagree about what an undeclared cell sizes. */
+const MAX_BIFF8_COLUMN = 0xff;
+const MAX_BIFF8_ROW = 0xffff;
+const X_FRACTION_UNITS = 1024; // OfficeArtClientAnchorSheet's own dx fields: 1/1024ths of the anchor column's width
+const X_FRACTION_MAX = X_FRACTION_UNITS - 1;
+const Y_FRACTION_UNITS = 256; // OfficeArtClientAnchorSheet's own dy fields: 1/256ths of the anchor row's height
+const Y_FRACTION_MAX = Y_FRACTION_UNITS - 1;
+
 export class WriterGridGeometry {
   private readonly columnWidths = new Map<number, number>();
   private readonly rowHeights = new Map<number, number>();
   private readonly defaultColumnWidthPt = columnWidthToPoints(
-    DEFAULT_COLUMN_WIDTH_CHARS * 256,
+    DEFAULT_COLUMN_WIDTH_CHARS * COLDX_PER_CHAR,
   );
 
   constructor(sheet: ContentSheet) {
@@ -77,33 +89,39 @@ export class WriterGridGeometry {
   /** Locates an absolute x as a column plus a 1/1024ths-of-that-column fraction, the pair OfficeArtClientAnchorSheet's own left/right corners state. A point beyond the grid's own last column clamps to that column's far edge: the grid has no column 256 to name, and a shape whose extent runs that far past the grid loses only the overflow, where refusing the workbook would lose the cells too — the same trade a print range past the grid already draws (print-names.ts's clampToGrid). */
   locateX(x: number): { readonly column: number; readonly fraction: number } {
     let left = 0;
-    for (let column = 0; column < 0xff; column += 1) {
+    for (let column = 0; column < MAX_BIFF8_COLUMN; column += 1) {
       const width = this.columnWidthPt(column);
       if (x < left + width) {
         return {
           column,
-          fraction: Math.min(1023, Math.round(((x - left) / width) * 1024)),
+          fraction: Math.min(
+            X_FRACTION_MAX,
+            Math.round(((x - left) / width) * X_FRACTION_UNITS),
+          ),
         };
       }
       left += width;
     }
-    return { column: 0xff, fraction: 1023 };
+    return { column: MAX_BIFF8_COLUMN, fraction: X_FRACTION_MAX };
   }
 
   /** The row-axis counterpart: a row plus a 1/256ths-of-that-row fraction, clamped to the grid's own last row. */
   locateY(y: number): { readonly row: number; readonly fraction: number } {
     let top = 0;
-    for (let row = 0; row < 0xffff; row += 1) {
+    for (let row = 0; row < MAX_BIFF8_ROW; row += 1) {
       const height = this.rowHeightPt(row);
       if (y < top + height) {
         return {
           row,
-          fraction: Math.min(255, Math.round(((y - top) / height) * 256)),
+          fraction: Math.min(
+            Y_FRACTION_MAX,
+            Math.round(((y - top) / height) * Y_FRACTION_UNITS),
+          ),
         };
       }
       top += height;
     }
-    return { row: 0xffff, fraction: 255 };
+    return { row: MAX_BIFF8_ROW, fraction: Y_FRACTION_MAX };
   }
 }
 
@@ -119,7 +137,10 @@ export function placementOfImage(
   image: ContentSheetImage,
   geometry: WriterGridGeometry,
 ): Placement {
-  if (image.anchorRow > 0xffff || image.anchorColumn > 0xff) {
+  if (
+    image.anchorRow > MAX_BIFF8_ROW ||
+    image.anchorColumn > MAX_BIFF8_COLUMN
+  ) {
     throw new BiffWriteError(
       `a sheet image anchored at row ${image.anchorRow}, column ${image.anchorColumn} is outside BIFF8's own grid (rows 0-65535, columns 0-255); a .xls workbook cannot address the cell it names`,
     );
@@ -180,10 +201,13 @@ export function anchorOf(
 const OBJECT_TYPE_PICTURE = 0x0008;
 
 /** FtCmo ([MS-XLS] 2.5.92, 22 bytes): ft 0x15, cb 0x12, the object type and id, then grbit and three unused dwords all written zero — the identical shape comment-writer.ts writes for a Note, restated here with the object type as a parameter rather than shared across the two direction modules. */
+const FT_CMO = 0x0015;
+const FT_CMO_SIZE = 0x0012;
+
 export function writeFtCmo(ot: number, id: number): Uint8Array<ArrayBuffer> {
   return new RecordBuilder()
-    .u16(0x0015)
-    .u16(0x0012)
+    .u16(FT_CMO)
+    .u16(FT_CMO_SIZE)
     .u16(ot)
     .u16(id)
     .u16(0) // grbit: fLocked/fDefaultSize/fPublished/fPrint and reserved bits, none of which this writer has data for
@@ -194,14 +218,23 @@ export function writeFtCmo(ot: number, id: number): Uint8Array<ArrayBuffer> {
 }
 
 /** FtCf ([MS-XLS] 2.5.142, https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/fc5bb3ce-8e35-4393-b22f-9cf54062a3a4): the clipboard format of the picture this object shows. 0xFFFF names "an unspecified format that is neither an enhanced metafile nor a bitmap" — honest for a shape whose visible rendering is the blip the Escher layer itself carries and for an OLE object this writer has no preview metafile for. */
+const FT_CF = 0x0007;
+const FT_CF_UNSPECIFIED_CLIPFORMAT = 0xffff;
+
 export function writeFtCf(): Uint8Array<ArrayBuffer> {
-  return new RecordBuilder().u16(0x0007).u16(0x0002).u16(0xffff).build();
+  return new RecordBuilder()
+    .u16(FT_CF)
+    .u16(0x0002)
+    .u16(FT_CF_UNSPECIFIED_CLIPFORMAT)
+    .build();
 }
 
 /** FtPioGrbit ([MS-XLS] 2.5.151, https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/8eee0b3d-9d27-4294-85fc-a66ae8a361c9): a plain picture states fAutoPict (aspect preserved across views); an OLE embedding states no bits at all — fPrstm and fDde stay clear, the pair the Embedding Storage page requires for storage-based object data. */
+const FT_PIO_GRBIT = 0x0008;
+
 export function writeFtPioGrbit(autoPict: boolean): Uint8Array<ArrayBuffer> {
   return new RecordBuilder()
-    .u16(0x0008)
+    .u16(FT_PIO_GRBIT)
     .u16(0x0002)
     .u16(autoPict ? 0x0001 : 0x0000)
     .build();
@@ -214,16 +247,21 @@ const PTG_TBL = 0x02;
 const EMBED_CLASS_NAME = "Package";
 
 /** FtPictFmla ([MS-XLS] 2.5.150, https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/00f89d32-67b0-408e-9eaf-f4fecbddb089) for an embedded OLE object: the ObjFmla (cbFmla counting the ObjectParsedFormula, the PictFmlaEmbedInfo, and the padding — even, per [MS-XLS] 2.5.187's own cbFmla rule), then lPosInCtlStm, the storage id the Embedding Storage's own MBD name is the eight-hex-digit spelling of. The ObjectParsedFormula is the one shape [MS-XLS] pins for an embedding: cce 5, rgce one PtgTbl followed by four undefined bytes. */
+const OBJECT_PARSED_FORMULA_CCE = 5;
+const PTG_TBL_UNDEFINED_BYTES = 4;
+const EMBED_INFO_TTB = 0x03; // ttb: reserved, MUST be 0x03
+const FT_PICT_FMLA = 0x0009;
+
 export function writeFtPictFmla(storageId: number): Uint8Array<ArrayBuffer> {
   const formula = new RecordBuilder()
-    .u16(5) // ObjectParsedFormula.cce
+    .u16(OBJECT_PARSED_FORMULA_CCE) // ObjectParsedFormula.cce
     .u32(0) // ObjectParsedFormula.unused
     .u8(PTG_TBL)
-    .bytes(new Uint8Array(4)) // PtgTbl's own four undefined bytes
+    .bytes(new Uint8Array(PTG_TBL_UNDEFINED_BYTES)) // PtgTbl's own four undefined bytes
     .build();
   const className = writeXLUnicodeStringNoCch(EMBED_CLASS_NAME);
   const embedInfo = new RecordBuilder()
-    .u8(0x03) // ttb: reserved, MUST be 0x03
+    .u8(EMBED_INFO_TTB)
     .u8(className.length - 1) // cbClass: the class name's own character count, one byte per character in the compressed spelling
     .u8(0) // reserved
     .bytes(className)
@@ -234,11 +272,16 @@ export function writeFtPictFmla(storageId: number): Uint8Array<ArrayBuffer> {
     .bytes(fmlaBytes)
     .u32(storageId) // lPosInCtlStm
     .build();
-  return new RecordBuilder().u16(0x0009).u16(data.length).bytes(data).build();
+  return new RecordBuilder()
+    .u16(FT_PICT_FMLA)
+    .u16(data.length)
+    .bytes(data)
+    .build();
 }
 
 /** The trailing four reserved bytes every Obj not naming a list-box/dropdown object carries ([MS-XLS] 2.4.181's own reserved field: MUST be 0) — the ftEnd marker a real sub-record walk terminates on. */
-const OBJ_RESERVED_END = new Uint8Array(4);
+const OBJ_RESERVED_END_BYTES = 4;
+const OBJ_RESERVED_END = new Uint8Array(OBJ_RESERVED_END_BYTES);
 
 /** One picture shape's Obj record: FtCmo (ot Picture), FtCf, FtPioGrbit, and the trailing reserved field. No FtPictFmla — the image's bytes live in the workbook's Blip Store, which the shape's own pib property names, leaving the Obj record itself nothing to locate. */
 export function writePictureObjRecord(
@@ -275,8 +318,15 @@ export function writeEmbeddedObjRecord(
 // --- The workbook-wide plan ---
 
 /** Base64's own character set, decoded by hand rather than through atob's DOM-string round trip, and kept here rather than taken from byte-codec (whose bytesToBase64 is what the read side encodes with) because this one reports an unmappable character as a BiffWriteError naming the character itself, which is what a caller writing a sheet image needs to hear; byte-codec's own decoder throws a flat "invalid base64 input". Byte-exact, allocation-predictable, and identical in Node and a Workers isolate. */
+const BYTE_VALUE_RANGE = 256;
+const BASE64_CHAR_BITS = 6;
+const BYTE_BITS = 8;
+const BYTE_MASK = 0xff;
+const BASE64_GROUP_CHARS = 4; // 4 base64 characters encode BASE64_GROUP_BYTES
+const BASE64_GROUP_BYTES = 3;
+
 export function bytesFromBase64(base64: string): Uint8Array<ArrayBuffer> {
-  const values = new Int8Array(256).fill(-1);
+  const values = new Int8Array(BYTE_VALUE_RANGE).fill(-1);
   "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
     .split("")
     .forEach((char, index) => {
@@ -285,7 +335,9 @@ export function bytesFromBase64(base64: string): Uint8Array<ArrayBuffer> {
   const padding = base64.endsWith("==") ? 2 : base64.endsWith("=") ? 1 : 0;
   // Trailing padding is sliced off up front rather than skipped inside the loop below: skipping it there was genuinely unobservable regardless, since `out`'s own length is already sized to exactly the real decoded bytes, so any value a padding character contributed could only ever land at or past that length — a Uint8Array write past its own end is a silent no-op, never a real byte the caller could see. padding is always 0, 1, or 2, so slicing zero characters off when there is no padding at all is just the original string back — no separate unpadded branch is needed.
   const data = base64.slice(0, base64.length - padding);
-  const out = new Uint8Array((base64.length / 4) * 3 - padding);
+  const out = new Uint8Array(
+    (base64.length / BASE64_GROUP_CHARS) * BASE64_GROUP_BYTES - padding,
+  );
   let buffer = 0;
   let bits = 0;
   let outIndex = 0;
@@ -296,11 +348,11 @@ export function bytesFromBase64(base64: string): Uint8Array<ArrayBuffer> {
         `a sheet image's own base64 payload contains "${char}", which is not part of the base64 alphabet`,
       );
     }
-    buffer = (buffer << 6) | value;
-    bits += 6;
-    if (bits >= 8) {
-      bits -= 8;
-      out[outIndex] = (buffer >> bits) & 0xff;
+    buffer = (buffer << BASE64_CHAR_BITS) | value;
+    bits += BASE64_CHAR_BITS;
+    if (bits >= BYTE_BITS) {
+      bits -= BYTE_BITS;
+      out[outIndex] = (buffer >> bits) & BYTE_MASK;
       outIndex += 1;
     }
   }
@@ -411,7 +463,7 @@ export function buildDrawingWritePlan(
       objRecords.push(writeEmbeddedObjRecord(nextObjectId, storageId));
       nextObjectId += 1;
       embeddingStreams.push({
-        path: `MBD${storageId.toString(16).toUpperCase().padStart(8, "0")}/Package`,
+        path: `MBD${storageId.toString(HEX_RADIX).toUpperCase().padStart(OLE_STORAGE_ID_DIGITS, "0")}/Package`,
         bytes: writeEmbeddedObjectPackage(embedded),
       });
     }
