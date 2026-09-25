@@ -32,15 +32,29 @@ export interface PdfDecryptor {
   ) => Uint8Array<ArrayBuffer>;
 }
 
+const HEX_RADIX = 16;
+const HEX_CHARS_PER_BYTE = 2;
+
+// Decodes a fixed hex string into bytes: used below for cryptographic constants whose exact byte sequence is spec-mandated rather than produced by any formula, where a 30+-element array literal would read as a wall of unrelated magic numbers instead of the one fixed value it actually is.
+function bytesFromHex(hex: string): Uint8Array<ArrayBuffer> {
+  const bytes = new Uint8Array(hex.length / HEX_CHARS_PER_BYTE);
+  for (let i = 0; i < bytes.length; i++) {
+    const start = i * HEX_CHARS_PER_BYTE;
+    bytes[i] = parseInt(
+      hex.substring(start, start + HEX_CHARS_PER_BYTE),
+      HEX_RADIX,
+    );
+  }
+  return bytes;
+}
+
 // ISO 32000-1 7.6.3.3, Algorithm 2, step (a): the 32-byte padding string every password (including the empty one) is padded to or truncated at. Exported: encrypt-write.ts's Algorithm 3/8/9 need the same constant to pad a real owner/user password the same way.
-export const PASSWORD_PADDING = new Uint8Array([
-  0x28, 0xbf, 0x4e, 0x5e, 0x4e, 0x75, 0x8a, 0x41, 0x64, 0x00, 0x4e, 0x56, 0xff,
-  0xfa, 0x01, 0x08, 0x2e, 0x2e, 0x00, 0xb6, 0xd0, 0x68, 0x3e, 0x80, 0x2f, 0x0c,
-  0xa9, 0xfe, 0x64, 0x53, 0x69, 0x7a,
-]);
+export const PASSWORD_PADDING = bytesFromHex(
+  "28bf4e5e4e758a4164004e56fffa01082e2e00b6d0683e802f0ca9fe6453697a",
+);
 
 // Algorithm 1's own trailing salt, appended to the per-object key input for an AES (but not an RC4) crypt filter — the four bytes of the ASCII string "sAlT". Exported: the same per-object key derivation (objectKey below) is symmetric between read and write, so encrypt-write.ts reuses this rather than re-deriving it.
-export const AES_OBJECT_KEY_SALT = new Uint8Array([0x73, 0x41, 0x6c, 0x54]);
+export const AES_OBJECT_KEY_SALT = new TextEncoder().encode("sAlT");
 
 export const MD5_DIGEST_BYTES = 16;
 const OBJECT_KEY_EXTRA_BYTES = 5; // Algorithm 1: three object-number bytes plus two generation bytes
@@ -56,6 +70,9 @@ export const RC4_40_KEY_BYTES = 5;
 export const AESV2_KEY_BYTES = 16;
 const DEFAULT_KEY_BITS = 40;
 const BITS_PER_BYTE = 8;
+const BYTE_MASK = (1 << BITS_PER_BYTE) - 1; // 0xff
+const UINT32_BYTE_2_SHIFT = 16;
+const UINT32_BYTE_3_SHIFT = 24;
 const MAX_RC4_KEY_BYTES = 16;
 export const ZERO_IV = new Uint8Array(AES_BLOCK_BYTES);
 
@@ -103,10 +120,10 @@ function bytesEqual(
 export function permissionsBytes(p: number): Uint8Array<ArrayBuffer> {
   const unsigned = Math.trunc(p) >>> 0;
   return new Uint8Array([
-    unsigned & 0xff,
-    (unsigned >>> 8) & 0xff,
-    (unsigned >>> 16) & 0xff,
-    (unsigned >>> 24) & 0xff,
+    unsigned & BYTE_MASK,
+    (unsigned >>> BITS_PER_BYTE) & BYTE_MASK,
+    (unsigned >>> UINT32_BYTE_2_SHIFT) & BYTE_MASK,
+    (unsigned >>> UINT32_BYTE_3_SHIFT) & BYTE_MASK,
   ]);
 }
 
@@ -124,6 +141,12 @@ export function padOrTruncatePassword(
 }
 
 // ISO 32000-1 7.6.3.3, Algorithm 2, generalised over an already-padded password (step (a) run once by the caller): both the read path (always the padded empty password — see computeLegacyFileKey below) and encrypt-write.ts's write path (a real, possibly non-empty, padded password) share every remaining step. Exported for that reuse.
+// Algorithm 2 step (f) applies from this revision onward (/EncryptMetadata is a revision 4+ concept).
+const METADATA_FLAG_MIN_REVISION = 4;
+const METADATA_NOT_ENCRYPTED_FLAG_BYTES = 4;
+// Algorithm 2 step (h): revision 3 and later iterate the MD5 digest LEGACY_KEY_ITERATIONS times.
+const ITERATED_REVISION_MIN = 3;
+
 export function computeLegacyFileKeyFromPaddedPassword(
   paddedPassword: Uint8Array<ArrayBuffer>,
   owner: Uint8Array<ArrayBuffer>,
@@ -139,12 +162,14 @@ export function computeLegacyFileKeyFromPaddedPassword(
     permissionsBytes(permissions),
     fileId,
   ];
-  if (revision >= 4 && !encryptMetadata) {
+  if (revision >= METADATA_FLAG_MIN_REVISION && !encryptMetadata) {
     // Algorithm 2 step (f): four 0xFF bytes stand in for the metadata-is-not-encrypted flag.
-    parts.push(new Uint8Array([0xff, 0xff, 0xff, 0xff]));
+    parts.push(
+      new Uint8Array(METADATA_NOT_ENCRYPTED_FLAG_BYTES).fill(BYTE_MASK),
+    );
   }
   let digest = md5(concatBytes(parts));
-  if (revision >= 3) {
+  if (revision >= ITERATED_REVISION_MIN) {
     for (let i = 0; i < LEGACY_KEY_ITERATIONS; i++) {
       digest = md5(digest.subarray(0, keyBytes));
     }
@@ -208,6 +233,12 @@ function legacyUserPasswordVerifies(
 }
 
 // ISO 32000-2 7.6.4.3.4, Algorithm 2.B: the revision-6 hardened password hash. Revision 5 (a deprecated Adobe extension that shipped before revision 6 was standardised) stops at the plain SHA-256 of the same input. Exported: encrypt-write.ts's own Algorithm 8/9 (computing /U, /UE, /O, /OE) call the identical hash the read side uses to verify them.
+// Revision 5 is a deprecated pre-standard Adobe extension that stops at the plain SHA-256 of the input; revision 6 (the standardised form) continues into Algorithm 2.B's own round loop below.
+const HARDENED_HASH_SHA256_ONLY_REVISION = 5;
+const STANDARD_AESV3_REVISION = 6;
+// Algorithm 2.B: "the first 16 bytes of E taken as an unsigned big-endian integer, modulo 3" selects among SHA-256/384/512.
+const HASH_SELECTOR_MODULUS = 3;
+
 export function hardenedHash(
   password: Uint8Array<ArrayBuffer>,
   salt: Uint8Array<ArrayBuffer>,
@@ -215,7 +246,7 @@ export function hardenedHash(
   revision: number,
 ): Uint8Array<ArrayBuffer> {
   let k = sha256(concatBytes([password, salt, userData]));
-  if (revision === 5) {
+  if (revision === HARDENED_HASH_SHA256_ONLY_REVISION) {
     return k;
   }
   // Algorithm 2.B runs at least R6_MINIMUM_ROUNDS rounds before the last-byte
@@ -241,7 +272,7 @@ export function hardenedHash(
     for (let i = 0; i < AES_BLOCK_BYTES; i++) {
       sum += e[i]!;
     }
-    const selector = sum % 3;
+    const selector = sum % HASH_SELECTOR_MODULUS;
     k = selector === 0 ? sha256(e) : selector === 1 ? sha384(e) : sha512(e);
     round++;
   } while (
@@ -353,6 +384,11 @@ function cryptFilterKeyBytes(
     : declared;
 }
 
+// /V 5 (AESV3) and the legacy handler's own /V 4 (crypt-filter-capable RC4/AESV2) and /R 4 (its own maximum revision).
+const V5_HANDLER_VERSION = 5;
+const V4_HANDLER_VERSION = 4;
+const LEGACY_MAX_REVISION = 4;
+
 function setUpHandler(
   encryptDict: PdfDict,
   fileId: Uint8Array<ArrayBuffer>,
@@ -365,8 +401,11 @@ function setUpHandler(
   const encryptMetadata =
     encryptMetadataEntry?.kind === "bool" ? encryptMetadataEntry.value : true;
 
-  if (version === 5) {
-    if (revision !== 5 && revision !== 6) {
+  if (version === V5_HANDLER_VERSION) {
+    if (
+      revision !== HARDENED_HASH_SHA256_ONLY_REVISION &&
+      revision !== STANDARD_AESV3_REVISION
+    ) {
       throw new PdfEncryptedError(
         `/V 5 encryption with an unsupported revision /R ${String(revision)}`,
       );
@@ -381,13 +420,13 @@ function setUpHandler(
     };
   }
 
-  if (version !== 1 && version !== 2 && version !== 4) {
+  if (version !== 1 && version !== 2 && version !== V4_HANDLER_VERSION) {
     // /V 0 (undocumented), /V 3 (an unpublished algorithm Adobe never specified), and anything beyond 5 are all genuinely unimplementable from the published spec rather than merely unimplemented.
     throw new PdfEncryptedError(
       `unsupported standard security handler version /V ${String(version)}`,
     );
   }
-  if (revision < 2 || revision > 4) {
+  if (revision < 2 || revision > LEGACY_MAX_REVISION) {
     throw new PdfEncryptedError(
       `unsupported standard security handler revision /R ${String(revision)}`,
     );
@@ -395,9 +434,13 @@ function setUpHandler(
 
   // /V 1 and /V 2 have no crypt-filter machinery at all: RC4 applies uniformly to every string and every stream. Resolving the filters first, before the key length, means a file naming a /CFM this codec cannot implement says so, rather than failing earlier with a misleading complaint about that filter's key size.
   const streamMethod: CipherMethod =
-    version === 4 ? methodFromCryptFilterName(encryptDict, "StmF") : "rc4";
+    version === V4_HANDLER_VERSION
+      ? methodFromCryptFilterName(encryptDict, "StmF")
+      : "rc4";
   const stringMethod: CipherMethod =
-    version === 4 ? methodFromCryptFilterName(encryptDict, "StrF") : "rc4";
+    version === V4_HANDLER_VERSION
+      ? methodFromCryptFilterName(encryptDict, "StrF")
+      : "rc4";
   const keyBytes =
     version === 1
       ? RC4_40_KEY_BYTES
@@ -436,11 +479,11 @@ export function objectKey(
   method: CipherMethod,
 ): Uint8Array<ArrayBuffer> {
   const extra = new Uint8Array(OBJECT_KEY_EXTRA_BYTES);
-  extra[0] = num & 0xff;
-  extra[1] = (num >>> 8) & 0xff;
-  extra[2] = (num >>> 16) & 0xff;
-  extra[3] = gen & 0xff;
-  extra[4] = (gen >>> 8) & 0xff;
+  extra[0] = num & BYTE_MASK;
+  extra[1] = (num >>> BITS_PER_BYTE) & BYTE_MASK;
+  extra[2] = (num >>> UINT32_BYTE_2_SHIFT) & BYTE_MASK;
+  extra[3] = gen & BYTE_MASK;
+  extra[4] = (gen >>> BITS_PER_BYTE) & BYTE_MASK;
   const parts =
     method === "aes" ? [fileKey, extra, AES_OBJECT_KEY_SALT] : [fileKey, extra];
   const digest = md5(concatBytes(parts));
