@@ -23,6 +23,20 @@ import { renderBlocksNeutral } from "./contentBlocks";
 import { flexColumn, previewFrame } from "./previewPanel.css";
 import * as styles from "./SlidesPreview.css";
 
+// The document model carries each colour channel as a 0..1 fraction; CSS rgb() wants the 8-bit value.
+const COLOR_CHANNEL_MAX = 255;
+
+// The line height a shape sits at before its own lineSpacingReduction is taken off, matching what a presentation renders single-spaced text at.
+const DEFAULT_LINE_HEIGHT = 1.5;
+
+// Dash geometry is expressed in multiples of the stroke's own width rather than in fixed lengths, so a hairline and a thick rule both read as recognisably dashed. A dot is a near-zero-length dash drawn with a round cap.
+const DASH_LENGTH_MULTIPLE = 3;
+const DASH_GAP_MULTIPLE = 2;
+const DOT_LENGTH_MULTIPLE = 0.1;
+
+// The underlay is drawn wider than the stroke it sits behind so the gap pass can cut a visible channel through it.
+const UNDERLAY_STROKE_MULTIPLE = 3;
+
 export interface SlidesPreviewProps {
   label: string;
   format: string;
@@ -166,7 +180,7 @@ function renderShape(shape: ContentShape, key: number): ReactNode {
   const fontSize = `${shape.fontScale}em`;
   const lineHeight =
     shape.lineSpacingReduction !== undefined
-      ? String(1.5 - shape.lineSpacingReduction)
+      ? String(DEFAULT_LINE_HEIGHT - shape.lineSpacingReduction)
       : undefined;
   const padding = `${shape.insetTopPt}pt ${shape.insetRightPt}pt ${shape.insetBottomPt}pt ${shape.insetLeftPt}pt`;
 
@@ -224,7 +238,7 @@ function renderDoubleStrokeVector(
     <g key={key}>
       {renderVectorSingle(vector, keys.underlay, {
         stroke: colorToCss(stroke.color),
-        strokeWidth: stroke.widthPt * 3,
+        strokeWidth: stroke.widthPt * UNDERLAY_STROKE_MULTIPLE,
       })}
       {renderVectorSingle(vector, keys.gap, {
         stroke: gapColor,
@@ -307,7 +321,7 @@ function colorToCss(
 ): string {
   return color === undefined
     ? "none"
-    : `rgb(${Math.round(color.r * 255)} ${Math.round(color.g * 255)} ${Math.round(color.b * 255)})`;
+    : `rgb(${Math.round(color.r * COLOR_CHANNEL_MAX)} ${Math.round(color.g * COLOR_CHANNEL_MAX)} ${Math.round(color.b * COLOR_CHANNEL_MAX)})`;
 }
 
 function strokeAttrs(stroke: ContentStroke | undefined): {
@@ -327,9 +341,9 @@ function strokeAttrs(stroke: ContentStroke | undefined): {
     strokeWidth: stroke.widthPt,
   };
   if (stroke.style === "dashed") {
-    attrs.strokeDasharray = `${stroke.widthPt * 3} ${stroke.widthPt * 2}`;
+    attrs.strokeDasharray = `${stroke.widthPt * DASH_LENGTH_MULTIPLE} ${stroke.widthPt * DASH_GAP_MULTIPLE}`;
   } else if (stroke.style === "dotted") {
-    attrs.strokeDasharray = `${stroke.widthPt * 0.1} ${stroke.widthPt * 2}`;
+    attrs.strokeDasharray = `${stroke.widthPt * DOT_LENGTH_MULTIPLE} ${stroke.widthPt * DASH_GAP_MULTIPLE}`;
     attrs.strokeLinecap = "round";
   }
   return attrs;
