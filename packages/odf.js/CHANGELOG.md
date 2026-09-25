@@ -1,3 +1,9 @@
+## [11.1.12](https://github.com/ExaDev/documents.js/compare/odf.js%4011.1.11...odf.js%4011.1.12) (2026-09-25)
+
+### Miscellaneous Chores
+
+* **lint:** drop the rule-debt lists that are now empty ([cb3449b](https://github.com/ExaDev/documents.js/commit/cb3449bc3a444ae3a3676e82b09a4d14f5e9501d))
+
 ## [11.1.11](https://github.com/ExaDev/documents.js/compare/odf.js%4011.1.10...odf.js%4011.1.11) (2026-09-25)
 
 ### Bug Fixes

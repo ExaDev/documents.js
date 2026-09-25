@@ -1,3 +1,9 @@
+## [1.2.10](https://github.com/ExaDev/documents.js/compare/excel-number-format%401.2.9...excel-number-format%401.2.10) (2026-09-25)
+
+### Miscellaneous Chores
+
+* **lint:** drop the rule-debt lists that are now empty ([cb3449b](https://github.com/ExaDev/documents.js/commit/cb3449bc3a444ae3a3676e82b09a4d14f5e9501d))
+
 ## [1.2.9](https://github.com/ExaDev/documents.js/compare/excel-number-format%401.2.8...excel-number-format%401.2.9) (2026-09-24)
 
 ### Bug Fixes

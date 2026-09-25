@@ -1,3 +1,9 @@
+## [1.0.55](https://github.com/ExaDev/documents.js/compare/pdf-raster-cpu%401.0.54...pdf-raster-cpu%401.0.55) (2026-09-25)
+
+### Miscellaneous Chores
+
+* **lint:** drop the rule-debt lists that are now empty ([cb3449b](https://github.com/ExaDev/documents.js/commit/cb3449bc3a444ae3a3676e82b09a4d14f5e9501d))
+
 ## [1.0.54](https://github.com/ExaDev/documents.js/compare/pdf-raster-cpu%401.0.53...pdf-raster-cpu%401.0.54) (2026-09-25)
 
 

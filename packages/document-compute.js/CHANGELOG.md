@@ -1,3 +1,14 @@
+## [1.6.53](https://github.com/ExaDev/documents.js/compare/document-compute.js%401.6.52...document-compute.js%401.6.53) (2026-09-25)
+
+### Miscellaneous Chores
+
+* **lint:** drop the rule-debt lists that are now empty ([cb3449b](https://github.com/ExaDev/documents.js/commit/cb3449bc3a444ae3a3676e82b09a4d14f5e9501d))
+
+
+### Dependencies
+
+- Updated documents.js to 14.4.43
+
 ## [1.6.52](https://github.com/ExaDev/documents.js/compare/document-compute.js%401.6.51...document-compute.js%401.6.52) (2026-09-25)
 
 

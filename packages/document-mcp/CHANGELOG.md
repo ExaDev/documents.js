@@ -1,3 +1,16 @@
+## [4.14.109](https://github.com/ExaDev/documents.js/compare/document-mcp%404.14.108...document-mcp%404.14.109) (2026-09-25)
+
+### Miscellaneous Chores
+
+* **lint:** drop the rule-debt lists that are now empty ([cb3449b](https://github.com/ExaDev/documents.js/commit/cb3449bc3a444ae3a3676e82b09a4d14f5e9501d))
+
+
+### Dependencies
+
+- Updated odf.js to 11.1.12
+- Updated documents.js to 14.4.43
+- Updated document-operations to 1.1.106
+
 ## [4.14.108](https://github.com/ExaDev/documents.js/compare/document-mcp%404.14.107...document-mcp%404.14.108) (2026-09-25)
 
 
