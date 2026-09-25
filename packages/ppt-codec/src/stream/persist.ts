@@ -8,6 +8,22 @@ import { RT_PersistDirectoryAtom, RT_UserEditAtom } from "../record/types";
 const USER_EDIT_LEN_WITHOUT_ENCRYPT_SESSION = 0x0000001c;
 const USER_EDIT_LEN_WITH_ENCRYPT_SESSION = 0x00000020;
 
+// The hexadecimal radix every record-type/recLen diagnostic below formats its own field through.
+const HEX_RADIX = 16;
+
+// UserEditAtom's own field byte offsets ([MS-PPT] 2.3.3), skipping the version/build/lastView/unused fields this reader deliberately reads past rather than surfaces (see the inline comments at each gap below).
+const USER_EDIT_OFFSET_LAST_EDIT_OFFSET = 8;
+const USER_EDIT_OFFSET_PERSIST_DIRECTORY_OFFSET = 12;
+const USER_EDIT_DOC_PERSIST_ID_REF_OFFSET = 16;
+const USER_EDIT_PERSIST_ID_SEED_OFFSET = 20;
+const USER_EDIT_ENCRYPT_SESSION_PERSIST_ID_REF_OFFSET = 28;
+
+// PersistDirectoryEntry's own packed header word ([MS-PPT] 2.3.5): a 4-byte word, persistId in its low 20 bits, cPersist in its high 12, then cPersist more 4-byte words, one offset each.
+const PERSIST_ENTRY_WORD_BYTES = 4;
+const PERSIST_ID_BITS = 20;
+const PERSIST_ID_MASK = 0xfffff;
+const CPERSIST_MASK = 0xfff;
+
 export interface UserEdit {
   readonly lastSlideIdRef: number;
   // Offset of the previous user edit's UserEditAtom, or 0 when this is the oldest edit.
@@ -21,7 +37,7 @@ export interface UserEdit {
 export function readUserEditAtom(record: PptRecord): UserEdit {
   if (record.header.recType !== RT_UserEditAtom) {
     throw new PptFormatError(
-      `expected RT_UserEditAtom (0x${RT_UserEditAtom.toString(16)}) at offset ${record.offset}, found record type 0x${record.header.recType.toString(16)}`,
+      `expected RT_UserEditAtom (0x${RT_UserEditAtom.toString(HEX_RADIX)}) at offset ${record.offset}, found record type 0x${record.header.recType.toString(HEX_RADIX)}`,
     );
   }
   const { recLen } = record.header;
@@ -30,7 +46,7 @@ export function readUserEditAtom(record: PptRecord): UserEdit {
     recLen !== USER_EDIT_LEN_WITH_ENCRYPT_SESSION
   ) {
     throw new PptFormatError(
-      `UserEditAtom at offset ${record.offset} declares recLen 0x${recLen.toString(16)}, neither 0x${USER_EDIT_LEN_WITHOUT_ENCRYPT_SESSION.toString(16)} nor 0x${USER_EDIT_LEN_WITH_ENCRYPT_SESSION.toString(16)}`,
+      `UserEditAtom at offset ${record.offset} declares recLen 0x${recLen.toString(HEX_RADIX)}, neither 0x${USER_EDIT_LEN_WITHOUT_ENCRYPT_SESSION.toString(HEX_RADIX)} nor 0x${USER_EDIT_LEN_WITH_ENCRYPT_SESSION.toString(HEX_RADIX)}`,
     );
   }
   const { data } = record;
@@ -38,14 +54,17 @@ export function readUserEditAtom(record: PptRecord): UserEdit {
   return {
     lastSlideIdRef: view.getUint32(0, true),
     // Bytes 4-7 are version (2), minorVersion (1) and majorVersion (1): build and format-version stamps the spec says to ignore, so they are read past rather than surfaced.
-    offsetLastEdit: view.getUint32(8, true),
-    offsetPersistDirectory: view.getUint32(12, true),
-    docPersistIdRef: view.getUint32(16, true),
-    persistIdSeed: view.getUint32(20, true),
+    offsetLastEdit: view.getUint32(USER_EDIT_OFFSET_LAST_EDIT_OFFSET, true),
+    offsetPersistDirectory: view.getUint32(
+      USER_EDIT_OFFSET_PERSIST_DIRECTORY_OFFSET,
+      true,
+    ),
+    docPersistIdRef: view.getUint32(USER_EDIT_DOC_PERSIST_ID_REF_OFFSET, true),
+    persistIdSeed: view.getUint32(USER_EDIT_PERSIST_ID_SEED_OFFSET, true),
     // Bytes 24-27 are lastView (2) and unused (2).
     encryptSessionPersistIdRef:
       recLen === USER_EDIT_LEN_WITH_ENCRYPT_SESSION
-        ? view.getUint32(28, true)
+        ? view.getUint32(USER_EDIT_ENCRYPT_SESSION_PERSIST_ID_REF_OFFSET, true)
         : undefined,
   };
 }
@@ -56,7 +75,7 @@ export function readPersistDirectoryAtom(
 ): Map<number, number> {
   if (record.header.recType !== RT_PersistDirectoryAtom) {
     throw new PptFormatError(
-      `expected RT_PersistDirectoryAtom (0x${RT_PersistDirectoryAtom.toString(16)}) at offset ${record.offset}, found record type 0x${record.header.recType.toString(16)}`,
+      `expected RT_PersistDirectoryAtom (0x${RT_PersistDirectoryAtom.toString(HEX_RADIX)}) at offset ${record.offset}, found record type 0x${record.header.recType.toString(HEX_RADIX)}`,
     );
   }
   const { data } = record;
@@ -64,29 +83,32 @@ export function readPersistDirectoryAtom(
   const entries = new Map<number, number>();
   let at = 0;
   while (at < data.length) {
-    if (at + 4 > data.length) {
+    if (at + PERSIST_ENTRY_WORD_BYTES > data.length) {
       throw new PptFormatError(
         `PersistDirectoryAtom at offset ${record.offset} has a ${data.length - at}-byte trailing fragment, too short for a PersistDirectoryEntry header word`,
       );
     }
     const packed = view.getUint32(at, true);
     // persistId occupies bits 0-19 and cPersist bits 20-31 of one little-endian word; a shift-and-mask split is the only reading that keeps a 20-bit persistId out of cPersist's bits.
-    const persistId = packed & 0xfffff;
-    const cPersist = (packed >>> 20) & 0xfff;
+    const persistId = packed & PERSIST_ID_MASK;
+    const cPersist = (packed >>> PERSIST_ID_BITS) & CPERSIST_MASK;
     if (cPersist === 0) {
       throw new PptFormatError(
         `PersistDirectoryEntry at offset ${record.dataOffset + at} declares cPersist 0x000, but the spec requires at least 0x001`,
       );
     }
-    at += 4;
-    const offsetsEnd = at + cPersist * 4;
+    at += PERSIST_ENTRY_WORD_BYTES;
+    const offsetsEnd = at + cPersist * PERSIST_ENTRY_WORD_BYTES;
     if (offsetsEnd > data.length) {
       throw new PptFormatError(
-        `PersistDirectoryEntry at offset ${record.dataOffset + at - 4} declares ${cPersist} offsets, which run past the atom's ${data.length} bytes`,
+        `PersistDirectoryEntry at offset ${record.dataOffset + at - PERSIST_ENTRY_WORD_BYTES} declares ${cPersist} offsets, which run past the atom's ${data.length} bytes`,
       );
     }
     for (let i = 0; i < cPersist; i++) {
-      entries.set(persistId + i, view.getUint32(at + i * 4, true));
+      entries.set(
+        persistId + i,
+        view.getUint32(at + i * PERSIST_ENTRY_WORD_BYTES, true),
+      );
     }
     at = offsetsEnd;
   }

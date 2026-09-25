@@ -98,9 +98,18 @@ export const PICTURES_STREAM = "Pictures";
 /** The [MS-OLEPS] Property Set Stream a .ppt's title/author/dates live in when present ([MS-OSHARED] 2.3.3.2.2) — a genuinely optional stream, unlike the two above, since a valid PowerPoint binary document need not carry document properties at all. */
 export const SUMMARY_INFORMATION_STREAM = "\x05SummaryInformation";
 
+// The hexadecimal radix every record-type diagnostic below formats its own field through.
+const HEX_RADIX = 16;
+// A little-endian OutlineTextRefAtom's own index field width: a single 4-byte uint32.
+const OUTLINE_TEXT_REF_INDEX_BYTES = 4;
+
 // PowerPoint's own default text insets: 0.1 inch left and right, 0.05 inch top and bottom — the same figures ECMA-376 later wrote into a:bodyPr's defaults, and the ones ooxml.js applies to a pptx shape stating none. A per-shape override lives in the shape's OfficeArtFOPT text properties (dxTextLeft/dyTextTop/dxTextRight/dyTextBottom — insetsForShape below reads them). Exported because the write side needs them too: ContentShape requires all four insets, and a shape the writer builds for itself (a notes body, a master placeholder) has to state the same defaults a read of that shape would report rather than invent its own.
-export const DEFAULT_INSET_LEFT_RIGHT_PT = 0.1 * POINTS_PER_INCH;
-export const DEFAULT_INSET_TOP_BOTTOM_PT = 0.05 * POINTS_PER_INCH;
+const DEFAULT_INSET_LEFT_RIGHT_INCHES = 0.1;
+const DEFAULT_INSET_TOP_BOTTOM_INCHES = 0.05;
+export const DEFAULT_INSET_LEFT_RIGHT_PT =
+  DEFAULT_INSET_LEFT_RIGHT_INCHES * POINTS_PER_INCH;
+export const DEFAULT_INSET_TOP_BOTTOM_PT =
+  DEFAULT_INSET_TOP_BOTTOM_INCHES * POINTS_PER_INCH;
 
 interface ShapeInsets {
   readonly insetLeftPt: number;
@@ -201,9 +210,9 @@ function textRecordsFor(
     }
     return { textType: readTextHeaderAtom(headerRecord), records: children };
   }
-  if (outlineRef.data.length < 4) {
+  if (outlineRef.data.length < OUTLINE_TEXT_REF_INDEX_BYTES) {
     throw new PptFormatError(
-      `OutlineTextRefAtom at offset ${outlineRef.offset} carries ${outlineRef.data.length} bytes, fewer than the 4 its index field needs`,
+      `OutlineTextRefAtom at offset ${outlineRef.offset} carries ${outlineRef.data.length} bytes, fewer than the ${OUTLINE_TEXT_REF_INDEX_BYTES} its index field needs`,
     );
   }
   const view = new DataView(
@@ -417,7 +426,7 @@ function readMastersById(
     );
     if (masterContainer.header.recType !== RT_MainMaster) {
       throw new PptFormatError(
-        `persist object ${persist.persistIdRef} is record type 0x${masterContainer.header.recType.toString(16)}, not the RT_MainMaster (0x${RT_MainMaster.toString(16)}) its MasterPersistAtom promised`,
+        `persist object ${persist.persistIdRef} is record type 0x${masterContainer.header.recType.toString(HEX_RADIX)}, not the RT_MainMaster (0x${RT_MainMaster.toString(HEX_RADIX)}) its MasterPersistAtom promised`,
       );
     }
     const masterChildren = childRecords(masterContainer);
@@ -454,7 +463,7 @@ function readSlide(
   );
   if (slideContainer.header.recType !== RT_Slide) {
     throw new PptFormatError(
-      `persist object ${persist.persistIdRef} is record type 0x${slideContainer.header.recType.toString(16)}, not the RT_Slide (0x${RT_Slide.toString(16)}) its SlidePersistAtom promised`,
+      `persist object ${persist.persistIdRef} is record type 0x${slideContainer.header.recType.toString(HEX_RADIX)}, not the RT_Slide (0x${RT_Slide.toString(HEX_RADIX)}) its SlidePersistAtom promised`,
     );
   }
   const slideChildren = childRecords(slideContainer);
@@ -593,7 +602,7 @@ export function readPptStreams(
   );
   if (documentContainer.header.recType !== RT_Document) {
     throw new PptFormatError(
-      `the document persist object is record type 0x${documentContainer.header.recType.toString(16)}, not RT_Document (0x${RT_Document.toString(16)})`,
+      `the document persist object is record type 0x${documentContainer.header.recType.toString(HEX_RADIX)}, not RT_Document (0x${RT_Document.toString(HEX_RADIX)})`,
     );
   }
 

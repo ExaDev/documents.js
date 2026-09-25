@@ -37,6 +37,11 @@ const DEFAULT_KEY_SIZE_BITS = 0x28;
 // The minimum EncryptionHeader length this module needs to read: flags, sizeExtra, algId, algIdHash, keySize, providerType, reserved1, reserved2 — eight 4-byte fields. A real header also carries a variable-length CSPName after these, which this module never reads: `headerSize` (see HEADER_SIZE_FIELD_OFFSET) already states exactly where the header ends and the EncryptionVerifier begins, so there is no need to parse or skip the CSPName string byte by byte.
 const MIN_HEADER_FIELDS_LENGTH = 32;
 
+// The hexadecimal radix every record-type/algorithm-id diagnostic below formats its own field through.
+const HEX_RADIX = 16;
+// A little-endian 32-bit field's own byte width: the EncryptionVerifier's own saltSize and verifierHashSize length-prefix fields, and a PptRecord header's own recLen field.
+const UINT32_FIELD_BYTES = 4;
+
 export interface PptEncryptionInfo {
   readonly keySizeBits: number;
   readonly salt: Uint8Array<ArrayBuffer>;
@@ -50,7 +55,7 @@ export function readDocumentEncryptionAtom(
 ): PptEncryptionInfo {
   if (record.header.recType !== RT_CryptSession10Container) {
     throw new PptFormatError(
-      `expected the DocumentEncryptionAtom's own record type (0x${RT_CryptSession10Container.toString(16)}) at offset ${record.offset}, found 0x${record.header.recType.toString(16)}`,
+      `expected the DocumentEncryptionAtom's own record type (0x${RT_CryptSession10Container.toString(HEX_RADIX)}) at offset ${record.offset}, found 0x${record.header.recType.toString(HEX_RADIX)}`,
     );
   }
   const { data } = record;
@@ -84,7 +89,7 @@ export function readDocumentEncryptionAtom(
   const algId = view.getUint32(HEADER_START + HEADER_ALG_ID_OFFSET, true);
   if (algId !== ALG_ID_RC4) {
     throw new PptEncryptedError(
-      `DocumentEncryptionAtom's EncryptionHeader names cipher algorithm 0x${algId.toString(16)}, not RC4 (0x${ALG_ID_RC4.toString(16)}); this package only decrypts RC4 CryptoAPI-encrypted presentations`,
+      `DocumentEncryptionAtom's EncryptionHeader names cipher algorithm 0x${algId.toString(HEX_RADIX)}, not RC4 (0x${ALG_ID_RC4.toString(HEX_RADIX)}); this package only decrypts RC4 CryptoAPI-encrypted presentations`,
     );
   }
   const algIdHash = view.getUint32(
@@ -93,7 +98,7 @@ export function readDocumentEncryptionAtom(
   );
   if (algIdHash !== ALG_ID_HASH_SHA1) {
     throw new PptEncryptedError(
-      `DocumentEncryptionAtom's EncryptionHeader names hash algorithm 0x${algIdHash.toString(16)}, not SHA-1 (0x${ALG_ID_HASH_SHA1.toString(16)}) as [MS-OFFCRYPTO] 2.3.5.1 requires of RC4 CryptoAPI`,
+      `DocumentEncryptionAtom's EncryptionHeader names hash algorithm 0x${algIdHash.toString(HEX_RADIX)}, not SHA-1 (0x${ALG_ID_HASH_SHA1.toString(HEX_RADIX)}) as [MS-OFFCRYPTO] 2.3.5.1 requires of RC4 CryptoAPI`,
     );
   }
   const rawKeySize = view.getUint32(
@@ -102,7 +107,7 @@ export function readDocumentEncryptionAtom(
   );
   const keySizeBits = rawKeySize === 0 ? DEFAULT_KEY_SIZE_BITS : rawKeySize;
 
-  if (headerEnd + 4 > data.length) {
+  if (headerEnd + UINT32_FIELD_BYTES > data.length) {
     throw new PptFormatError(
       `DocumentEncryptionAtom at offset ${record.offset} has no room for its EncryptionVerifier's saltSize field after the ${headerSize}-byte header`,
     );
@@ -113,11 +118,12 @@ export function readDocumentEncryptionAtom(
       `DocumentEncryptionAtom's EncryptionVerifier declares saltSize ${saltSize}, not the mandated ${RC4_CRYPTOAPI_SALT_LENGTH}`,
     );
   }
-  const saltStart = headerEnd + 4;
+  const saltStart = headerEnd + UINT32_FIELD_BYTES;
   const encryptedVerifierStart = saltStart + RC4_CRYPTOAPI_SALT_LENGTH;
   const verifierHashSizeFieldStart =
     encryptedVerifierStart + RC4_CRYPTOAPI_VERIFIER_LENGTH;
-  const encryptedVerifierHashStart = verifierHashSizeFieldStart + 4;
+  const encryptedVerifierHashStart =
+    verifierHashSizeFieldStart + UINT32_FIELD_BYTES;
   const encryptedVerifierHashEnd =
     encryptedVerifierHashStart + RC4_CRYPTOAPI_VERIFIER_HASH_LENGTH;
   if (encryptedVerifierHashEnd > data.length) {
@@ -204,7 +210,7 @@ export function decryptPptDocumentStream(
       headerPlaintext.byteOffset,
       headerPlaintext.byteLength,
     );
-    const recLen = headerView.getUint32(4, true);
+    const recLen = headerView.getUint32(UINT32_FIELD_BYTES, true);
     const objectEnd = offset + RECORD_HEADER_SIZE + recLen;
     if (objectEnd > streamBytes.length) {
       throw new PptFormatError(
