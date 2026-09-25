@@ -1,5 +1,34 @@
 import { isCompoundFile } from "./detect";
 
+// The CFB header's own field offsets ([MS-CFB] 2.2), the directory entry's own field offsets and 128-byte size ([MS-CFB] 2.6.1), the FAT's 4-byte entries, the major versions and their own sector shifts, the mini sector shift, the little-endian byte order mark, the high word's own 2^32 weight, and the 64 bytes a directory entry's own name field spans.
+const FAT_ENTRY_BYTES = 4;
+const WORDS_PER_SIZE_HIGH = 4294967296;
+const DIRENT_SIZE = 128;
+const VERSION_3 = 3;
+const VERSION_4 = 4;
+const VERSION_3_SECTOR_SHIFT = 9;
+const VERSION_4_SECTOR_SHIFT = 12;
+const MINI_SECTOR_SHIFT = 6;
+const LITTLE_ENDIAN_BOM = 0xfffe;
+const MAX_NAME_LENGTH_BYTES = 64;
+const HEADER_MAJOR_VERSION_OFFSET = 0x1a;
+const HEADER_BYTE_ORDER_OFFSET = 0x1c;
+const HEADER_SECTOR_SHIFT_OFFSET = 0x1e;
+const HEADER_MINI_SECTOR_SHIFT_OFFSET = 0x20;
+const HEADER_DIRECTORY_START_OFFSET = 0x30;
+const HEADER_MINI_STREAM_CUTOFF_OFFSET = 0x38;
+const HEADER_MINI_FAT_START_OFFSET = 0x3c;
+const HEADER_DIFAT_START_OFFSET = 0x44;
+const HEADER_DIFAT_OFFSET = 0x4c;
+const DIRENT_NAME_LENGTH_OFFSET = 0x40;
+const DIRENT_OBJECT_TYPE_OFFSET = 0x42;
+const DIRENT_LEFT_OFFSET = 0x44;
+const DIRENT_RIGHT_OFFSET = 0x48;
+const DIRENT_CHILD_OFFSET = 0x4c;
+const DIRENT_START_SECTOR_OFFSET = 0x74;
+const DIRENT_SIZE_OFFSET = 0x78;
+const DIRENT_SIZE_HIGH_OFFSET = 0x7c;
+
 // A bounded reader for the classic OLE compound-file container ([MS-CFB]): header and sector-size parsing, DIFAT/FAT chain walking, the directory entry tree, and stream extraction from both the FAT and the mini stream. It exists because the ZIP-payload spelling is not the only way an OOXML package embeds an object — real-world Word and PowerPoint files frequently store the embeddee as an OLE compound file (word|ppt/embeddings/oleObject1.bin), whose storages and streams this reader surfaces (see documents.js#739). Structural knowledge only: it knows sectors, chains, and directory entries, never that any stream is a document.
 
 // [MS-CFB] 2.3 special FAT values: a chain slot either names the chain's next sector, ends it (ENDOFCHAIN), or describes the sector itself (FATSECT marks a sector holding FAT data, DIFSECT one holding DIFAT data, FREESECT marks an unused slot).
@@ -18,7 +47,10 @@ const OBJECT_TYPE_STREAM = 2;
 const OBJECT_TYPE_ROOT = 5;
 
 // Cumulative-extraction derivation: a compound file stores its streams uncompressed, so honest content cannot exceed the file itself — but the FAT is attacker-controlled bytes, and nothing structural stops one sector from appearing in many chains, so a hostile file with S stream entries can each declare a chain covering the whole file and extract S x file-size bytes from an input of a few kilobytes. One budget shared across every extracted stream bounds that multiplication at a single figure. The 512 MiB is the same figure the family already grants one honest decompressed stream (byte-codec's MAX_INFLATE_OUTPUT_BYTES, re-used as archive-codec's MAX_WALK_TOTAL_BYTES): a compound file holding genuine documents decompresses nothing, so its total stream content sits well inside what one compressed stream already may.
-export const MAX_CFB_TOTAL_STREAM_BYTES = 512 * 1024 * 1024;
+const KIB = 1024;
+const MIB = KIB * KIB;
+const MAX_TOTAL_STREAM_MIB = 512;
+export const MAX_CFB_TOTAL_STREAM_BYTES = MAX_TOTAL_STREAM_MIB * MIB;
 
 // Thrown when input claiming the compound-file signature does not conform to [MS-CFB]: a bad header field, a chain that cycles or points outside the file, a directory entry outside the entry array, or a declared stream size its chain cannot fill. A distinct error class (rather than a plain Error) because malformed-container detection is one half of this package's contract — a consumer must be able to catch structural failure by name and decide its own degradation, rather than parse a message string.
 export class CompoundFileFormatError extends Error {
@@ -76,44 +108,44 @@ export function readCompoundFile(
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
 
   // Header fields and their [MS-CFB] 2.2 invariants. Sector shift is validated as exactly the version's mandated value (0x0009 for version 3, 0x000C for version 4) rather than merely "large enough to address the file": every other derived offset depends on it, and a header that disagrees with its own version is not a variant, it is corruption.
-  const majorVersion = u16(view, 0x1a);
-  if (majorVersion !== 3 && majorVersion !== 4) {
+  const majorVersion = u16(view, HEADER_MAJOR_VERSION_OFFSET);
+  if (majorVersion !== VERSION_3 && majorVersion !== VERSION_4) {
     throw new CompoundFileFormatError(
       `compound file major version ${majorVersion} is not 3 or 4`,
     );
   }
-  if (u16(view, 0x1c) !== 0xfffe) {
+  if (u16(view, HEADER_BYTE_ORDER_OFFSET) !== LITTLE_ENDIAN_BOM) {
     throw new CompoundFileFormatError(
       "compound file byte order is not little-endian",
     );
   }
-  const sectorShift = u16(view, 0x1e);
+  const sectorShift = u16(view, HEADER_SECTOR_SHIFT_OFFSET);
   if (
-    (majorVersion === 3 && sectorShift !== 9) ||
-    (majorVersion === 4 && sectorShift !== 12)
+    (majorVersion === VERSION_3 && sectorShift !== VERSION_3_SECTOR_SHIFT) ||
+    (majorVersion === VERSION_4 && sectorShift !== VERSION_4_SECTOR_SHIFT)
   ) {
     throw new CompoundFileFormatError(
       `compound file sector shift 2^${sectorShift} does not match major version ${majorVersion} (version 3 requires 512-byte sectors, version 4 requires 4096-byte)`,
     );
   }
-  const miniSectorShift = u16(view, 0x20);
-  if (miniSectorShift !== 6) {
+  const miniSectorShift = u16(view, HEADER_MINI_SECTOR_SHIFT_OFFSET);
+  if (miniSectorShift !== MINI_SECTOR_SHIFT) {
     throw new CompoundFileFormatError(
       `compound file mini sector shift 2^${miniSectorShift} is not the mandated 64-byte mini sector`,
     );
   }
   const sectorSize = 1 << sectorShift;
   const miniSectorSize = 1 << miniSectorShift;
-  const miniStreamCutoff = u32(view, 0x38);
+  const miniStreamCutoff = u32(view, HEADER_MINI_STREAM_CUTOFF_OFFSET);
   if (miniStreamCutoff < miniSectorSize) {
     throw new CompoundFileFormatError(
       `compound file mini stream cutoff ${miniStreamCutoff} is smaller than the ${miniSectorSize}-byte mini sector itself`,
     );
   }
   // The cutoff is honoured as declared rather than required to be 0x1000: the spec fixes that value for producers, but which stream lives in the mini stream is the header field's own decision, and a reader that hardcoded 4096 would misplace every stream in a file whose producer wrote a different cutoff.
-  const firstDirectorySector = u32(view, 0x30);
-  const firstMiniFatSector = u32(view, 0x3c);
-  const firstDifatSector = u32(view, 0x44);
+  const firstDirectorySector = u32(view, HEADER_DIRECTORY_START_OFFSET);
+  const firstMiniFatSector = u32(view, HEADER_MINI_FAT_START_OFFSET);
+  const firstDifatSector = u32(view, HEADER_DIFAT_START_OFFSET);
 
   // Sector N occupies bytes [(N + 1) * sectorSize, (N + 2) * sectorSize): the header takes the first sectorSize bytes of the file (the 3584 bytes past version 4's 512-byte header are zero padding; version 3's header fills its 512-byte sector exactly), so a sector number is valid only when the file fully contains its end. This derivation doubles as every chain's cycle bound — a chain of more than sectorCount sectors must revisit one, because every valid sector number is below sectorCount.
   const sectorCount = Math.floor(bytes.length / sectorSize) - 1;
@@ -140,7 +172,10 @@ export function readCompoundFile(
     fatSectorIds.push(sector);
   };
   for (let i = 0; i < HEADER_DIFAT_ENTRIES; i++) {
-    acceptFatSector(u32(view, 0x4c + i * 4), "the header DIFAT array");
+    acceptFatSector(
+      u32(view, HEADER_DIFAT_OFFSET + i * FAT_ENTRY_BYTES),
+      "the header DIFAT array",
+    );
   }
   let difatSector = firstDifatSector;
   let difatSectorsWalked = 0;
@@ -160,11 +195,11 @@ export function readCompoundFile(
       bytes.byteOffset + sectorOffset(difatSector),
       sectorSize,
     );
-    const entriesPerDifatSector = sectorSize / 4 - 1;
+    const entriesPerDifatSector = sectorSize / FAT_ENTRY_BYTES - 1;
     for (let i = 0; i < entriesPerDifatSector; i++) {
-      acceptFatSector(u32(difatView, i * 4), "a DIFAT sector");
+      acceptFatSector(u32(difatView, i * FAT_ENTRY_BYTES), "a DIFAT sector");
     }
-    difatSector = u32(difatView, entriesPerDifatSector * 4);
+    difatSector = u32(difatView, entriesPerDifatSector * FAT_ENTRY_BYTES);
   }
   if (fatSectorIds.length === 0) {
     throw new CompoundFileFormatError(
@@ -181,8 +216,8 @@ export function readCompoundFile(
 
   // No offset<0 guard: sector is always a chain's own start (a u32 header/entry read) or a prior fatEntry return (itself a u32 read), so it can never actually be negative — a defensive check against an input this closure never receives.
   const fatEntry = (sector: number): number => {
-    const offset = sector * 4;
-    if (offset + 4 > fatBytes.length) {
+    const offset = sector * FAT_ENTRY_BYTES;
+    if (offset + FAT_ENTRY_BYTES > fatBytes.length) {
       throw new CompoundFileFormatError(
         `FAT entry for sector ${sector} lies beyond the sectors the DIFAT named`,
       );
@@ -236,26 +271,27 @@ export function readCompoundFile(
     );
   }
   const directoryView = new DataView(directoryBytes.buffer);
-  const entryCount = directoryBytes.length / 128;
+  const entryCount = directoryBytes.length / DIRENT_SIZE;
   const nameDecoder = new TextDecoder("utf-16le");
   const entries: DirectoryEntry[] = [];
   for (let id = 0; id < entryCount; id++) {
-    const base = id * 128;
-    const nameLength = u16(directoryView, base + 0x40);
+    const base = id * DIRENT_SIZE;
+    const nameLength = u16(directoryView, base + DIRENT_NAME_LENGTH_OFFSET);
     // The length counts the terminating null, so the name itself is the first nameLength - 2 bytes of the field. Name and type are validated when the entry tree reaches an entry, not here: unallocated entries pad every directory sector to 4-per-sector and their bytes are arbitrary, so a parse-time check would reject well-formed files.
     entries.push({
       name: nameDecoder.decode(
         directoryBytes.subarray(base, base + Math.max(0, nameLength - 2)),
       ),
       nameLength,
-      objectType: directoryView.getUint8(base + 0x42),
-      leftSibling: u32(directoryView, base + 0x44),
-      rightSibling: u32(directoryView, base + 0x48),
-      child: u32(directoryView, base + 0x4c),
-      startSector: u32(directoryView, base + 0x74),
+      objectType: directoryView.getUint8(base + DIRENT_OBJECT_TYPE_OFFSET),
+      leftSibling: u32(directoryView, base + DIRENT_LEFT_OFFSET),
+      rightSibling: u32(directoryView, base + DIRENT_RIGHT_OFFSET),
+      child: u32(directoryView, base + DIRENT_CHILD_OFFSET),
+      startSector: u32(directoryView, base + DIRENT_START_SECTOR_OFFSET),
       size:
-        u32(directoryView, base + 0x78) +
-        u32(directoryView, base + 0x7c) * 4294967296,
+        u32(directoryView, base + DIRENT_SIZE_OFFSET) +
+        u32(directoryView, base + DIRENT_SIZE_HIGH_OFFSET) *
+          WORDS_PER_SIZE_HIGH,
     });
   }
   const root = entries[0];
@@ -290,7 +326,7 @@ export function readCompoundFile(
       }
       visited.add(current);
       ids.push(current);
-      const next = miniFat.getUint32(current * 4, true);
+      const next = miniFat.getUint32(current * FAT_ENTRY_BYTES, true);
       if (next === FREESECT || next === FATSECT || next === DIFSECT) {
         throw new CompoundFileFormatError(
           `a mini-FAT chain steps to mini sector ${current}'s entry ${next}, which is a sector-role marker, not a chain continuation`,
@@ -380,7 +416,7 @@ export function readCompoundFile(
       visited.add(id);
       if (
         entry.nameLength < 2 ||
-        entry.nameLength > 64 ||
+        entry.nameLength > MAX_NAME_LENGTH_BYTES ||
         entry.nameLength % 2 === 1
       ) {
         throw new CompoundFileFormatError(
