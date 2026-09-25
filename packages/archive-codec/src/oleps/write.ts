@@ -14,6 +14,17 @@ import {
   type PropertyValue,
 } from "./wire";
 
+// The write side of read.ts's own layout constants: values pad to 4 bytes, a typed value's own 4-byte value field and 8-byte filetime, a UTF-16 unit's 2 bytes, and the property set stream header's own field offsets.
+const PAD_TO = 4;
+const VALUE_FIELD_BYTES = 4;
+const FILETIME_BYTES = 8;
+const BYTES_PER_UTF16_UNIT = 2;
+const VALUE_OFFSET_IN_ENTRY = 4;
+const PROPERTY_COUNT_OFFSET_IN_SECTION = 4;
+const NUM_PROPERTY_SETS_OFFSET = 24;
+const FORMAT_ID_OFFSET = 28;
+const SECTION_OFFSET_FIELD = 44;
+
 // The write half of the generic [MS-OLEPS] Property Set Stream reader in ./read.ts: given the same {formatId, properties} vocabulary that reads, it emits a conformant single-property-set stream — header, PropertySet packet (Size, NumProperties, the PropertyIdentifierAndOffset dictionary, and the typed values themselves). Deliberately the mirror of readPropertySetStream: writePropertySetStream(readPropertySetStream(bytes)) is a well-typed round trip rather than a translation between two vocabularies, exactly as cfb/write.ts is to cfb/read.ts.
 //
 // Purely mechanical: this writer emits exactly the properties it is given, in PID order, and injects nothing of its own (no default CodePage, no synthesized property) — the same "output depends only on what was asked for, never a guess about what a well-formed stream should also contain" discipline cfb/write.ts holds for stream paths. Constructing a properties map that is actually a well-formed "\x05SummaryInformation" stream (title/author/dates mapped onto the right PIDs, a CodePage property included) is ./summary-information.ts's job, one level up.
@@ -38,7 +49,7 @@ function encodeUnicodeStringValue(value: string): Uint8Array<ArrayBuffer> {
 }
 
 function padTo4(length: number): number {
-  return Math.ceil(length / 4) * 4;
+  return Math.ceil(length / PAD_TO) * PAD_TO;
 }
 
 // Reached only if PropertyValue ever gains a variant encodeTypedPropertyValue's own switch does not match: every current member is covered by a case there, so `value` narrows to `never` at every real call site, and adding an uncovered variant makes that narrowing fail and this call stop compiling — the real safety net. Exists so the switch's own exhaustiveness (proven by the type checker, not by a catch-all default that would silently swallow a genuinely new variant) still gives consistent-return an explicit statement to see past the switch. Exported so write.test.ts can exercise the throw directly with a forced-invalid cast — it is otherwise unreachable through encodeTypedPropertyValue, since every real PropertyValue variant is already handled by a case above.
@@ -55,39 +66,45 @@ function encodeTypedPropertyValue(
   switch (value.type) {
     case "VT_I2": {
       // Padding (bytes 2-3) and the trailing alignment padding (bytes 6-7) both stay zero: `bytes` is fresh off `new Uint8Array`, which already zero-fills every byte this case does not itself set.
-      const bytes = new Uint8Array(TYPED_VALUE_HEADER_SIZE + 4);
+      const bytes = new Uint8Array(TYPED_VALUE_HEADER_SIZE + VALUE_FIELD_BYTES);
       const view = new DataView(bytes.buffer);
       view.setUint16(0, VT_I2, true);
-      view.setInt16(4, value.value, true);
+      view.setInt16(VALUE_FIELD_BYTES, value.value, true);
       return bytes;
     }
     case "VT_I4": {
       // Padding (bytes 2-3) stays zero: `bytes` is fresh off `new Uint8Array`, which already zero-fills every byte this case does not itself set.
-      const bytes = new Uint8Array(TYPED_VALUE_HEADER_SIZE + 4);
+      const bytes = new Uint8Array(TYPED_VALUE_HEADER_SIZE + VALUE_FIELD_BYTES);
       const view = new DataView(bytes.buffer);
       view.setUint16(0, VT_I4, true);
-      view.setInt32(4, value.value, true);
+      view.setInt32(VALUE_FIELD_BYTES, value.value, true);
       return bytes;
     }
     case "VT_FILETIME": {
       // Padding (bytes 2-3) stays zero: `bytes` is fresh off `new Uint8Array`, which already zero-fills every byte this case does not itself set.
       const { low, high } = dateToFiletime(value.value);
-      const bytes = new Uint8Array(TYPED_VALUE_HEADER_SIZE + 8);
+      const bytes = new Uint8Array(TYPED_VALUE_HEADER_SIZE + FILETIME_BYTES);
       const view = new DataView(bytes.buffer);
       view.setUint16(0, VT_FILETIME, true);
-      view.setUint32(4, low, true);
-      view.setUint32(8, high, true);
+      view.setUint32(VALUE_FIELD_BYTES, low, true);
+      view.setUint32(2 * VALUE_FIELD_BYTES, high, true);
       return bytes;
     }
     case "VT_LPWSTR": {
       // Padding (bytes 2-3) stays zero: `bytes` is fresh off `new Uint8Array`, which already zero-fills every byte this case does not itself set.
       const characters = encodeUnicodeStringValue(value.value);
       const paddedLength = padTo4(characters.length);
-      const bytes = new Uint8Array(TYPED_VALUE_HEADER_SIZE + 4 + paddedLength);
+      const bytes = new Uint8Array(
+        TYPED_VALUE_HEADER_SIZE + VALUE_FIELD_BYTES + paddedLength,
+      );
       const view = new DataView(bytes.buffer);
       view.setUint16(0, VT_LPWSTR, true);
-      view.setUint32(4, characters.length / 2, true); // Length is in 16-bit units, not bytes
-      bytes.set(characters, TYPED_VALUE_HEADER_SIZE + 4);
+      view.setUint32(
+        VALUE_FIELD_BYTES,
+        characters.length / BYTES_PER_UTF16_UNIT,
+        true,
+      ); // Length is in 16-bit units, not bytes
+      bytes.set(characters, TYPED_VALUE_HEADER_SIZE + VALUE_FIELD_BYTES);
       return bytes;
     }
     case "VT_LPSTR":
@@ -117,7 +134,7 @@ export function writePropertySetStream(
     const encoded = encodeTypedPropertyValue(value);
     dictionaryView.setUint32(index * IDENTIFIER_AND_OFFSET_SIZE, pid, true);
     dictionaryView.setUint32(
-      index * IDENTIFIER_AND_OFFSET_SIZE + 4,
+      index * IDENTIFIER_AND_OFFSET_SIZE + VALUE_OFFSET_IN_ENTRY,
       valueOffset,
       true,
     );
@@ -130,7 +147,11 @@ export function writePropertySetStream(
   const propertySetBytes = new Uint8Array(propertySetSize);
   const propertySetView = new DataView(propertySetBytes.buffer);
   propertySetView.setUint32(0, propertySetSize, true);
-  propertySetView.setUint32(4, entries.length, true);
+  propertySetView.setUint32(
+    PROPERTY_COUNT_OFFSET_IN_SECTION,
+    entries.length,
+    true,
+  );
   propertySetBytes.set(dictionaryBytes, PROPERTY_SET_HEADER_SIZE);
   let cursor = PROPERTY_SET_HEADER_SIZE + dictionaryBytes.length;
   for (const chunk of valueChunks) {
@@ -142,9 +163,9 @@ export function writePropertySetStream(
   const view = new DataView(streamBytes.buffer);
   view.setUint16(0, BYTE_ORDER_MARK, true);
   // Version (bytes 2-3, 0: none of the types this writer emits need version 1's extra features), SystemIdentifier (bytes 4-7, implementation-specific and MUST be ignored by readers per [MS-OLEPS] 2.21, so left at 0 rather than impersonating a real OS identifier), and CLSID (bytes 8-23, this package has no notion of a property set's own associated CLSID, and GUID_NULL is all zero bytes) all stay zero: streamBytes is fresh off `new Uint8Array`, which already zero-fills every byte none of these three fields is written a second time.
-  view.setUint32(24, 1, true); // NumPropertySets
-  writeGuid(view, 28, propertySet.formatId);
-  view.setUint32(44, HEADER_SIZE, true); // Offset0
+  view.setUint32(NUM_PROPERTY_SETS_OFFSET, 1, true); // this writer always emits exactly one
+  writeGuid(view, FORMAT_ID_OFFSET, propertySet.formatId);
+  view.setUint32(SECTION_OFFSET_FIELD, HEADER_SIZE, true); // Offset0
   streamBytes.set(propertySetBytes, HEADER_SIZE);
   return streamBytes;
 }
