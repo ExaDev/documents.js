@@ -6,6 +6,22 @@
 const ROUND_2_CONSTANT = 0x5a827999;
 const ROUND_3_CONSTANT = 0x6ed9eba1;
 
+/** RFC 1320 A.3's own per-round rotation schedule, named by position within each round's repeating 4-operation group rather than restated as a bare literal at every one of the 48 call sites below: round 1 cycles 3/7/11/19 across all 16 words in order; round 2 cycles 3/5/9/13 across the words stepped by 4; round 3 cycles 3/9/11/15 across the 0,8,4,12,... permuted order. */
+const ROUND_1_ROTATE_1 = 3;
+const ROUND_1_ROTATE_2 = 7;
+const ROUND_1_ROTATE_3 = 11;
+const ROUND_1_ROTATE_4 = 19;
+
+const ROUND_2_ROTATE_1 = 3;
+const ROUND_2_ROTATE_2 = 5;
+const ROUND_2_ROTATE_3 = 9;
+const ROUND_2_ROTATE_4 = 13;
+
+const ROUND_3_ROTATE_1 = 3;
+const ROUND_3_ROTATE_2 = 9;
+const ROUND_3_ROTATE_3 = 11;
+const ROUND_3_ROTATE_4 = 15;
+
 /** RFC 1320 2.2: "Let A = 0x67452301, B = 0xefcdab89, C = 0x98badcfe, D = 0x10325476". */
 const INITIAL_A = 0x67452301;
 const INITIAL_B = 0xefcdab89;
@@ -14,7 +30,24 @@ const INITIAL_D = 0x10325476;
 
 const BLOCK_SIZE = 64;
 
-/** A block's 16 message words, one per `Uint32` of the 64-byte block. A literal-index tuple rather than `number[]` so every `x[index]` access below is typed as `number`, never `number | undefined`: `index` is itself typed as one of the 16 literal positions this tuple actually has, so there is no in-bounds/out-of-bounds question left for a guard to answer. */
+/** Byte offset of message word N (N = 1-15) within a 64-byte block, 4 bytes (one Uint32) apart — stated as bare literals rather than `N * 4` since only a plain `const NAME = literal` (not an expression combining literals) satisfies this workspace's no-magic-numbers rule; word 0 needs no offset constant, since `offset + 0` is just `offset`. */
+const WORD_1_OFFSET_BYTES = 4;
+const WORD_2_OFFSET_BYTES = 8;
+const WORD_3_OFFSET_BYTES = 12;
+const WORD_4_OFFSET_BYTES = 16;
+const WORD_5_OFFSET_BYTES = 20;
+const WORD_6_OFFSET_BYTES = 24;
+const WORD_7_OFFSET_BYTES = 28;
+const WORD_8_OFFSET_BYTES = 32;
+const WORD_9_OFFSET_BYTES = 36;
+const WORD_10_OFFSET_BYTES = 40;
+const WORD_11_OFFSET_BYTES = 44;
+const WORD_12_OFFSET_BYTES = 48;
+const WORD_13_OFFSET_BYTES = 52;
+const WORD_14_OFFSET_BYTES = 56;
+const WORD_15_OFFSET_BYTES = 60;
+
+/** A block's 16 message words, one per `Uint32` of the 64-byte block. A literal-index tuple rather than `number[]`, so a literal `x[N]` read at each round-schedule call site below (`ff`/`gg`/`hh`'s own `word` argument) is typed as plain `number`, never `number | undefined`: there is no in-bounds/out-of-bounds question left for a guard to answer, since every N the schedule actually uses is one of this tuple's own 16 known positions. */
 type BlockWords = readonly [
   number,
   number,
@@ -34,10 +67,6 @@ type BlockWords = readonly [
   number,
 ];
 
-/** The 16 literal positions a `BlockWords` tuple actually has. */
-type WordIndex =
-  0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15;
-
 /** The three auxiliary functions of RFC 1320 2.2, each a bit-selection over x/y/z — G and H are MD4's own, not MD5's similarly-named ones. */
 function f(x: number, y: number, z: number): number {
   return (x & y) | (~x & z);
@@ -51,21 +80,27 @@ function h(x: number, y: number, z: number): number {
   return x ^ y ^ z;
 }
 
+const WORD_BITS = 32;
+
 /** A 32-bit rotate left; the final `>>> 0` keeps the result unsigned where `<<` would sign it. */
 function rotateLeft(x: number, count: number): number {
-  return ((x << count) | (x >>> (32 - count))) >>> 0;
+  return ((x << count) | (x >>> (WORD_BITS - count))) >>> 0;
 }
 
 /** The padding of RFC 1320 3.1: the message, a single 1 bit, zeros, then the 64-bit little-endian bit length, filling the final block(s) to a 64-byte multiple. The length field's high 32 bits are never written: every message this hand-written digest ever hashes is an in-memory Escher blip payload, thousands of bytes at most, so `message.length * 8` never approaches 2**32 — and a freshly allocated Uint8Array is already zero-filled, so stating the high word explicitly would be a redundant call rather than a real fact about the message. */
+const BITS_PER_BYTE = 8;
+const LENGTH_FIELD_BYTES = 8;
+
 function padMessage(message: Uint8Array<ArrayBuffer>): Uint8Array<ArrayBuffer> {
-  const bitLength = message.length * 8;
+  const bitLength = message.length * BITS_PER_BYTE;
   const paddedLength =
-    Math.ceil((message.length + 1 + 8) / BLOCK_SIZE) * BLOCK_SIZE;
+    Math.ceil((message.length + 1 + LENGTH_FIELD_BYTES) / BLOCK_SIZE) *
+    BLOCK_SIZE;
   const out = new Uint8Array(paddedLength);
   out.set(message);
   out[message.length] = 0x80;
   const view = new DataView(out.buffer);
-  view.setUint32(paddedLength - 8, bitLength >>> 0, true);
+  view.setUint32(paddedLength - LENGTH_FIELD_BYTES, bitLength >>> 0, true);
   return out;
 }
 
@@ -76,6 +111,13 @@ function rotateRegisters(
 ): [number, number, number, number] {
   return [frame[3], updated, frame[1], frame[2]];
 }
+
+/** The 16-byte MD4 digest output (registers A/B/C/D, 4 bytes each) and register B/C/D's own byte offset within it (A needs none, at offset 0). */
+const DIGEST_BYTES = 16;
+const REGISTER_B_OFFSET_BYTES = 4;
+const REGISTER_C_OFFSET_BYTES = 8;
+const REGISTER_D_OFFSET_BYTES = 12;
+const HEX_RADIX = 16;
 
 /**
  * The MD4 digest of `message`, as 32 lowercase hex characters — the digest bytes in order, which RFC 1320 3.5 states begin with the LOW-order byte of A ("beginning with the low-order byte of A, and ending with the high-order byte of D"), so each register is emitted little-endian rather than as a big-endian hex word.
@@ -94,23 +136,23 @@ export function md4(message: Uint8Array<ArrayBuffer>): string {
 
   for (let offset = 0; offset < padded.length; offset += BLOCK_SIZE) {
     const x: BlockWords = [
-      // The first word needs no offset term at all — `+ 0 * 4` is always exactly `offset` regardless of which arithmetic operator produced the zero, so stating it would only be restating the same value a different, more roundabout way.
+      // The first word needs no offset term at all — `+ WORD_1_OFFSET_BYTES - 4` is always exactly `offset` regardless of which arithmetic operator produced the zero, so stating it would only be restating the same value a different, more roundabout way.
       view.getUint32(offset, true),
-      view.getUint32(offset + 1 * 4, true),
-      view.getUint32(offset + 2 * 4, true),
-      view.getUint32(offset + 3 * 4, true),
-      view.getUint32(offset + 4 * 4, true),
-      view.getUint32(offset + 5 * 4, true),
-      view.getUint32(offset + 6 * 4, true),
-      view.getUint32(offset + 7 * 4, true),
-      view.getUint32(offset + 8 * 4, true),
-      view.getUint32(offset + 9 * 4, true),
-      view.getUint32(offset + 10 * 4, true),
-      view.getUint32(offset + 11 * 4, true),
-      view.getUint32(offset + 12 * 4, true),
-      view.getUint32(offset + 13 * 4, true),
-      view.getUint32(offset + 14 * 4, true),
-      view.getUint32(offset + 15 * 4, true),
+      view.getUint32(offset + WORD_1_OFFSET_BYTES, true),
+      view.getUint32(offset + WORD_2_OFFSET_BYTES, true),
+      view.getUint32(offset + WORD_3_OFFSET_BYTES, true),
+      view.getUint32(offset + WORD_4_OFFSET_BYTES, true),
+      view.getUint32(offset + WORD_5_OFFSET_BYTES, true),
+      view.getUint32(offset + WORD_6_OFFSET_BYTES, true),
+      view.getUint32(offset + WORD_7_OFFSET_BYTES, true),
+      view.getUint32(offset + WORD_8_OFFSET_BYTES, true),
+      view.getUint32(offset + WORD_9_OFFSET_BYTES, true),
+      view.getUint32(offset + WORD_10_OFFSET_BYTES, true),
+      view.getUint32(offset + WORD_11_OFFSET_BYTES, true),
+      view.getUint32(offset + WORD_12_OFFSET_BYTES, true),
+      view.getUint32(offset + WORD_13_OFFSET_BYTES, true),
+      view.getUint32(offset + WORD_14_OFFSET_BYTES, true),
+      view.getUint32(offset + WORD_15_OFFSET_BYTES, true),
     ];
     const savedA = a;
     const savedB = b;
@@ -119,77 +161,76 @@ export function md4(message: Uint8Array<ArrayBuffer>): string {
 
     const op = (
       kind: (x: number, y: number, z: number) => number,
-      index: WordIndex,
+      word: number,
       rotation: number,
       roundConstant: number,
     ): void => {
-      const word = x[index];
       const updated = rotateLeft(
         (a + kind(b, c, d) + word + roundConstant) >>> 0,
         rotation,
       );
       [a, b, c, d] = rotateRegisters([a, b, c, d], updated);
     };
-    const ff = (index: WordIndex, rotation: number) => {
-      op(f, index, rotation, 0);
+    const ff = (word: number, rotation: number) => {
+      op(f, word, rotation, 0);
     };
-    const gg = (index: WordIndex, rotation: number) => {
-      op(g, index, rotation, ROUND_2_CONSTANT);
+    const gg = (word: number, rotation: number) => {
+      op(g, word, rotation, ROUND_2_CONSTANT);
     };
-    const hh = (index: WordIndex, rotation: number) => {
-      op(h, index, rotation, ROUND_3_CONSTANT);
+    const hh = (word: number, rotation: number) => {
+      op(h, word, rotation, ROUND_3_CONSTANT);
     };
 
-    ff(0, 3);
-    ff(1, 7);
-    ff(2, 11);
-    ff(3, 19);
-    ff(4, 3);
-    ff(5, 7);
-    ff(6, 11);
-    ff(7, 19);
-    ff(8, 3);
-    ff(9, 7);
-    ff(10, 11);
-    ff(11, 19);
-    ff(12, 3);
-    ff(13, 7);
-    ff(14, 11);
-    ff(15, 19);
+    ff(x[0], ROUND_1_ROTATE_1);
+    ff(x[1], ROUND_1_ROTATE_2);
+    ff(x[2], ROUND_1_ROTATE_3);
+    ff(x[3], ROUND_1_ROTATE_4);
+    ff(x[4], ROUND_1_ROTATE_1);
+    ff(x[5], ROUND_1_ROTATE_2);
+    ff(x[6], ROUND_1_ROTATE_3);
+    ff(x[7], ROUND_1_ROTATE_4);
+    ff(x[8], ROUND_1_ROTATE_1);
+    ff(x[9], ROUND_1_ROTATE_2);
+    ff(x[10], ROUND_1_ROTATE_3);
+    ff(x[11], ROUND_1_ROTATE_4);
+    ff(x[12], ROUND_1_ROTATE_1);
+    ff(x[13], ROUND_1_ROTATE_2);
+    ff(x[14], ROUND_1_ROTATE_3);
+    ff(x[15], ROUND_1_ROTATE_4);
 
-    gg(0, 3);
-    gg(4, 5);
-    gg(8, 9);
-    gg(12, 13);
-    gg(1, 3);
-    gg(5, 5);
-    gg(9, 9);
-    gg(13, 13);
-    gg(2, 3);
-    gg(6, 5);
-    gg(10, 9);
-    gg(14, 13);
-    gg(3, 3);
-    gg(7, 5);
-    gg(11, 9);
-    gg(15, 13);
+    gg(x[0], ROUND_2_ROTATE_1);
+    gg(x[4], ROUND_2_ROTATE_2);
+    gg(x[8], ROUND_2_ROTATE_3);
+    gg(x[12], ROUND_2_ROTATE_4);
+    gg(x[1], ROUND_2_ROTATE_1);
+    gg(x[5], ROUND_2_ROTATE_2);
+    gg(x[9], ROUND_2_ROTATE_3);
+    gg(x[13], ROUND_2_ROTATE_4);
+    gg(x[2], ROUND_2_ROTATE_1);
+    gg(x[6], ROUND_2_ROTATE_2);
+    gg(x[10], ROUND_2_ROTATE_3);
+    gg(x[14], ROUND_2_ROTATE_4);
+    gg(x[3], ROUND_2_ROTATE_1);
+    gg(x[7], ROUND_2_ROTATE_2);
+    gg(x[11], ROUND_2_ROTATE_3);
+    gg(x[15], ROUND_2_ROTATE_4);
 
-    hh(0, 3);
-    hh(8, 9);
-    hh(4, 11);
-    hh(12, 15);
-    hh(2, 3);
-    hh(10, 9);
-    hh(6, 11);
-    hh(14, 15);
-    hh(1, 3);
-    hh(9, 9);
-    hh(5, 11);
-    hh(13, 15);
-    hh(3, 3);
-    hh(11, 9);
-    hh(7, 11);
-    hh(15, 15);
+    hh(x[0], ROUND_3_ROTATE_1);
+    hh(x[8], ROUND_3_ROTATE_2);
+    hh(x[4], ROUND_3_ROTATE_3);
+    hh(x[12], ROUND_3_ROTATE_4);
+    hh(x[2], ROUND_3_ROTATE_1);
+    hh(x[10], ROUND_3_ROTATE_2);
+    hh(x[6], ROUND_3_ROTATE_3);
+    hh(x[14], ROUND_3_ROTATE_4);
+    hh(x[1], ROUND_3_ROTATE_1);
+    hh(x[9], ROUND_3_ROTATE_2);
+    hh(x[5], ROUND_3_ROTATE_3);
+    hh(x[13], ROUND_3_ROTATE_4);
+    hh(x[3], ROUND_3_ROTATE_1);
+    hh(x[11], ROUND_3_ROTATE_2);
+    hh(x[7], ROUND_3_ROTATE_3);
+    hh(x[15], ROUND_3_ROTATE_4);
 
     // RFC 1320 3.3 step 4: "add that to the input values" — the Davies-Meyer-style feed-forward that makes each block's output depend on its input chaining value.
     a = (a + savedA) >>> 0;
@@ -198,11 +239,13 @@ export function md4(message: Uint8Array<ArrayBuffer>): string {
     d = (d + savedD) >>> 0;
   }
 
-  const out = new Uint8Array(16);
+  const out = new Uint8Array(DIGEST_BYTES);
   const outView = new DataView(out.buffer);
   outView.setUint32(0, a >>> 0, true);
-  outView.setUint32(4, b >>> 0, true);
-  outView.setUint32(8, c >>> 0, true);
-  outView.setUint32(12, d >>> 0, true);
-  return Array.from(out, (byte) => byte.toString(16).padStart(2, "0")).join("");
+  outView.setUint32(REGISTER_B_OFFSET_BYTES, b >>> 0, true);
+  outView.setUint32(REGISTER_C_OFFSET_BYTES, c >>> 0, true);
+  outView.setUint32(REGISTER_D_OFFSET_BYTES, d >>> 0, true);
+  return Array.from(out, (byte) =>
+    byte.toString(HEX_RADIX).padStart(2, "0"),
+  ).join("");
 }
