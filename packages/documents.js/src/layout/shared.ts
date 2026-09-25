@@ -41,6 +41,9 @@ import type {
 // Deep-imported from pdf-codec's layout module rather than its root barrel: this module sits in the reconstruction path's graph (documents.js/read), and the barrel's write half would drag the vendored font assets into it. See src/read-graph.test.ts.
 import { LAYOUT_FORMAT_VERSION } from "pdf-codec/layout";
 
+// The id names an image by its content hash, in hex because a crc32 is a 32-bit integer.
+const HEX_RADIX = 16;
+
 // Layout logic genuinely shared between src/layout/slides.ts (pptx, direct placement) and src/layout/engine.ts (docx, flow/pagination): run styling, line-height measurement, alignment, and image-asset registration have no format-specific knowledge of their own — duplicating them between the two engines would just be two copies to keep in sync.
 
 // Records one rendered placement onto a content node's own frames array, in place — the single mechanism every layout engine and reconstructor in this package uses to fuse positions into the content tree (the schema's DocumentTree design: a node's frames ARE its rendered page positions, in PDF user space, so no second LayoutDocument needs to be correlated back by sourcePath). Mutating the caller's own content tree here is the deliberate design, not an oversight: the correspondence between a node and its position is in hand at exactly this moment and would otherwise be thrown away (see ExaDev/documents.js#569).
@@ -404,7 +407,7 @@ export function registerImage(
     );
   }
   const bytes = base64ToBytes(block.base64);
-  const imageId = `img${crc32(bytes).toString(16)}`;
+  const imageId = `img${crc32(bytes).toString(HEX_RADIX)}`;
   if (!(imageId in images)) {
     const { widthPx, heightPx } = decodeImageDimensions(block.format, bytes);
     images[imageId] = {

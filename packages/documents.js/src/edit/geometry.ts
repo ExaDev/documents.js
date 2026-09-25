@@ -3,13 +3,16 @@ import { applyOdfTransform, formatOdfLength } from "odf.js";
 import type { Box } from "document-schema.js";
 import { removeAttr, setAttr } from "../xml/edit";
 
+// Pi radians expressed in degrees: the degrees-to-radians conversion factor.
+const PI_RADIANS_IN_DEGREES = 180;
+
 // The write side of ODF's own shape-geometry representation, shared by every editable element whose geometry odf.js resolves through the SAME resolveOdfShapeGeometry (typed/shared/transform.ts): a draw:frame (src/edit/odp/shape.ts's OdpShape, reused wholesale by odg), and the odg vector primitives draw:rect/draw:ellipse/draw:path (src/edit/odg/vector.ts). draw:line is the one exception and deliberately absent from this module's callers — it carries two endpoints (svg:x1/y1/x2/y2) rather than a box, has no draw:transform handling in odf.js's own readDrawLineVector, and ContentVectorSchema's own 'line' variant has no rotationDeg field to write in the first place.
 //
 // Lives here, a peer of the per-format edit directories, rather than inside src/edit/odp/: the machinery is genuinely format-neutral (odp, odg, and any future ODF editor resolve geometry identically), and putting it in odp/ would make odg/vector.ts depend on the presentation editor for something that has nothing to do with presentations.
 
 // The write-side inverse of odf.js's own resolveOdfShapeGeometry: given an element's own unrotated frame and a target clockwise-on-screen rotationDeg, produces a draw:transform="rotate(angleRad) translate(txPt typPt)" string that, fed back through resolveOdfShapeGeometry, reproduces exactly `frame` and `rotationDeg`. This reuses applyOdfTransform — the SAME exported function resolveOdfShapeGeometry's own read side uses to fold rotate()/translate() together — rather than re-deriving the rotation matrix and its sign convention by hand: angleRad is the exact algebraic inverse of transform.ts's own netRotationDeg ("(-totalRad * 180) / Math.PI" for a single rotate()), and the translate offset is computed by asking applyOdfTransform where a bare rotate(angleRad) would place the frame's own local centre, then translating by whatever remains to reach the frame's real centre. See transform.ts's own top-of-file note for how the rotate-then-translate composition order and the clockwise-positive sign convention were empirically verified against real LibreOffice-rendered output — this function inherits that verification by construction rather than re-deriving it, which is the whole point of building it on applyOdfTransform instead of a hand-rolled rotation matrix.
 export function buildTransformAttr(frame: Box, rotationDeg: number): string {
-  const angleRad = (-rotationDeg * Math.PI) / 180;
+  const angleRad = (-rotationDeg * Math.PI) / PI_RADIANS_IN_DEGREES;
   const localCenter = { xPt: frame.widthPt / 2, yPt: frame.heightPt / 2 };
   const rotatedCenter = applyOdfTransform(
     [{ kind: "rotate", angleRad }],
