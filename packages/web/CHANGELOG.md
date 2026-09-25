@@ -1,3 +1,14 @@
+## [2.16.5](https://github.com/ExaDev/documents.js/compare/web%402.16.4...web%402.16.5) (2026-09-25)
+
+### Bug Fixes
+
+* **web:** settle the open-document zone and align the From/To row ([7487ee3](https://github.com/ExaDev/documents.js/commit/7487ee35e4258e37122d0bf7c7db29f411e48eb5))
+
+
+### Dependencies
+
+- Updated documents.js to 14.4.39
+
 ## [2.16.4](https://github.com/ExaDev/documents.js/compare/web%402.16.3...web%402.16.4) (2026-09-25)
 
 

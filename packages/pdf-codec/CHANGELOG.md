@@ -1,3 +1,9 @@
+## [5.2.27](https://github.com/ExaDev/documents.js/compare/pdf-codec%405.2.26...pdf-codec%405.2.27) (2026-09-25)
+
+### Code Refactoring
+
+* **pdf-codec:** enable prefer-readonly params and stop mutating them ([818e57f](https://github.com/ExaDev/documents.js/commit/818e57f22ce05399f1f0a8dfd1cdca1aee896675))
+
 ## [5.2.26](https://github.com/ExaDev/documents.js/compare/pdf-codec%405.2.25...pdf-codec%405.2.26) (2026-09-24)
 
 ### Code Refactoring

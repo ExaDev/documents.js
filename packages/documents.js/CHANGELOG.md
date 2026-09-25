@@ -1,3 +1,14 @@
+## [14.4.39](https://github.com/ExaDev/documents.js/compare/documents.js%4014.4.38...documents.js%4014.4.39) (2026-09-25)
+
+### Tests
+
+* **documents.js:** cover hsqldb binary-script error identity and field truncation ([c732be7](https://github.com/ExaDev/documents.js/commit/c732be76e51524b3919a97bd0d46233c4feef74f))
+
+
+### Dependencies
+
+- Updated pdf-codec to 5.2.27
+
 ## [14.4.38](https://github.com/ExaDev/documents.js/compare/documents.js%4014.4.37...documents.js%4014.4.38) (2026-09-25)
 
 ### Tests
