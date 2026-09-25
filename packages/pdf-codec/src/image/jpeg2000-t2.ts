@@ -198,8 +198,12 @@ function bandCoordinate(
   return Math.ceil((componentCoordinate - half * orientation) / (2 * half));
 }
 
+const SUBBANDS_PER_RESOLUTION_LEVEL = 3; // every resolution level beyond the LL band contributes exactly three subbands: HL, LH, HH
+
 function quantizationIndex(resolution: number, bandIndex: number): number {
-  return resolution === 0 ? 0 : 3 * (resolution - 1) + bandIndex + 1;
+  return resolution === 0
+    ? 0
+    : SUBBANDS_PER_RESOLUTION_LEVEL * (resolution - 1) + bandIndex + 1;
 }
 
 // E.1.1 equation E-5: with derived quantization only the LL band's step size is transmitted and every other band's exponent follows from its own decomposition level.
@@ -407,7 +411,14 @@ export function subbandGainLog2(type: Jpeg2000SubbandType): number {
   return SUBBAND_GAIN_LOG2[type];
 }
 
-// B.10.6 Table B.4: the number of coding passes a code-block contributes to this layer, coded as a prefix code over the ranges 1, 2, 3-5, 6-36 and 37-164.
+// B.10.6 Table B.4: the number of coding passes a code-block contributes to this layer, coded as a prefix code over the ranges 1, 2, 3-5, 6-36 and 37-164. Each escape field's own maximum representable value doubles as its escape sentinel (read one more, wider field) and, added to the next range's base, produces the range boundary the comment above names.
+const CODING_PASSES_RANGE_3_5_BASE = 3; // also the 2-bit field's own escape sentinel: a value of 3 (out of 0-3) means "keep reading" rather than "the answer is 3"
+const CODING_PASSES_5_BIT_FIELD_WIDTH = 5;
+const CODING_PASSES_5_BIT_FIELD_ESCAPE = 31; // 2^5 - 1, the 5-bit field's own maximum representable value, used as its escape sentinel
+const CODING_PASSES_RANGE_6_36_BASE = 6;
+const CODING_PASSES_RANGE_37_164_BASE = 37;
+const CODING_PASSES_7_BIT_FIELD_WIDTH = 7;
+
 function readCodingPasses(reader: PacketBitReader): number {
   if (reader.readBit() === 0) {
     return 1;
@@ -416,14 +427,17 @@ function readCodingPasses(reader: PacketBitReader): number {
     return 2;
   }
   const twoBit = reader.readBits(2);
-  if (twoBit < 3) {
-    return 3 + twoBit;
+  if (twoBit < CODING_PASSES_RANGE_3_5_BASE) {
+    return CODING_PASSES_RANGE_3_5_BASE + twoBit;
   }
-  const fiveBit = reader.readBits(5);
-  if (fiveBit < 31) {
-    return 6 + fiveBit;
+  const fiveBit = reader.readBits(CODING_PASSES_5_BIT_FIELD_WIDTH);
+  if (fiveBit < CODING_PASSES_5_BIT_FIELD_ESCAPE) {
+    return CODING_PASSES_RANGE_6_36_BASE + fiveBit;
   }
-  return 37 + reader.readBits(7);
+  return (
+    CODING_PASSES_RANGE_37_164_BASE +
+    reader.readBits(CODING_PASSES_7_BIT_FIELD_WIDTH)
+  );
 }
 
 export interface PacketPosition {
