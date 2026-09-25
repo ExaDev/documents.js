@@ -48,13 +48,20 @@ function graphicStyle(
 }
 
 // Only the PNG magic-byte signature matters to sniffImageFormat — the rest is arbitrary filler, not a real encoded image, matching ooxml.js's own read.test.ts convention.
+const PNG_SIGNATURE_BYTES: readonly number[] = Array.from(
+  "\x89PNG\r\n\x1a\n",
+  (c) => c.charCodeAt(0),
+);
+
 function tinyPngBase64(): string {
-  return bytesToBase64(
-    new Uint8Array([
-      0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0,
-    ]),
-  );
+  return bytesToBase64(new Uint8Array([...PNG_SIGNATURE_BYTES, 0, 0, 0, 0]));
 }
+
+const POINTS_PER_INCH = 72;
+const CM_PER_INCH = 2.54;
+const CM_PRECISION_DIGITS = 6;
+// Not specific to cm-conversion: the same numeric tolerance reused for floating-point rotation/geometry composition assertions elsewhere in this file.
+const FLOAT_PRECISION_DIGITS = 6;
 
 describe("readDrawFrame: geometry", () => {
   it("reads a plain, unrotated frame's own svg:x/svg:y/svg:width/svg:height with no group transform", () => {
@@ -91,6 +98,9 @@ describe("readDrawFrame: geometry", () => {
 });
 
 describe("readDrawFrame: insets from the graphic-family style cascade", () => {
+  const leftRightPaddingCm = 0.25;
+  const topBottomPaddingCm = 0.125;
+
   it("reads fo:padding-* from the frame's own draw:style-name -> graphic family style", () => {
     const gr1 = graphicStyle("gr1", {
       "fo:padding-left": "0.25cm",
@@ -107,8 +117,14 @@ describe("readDrawFrame: insets from the graphic-family style cascade", () => {
       "svg:height": "10pt",
     });
     const shape = readDrawFrame(frame, [], pkg);
-    expect(shape?.insetLeftPt).toBeCloseTo(0.25 * (72 / 2.54), 6);
-    expect(shape?.insetTopPt).toBeCloseTo(0.125 * (72 / 2.54), 6);
+    expect(shape?.insetLeftPt).toBeCloseTo(
+      leftRightPaddingCm * (POINTS_PER_INCH / CM_PER_INCH),
+      CM_PRECISION_DIGITS,
+    );
+    expect(shape?.insetTopPt).toBeCloseTo(
+      topBottomPaddingCm * (POINTS_PER_INCH / CM_PER_INCH),
+      CM_PRECISION_DIGITS,
+    );
   });
 
   it("inherits padding via style:parent-style-name — the real LibreOffice pattern where a shape's own automatic style rarely repeats \"standard\"'s own padding declaration", () => {
@@ -134,8 +150,14 @@ describe("readDrawFrame: insets from the graphic-family style cascade", () => {
       "svg:height": "10pt",
     });
     const shape = readDrawFrame(frame, [], pkg);
-    expect(shape?.insetLeftPt).toBeCloseTo(0.25 * (72 / 2.54), 6);
-    expect(shape?.insetBottomPt).toBeCloseTo(0.125 * (72 / 2.54), 6);
+    expect(shape?.insetLeftPt).toBeCloseTo(
+      leftRightPaddingCm * (POINTS_PER_INCH / CM_PER_INCH),
+      CM_PRECISION_DIGITS,
+    );
+    expect(shape?.insetBottomPt).toBeCloseTo(
+      topBottomPaddingCm * (POINTS_PER_INCH / CM_PER_INCH),
+      CM_PRECISION_DIGITS,
+    );
   });
 
   it("defaults every inset to 0 when the frame has no draw:style-name at all", () => {
@@ -510,20 +532,27 @@ describe("readDrawFrame: flowPositioning opt-in", () => {
 
 describe("readDrawFrame: rotation via draw:transform", () => {
   it("composes into a center-pivoting frame + rotationDeg — see transform.test.ts for the pixel-verified geometry this delegates to", () => {
+    const expectedXPt = 30;
+    const expectedYPt = -30;
+    const expectedRotationDeg = -90;
     const frame = el("draw:frame", {
       "svg:width": "200pt",
       "svg:height": "60pt",
       "draw:transform": "rotate(1.5707963267948966) translate(100pt 100pt)",
     });
     const shape = readDrawFrame(frame, [], { parts: {} });
-    expect(shape?.frame.xPt).toBeCloseTo(30, 6);
-    expect(shape?.frame.yPt).toBeCloseTo(-30, 6);
-    expect(shape?.rotationDeg).toBeCloseTo(-90, 6);
+    expect(shape?.frame.xPt).toBeCloseTo(expectedXPt, FLOAT_PRECISION_DIGITS);
+    expect(shape?.frame.yPt).toBeCloseTo(expectedYPt, FLOAT_PRECISION_DIGITS);
+    expect(shape?.rotationDeg).toBeCloseTo(
+      expectedRotationDeg,
+      FLOAT_PRECISION_DIGITS,
+    );
   });
 });
 
 describe("walkDrawShapes: flat, non-grouped content", () => {
   it("collects every draw:frame at the top level, in document order", () => {
+    const secondFrameXPt = 20;
     const frame1 = el("draw:frame", {
       "svg:x": "0pt",
       "svg:y": "0pt",
@@ -531,14 +560,14 @@ describe("walkDrawShapes: flat, non-grouped content", () => {
       "svg:height": "10pt",
     });
     const frame2 = el("draw:frame", {
-      "svg:x": "20pt",
+      "svg:x": `${secondFrameXPt}pt`,
       "svg:y": "20pt",
       "svg:width": "10pt",
       "svg:height": "10pt",
     });
     const out: ContentShape[] = [];
     walkDrawShapes([frame1, frame2], [], { parts: {} }, { shapes: out });
-    expect(out.map((s) => s.frame.xPt)).toEqual([0, 20]);
+    expect(out.map((s) => s.frame.xPt)).toEqual([0, secondFrameXPt]);
   });
 
   it("skips a top-level element that is neither draw:frame nor draw:g (a bare vector-primitive shape, out of this task's documented scope)", () => {
@@ -598,11 +627,13 @@ describe("walkDrawShapes: draw:g group flattening", () => {
 
   it("composes a group's own draw:transform onto each child — a concrete before/after example: child center (90,70) rotated+translated by the group becomes center (170,10)", () => {
     // Before: child A's own box is x:50 y:50 w:80 h:40 -> local center (90, 70).
+    const widthPt = 80;
+    const heightPt = 40;
     const shapeA = el("draw:frame", {
       "svg:x": "50pt",
       "svg:y": "50pt",
-      "svg:width": "80pt",
-      "svg:height": "40pt",
+      "svg:width": `${widthPt}pt`,
+      "svg:height": `${heightPt}pt`,
     });
     // Group transform: rotate(pi/2) translate(100pt 100pt) — verified against a real render in transform.test.ts.
     const group = el(
@@ -613,12 +644,27 @@ describe("walkDrawShapes: draw:g group flattening", () => {
     const out: ContentShape[] = [];
     walkDrawShapes([group], [], { parts: {} }, { shapes: out });
     expect(out).toHaveLength(1);
-    // After: applyOdfTransform(groupFunctions, {90,70}) -> rotate: (70,-90) -> translate: (170,10) -> frame top-left = center - halfSize = (170-40, 10-20) = (130,-10).
-    expect(out[0]?.frame.xPt).toBeCloseTo(130, 6);
-    expect(out[0]?.frame.yPt).toBeCloseTo(-10, 6);
-    expect(out[0]?.frame.widthPt).toBeCloseTo(80, 6); // unchanged — no scale in ODF's own group model
-    expect(out[0]?.frame.heightPt).toBeCloseTo(40, 6);
-    expect(out[0]?.rotationDeg).toBeCloseTo(-90, 6);
+    // After: applyOdfTransform(groupFunctions, {90,70}) -> rotate: (70,-90) -> translate: (170,10) -> frame top-left = center - halfSize.
+    const newCenterXPt = 170;
+    const newCenterYPt = 10;
+    const expectedRotationDeg = -90;
+    expect(out[0]?.frame.xPt).toBeCloseTo(
+      newCenterXPt - widthPt / 2,
+      FLOAT_PRECISION_DIGITS,
+    );
+    expect(out[0]?.frame.yPt).toBeCloseTo(
+      newCenterYPt - heightPt / 2,
+      FLOAT_PRECISION_DIGITS,
+    );
+    expect(out[0]?.frame.widthPt).toBeCloseTo(widthPt, FLOAT_PRECISION_DIGITS); // unchanged — no scale in ODF's own group model
+    expect(out[0]?.frame.heightPt).toBeCloseTo(
+      heightPt,
+      FLOAT_PRECISION_DIGITS,
+    );
+    expect(out[0]?.rotationDeg).toBeCloseTo(
+      expectedRotationDeg,
+      FLOAT_PRECISION_DIGITS,
+    );
   });
 
   it("composes NESTED groups innermost-first: an inner group's own transform applies to the child before the outer group's own transform applies to the result", () => {
@@ -637,8 +683,15 @@ describe("walkDrawShapes: draw:g group flattening", () => {
     const out: ContentShape[] = [];
     walkDrawShapes([outer], [], { parts: {} }, { shapes: out });
     // Child local center (5,5) -> inner translate (10,0) -> (15,5) -> outer translate (0,10) -> (15,15) -> top-left (10,10).
-    expect(out[0]?.frame.xPt).toBeCloseTo(10, 6);
-    expect(out[0]?.frame.yPt).toBeCloseTo(10, 6);
+    const expectedTopLeftPt = 10;
+    expect(out[0]?.frame.xPt).toBeCloseTo(
+      expectedTopLeftPt,
+      FLOAT_PRECISION_DIGITS,
+    );
+    expect(out[0]?.frame.yPt).toBeCloseTo(
+      expectedTopLeftPt,
+      FLOAT_PRECISION_DIGITS,
+    );
   });
 
   it("flattens an EMPTY group (no children) into nothing, without error", () => {
@@ -656,17 +709,19 @@ function vectorPackage(pkg: Package = { parts: {} }): Package {
 
 describe("readDrawPageContent: draw:rect / draw:ellipse / draw:circle", () => {
   it("reads a plain draw:rect into the rect variant, with fill+stroke from its own graphic-family style", () => {
+    const widthCm = 5;
+    const strokeWidthCm = 0.05;
     const gr1 = graphicStyle("gr1", {
       "draw:fill-color": "#ff0000",
       "svg:stroke-color": "#000000",
-      "svg:stroke-width": "0.05cm",
+      "svg:stroke-width": `${strokeWidthCm}cm`,
     });
     const pkg: Package = { parts: { "content.xml": contentPackage([gr1]) } };
     const rect = el("draw:rect", {
       "draw:style-name": "gr1",
       "svg:x": "1cm",
       "svg:y": "1cm",
-      "svg:width": "5cm",
+      "svg:width": `${widthCm}cm`,
       "svg:height": "3cm",
     });
     const { vectors } = readDrawPageContent([rect], pkg);
@@ -675,10 +730,16 @@ describe("readDrawPageContent: draw:rect / draw:ellipse / draw:circle", () => {
     if (vector?.kind !== "rect") {
       throw new Error("expected a rect vector");
     }
-    expect(vector.frame.widthPt).toBeCloseTo(5 * (72 / 2.54), 6);
+    expect(vector.frame.widthPt).toBeCloseTo(
+      widthCm * (POINTS_PER_INCH / CM_PER_INCH),
+      CM_PRECISION_DIGITS,
+    );
     expect(vector.fill).toEqual({ r: 1, g: 0, b: 0 });
     expect(vector.stroke?.color).toEqual({ r: 0, g: 0, b: 0 });
-    expect(vector.stroke?.widthPt).toBeCloseTo(0.05 * (72 / 2.54), 6);
+    expect(vector.stroke?.widthPt).toBeCloseTo(
+      strokeWidthCm * (POINTS_PER_INCH / CM_PER_INCH),
+      CM_PRECISION_DIGITS,
+    );
   });
 
   it("reads draw:ellipse and draw:circle into the SAME ellipse variant — real LibreOffice output writes draw:circle instead of draw:ellipse specifically when width equals height, with no other attribute-shape difference", () => {
@@ -816,12 +877,18 @@ describe("readDrawPageContent: non-flat fills (gradient/bitmap/hatch) and fill o
   });
 
   it('resolves a "hatch" fill from its named <draw:hatch> definition, using its own colour as the flat fill swatch', () => {
+    const RGB_CHANNEL_MAX = 255;
+    const red = 0x12;
+    const green = 0x34;
+    const blue = 0x56;
+    const distanceCm = 0.1;
+    const rotationDeg = 90;
     const hatch = el("draw:hatch", {
       "draw:name": "hatch1",
       "draw:style": "triple",
       "draw:color": "#123456",
-      "draw:distance": "0.1cm",
-      "draw:rotation": "90",
+      "draw:distance": `${distanceCm}cm`,
+      "draw:rotation": `${rotationDeg}`,
     });
     const gr1 = graphicStyle("gr1", {
       "draw:fill": "hatch",
@@ -845,9 +912,13 @@ describe("readDrawPageContent: non-flat fills (gradient/bitmap/hatch) and fill o
     expect(vector.fillPattern).toEqual({
       kind: "hatch",
       style: "triple",
-      color: { r: 0x12 / 255, g: 0x34 / 255, b: 0x56 / 255 },
-      distancePt: 0.1 * (72 / 2.54),
-      rotationDeg: 90,
+      color: {
+        r: red / RGB_CHANNEL_MAX,
+        g: green / RGB_CHANNEL_MAX,
+        b: blue / RGB_CHANNEL_MAX,
+      },
+      distancePt: distanceCm * (POINTS_PER_INCH / CM_PER_INCH),
+      rotationDeg,
     });
   });
 
@@ -1025,9 +1096,11 @@ describe("readDrawPageContent: non-flat fills (gradient/bitmap/hatch) and fill o
   });
 
   it("reads draw:opacity into fillOpacity as a 0..1 fraction", () => {
+    const opacityPercent = 37;
+    const percentScale = 100;
     const gr1 = graphicStyle("gr1", {
       "draw:fill-color": "#ff0000",
-      "draw:opacity": "37%",
+      "draw:opacity": `${opacityPercent}%`,
     });
     const pkg: Package = { parts: { "content.xml": contentPackage([gr1]) } };
     const rect = el("draw:rect", {
@@ -1042,7 +1115,10 @@ describe("readDrawPageContent: non-flat fills (gradient/bitmap/hatch) and fill o
     if (vector?.kind !== "rect") {
       throw new Error("expected a rect vector");
     }
-    expect(vector.fillOpacity).toBeCloseTo(0.37, 6);
+    expect(vector.fillOpacity).toBeCloseTo(
+      opacityPercent / percentScale,
+      FLOAT_PRECISION_DIGITS,
+    );
   });
 
   it("leaves fillOpacity undefined (fully opaque) when draw:opacity is absent", () => {
@@ -1066,10 +1142,11 @@ describe("readDrawPageContent: non-flat fills (gradient/bitmap/hatch) and fill o
 
 describe("readDrawPageContent: stroke opacity and the real dash run-length pattern (ExaDev/documents.js#954)", () => {
   it("reads svg:stroke-opacity (a bare [0,1] double) into the stroke's own opacity field", () => {
+    const strokeOpacity = 0.25;
     const gr1 = graphicStyle("gr1", {
       "svg:stroke-color": "#000000",
       "svg:stroke-width": "1pt",
-      "svg:stroke-opacity": "0.25",
+      "svg:stroke-opacity": `${strokeOpacity}`,
     });
     const pkg: Package = { parts: { "content.xml": contentPackage([gr1]) } };
     const rect = el("draw:rect", {
@@ -1084,14 +1161,19 @@ describe("readDrawPageContent: stroke opacity and the real dash run-length patte
     if (vector?.kind !== "rect") {
       throw new Error("expected a rect vector");
     }
-    expect(vector.stroke?.opacity).toBeCloseTo(0.25, 6);
+    expect(vector.stroke?.opacity).toBeCloseTo(
+      strokeOpacity,
+      FLOAT_PRECISION_DIGITS,
+    );
   });
 
   it("also accepts svg:stroke-opacity as a percentage", () => {
+    const strokeOpacityPercent = 80;
+    const percentScale = 100;
     const gr1 = graphicStyle("gr1", {
       "svg:stroke-color": "#000000",
       "svg:stroke-width": "1pt",
-      "svg:stroke-opacity": "80%",
+      "svg:stroke-opacity": `${strokeOpacityPercent}%`,
     });
     const pkg: Package = { parts: { "content.xml": contentPackage([gr1]) } };
     const rect = el("draw:rect", {
@@ -1106,7 +1188,10 @@ describe("readDrawPageContent: stroke opacity and the real dash run-length patte
     if (vector?.kind !== "rect") {
       throw new Error("expected a rect vector");
     }
-    expect(vector.stroke?.opacity).toBeCloseTo(0.8, 6);
+    expect(vector.stroke?.opacity).toBeCloseTo(
+      strokeOpacityPercent / percentScale,
+      FLOAT_PRECISION_DIGITS,
+    );
   });
 
   it("resolves a \"dash\"-mode stroke's own named <draw:stroke-dash> definition into a real dashPattern, alongside the existing style: 'dashed'", () => {
@@ -1356,20 +1441,28 @@ describe("readDrawPageContent: draw:line", () => {
       "svg:stroke-width": "0.03cm",
     });
     const pkg: Package = { parts: { "content.xml": contentPackage([gr1]) } };
+    const x1Cm = 9;
+    const y2Cm = 4;
     const line = el("draw:line", {
       "draw:style-name": "gr1",
-      "svg:x1": "9cm",
+      "svg:x1": `${x1Cm}cm`,
       "svg:y1": "1cm",
       "svg:x2": "13cm",
-      "svg:y2": "4cm",
+      "svg:y2": `${y2Cm}cm`,
     });
     const { vectors } = readDrawPageContent([line], pkg);
     const vector = vectors[0];
     if (vector?.kind !== "line") {
       throw new Error("expected a line vector");
     }
-    expect(vector.from.xPt).toBeCloseTo(9 * (72 / 2.54), 6);
-    expect(vector.to.yPt).toBeCloseTo(4 * (72 / 2.54), 6);
+    expect(vector.from.xPt).toBeCloseTo(
+      x1Cm * (POINTS_PER_INCH / CM_PER_INCH),
+      CM_PRECISION_DIGITS,
+    );
+    expect(vector.to.yPt).toBeCloseTo(
+      y2Cm * (POINTS_PER_INCH / CM_PER_INCH),
+      CM_PRECISION_DIGITS,
+    );
     expect(vector.stroke.color).toEqual({ r: 0, g: 0, b: 1 });
   });
 
@@ -1686,22 +1779,25 @@ describe("readDrawPageContent: draw:custom-shape presets", () => {
 
   // ExaDev/documents.js#954: 'round-rectangle' now builds a REAL rounded-corner path when the shape's own draw:handle/draw:modifiers resolve a corner radius, rather than always approximating to the plain rect variant.
   it('"round-rectangle" with a resolvable draw:handle/draw:modifiers corner radius builds a real rounded-corner path, not the plain rect approximation', () => {
+    const widthPt = 50;
+    const modifierValue = 3600;
+    const viewBoxSize = 21600;
     const shape = el(
       "draw:custom-shape",
       {
         "draw:name": "CustomRoundRect1",
         "svg:x": "0pt",
         "svg:y": "0pt",
-        "svg:width": "50pt",
+        "svg:width": `${widthPt}pt`,
         "svg:height": "30pt",
       },
       [
         el(
           "draw:enhanced-geometry",
           {
-            "svg:viewBox": "0 0 21600 21600",
+            "svg:viewBox": `0 0 ${viewBoxSize} ${viewBoxSize}`,
             "draw:type": "round-rectangle",
-            "draw:modifiers": "3600",
+            "draw:modifiers": `${modifierValue}`,
           },
           [
             el("draw:handle", {
@@ -1718,15 +1814,19 @@ describe("readDrawPageContent: draw:custom-shape presets", () => {
     if (vector?.kind !== "path") {
       throw new Error("expected a path vector");
     }
-    // 3600/21600 * 50pt width = ~8.33pt radius.
-    const expectedRadius = (3600 / 21600) * 50;
+    // modifierValue/viewBoxSize * widthPt = ~8.33pt radius.
+    const expectedRadius = (modifierValue / viewBoxSize) * widthPt;
     expect(vector.subpaths).toHaveLength(1);
     const subpath = vector.subpaths[0];
     expect(subpath?.closed).toBe(true);
-    expect(subpath?.start.xPt).toBeCloseTo(expectedRadius, 6);
-    expect(subpath?.start.yPt).toBeCloseTo(0, 6);
-    // 4 straight edges + 4 corner arcs = 8 segments.
-    expect(subpath?.segments).toHaveLength(8);
+    expect(subpath?.start.xPt).toBeCloseTo(
+      expectedRadius,
+      FLOAT_PRECISION_DIGITS,
+    );
+    expect(subpath?.start.yPt).toBeCloseTo(0, FLOAT_PRECISION_DIGITS);
+    // 4 straight edges + 4 corner arcs.
+    const expectedSegmentCount = 8;
+    expect(subpath?.segments).toHaveLength(expectedSegmentCount);
     expect(subpath?.segments.map((s) => s.kind)).toEqual([
       "line",
       "cubic",
@@ -1740,13 +1840,14 @@ describe("readDrawPageContent: draw:custom-shape presets", () => {
   });
 
   it('"round-rectangle" clamps a modifier value beyond half the shape\'s shorter side to the mathematical maximum a corner radius can be', () => {
+    const heightPt = 30;
     const shape = el(
       "draw:custom-shape",
       {
         "svg:x": "0pt",
         "svg:y": "0pt",
         "svg:width": "50pt",
-        "svg:height": "30pt",
+        "svg:height": `${heightPt}pt`,
       },
       [
         el(
@@ -1766,17 +1867,26 @@ describe("readDrawPageContent: draw:custom-shape presets", () => {
       throw new Error("expected a path vector");
     }
     const subpath = vector.subpaths[0];
-    // Clamped to half the shorter side (30pt height / 2 = 15pt).
-    expect(subpath?.start.xPt).toBeCloseTo(15, 6);
+    // Clamped to half the shorter side.
+    expect(subpath?.start.xPt).toBeCloseTo(
+      heightPt / 2,
+      FLOAT_PRECISION_DIGITS,
+    );
   });
 
+  const DIAMOND_VERTEX_COUNT = 4;
+  const TRIANGLE_VERTEX_COUNT = 3;
+  const PENTAGON_VERTEX_COUNT = 5;
+  const HEXAGON_VERTEX_COUNT = 6;
+  const OCTAGON_VERTEX_COUNT = 8;
+
   it.each([
-    ["diamond", 4],
-    ["isosceles-triangle", 3],
-    ["right-triangle", 3],
-    ["pentagon", 5],
-    ["hexagon", 6],
-    ["octagon", 8],
+    ["diamond", DIAMOND_VERTEX_COUNT],
+    ["isosceles-triangle", TRIANGLE_VERTEX_COUNT],
+    ["right-triangle", TRIANGLE_VERTEX_COUNT],
+    ["pentagon", PENTAGON_VERTEX_COUNT],
+    ["hexagon", HEXAGON_VERTEX_COUNT],
+    ["octagon", OCTAGON_VERTEX_COUNT],
   ])(
     'recognises the "%s" preset — builds a closed, straight-line-only path with %i vertices inscribed in the shape\'s own frame',
     (type, vertexCount) => {
@@ -1950,22 +2060,32 @@ describe("readDrawPageContent: draw:z-index paint order", () => {
 
 describe("readDrawPageContent: group flattening for vector primitives", () => {
   it("applies an enclosing draw:g's own translate to a rect's frame, exactly like it already does for draw:frame", () => {
+    const originPt = 10;
+    const translatePt = 5;
     const rect = el("draw:rect", {
-      "svg:x": "10pt",
-      "svg:y": "10pt",
+      "svg:x": `${originPt}pt`,
+      "svg:y": `${originPt}pt`,
       "svg:width": "20pt",
       "svg:height": "20pt",
     });
-    const group = el("draw:g", { "draw:transform": "translate(5pt 5pt)" }, [
-      rect,
-    ]);
+    const group = el(
+      "draw:g",
+      { "draw:transform": `translate(${translatePt}pt ${translatePt}pt)` },
+      [rect],
+    );
     const { vectors } = readDrawPageContent([group], { parts: {} });
     const vector = vectors[0];
     if (vector?.kind !== "rect") {
       throw new Error("expected a rect vector");
     }
-    expect(vector.frame.xPt).toBeCloseTo(15, 6);
-    expect(vector.frame.yPt).toBeCloseTo(15, 6);
+    expect(vector.frame.xPt).toBeCloseTo(
+      originPt + translatePt,
+      FLOAT_PRECISION_DIGITS,
+    );
+    expect(vector.frame.yPt).toBeCloseTo(
+      originPt + translatePt,
+      FLOAT_PRECISION_DIGITS,
+    );
   });
 
   it("recurses through nested groups for vector primitives, mirroring walkDrawShapes' own innermost-first composition", () => {
@@ -1986,8 +2106,9 @@ describe("readDrawPageContent: group flattening for vector primitives", () => {
     if (vector?.kind !== "rect") {
       throw new Error("expected a rect vector");
     }
-    expect(vector.frame.xPt).toBeCloseTo(10, 6);
-    expect(vector.frame.yPt).toBeCloseTo(10, 6);
+    const expectedPt = 10;
+    expect(vector.frame.xPt).toBeCloseTo(expectedPt, FLOAT_PRECISION_DIGITS);
+    expect(vector.frame.yPt).toBeCloseTo(expectedPt, FLOAT_PRECISION_DIGITS);
   });
 });
 
@@ -2022,34 +2143,46 @@ describe("readDrawPageContent: unhandled node kinds", () => {
 });
 
 describe("readDrawPageContent: vector rotation via draw:transform — reuses the SAME geometry machinery draw:frame already resolves rotation through", () => {
+  const quarterTurnTransform =
+    "rotate(1.5707963267948966) translate(100pt 100pt)";
+  const expectedRotationDeg = -90;
+
   it("reads a rotated draw:rect's own rotationDeg, not just its unrotated frame", () => {
+    const expectedXPt = 30;
+    const expectedYPt = -30;
     const rect = el("draw:rect", {
       "svg:width": "200pt",
       "svg:height": "60pt",
-      "draw:transform": "rotate(1.5707963267948966) translate(100pt 100pt)",
+      "draw:transform": quarterTurnTransform,
     });
     const { vectors } = readDrawPageContent([rect], { parts: {} });
     const vector = vectors[0];
     if (vector?.kind !== "rect") {
       throw new Error("expected a rect vector");
     }
-    expect(vector.frame.xPt).toBeCloseTo(30, 6);
-    expect(vector.frame.yPt).toBeCloseTo(-30, 6);
-    expect(vector.rotationDeg).toBeCloseTo(-90, 6);
+    expect(vector.frame.xPt).toBeCloseTo(expectedXPt, FLOAT_PRECISION_DIGITS);
+    expect(vector.frame.yPt).toBeCloseTo(expectedYPt, FLOAT_PRECISION_DIGITS);
+    expect(vector.rotationDeg).toBeCloseTo(
+      expectedRotationDeg,
+      FLOAT_PRECISION_DIGITS,
+    );
   });
 
   it("reads a rotated draw:ellipse's own rotationDeg", () => {
     const ellipse = el("draw:ellipse", {
       "svg:width": "200pt",
       "svg:height": "60pt",
-      "draw:transform": "rotate(1.5707963267948966) translate(100pt 100pt)",
+      "draw:transform": quarterTurnTransform,
     });
     const { vectors } = readDrawPageContent([ellipse], { parts: {} });
     const vector = vectors[0];
     if (vector?.kind !== "ellipse") {
       throw new Error("expected an ellipse vector");
     }
-    expect(vector.rotationDeg).toBeCloseTo(-90, 6);
+    expect(vector.rotationDeg).toBeCloseTo(
+      expectedRotationDeg,
+      FLOAT_PRECISION_DIGITS,
+    );
   });
 
   it("reads a rotated draw:path's own rotationDeg alongside its normally-scaled subpaths", () => {
@@ -2058,14 +2191,17 @@ describe("readDrawPageContent: vector rotation via draw:transform — reuses the
       "svg:height": "100pt",
       "svg:viewBox": "0 0 4000 4000",
       "svg:d": "M0 4000h3000c1000 0 1000-4000-1000-4000z",
-      "draw:transform": "rotate(1.5707963267948966) translate(100pt 100pt)",
+      "draw:transform": quarterTurnTransform,
     });
     const { vectors } = readDrawPageContent([path], { parts: {} });
     const vector = vectors[0];
     if (vector?.kind !== "path") {
       throw new Error("expected a path vector");
     }
-    expect(vector.rotationDeg).toBeCloseTo(-90, 6);
+    expect(vector.rotationDeg).toBeCloseTo(
+      expectedRotationDeg,
+      FLOAT_PRECISION_DIGITS,
+    );
     expect(vector.subpaths).toHaveLength(1);
   });
 
@@ -2076,17 +2212,18 @@ describe("readDrawPageContent: vector rotation via draw:transform — reuses the
       "svg:width": "80pt",
       "svg:height": "40pt",
     });
-    const group = el(
-      "draw:g",
-      { "draw:transform": "rotate(1.5707963267948966) translate(100pt 100pt)" },
-      [rect],
-    );
+    const group = el("draw:g", { "draw:transform": quarterTurnTransform }, [
+      rect,
+    ]);
     const { vectors } = readDrawPageContent([group], { parts: {} });
     const vector = vectors[0];
     if (vector?.kind !== "rect") {
       throw new Error("expected a rect vector");
     }
-    expect(vector.rotationDeg).toBeCloseTo(-90, 6);
+    expect(vector.rotationDeg).toBeCloseTo(
+      expectedRotationDeg,
+      FLOAT_PRECISION_DIGITS,
+    );
   });
 
   it("leaves rotationDeg undefined for an unrotated vector, matching draw:frame's own convention", () => {
@@ -2107,8 +2244,9 @@ describe("readDrawPageContent: vector rotation via draw:transform — reuses the
 
 describe("readDrawPageContent / walkDrawShapes: paintOrder stamping", () => {
   it("stamps the resolved zIndex onto each ContentVector, in addition to using it to sort the vectors array", () => {
+    const zIndexA = 5;
     const rectA = el("draw:rect", {
-      "draw:z-index": "5",
+      "draw:z-index": `${zIndexA}`,
       "svg:x": "0pt",
       "svg:y": "0pt",
       "svg:width": "10pt",
@@ -2122,7 +2260,7 @@ describe("readDrawPageContent / walkDrawShapes: paintOrder stamping", () => {
       "svg:height": "10pt",
     });
     const { vectors } = readDrawPageContent([rectA, rectB], { parts: {} });
-    expect(vectors.map((v) => v.paintOrder)).toEqual([1, 5]);
+    expect(vectors.map((v) => v.paintOrder)).toEqual([1, zIndexA]);
   });
 
   it("stamps a document-encounter fallback index (not just undefined) when draw:z-index is absent", () => {
@@ -2169,9 +2307,10 @@ describe("readDrawPageContent / walkDrawShapes: paintOrder stamping", () => {
   });
 
   it("walkDrawShapes (odp) stamps the identical paintOrder value onto each ContentShape it produces, without reordering its own output array", () => {
+    const zIndexA = 5;
     const frameA = el("draw:frame", {
       "draw:name": "A",
-      "draw:z-index": "5",
+      "draw:z-index": `${zIndexA}`,
       "svg:x": "0pt",
       "svg:y": "0pt",
       "svg:width": "10pt",
@@ -2189,7 +2328,7 @@ describe("readDrawPageContent / walkDrawShapes: paintOrder stamping", () => {
     walkDrawShapes([frameA, frameB], [], { parts: {} }, { shapes: out });
     // Document order is unchanged (A then B) — only the stamped value reflects the real z-index.
     expect(out.map((s) => s.name)).toEqual(["A", "B"]);
-    expect(out.map((s) => s.paintOrder)).toEqual([5, 1]);
+    expect(out.map((s) => s.paintOrder)).toEqual([zIndexA, 1]);
   });
 
   it("walkDrawShapes threads its own indexState across a recursive draw:g walk, keeping the document-encounter fallback monotonic", () => {
@@ -2437,42 +2576,55 @@ describe("readDrawPageContent: fixed-preset and regular-polygon exact vertex coo
   });
 
   it("hexagon's own six vertices are evenly spaced around the frame's own centre, point-up", () => {
+    const hexagonVertexCount = 6;
+    const angularPrecisionDigits = 9;
     const vertices = pathVertices("hexagon");
-    expect(vertices).toHaveLength(6);
+    expect(vertices).toHaveLength(hexagonVertexCount);
     const cx = 25;
     const cy = 15;
-    const expected = Array.from({ length: 6 }, (_, i) => {
-      const angle = -Math.PI / 2 + (2 * Math.PI * i) / 6;
+    const expected = Array.from({ length: hexagonVertexCount }, (_, i) => {
+      const angle = -Math.PI / 2 + (2 * Math.PI * i) / hexagonVertexCount;
       return { xPt: cx + cx * Math.cos(angle), yPt: cy + cy * Math.sin(angle) };
     });
     vertices.forEach((v, i) => {
-      expect(v.xPt).toBeCloseTo(expected[i]!.xPt, 9);
-      expect(v.yPt).toBeCloseTo(expected[i]!.yPt, 9);
+      expect(v.xPt).toBeCloseTo(expected[i]!.xPt, angularPrecisionDigits);
+      expect(v.yPt).toBeCloseTo(expected[i]!.yPt, angularPrecisionDigits);
     });
     // The topmost vertex sits at dead centre horizontally, at the very top of the frame.
-    expect(vertices[0]!.xPt).toBeCloseTo(25, 9);
-    expect(vertices[0]!.yPt).toBeCloseTo(0, 9);
+    expect(vertices[0]!.xPt).toBeCloseTo(cx, angularPrecisionDigits);
+    expect(vertices[0]!.yPt).toBeCloseTo(0, angularPrecisionDigits);
     // The bottommost vertex (index 3, halfway round) sits at dead centre horizontally, at the very bottom.
-    expect(vertices[3]!.xPt).toBeCloseTo(25, 9);
-    expect(vertices[3]!.yPt).toBeCloseTo(30, 9);
+    const bottommostVertexIndex = 3;
+    expect(vertices[bottommostVertexIndex]!.xPt).toBeCloseTo(
+      cx,
+      angularPrecisionDigits,
+    );
+    expect(vertices[bottommostVertexIndex]!.yPt).toBeCloseTo(
+      2 * cy,
+      angularPrecisionDigits,
+    );
   });
 
   it("round-rectangle's real rounded path carries every one of its 8 segments' own exact coordinates, not just the start point", () => {
+    const modifierValue = 3600;
+    const viewBoxSize = 21600;
+    const w = 50;
+    const h = 30;
     const shape = el(
       "draw:custom-shape",
       {
         "svg:x": "0pt",
         "svg:y": "0pt",
-        "svg:width": "50pt",
-        "svg:height": "30pt",
+        "svg:width": `${w}pt`,
+        "svg:height": `${h}pt`,
       },
       [
         el(
           "draw:enhanced-geometry",
           {
-            "svg:viewBox": "0 0 21600 21600",
+            "svg:viewBox": `0 0 ${viewBoxSize} ${viewBoxSize}`,
             "draw:type": "round-rectangle",
-            "draw:modifiers": "3600",
+            "draw:modifiers": `${modifierValue}`,
           },
           [el("draw:handle", { "draw:handle-position": "$0 0" })],
         ),
@@ -2483,10 +2635,10 @@ describe("readDrawPageContent: fixed-preset and regular-polygon exact vertex coo
     if (vector?.kind !== "path") {
       throw new Error("expected a path vector");
     }
-    const r = (3600 / 21600) * 50; // ~8.333333pt
-    const k = r * 0.5522847498307936;
-    const w = 50;
-    const h = 30;
+    const r = (modifierValue / viewBoxSize) * w; // ~8.333333pt
+    // The standard cubic-bezier kappa constant for approximating a quarter circle: 4*(sqrt(2)-1)/3.
+    const BEZIER_QUARTER_CIRCLE_KAPPA = 0.5522847498307936;
+    const k = r * BEZIER_QUARTER_CIRCLE_KAPPA;
     const subpath = vector.subpaths[0]!;
     expect(subpath.start).toEqual({ xPt: r, yPt: 0 });
     expect(subpath.segments).toEqual([
@@ -2574,9 +2726,11 @@ describe("readDrawPageContent: fixed-preset and regular-polygon exact vertex coo
 
 describe("readDrawPageContent: fillPattern/fillOpacity carried through every vector kind, not only rect", () => {
   it("draw:ellipse carries fillOpacity through, the same as draw:rect", () => {
+    const opacityPercent = 50;
+    const percentScale = 100;
     const gr1 = graphicStyle("gr1", {
       "draw:fill-color": "#ff0000",
-      "draw:opacity": "50%",
+      "draw:opacity": `${opacityPercent}%`,
     });
     const pkg: Package = { parts: { "content.xml": contentPackage([gr1]) } };
     const ellipse = el("draw:ellipse", {
@@ -2591,13 +2745,18 @@ describe("readDrawPageContent: fillPattern/fillOpacity carried through every vec
     if (vector?.kind !== "ellipse") {
       throw new Error("expected an ellipse vector");
     }
-    expect(vector.fillOpacity).toBeCloseTo(0.5, 6);
+    expect(vector.fillOpacity).toBeCloseTo(
+      opacityPercent / percentScale,
+      FLOAT_PRECISION_DIGITS,
+    );
   });
 
   it("draw:path carries fillOpacity through, the same as draw:rect", () => {
+    const opacityPercent = 50;
+    const percentScale = 100;
     const gr1 = graphicStyle("gr1", {
       "draw:fill-color": "#ff0000",
-      "draw:opacity": "50%",
+      "draw:opacity": `${opacityPercent}%`,
     });
     const pkg: Package = { parts: { "content.xml": contentPackage([gr1]) } };
     const path = el("draw:path", {
@@ -2614,13 +2773,18 @@ describe("readDrawPageContent: fillPattern/fillOpacity carried through every vec
     if (vector?.kind !== "path") {
       throw new Error("expected a path vector");
     }
-    expect(vector.fillOpacity).toBeCloseTo(0.5, 6);
+    expect(vector.fillOpacity).toBeCloseTo(
+      opacityPercent / percentScale,
+      FLOAT_PRECISION_DIGITS,
+    );
   });
 
   it("a recognised custom-shape preset carries fillOpacity through, the same as a plain draw:rect", () => {
+    const opacityPercent = 50;
+    const percentScale = 100;
     const gr1 = graphicStyle("gr1", {
       "draw:fill-color": "#ff0000",
-      "draw:opacity": "50%",
+      "draw:opacity": `${opacityPercent}%`,
     });
     const pkg: Package = { parts: { "content.xml": contentPackage([gr1]) } };
     const shape = el(
@@ -2639,6 +2803,9 @@ describe("readDrawPageContent: fillPattern/fillOpacity carried through every vec
     if (vector?.kind !== "ellipse") {
       throw new Error("expected an ellipse vector");
     }
-    expect(vector.fillOpacity).toBeCloseTo(0.5, 6);
+    expect(vector.fillOpacity).toBeCloseTo(
+      opacityPercent / percentScale,
+      FLOAT_PRECISION_DIGITS,
+    );
   });
 });
