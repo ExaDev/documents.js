@@ -333,9 +333,13 @@ export interface GroupChildTransform {
   readonly compositeMirrored: boolean;
 }
 
+// ECMA-376's own rotation angles are always plain degrees (DrawingML's 60,000ths-of-a-degree ST_Angle unit is converted to plain degrees at the point a:xfrm/@rot is read, before any value reaches this module), so every helper below shares these two degree-circle constants rather than each re-deriving them.
+const DEGREES_PER_FULL_CIRCLE = 360;
+const DEGREES_PER_HALF_CIRCLE = 180;
+
 function normalizeDeg(deg: number): number {
-  const mod = deg % 360;
-  return mod < 0 ? mod + 360 : mod;
+  const mod = deg % DEGREES_PER_FULL_CIRCLE;
+  return mod < 0 ? mod + DEGREES_PER_FULL_CIRCLE : mod;
 }
 
 // Canonicalises a group's own (rotationDeg, flipH, flipV) into a single (angleDeg, mirrored) pair representing the linear map M = R(angleDeg) . (Fh if mirrored else I), where R(theta) is ECMA-376's own clockwise rotation and Fh = diag(-1, 1) (a mirror across the vertical axis). Two flips cancel to a pure rotation rather than compounding into a further mirror, since Fh . Fv = diag(-1,-1) = R(180 deg); a lone flipV is restated in terms of the canonical Fh axis via the identity Fv = R(180 deg) . Fh (both verified by direct 2x2 matrix multiplication): flipH && flipV -> R(rot).Fh.Fv = R(rot).R(180) = R(rot+180), no residual mirror; flipV only -> R(rot).Fv = R(rot).R(180).Fh = R(rot+180).Fh, mirrored; flipH only -> R(rot).Fh, mirrored; neither -> R(rot), not mirrored.
@@ -348,7 +352,10 @@ function canonicalizeGroupRotation(
   //
   // "+ 180" here is a genuinely irreducible equivalent mutation opportunity, not merely an untested one: every caller of this function eventually normalises the returned angleDeg modulo 360 (directly, via normalizeDeg in composeGroupTransform's own top-level branch, or as an operand composeAngleDeg feeds through normalizeDeg when composing with a parent), and (x + 180) mod 360 === (x - 180) mod 360 for every x, since the two differ by exactly 360. No test built on this function's own observable contract (an angle consumed only through that eventual mod-360 normalisation) can ever tell "+ 180" and "- 180" apart here — the difference genuinely does not exist for any input, not just the ones a test happens to try. Two restructurings were tried and both moved the identical ambiguity rather than removing it: composing through composeAngleDeg(false, rotationDeg, 180) replaces the arithmetic operator with a boolean literal (Stryker then flips `false` to `true`, landing on the exact same rotationDeg - 180 this comment already proves indistinguishable), and no other expression of "add exactly half of the 360deg period" can differ, since 180 is the unique fixed point where +x and -x coincide modulo 360 regardless of how the addition is spelled. This is the one confirmed case in the whole ooxml.js mutation campaign where the survivor is accepted rather than restructured away.
   if (flipV) {
-    return { angleDeg: rotationDeg + 180, mirrored: !flipH };
+    return {
+      angleDeg: rotationDeg + DEGREES_PER_HALF_CIRCLE,
+      mirrored: !flipH,
+    };
   }
   if (flipH) {
     return { angleDeg: rotationDeg, mirrored: true };
@@ -462,7 +469,7 @@ export function applyGroupTransform(
   if (group.compositeMirrored) {
     dx = -dx; // mirror across the canonical Fh axis, matching canonicalizeGroupRotation's own convention
   }
-  const rad = (group.compositeRotationDeg * Math.PI) / 180;
+  const rad = (group.compositeRotationDeg * Math.PI) / DEGREES_PER_HALF_CIRCLE;
   const cos = Math.cos(rad);
   const sin = Math.sin(rad);
   const rotatedX = dx * cos - dy * sin;
