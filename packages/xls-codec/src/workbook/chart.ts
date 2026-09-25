@@ -16,6 +16,20 @@ import { errorTextOf } from "../biff/errors";
 import { readShortXLUnicodeString, readXLUnicodeString } from "../biff/strings";
 import type { RecordGroup } from "../biff/substreams";
 
+// Ptg opcodes a chart's series formula resolves to: the display-only paren wrapper, the three literal forms, and PtgRef3d/PtgArea3d's own three class variants (the reference-class base, 0x20 above it for value class, 0x40 for array class).
+const PTG_PAREN = 0x15;
+const PTG_INT = 0x1e;
+const PTG_NUM = 0x1f;
+const PTG_STR = 0x17;
+const CLASS_VALUE_OFFSET = 0x20;
+const CLASS_ARRAY_OFFSET = 0x40;
+const PTG_REF3D_CLASS_REFERENCE = 0x3a;
+const PTG_REF3D_CLASS_VALUE = PTG_REF3D_CLASS_REFERENCE + CLASS_VALUE_OFFSET;
+const PTG_REF3D_CLASS_ARRAY = PTG_REF3D_CLASS_REFERENCE + CLASS_ARRAY_OFFSET;
+const PTG_AREA3D_CLASS_REFERENCE = 0x3b;
+const PTG_AREA3D_CLASS_VALUE = PTG_AREA3D_CLASS_REFERENCE + CLASS_VALUE_OFFSET;
+const PTG_AREA3D_CLASS_ARRAY = PTG_AREA3D_CLASS_REFERENCE + CLASS_ARRAY_OFFSET;
+
 // A chart's own substream ([MS-XLS] "Chart Sheet Substream", https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/732ff614-d939-416b-b7c7-6d983471ff11), read only as far as document-schema.js's own chart representation needs: a flattened series/category table (ExaDev/documents.js#719 — 'chart' is a ContentEmbeddedObject naming a chart frame's cached data as a small spreadsheet ContentDocument, the identical shape ooxml.js's own xlsx/pptx chart readers already produce via readChartTable), not a typed chart-type/axis/legend object model. So this reader walks only Series/AI(BRAI)/SeriesText — a series' own name and its category/value data links — and the SERIESDATA cache those links can resolve through, and reads nothing about chart type, axes, or presentation.
 //
 // A data-role link's own value comes from one of two places, per [MS-XLS] "Chart Data Cache" (https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/e21d24e4-e71f-4fdc-8107-7f0d6a6efa6a): "the chart data cache MUST NOT contain data ... if the corresponding data is specified in the chart or on the same sheet as the chart" — so an embedded chart plotting its OWN sheet's cells (the overwhelmingly common case) carries no on-disk cache at all, and this reader resolves it instead by reading the AI's own formula reference (a PtgArea3d/PtgRef3d range, the same reference-token family biff/ptg.ts already resolves for a worksheet cell's own Formula record, restricted here to a single already-parsed range rather than that module's full expression grammar) and looking the referenced cells straight up in the OWNING sheet's own already-mapped cells. A chart plotting data from ANOTHER sheet, or genuinely external data, has no such shortcut available and instead carries the real on-disk SERIESDATA cache this reader also reads (`SERIESDATA = Dimensions 3(SIIndex *(Number/BoolErr/Blank/Label))`) — one shared cache block per data role (values/categories/bubble sizes), each cached record's own `col` field naming which SERIES (0-based, into the Series-record collection) the value belongs to and its own `row` field naming the point's own 0-based position within that series. The cache is consulted FIRST and the same-sheet range fallback only when no cached entry exists for that exact (role, series, point) — which is never both at once for a real file, per the spec's own "MUST NOT" above, but resolves the same either way if it were.
@@ -302,16 +316,16 @@ function readLiteralToken(rgce: Uint8Array<ArrayBuffer>): string | undefined {
     return undefined;
   }
   let opcode = cursor.u8();
-  if (opcode === 0x15 && cursor.hasMore()) {
+  if (opcode === PTG_PAREN && cursor.hasMore()) {
     // PtgParen — a display-only wrapper carrying no bytes of its own.
     opcode = cursor.u8();
   }
   switch (opcode) {
-    case 0x1e: // PtgInt
+    case PTG_INT: // PtgInt
       return String(cursor.u16());
-    case 0x1f: // PtgNum
+    case PTG_NUM: // PtgNum
       return String(cursor.f64());
-    case 0x17: // PtgStr
+    case PTG_STR: // PtgStr
       return readShortXLUnicodeString(cursor);
     default:
       return undefined;
@@ -328,11 +342,15 @@ function readRangeToken(
     return undefined;
   }
   let opcode = cursor.u8();
-  if (opcode === 0x15 && cursor.hasMore()) {
+  if (opcode === PTG_PAREN && cursor.hasMore()) {
     opcode = cursor.u8();
   }
   const COLUMN_INDEX_MASK = 0x3fff;
-  if (opcode === 0x3a || opcode === 0x5a || opcode === 0x7a) {
+  if (
+    opcode === PTG_REF3D_CLASS_REFERENCE ||
+    opcode === PTG_REF3D_CLASS_VALUE ||
+    opcode === PTG_REF3D_CLASS_ARRAY
+  ) {
     // PtgRef3d family
     const ixti = cursor.u16();
     const row = cursor.u16();
@@ -346,7 +364,11 @@ function readRangeToken(
       endColumn: column,
     };
   }
-  if (opcode === 0x3b || opcode === 0x5b || opcode === 0x7b) {
+  if (
+    opcode === PTG_AREA3D_CLASS_REFERENCE ||
+    opcode === PTG_AREA3D_CLASS_VALUE ||
+    opcode === PTG_AREA3D_CLASS_ARRAY
+  ) {
     // PtgArea3d family
     const ixti = cursor.u16();
     const rowFirst = cursor.u16();
