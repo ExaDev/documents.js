@@ -55,6 +55,9 @@ const GLYPH_SPACE_UNITS_PER_EM = 1000;
 // The Tz (horizontal scaling) percentage an embedded face is always drawn at: it advances at its own real widths, which is exactly what the measurer measured, so there is nothing to correct. See measure.ts's own DEFAULT_WIDTH_CORRECTIONS comment for why applying a standard-14 substitute's correction here as well would silently overrun a column.
 const EMBEDDED_HORIZONTAL_SCALE_PERCENT = 100;
 
+// The Tz operator's operand is a percentage, but TextMeasurer.horizontalScaleFor returns the correction as a plain fraction (1.0 meaning no correction), so it must be multiplied by this factor before being written.
+const PERCENT_SCALE_FACTOR = 100;
+
 export interface ResolvedImageResource {
   readonly resourceName: string; // e.g. 'Im1', the key under the page's /Resources/XObject dict
 }
@@ -168,7 +171,7 @@ function writeStandardText(
   // The Tz (horizontal scaling) percentage is a text-state parameter that persists across content-stream items until explicitly changed — it must be written for every text item, even when the correction is 1.0 (100%), or a preceding item's correction would silently leak into this one.
   const scale = measurer.horizontalScaleFor(item.font);
   // Always a plain Tj: a standard-14 face is measured through afm-widths.ts's own per-glyph width table, which carries no pair data of any kind, so there is no kerning on this path to position glyphs for and nothing that could make an array operand differ from a single string.
-  writeShowTextBlock(writer, item, resourceName, scale * 100, {
+  writeShowTextBlock(writer, item, resourceName, scale * PERCENT_SCALE_FACTOR, {
     operand: pdfHexString(encoded.codes),
     operator: "Tj",
   });
