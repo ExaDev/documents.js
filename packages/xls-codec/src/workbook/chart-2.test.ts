@@ -1,3 +1,5 @@
+// The chart-series suites, split from chart.test.ts, restating its harness verbatim.
+
 import { describe, expect, it } from "vitest";
 
 import type { ContentSheetCell } from "document-schema.js";
