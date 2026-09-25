@@ -19,6 +19,18 @@ import {
   type PropertyValue,
 } from "./wire";
 
+// [MS-OLEPS] fixed sizes and offsets: a 4-byte size or length field, a typed value's own 4-byte value field and 8-byte I8/filetime payload, the property set stream header's own NumPropertySets/FMTID0/Offset0 fields, a section's own property count, an entry's own value offset, and the 16-bit wrap space a negative signed read folds back through.
+const HEX_RADIX = 16;
+const U16_SPACE = 0x10000;
+const SIZE_FIELD_BYTES = 4;
+const VALUE_FIELD_BYTES = 4;
+const I8_VALUE_BYTES = 8;
+const NUM_PROPERTY_SETS_OFFSET = 24;
+const FORMAT_ID_OFFSET = 28;
+const SECTION_OFFSET_FIELD = 44;
+const PROPERTY_COUNT_OFFSET_IN_SECTION = 4;
+const VALUE_OFFSET_IN_ENTRY = 4;
+
 // A generic reader for the [MS-OLEPS] Property Set Stream format: the stream header, the single PropertySet packet it names (Size, NumProperties, the PropertyIdentifierAndOffset dictionary, and the typed property values themselves), decoding VT_I2, VT_I4, VT_LPSTR, VT_LPWSTR, and VT_FILETIME — the five PropertyType values ./summary-information.ts's own seven projected fields need. A real [MS-OSHARED] SummaryInformation stream can carry other PropertyType values this reader does not decode (PIDSI_THUMBNAIL/PID 0x11 is VT_CF, a clipboard-format thumbnail Word/Excel/PowerPoint write whenever "save preview picture" is on) and a VT_LPSTR under a CodePage other than CP_WINUNICODE/windows-1252 (a real, common case for non-Western documents): a property this reader cannot decode — unsupported PropertyType, or an unsupported CodePage for VT_LPSTR — is skipped rather than aborting the whole read, since an undecodable value is a gap in projection, not a structural nonconformance, and every PID this reader does decode still parses correctly around it. Zero document-format knowledge: it knows property identifiers and typed values, never that PID 2 means a title or that this stream is conventionally named "\x05SummaryInformation" — that mapping lives one level up, in ./summary-information.ts, the same layering cfb/ole-package.ts gives the OLE Package stream on top of the generic CFB reader in ../cfb/read.ts.
 //
 // Two genuine [MS-OLEPS] features are out of scope, deliberately, rather than by oversight: a PropertySetStream can carry two property sets in one physical stream (2.21 — how DocumentSummaryInformation and its UserDefinedProperties share a stream), and a property set can carry named, dictionary-keyed properties (via PID 0, the Dictionary property) rather than purely numeric ones. Neither ever appears in a "\x05SummaryInformation" stream — SummaryInformation is always exactly one property set, and its properties are always identified numerically — so a reader that rejects both stays honest about not reading DocumentSummaryInformation while still parsing every real SummaryInformation stream in full.
@@ -46,7 +58,7 @@ function requireBytes(
 
 // VT_I2's own Value field is a signed 16-bit integer, but a codepage above 32767 is conventionally stored as its negative two's-complement equivalent — this undoes that back to the unsigned codepage number a real producer declared. Exported for direct testing: the resulting number is only ever compared against CP_WINUNICODE/WINDOWS_1252_CODEPAGE downstream, neither of which a boundary mistake at raw === 0 would ever produce either way, so no decoding outcome could otherwise distinguish the two.
 export function decodeCodepage(raw: number): number {
-  return raw < 0 ? raw + 0x10000 : raw;
+  return raw < 0 ? raw + U16_SPACE : raw;
 }
 
 const ANSI_DECODER = new TextDecoder("windows-1252");
@@ -77,15 +89,23 @@ function readCodePageString(
   offset: number,
   codepage: number,
 ): string | undefined {
-  requireBytes(bytes.length, offset, 4, "a CodePageString's Size field");
+  requireBytes(
+    bytes.length,
+    offset,
+    SIZE_FIELD_BYTES,
+    "a CodePageString's Size field",
+  );
   const size = view.getUint32(offset, true);
   requireBytes(
     bytes.length,
-    offset + 4,
+    offset + SIZE_FIELD_BYTES,
     size,
     "a CodePageString's Characters field",
   );
-  const raw = bytes.subarray(offset + 4, offset + 4 + size);
+  const raw = bytes.subarray(
+    offset + SIZE_FIELD_BYTES,
+    offset + SIZE_FIELD_BYTES + size,
+  );
   if (codepage === CP_WINUNICODE) {
     return truncateAtNull(UTF16_DECODER.decode(raw));
   }
@@ -99,16 +119,24 @@ function readUnicodeString(
   view: DataView,
   offset: number,
 ): string {
-  requireBytes(bytes.length, offset, 4, "a UnicodeString's Length field");
+  requireBytes(
+    bytes.length,
+    offset,
+    SIZE_FIELD_BYTES,
+    "a UnicodeString's Length field",
+  );
   const units = view.getUint32(offset, true);
   const byteLength = units * 2;
   requireBytes(
     bytes.length,
-    offset + 4,
+    offset + SIZE_FIELD_BYTES,
     byteLength,
     "a UnicodeString's Characters field",
   );
-  const raw = bytes.subarray(offset + 4, offset + 4 + byteLength);
+  const raw = bytes.subarray(
+    offset + SIZE_FIELD_BYTES,
+    offset + SIZE_FIELD_BYTES + byteLength,
+  );
   return truncateAtNull(UTF16_DECODER.decode(raw));
 }
 
@@ -127,17 +155,17 @@ export function readPropertySetStream(
   const byteOrder = view.getUint16(0, true);
   if (byteOrder !== BYTE_ORDER_MARK) {
     throw new PropertySetFormatError(
-      `property set stream's ByteOrder field is 0x${byteOrder.toString(16)}, not the mandated 0xFFFE`,
+      `property set stream's ByteOrder field is 0x${byteOrder.toString(HEX_RADIX)}, not the mandated 0xFFFE`,
     );
   }
-  const numPropertySets = view.getUint32(24, true);
+  const numPropertySets = view.getUint32(NUM_PROPERTY_SETS_OFFSET, true);
   if (numPropertySets !== 1) {
     throw new PropertySetFormatError(
       `property set stream declares ${numPropertySets} property sets; this reader only handles the single-property-set form every "\\x05SummaryInformation" stream uses (the two-property-set DocumentSummaryInformation/UserDefinedProperties spelling is out of scope, see the package README)`,
     );
   }
-  const formatId = readGuid(view, 28);
-  const offset0 = view.getUint32(44, true);
+  const formatId = readGuid(view, FORMAT_ID_OFFSET);
+  const offset0 = view.getUint32(SECTION_OFFSET_FIELD, true);
 
   requireBytes(
     bytes.length,
@@ -152,7 +180,10 @@ export function readPropertySetStream(
     size,
     "the PropertySet packet's own declared Size",
   );
-  const numProperties = view.getUint32(offset0 + 4, true);
+  const numProperties = view.getUint32(
+    offset0 + PROPERTY_COUNT_OFFSET_IN_SECTION,
+    true,
+  );
 
   const tableStart = offset0 + PROPERTY_SET_HEADER_SIZE;
   requireBytes(
@@ -172,7 +203,7 @@ export function readPropertySetStream(
     }
     entries.push({
       pid,
-      relativeOffset: view.getUint32(entryOffset + 4, true),
+      relativeOffset: view.getUint32(entryOffset + VALUE_OFFSET_IN_ENTRY, true),
     });
   }
 
@@ -184,13 +215,13 @@ export function readPropertySetStream(
     requireBytes(
       bytes.length,
       abs,
-      TYPED_VALUE_HEADER_SIZE + 4,
+      TYPED_VALUE_HEADER_SIZE + VALUE_FIELD_BYTES,
       "the CodePage property's TypedPropertyValue",
     );
     const type = view.getUint16(abs, true);
     if (type !== VT_I2) {
       throw new PropertySetFormatError(
-        `CodePage property (PID 1) has type 0x${type.toString(16)}, not VT_I2 as [MS-OLEPS] requires`,
+        `CodePage property (PID 1) has type 0x${type.toString(HEX_RADIX)}, not VT_I2 as [MS-OLEPS] requires`,
       );
     }
     const raw = view.getInt16(abs + TYPED_VALUE_HEADER_SIZE, true);
@@ -210,7 +241,7 @@ export function readPropertySetStream(
     const padding = view.getUint16(abs + 2, true);
     if (padding !== 0) {
       throw new PropertySetFormatError(
-        `property ${entry.pid}'s TypedPropertyValue padding is 0x${padding.toString(16)}, not zero as [MS-OLEPS] requires`,
+        `property ${entry.pid}'s TypedPropertyValue padding is 0x${padding.toString(HEX_RADIX)}, not zero as [MS-OLEPS] requires`,
       );
     }
     const valueOffset = abs + TYPED_VALUE_HEADER_SIZE;
@@ -220,7 +251,7 @@ export function readPropertySetStream(
         requireBytes(
           bytes.length,
           valueOffset,
-          4,
+          VALUE_FIELD_BYTES,
           `property ${entry.pid}'s VT_I2 value`,
         );
         properties.set(entry.pid, {
@@ -233,7 +264,7 @@ export function readPropertySetStream(
         requireBytes(
           bytes.length,
           valueOffset,
-          4,
+          VALUE_FIELD_BYTES,
           `property ${entry.pid}'s VT_I4 value`,
         );
         properties.set(entry.pid, {
@@ -259,11 +290,11 @@ export function readPropertySetStream(
         requireBytes(
           bytes.length,
           valueOffset,
-          8,
+          I8_VALUE_BYTES,
           `property ${entry.pid}'s VT_FILETIME value`,
         );
         const low = view.getUint32(valueOffset, true);
-        const high = view.getUint32(valueOffset + 4, true);
+        const high = view.getUint32(valueOffset + VALUE_FIELD_BYTES, true);
         properties.set(entry.pid, {
           type: "VT_FILETIME",
           value: filetimeToDate(low, high),
