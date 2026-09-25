@@ -1,3 +1,14 @@
+## [5.1.18](https://github.com/ExaDev/documents.js/compare/wpd-codec%405.1.17...wpd-codec%405.1.18) (2026-09-25)
+
+### Tests
+
+* **wpd-codec:** cover the three test-support modules the maxLines split left untested ([5a4b891](https://github.com/ExaDev/documents.js/commit/5a4b8918cc48cb2893ee136fc5107f8478e329ba))
+
+
+### Dependencies
+
+- Updated archive-codec to 1.11.23
+
 ## [5.1.17](https://github.com/ExaDev/documents.js/compare/wpd-codec%405.1.16...wpd-codec%405.1.17) (2026-09-24)
 
 ### Bug Fixes

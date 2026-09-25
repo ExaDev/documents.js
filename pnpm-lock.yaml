@@ -407,7 +407,7 @@ importers:
   packages/doc-codec:
     dependencies:
       archive-codec:
-        specifier: 1.11.22
+        specifier: 1.11.23
         version: link:../archive-codec
       byte-codec:
         specifier: 2.0.1
@@ -471,7 +471,7 @@ importers:
         specifier: 7.15.3
         version: link:../document-schema.js
       documents.js:
-        specifier: 14.4.39
+        specifier: 14.4.40
         version: link:../documents.js
       ink:
         specifier: 7.1.1
@@ -517,7 +517,7 @@ importers:
         specifier: 4.0.0
         version: 4.0.0(@types/react@19.2.18)
       odf.js:
-        specifier: 11.1.10
+        specifier: 11.1.11
         version: link:../odf.js
       publint:
         specifier: 0.3.22
@@ -566,7 +566,7 @@ importers:
         specifier: 26.2.0
         version: 26.2.0
       documents.js:
-        specifier: 14.4.39
+        specifier: 14.4.40
         version: link:../documents.js
       eslint:
         specifier: 10.8.1
@@ -602,10 +602,10 @@ importers:
         specifier: 2.0.0
         version: 2.0.0
       document-operations:
-        specifier: 1.1.102
+        specifier: 1.1.103
         version: link:../document-operations
       documents.js:
-        specifier: 14.4.39
+        specifier: 14.4.40
         version: link:../documents.js
       zod:
         specifier: 4.4.3
@@ -645,7 +645,7 @@ importers:
         specifier: 9.1.7
         version: 9.1.7
       odf.js:
-        specifier: 11.1.10
+        specifier: 11.1.11
         version: link:../odf.js
       publint:
         specifier: 0.3.22
@@ -666,13 +666,13 @@ importers:
         specifier: 4.1.11
         version: 4.1.11(@types/node@26.2.0)(@vitest/coverage-v8@4.1.11)(jsdom@30.0.1)(vite@8.2.1(@types/node@26.2.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(yaml@2.9.0))
       wpd-codec:
-        specifier: 5.1.17
+        specifier: 5.1.18
         version: link:../wpd-codec
 
   packages/document-operations:
     dependencies:
       document-compute.js:
-        specifier: 1.6.49
+        specifier: 1.6.50
         version: link:../document-compute.js
       document-outline.js:
         specifier: 3.10.22
@@ -681,7 +681,7 @@ importers:
         specifier: 7.15.3
         version: link:../document-schema.js
       documents.js:
-        specifier: 14.4.39
+        specifier: 14.4.40
         version: link:../documents.js
       zod:
         specifier: 4.4.3
@@ -715,7 +715,7 @@ importers:
         specifier: 9.1.7
         version: 9.1.7
       odf.js:
-        specifier: 11.1.10
+        specifier: 11.1.11
         version: link:../odf.js
       publint:
         specifier: 0.3.22
@@ -797,10 +797,10 @@ importers:
   packages/document-rest:
     dependencies:
       document-operations:
-        specifier: 1.1.102
+        specifier: 1.1.103
         version: link:../document-operations
       documents.js:
-        specifier: 14.4.39
+        specifier: 14.4.40
         version: link:../documents.js
       zod:
         specifier: 4.4.3
@@ -822,7 +822,7 @@ importers:
         specifier: 9.1.7
         version: 9.1.7
       odf.js:
-        specifier: 11.1.10
+        specifier: 11.1.11
         version: link:../odf.js
       publint:
         specifier: 0.3.22
@@ -901,13 +901,13 @@ importers:
   packages/documents.js:
     dependencies:
       archive-codec:
-        specifier: 1.11.22
+        specifier: 1.11.23
         version: link:../archive-codec
       byte-codec:
         specifier: 2.0.1
         version: link:../byte-codec
       doc-codec:
-        specifier: 6.1.17
+        specifier: 6.1.18
         version: link:../doc-codec
       document-schema.js:
         specifier: 7.15.3
@@ -922,28 +922,28 @@ importers:
         specifier: 11.1.11
         version: link:../markdown-codec
       odf.js:
-        specifier: 11.1.10
+        specifier: 11.1.11
         version: link:../odf.js
       ooxml.js:
-        specifier: 12.2.24
+        specifier: 12.2.25
         version: link:../ooxml.js
       pdf-codec:
         specifier: 5.2.27
         version: link:../pdf-codec
       ppt-codec:
-        specifier: 2.2.18
+        specifier: 2.2.19
         version: link:../ppt-codec
       rtf-codec:
-        specifier: 8.1.18
+        specifier: 8.1.19
         version: link:../rtf-codec
       temml:
         specifier: 0.13.4
         version: 0.13.4
       wpd-codec:
-        specifier: 5.1.17
+        specifier: 5.1.18
         version: link:../wpd-codec
       xls-codec:
-        specifier: 4.15.37
+        specifier: 4.15.38
         version: link:../xls-codec
       zod:
         specifier: 4.4.3
@@ -1241,7 +1241,7 @@ importers:
   packages/ooxml.js:
     dependencies:
       archive-codec:
-        specifier: 1.11.22
+        specifier: 1.11.23
         version: link:../archive-codec
       byte-codec:
         specifier: 2.0.1
@@ -1439,7 +1439,7 @@ importers:
   packages/ppt-codec:
     dependencies:
       archive-codec:
-        specifier: 1.11.22
+        specifier: 1.11.23
         version: link:../archive-codec
       byte-codec:
         specifier: 2.0.1
@@ -1494,7 +1494,7 @@ importers:
   packages/rtf-codec:
     dependencies:
       archive-codec:
-        specifier: 1.11.22
+        specifier: 1.11.23
         version: link:../archive-codec
       byte-codec:
         specifier: 2.0.1
@@ -1606,7 +1606,7 @@ importers:
         specifier: 7.15.3
         version: link:../document-schema.js
       documents.js:
-        specifier: 14.4.39
+        specifier: 14.4.40
         version: link:../documents.js
       markdown-codec:
         specifier: 11.1.11
@@ -1688,7 +1688,7 @@ importers:
         specifier: 30.0.1
         version: 30.0.1
       ooxml.js:
-        specifier: 12.2.24
+        specifier: 12.2.25
         version: link:../ooxml.js
       semantic-release:
         specifier: 25.0.9
@@ -1712,7 +1712,7 @@ importers:
   packages/wpd-codec:
     dependencies:
       archive-codec:
-        specifier: 1.11.22
+        specifier: 1.11.23
         version: link:../archive-codec
       byte-codec:
         specifier: 2.0.1
@@ -1776,7 +1776,7 @@ importers:
   packages/xls-codec:
     dependencies:
       archive-codec:
-        specifier: 1.11.22
+        specifier: 1.11.23
         version: link:../archive-codec
       byte-codec:
         specifier: 2.0.1
