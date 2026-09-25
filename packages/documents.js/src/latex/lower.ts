@@ -14,6 +14,9 @@ import {
 import { glyphOfSymbolText, SymbolResolver } from "./symbols";
 import { decimalToRational } from "./rational";
 
+// Three subscript nodes is the `_{name = expression}` shape: a left side, a relation, and a right side.
+const RELATION_SUBSCRIPT_MIN_NODES = 3;
+
 // LaTeX presentation -> MathExpression, the string-to-tree half of the two-layer math model (document-schema.js src/math.ts states the contract: this direction is total — any input at least degrades to an `unparsed` node — while tree-to-string rendering is partial, which is why storage carries both layers verbatim). The rules are mechanical exactly where notation is unambiguous and degrade to visible `unparsed` data everywhere else, per the design the issue records: `\frac` is always division, a radical is always a root, a scripted Sigma with limits is always a binder, and juxtaposition — the one construct with two defensible readings (multiplication, function application) — is NEVER guessed, because a wrong guess is indistinguishable from a correct lowering until someone computes with it.
 //
 // The input tree is temml's KaTeX-style parse tree (src/latex/temml.ts, the pinned parser). Everything here reads it through structural guards, so a temml release that reshapes a node changes a type-guard failure in the test suite rather than silently mis-lowering.
@@ -861,7 +864,7 @@ function readBinder(node: TemmlNode, context: LoweringContext): BinderRead {
   const upper =
     sup === undefined ? implicitBound(context) : lowerNodeList(sup, context);
   // `_{name = expression}`
-  if ((sub?.length ?? 0) >= 3) {
+  if ((sub?.length ?? 0) >= RELATION_SUBSCRIPT_MIN_NODES) {
     const first = sub?.[0];
     const relation = sub?.[1];
     const rest = sub?.slice(2) ?? [];

@@ -87,6 +87,12 @@ interface TextLine {
 // Baseline-proximity tolerance of 0.5x font size — wide enough to catch superscripts into their own line, tight enough to never merge two genuinely separate lines (plan Step 10). The fraction stays at this package's own tuned value rather than pdf-codec's looser default, but the em it is a fraction of now comes from the SMALLER of the two runs being compared rather than from whichever of them happened to supply it (ExaDev/documents.js#1317): taken from the larger, a 30pt heading's own 15pt window swallowed the 9pt line 12pt beneath it, and the merged line's runs then sorted by x into a sequence whose gaps were negative, which pushRunsForLine reads as one word, concatenating the two lines into run-together text.
 const LINE_BASELINE_TOLERANCE_FACTOR = 0.5;
 
+// AFM font metrics are stated in thousandths of an em, the factor that turns them into points at a given size.
+const AFM_UNITS_PER_EM = 1000;
+
+// Font sizes and line gaps are clustered into half-point buckets: fine enough that genuine sizes stay distinct, coarse enough that float noise in repeated paints lands in one bucket.
+const HALF_POINT_BUCKET_PT = 0.5;
+
 // Whether `item` belongs on the line `anchor` opened. The comparison is always against a line's own anchor, never its most recently admitted run, so a line cannot walk down the page one near-miss at a time.
 function sharesBaseline(anchor: LayoutText, item: LayoutText): boolean {
   return runsShareBaseline(anchor, item, {
@@ -334,8 +340,8 @@ function textItemVerticalExtent(item: LayoutText): {
   );
   const metrics = STANDARD_METRICS[standardName];
   return {
-    ascentPt: (metrics.ascender / 1000) * item.sizePt,
-    descentPt: (Math.abs(metrics.descender) / 1000) * item.sizePt,
+    ascentPt: (metrics.ascender / AFM_UNITS_PER_EM) * item.sizePt,
+    descentPt: (Math.abs(metrics.descender) / AFM_UNITS_PER_EM) * item.sizePt,
   };
 }
 
@@ -450,7 +456,7 @@ function modeOf(values: readonly number[], bucketSize: number): number {
 
 // A "mode" with no actual repetition (every gap in the sample distinct) isn't a meaningful modal line spacing — with all counts tied at 1, modeOf would just return whichever bucket happened to be inserted first, which is arbitrary. The smallest observed gap is a more defensible "this counts as normal line spacing" baseline in that case, since a paragraph or section break is by definition larger than ordinary single-line spacing, never smaller.
 function modalLineGap(gaps: readonly number[]): number {
-  const counts = bucketCounts(gaps, 0.5);
+  const counts = bucketCounts(gaps, HALF_POINT_BUCKET_PT);
   let bestBucket = gaps[0]!;
   let bestCount = 0;
   for (const [bucket, count] of counts) {
@@ -474,7 +480,7 @@ function estimateModalLineSpacing(lines: readonly TextLine[]): number {
   if (lines.length < MIN_LINES_FOR_GAP_MODE) {
     const dominantSizePt = modeOf(
       lines.map((l) => l.items[0]!.sizePt),
-      0.5,
+      HALF_POINT_BUCKET_PT,
     );
     return dominantSizePt * NOMINAL_LINE_SPACING_RATIO;
   }
@@ -567,14 +573,11 @@ function dropHiddenLayerContent(doc: LayoutDocument): LayoutDocument {
 //
 // A tagged PDF is the one format state this reconstruction otherwise infers: headings, table cells, and grouping containers are STATED in /StructTreeRoot, not guessed from geometry. readPdf flattens that tree into LayoutDocument.structure and stamps each item with its owning element's id; the index below turns those two facts into the three queries the reconstruction consumes — the heading level an item's owning element chain implies, the cell/row/table a text item belongs to, and the chain of division elements (/Part /Sect /Div) enclosing it. Everything is a nearest-ancestor walk: a /Span inside an /H2 reads as heading content exactly as direct ownership would, the same way effective properties resolve down a style chain.
 
-const HEADING_LEVELS: ReadonlyMap<string, number> = new Map([
-  ["H1", 1],
-  ["H2", 2],
-  ["H3", 3],
-  ["H4", 4],
-  ["H5", 5],
-  ["H6", 6],
-]);
+// H1..H6 in order: the level each tag carries is its own position in that sequence.
+const HEADING_TAGS = ["H1", "H2", "H3", "H4", "H5", "H6"] as const;
+const HEADING_LEVELS: ReadonlyMap<string, number> = new Map(
+  HEADING_TAGS.map((tag, index) => [tag, index + 1] as const),
+);
 // The grouping types mapped to the schema's division construct — the shape document-schema.js's own construct vocabulary names tagged PDF's /Sect and /Div as its cross-format analogue for, plus /Part as the coarsest grouping. /Art and /BlockQuote stay out deliberately: they are semantic block containers closer to a block quote than a named division, and conflating them would invent grouping the schema keeps distinct.
 const DIVISION_TYPES: ReadonlySet<string> = new Set(["Part", "Sect", "Div"]);
 const CELL_TYPES: ReadonlySet<string> = new Set(["TD", "TH"]);
@@ -708,10 +711,11 @@ function headingSizeLevels(doc: LayoutDocument): ReadonlyMap<number, number> {
   if (sizes.length === 0) {
     return new Map();
   }
-  const bodySizePt = modeOf(sizes, 0.5);
+  const bodySizePt = modeOf(sizes, HALF_POINT_BUCKET_PT);
   const headingBuckets = new Set<number>();
   for (const size of sizes) {
-    const bucket = Math.round(size / 0.5) * 0.5;
+    const bucket =
+      Math.round(size / HALF_POINT_BUCKET_PT) * HALF_POINT_BUCKET_PT;
     if (bucket - bodySizePt >= HEADING_MIN_SIZE_DELTA_PT) {
       headingBuckets.add(bucket);
     }
@@ -736,7 +740,7 @@ function headingLevelOf(
         .flatMap((line) => line.items)
         .filter((item) => hasVisibleText(item.text))
         .map((item) => item.sizePt),
-      0.5,
+      HALF_POINT_BUCKET_PT,
     ),
   );
 }

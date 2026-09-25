@@ -13,6 +13,9 @@ import type {
 
 import { SLIDE_SIZE_WIDESCREEN, PAGE_SIZE_A4 } from "document-schema.js";
 
+// The width assumed for a column the sheet itself declares none for: one inch, the default every spreadsheet starts from.
+const DEFAULT_COLUMN_WIDTH_PT = 72;
+
 // Cross-variant content bridges: transforms between ContentDocument variants that do NOT share a common shape (wordprocessing ↔ presentation, wordprocessing ↔ spreadsheet, drawing ↔ presentation), so pairs like docx↔pptx, odt↔xlsx, or odg↔odp can bypass PDF entirely through the content pivot. Unlike the same-variant bridges (odt↔docx, odp↔pptx, ods↔xlsx), which are a direct read→build copy because both sides share one ContentDocument variant, these are genuine semantic TRANSFORMS — a flow document has no slide boundaries, a deck has no flow — so each direction is an approximation, documented per direction below. The wordprocessing ↔ spreadsheet pair named above went unimplemented from this module's very first commit until spreadsheetToWordprocessing landed (ExaDev/documents.js#1043) — the reverse direction stays unimplemented: a markdown/docx table has no cell types, formulas, or geometry of its own to recover, so wordprocessing → spreadsheet is a separate question with no honest answer here.
 
 type WordprocessingContentDocument = Extract<
@@ -198,7 +201,7 @@ function sheetToTableBlock(sheet: ContentSheet): ContentBlock | undefined {
     sheet.columns.map((column) => [column.index, column.widthPt] as const),
   );
   const columns = visibleColumns.map((column) => ({
-    widthPt: columnWidthByIndex.get(column) ?? 72,
+    widthPt: columnWidthByIndex.get(column) ?? DEFAULT_COLUMN_WIDTH_PT,
   }));
   const rows: ContentTableRow[] = visibleRows.map((row) => ({
     cells: visibleColumns.map((column) =>

@@ -176,7 +176,10 @@ function convertRectVector(
 }
 
 // The circle-to-cubic control-point ratio: the distance, as a fraction of the radius, from an axis endpoint to its own adjacent Bezier control point that makes a single cubic segment best approximate a quarter arc. Derived, not a transcribed literal — 4/3 * (sqrt(2) - 1) is the exact value obtained by forcing the cubic through the quarter arc's own 45-degree midpoint.
-const CIRCLE_CUBIC_RATIO = (4 / 3) * (Math.SQRT2 - 1);
+const CIRCLE_CUBIC_NUMERATOR = 4;
+const CIRCLE_CUBIC_DENOMINATOR = 3;
+const CIRCLE_CUBIC_RATIO =
+  (CIRCLE_CUBIC_NUMERATOR / CIRCLE_CUBIC_DENOMINATOR) * (Math.SQRT2 - 1);
 
 // One ellipse as four cubic quarter-arcs, walked counter-clockwise from the rightmost axis point — the same four-arc construction pdf-codec's own writeEllipse emits for an unrotated LayoutEllipse, restated here in explicit point form so every one of its control points can be run through the rotation before being written out.
 function ellipseCubicPoints(flipped: Box): {

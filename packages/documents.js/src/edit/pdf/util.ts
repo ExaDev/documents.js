@@ -2,6 +2,9 @@ import { bytesToBase64 } from "ooxml.js";
 import type { LayoutImageAsset } from "pdf-codec";
 import { crc32, decodePng, readJpegInfo } from "byte-codec";
 
+// The id names an image by its content hash, in hex because a crc32 is a 32-bit integer.
+const HEX_RADIX = 16;
+
 // Generic splice-by-reference removal for a plain (non-XmlNode) array — the LayoutPage[]/LayoutItem[] counterpart to src/xml/edit.ts's own removeChild, which is typed specifically for XmlNode and can't be reused here: PdfEditor/PdfPage/PdfItem hold live references directly into plain, Zod-inferred LayoutDocument objects (readPdf's/createPdf's own return value), never an XmlElement tree.
 export function spliceOut<T>(container: T[], node: T): void {
   const index = container.indexOf(node);
@@ -28,7 +31,7 @@ export function registerImageBytes(
   format: "png" | "jpeg",
   images: Record<string, LayoutImageAsset>,
 ): string {
-  const imageId = `img${crc32(bytes).toString(16)}`;
+  const imageId = `img${crc32(bytes).toString(HEX_RADIX)}`;
   if (!(imageId in images)) {
     const { widthPx, heightPx } = decodeImageDimensions(format, bytes);
     images[imageId] = {

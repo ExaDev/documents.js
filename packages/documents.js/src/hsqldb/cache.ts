@@ -8,6 +8,10 @@ import {
   resolveHsqldbTypeCode,
 } from "./rowformat";
 
+// initParams() turns any non-default cache_file_scale into the literal 8 bytes per row slot, and every row position in database/data is located by its 4-byte int32 slot.
+const NON_DEFAULT_CACHE_FILE_SCALE = 8;
+const INT32_BYTE_LENGTH = 4;
+
 // Tier 2 — HSQLDB 1.8.x's own binary CACHED-table row-store format: when a table is declared CACHED (LibreOffice's own embedded HSQLDB default — see database.isStoredFileAccess() in the decompiled org.hsqldb.persist.HsqlDatabaseProperties constructor, which switches hsqldb.default_table_type to "cached" specifically for a storage-backed (i.e. embedded-in-a-package) database), that table's own DDL still lives in database/script as ordinary TEXT-format SQL (a CREATE CACHED TABLE statement, parsed by src/hsqldb/script.ts exactly like a MEMORY/TEXT table's), but its ROW DATA lives entirely in database/data, a separate binary page-cache file, with database/properties declaring the engine version and cache-file layout and database/backup holding a zip snapshot of database/data taken at the last checkpoint (org.hsqldb.persist.Log.checkpoint()/DataFileCache.backupFile()). This module is the row/tree-walking half; src/hsqldb/rowformat.ts is the per-SQL-type binary field decoding it calls into.
 //
 // Scope is deliberately the specific HSQLDB 1.8.x-branch row-store format LibreOffice's embedded driver actually ships — a concrete, dateable target, not "any HSQLDB version ever" — the same way this package's PDF codec bounds itself to mainstream-producer output rather than every PDF ever created. There is no ratified specification for this binary format at all; ground truth is the actual HSQLDB 1.8.0.10 engine source, decompiled from the real hsqldb.jar LibreOffice 26.2 bundles (`Specification-Version: 1.8.0.10` in that jar's own META-INF/MANIFEST.MF — the exact engine version LibreOffice's embedded HSQLDB JDBC driver loads), plus a real database this same jar produced.
@@ -57,7 +61,7 @@ export function parseHsqldbProperties(text: string): HsqldbCacheFileInfo {
   }
   // org.hsqldb.persist.DataFileCache.initParams(): any hsqldb.cache_file_scale value other than the literal default of 1 becomes 8 (not the property's own numeric value) — a real, slightly surprising rule in the actual engine source, mirrored here verbatim rather than trusting the property's own number directly.
   const rawScale = Number(props.get("hsqldb.cache_file_scale") ?? "1");
-  const cacheFileScale = rawScale === 1 ? 1 : 8;
+  const cacheFileScale = rawScale === 1 ? 1 : NON_DEFAULT_CACHE_FILE_SCALE;
   return { cacheFileScale, compatibleVersion };
 }
 
@@ -133,7 +137,7 @@ export function readHsqldbCachedTableRows(
       return;
     }
     const byteOffset = pos * cacheFileScale;
-    if (byteOffset < 0 || byteOffset + 4 > dataBytes.length) {
+    if (byteOffset < 0 || byteOffset + INT32_BYTE_LENGTH > dataBytes.length) {
       throw new HsqldbRowFormatError(
         `row position ${pos} (byte offset ${byteOffset}) falls outside database/data (${dataBytes.length} bytes)`,
       );

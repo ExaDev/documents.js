@@ -372,7 +372,12 @@ export function packageLintConfig(
       // A no-op arrow standing in for a callback prop a given test case never exercises is the ordinary way to write that, and flagging each one only pushes authors to pad it with a meaningless body. Scoped to tests: production code has no legitimate empty function body.
       //
       // The CLI and the MCP server each carried this already, scoped to `**/*.test.ts` — a glob that silently misses `.test.tsx`, so twelve such stand-ins in one Ink component test were reported as errors while the identical pattern in a `.ts` test was not. Stated once here, over both extensions.
-      files: ["**/*.test.{ts,tsx}", "**/*.spec.{ts,tsx}"],
+      files: [
+        "**/*.test.{ts,tsx}",
+        "**/*.spec.{ts,tsx}",
+        // test-support is test code by every property that matters here: it exists only to build fixtures for the suites, and every package's tsdown entry list already excludes it from the published build. It missed the test glob only by filename.
+        "**/test-support/**",
+      ],
       rules: {
         "@typescript-eslint/no-empty-function": [
           "error",

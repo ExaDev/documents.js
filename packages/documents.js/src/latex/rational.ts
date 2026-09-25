@@ -1,15 +1,19 @@
 // Exact-rational arithmetic over the schema's canonical decimal-integer strings, shared by the lowering (decimal literals -> lowest-terms rationals) and the coherence lint (normalising stored rationals for comparison). BigInt throughout: Number loses integer exactness above 2^53 and exactness is the entire point of the string-encoded rational the schema defines.
 
+// BigInt's own zero and one, and decimal notation's base: the identities and the radix rational arithmetic reduces over.
+const BIGINT_ZERO = 0n;
+const BIGINT_ONE = 1n;
+const BIGINT_TEN = 10n;
 function gcd(a: bigint, b: bigint): bigint {
   let x = a;
   let y = b;
-  while (y !== 0n) {
+  while (y !== BIGINT_ZERO) {
     const next = x % y;
     x = y;
     y = next;
   }
   // gcd(0, 0) is defined as 1 here so 0/0-shaped degenerates reduce to 0/1 rather than dividing by zero — the schema's patterns keep 0's denominator at '1', and this keeps the arithmetic total on the same convention.
-  return x === 0n ? 1n : x;
+  return x === BIGINT_ZERO ? BIGINT_ONE : x;
 }
 
 // A decimal literal (digits with at most one point) as a lowest-terms rational: '3.14' -> 157/50, '42' -> 42/1. Undefined for a malformed literal (two points, empty digits), which the lowering degrades visibly rather than repair.
@@ -24,7 +28,7 @@ export function decimalToRational(
   }
   const denominatorPower = point === -1 ? 0 : literal.length - point - 1;
   const numerator = BigInt(digits);
-  const denominator = 10n ** BigInt(denominatorPower);
+  const denominator = BIGINT_TEN ** BigInt(denominatorPower);
   return reduceRational(numerator, denominator);
 }
 
