@@ -5,7 +5,10 @@ import { unzipPackage } from "./container";
 export const MAX_WALK_DEPTH = 8;
 
 // Cumulative-size derivation: byte-codec caps one honest decompressed stream at 512 MiB (its MAX_INFLATE_OUTPUT_BYTES), and that per-stream cap does not compose across recursion — N nested levels each "honest" under it multiply to N x 512 MiB, and a bomb's leverage is exactly that multiplication (a megabyte archive can declare terabytes of nested content). One budget shared across every entry of every nesting level turns the multiplication into addition bounded at a single figure. The same 512 MiB the family already grants one stream serves, since a recursive walk over honest documents decompresses a handful of complete documents, which must fit inside what one single stream already gets. Counted post-hoc on actual decompressed lengths — declared sizes in hostile headers must not be trusted — matching byte-codec's own post-hoc per-stream cap; the transient in-memory peak is thereby bounded by the budget plus at most one archive's contents.
-export const MAX_WALK_TOTAL_BYTES = 512 * 1024 * 1024;
+const KIB = 1024;
+const MIB = KIB * KIB;
+const MAX_WALK_TOTAL_MIB = 512;
+export const MAX_WALK_TOTAL_BYTES = MAX_WALK_TOTAL_MIB * MIB;
 
 // One entry of the flattened walk listing. ancestors is the chain of nested-ZIP entry paths leading to the entry's own archive, outermost first — for a file inside word/embeddings/oleObject1.xlsx within a docx, ancestors is ['word/embeddings/oleObject1.xlsx'] and path is the file's path within that embedded package. An entry's depth is ancestors.length + 1.
 export interface ArchiveWalkEntry {
