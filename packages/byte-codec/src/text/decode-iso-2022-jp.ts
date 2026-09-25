@@ -41,12 +41,26 @@ const HALFWIDTH_KATAKANA_START = 0xff61;
 const JIS0208_INDEX_BYTE_MIN = 0x21;
 const JIS0208_INDEX_BYTE_MAX = 0x7e;
 const JIS0208_INDEX_COLUMNS = 94;
+const HEX_RADIX = 16;
+const PLAIN_BYTE_MAX = 0x7f;
+const SHIFT_OUT = 0x0e;
+const SHIFT_IN = 0x0f;
+const ROMAN_YEN_BYTE = 0x5c;
+const ROMAN_YEN_CODEPOINT = 0x00a5;
+const ROMAN_OVERLINE_BYTE = 0x7e;
+const ROMAN_OVERLINE_CODEPOINT = 0x203e;
+const ESCAPE_DESIGNATOR_DOLLAR = 0x24;
+const ESCAPE_DESIGNATOR_PAREN = 0x28;
+const ESCAPE_DESIGNATOR_AT = 0x40;
+const ESCAPE_DESIGNATOR_B = 0x42;
+const ESCAPE_DESIGNATOR_I = 0x49;
+const ESCAPE_DESIGNATOR_J = 0x4a;
 
 /**
  * Whether `byte` is one this decoder's ASCII and Roman states pass through unchanged: any byte below 0x80 except the two Shift-Out/Shift-In control codes (0x0E, 0x0F) a different ISO-2022 variant uses for a switching mechanism this decoder does not support. No check for {@link ESCAPE} here: both callers (the "ascii" and "roman" cases below) already intercept it with their own `byte === ESCAPE` branch before ever reaching this function, so `byte` here is never that value in the first place.
  */
 function isPlainByte(byte: number): boolean {
-  return byte <= 0x7f && byte !== 0x0e && byte !== 0x0f;
+  return byte <= PLAIN_BYTE_MAX && byte !== SHIFT_OUT && byte !== SHIFT_IN;
 }
 
 /**
@@ -75,7 +89,7 @@ export function decodeIso2022Jp(bytes: Uint8Array): string {
         output = false;
         if (!isPlainByte(byte)) {
           malformed(
-            `has no character for byte 0x${byte.toString(16)} in ASCII mode`,
+            `has no character for byte 0x${byte.toString(HEX_RADIX)} in ASCII mode`,
           );
         }
         units.push(byte);
@@ -87,17 +101,17 @@ export function decodeIso2022Jp(bytes: Uint8Array): string {
           continue;
         }
         output = false;
-        if (byte === 0x5c) {
-          units.push(0x00a5); // ¥ YEN SIGN
+        if (byte === ROMAN_YEN_BYTE) {
+          units.push(ROMAN_YEN_CODEPOINT); // ¥ YEN SIGN
           continue;
         }
-        if (byte === 0x7e) {
-          units.push(0x203e); // ‾ OVERLINE
+        if (byte === ROMAN_OVERLINE_BYTE) {
+          units.push(ROMAN_OVERLINE_CODEPOINT); // ‾ OVERLINE
           continue;
         }
         if (!isPlainByte(byte)) {
           malformed(
-            `has no character for byte 0x${byte.toString(16)} in Roman mode`,
+            `has no character for byte 0x${byte.toString(HEX_RADIX)} in Roman mode`,
           );
         }
         units.push(byte);
@@ -111,7 +125,7 @@ export function decodeIso2022Jp(bytes: Uint8Array): string {
         output = false;
         if (byte < KATAKANA_FIRST_BYTE || byte > KATAKANA_LAST_BYTE) {
           malformed(
-            `has no character for byte 0x${byte.toString(16)} in Katakana mode`,
+            `has no character for byte 0x${byte.toString(HEX_RADIX)} in Katakana mode`,
           );
         }
         units.push(HALFWIDTH_KATAKANA_START - KATAKANA_FIRST_BYTE + byte);
@@ -125,7 +139,7 @@ export function decodeIso2022Jp(bytes: Uint8Array): string {
         output = false;
         if (byte < JIS0208_INDEX_BYTE_MIN || byte > JIS0208_INDEX_BYTE_MAX) {
           malformed(
-            `has no character for byte 0x${byte.toString(16)} as a JIS X 0208 lead byte`,
+            `has no character for byte 0x${byte.toString(HEX_RADIX)} as a JIS X 0208 lead byte`,
           );
         }
         pending = byte;
@@ -138,12 +152,12 @@ export function decodeIso2022Jp(bytes: Uint8Array): string {
         state = "leadingByte";
         if (byte === ESCAPE) {
           malformed(
-            `has an incomplete JIS X 0208 two-byte sequence: lead byte 0x${leadingByte.toString(16)} was interrupted by an escape sequence`,
+            `has an incomplete JIS X 0208 two-byte sequence: lead byte 0x${leadingByte.toString(HEX_RADIX)} was interrupted by an escape sequence`,
           );
         }
         if (byte < JIS0208_INDEX_BYTE_MIN || byte > JIS0208_INDEX_BYTE_MAX) {
           malformed(
-            `has no character for lead byte 0x${leadingByte.toString(16)} trail byte 0x${byte.toString(16)}`,
+            `has no character for lead byte 0x${leadingByte.toString(HEX_RADIX)} trail byte 0x${byte.toString(HEX_RADIX)}`,
           );
         }
         const pointer =
@@ -153,21 +167,24 @@ export function decodeIso2022Jp(bytes: Uint8Array): string {
         const codePoint = pointerCodePoint(JIS0208, pointer);
         if (codePoint === undefined) {
           malformed(
-            `has no character for lead byte 0x${leadingByte.toString(16)} trail byte 0x${byte.toString(16)}`,
+            `has no character for lead byte 0x${leadingByte.toString(HEX_RADIX)} trail byte 0x${byte.toString(HEX_RADIX)}`,
           );
         }
         units.push(codePoint);
         continue;
       }
       case "escapeStart": {
-        if (byte === 0x24 || byte === 0x28) {
+        if (
+          byte === ESCAPE_DESIGNATOR_DOLLAR ||
+          byte === ESCAPE_DESIGNATOR_PAREN
+        ) {
           pending = byte;
           state = "escape";
           continue;
         }
         // No revert to a remembered "output state" before this throw: the Encoding Standard's own algorithm carries a separate `decoder output state` precisely so a browser's non-fatal decoder can revert to the right mode and keep going after this exact error, but this decoder never continues past a throw, so that state has nothing left to do and this file carries only the one `state` variable.
         malformed(
-          `has no supported designator starting with escape byte 0x${byte.toString(16)}`,
+          `has no supported designator starting with escape byte 0x${byte.toString(HEX_RADIX)}`,
         );
         continue;
       }
@@ -175,18 +192,23 @@ export function decodeIso2022Jp(bytes: Uint8Array): string {
         const leadingEscapeByte = pending;
         pending = 0;
         const nextState: Iso2022JpState | undefined =
-          leadingEscapeByte === 0x28 && byte === 0x42
+          leadingEscapeByte === ESCAPE_DESIGNATOR_PAREN &&
+          byte === ESCAPE_DESIGNATOR_B
             ? "ascii"
-            : leadingEscapeByte === 0x28 && byte === 0x4a
+            : leadingEscapeByte === ESCAPE_DESIGNATOR_PAREN &&
+                byte === ESCAPE_DESIGNATOR_J
               ? "roman"
-              : leadingEscapeByte === 0x28 && byte === 0x49
+              : leadingEscapeByte === ESCAPE_DESIGNATOR_PAREN &&
+                  byte === ESCAPE_DESIGNATOR_I
                 ? "katakana"
-                : leadingEscapeByte === 0x24 && (byte === 0x40 || byte === 0x42)
+                : leadingEscapeByte === ESCAPE_DESIGNATOR_DOLLAR &&
+                    (byte === ESCAPE_DESIGNATOR_AT ||
+                      byte === ESCAPE_DESIGNATOR_B)
                   ? "leadingByte"
                   : undefined;
         if (nextState === undefined) {
           malformed(
-            `has an unsupported designator escape sequence 0x1b 0x${leadingEscapeByte.toString(16)} 0x${byte.toString(16)}`,
+            `has an unsupported designator escape sequence 0x1b 0x${leadingEscapeByte.toString(HEX_RADIX)} 0x${byte.toString(HEX_RADIX)}`,
           );
         }
         state = nextState;

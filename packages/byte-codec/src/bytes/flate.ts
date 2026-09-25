@@ -4,8 +4,13 @@ import { concatBytes } from "./writer";
 
 // The only file in the package that imports fflate — the direct analogue of ooxml.js's own src/zip.ts ("a thin wrapper over fflate's zipSync/unzipSync, isomorphic and dependency-free"). PDF's FlateDecode filter and PNG's IDAT payload both use zlib-framed DEFLATE (RFC 1950 — a 2-byte header plus a trailing Adler-32 checksum) — that is zlibSync/unzlibSync, NOT fflate's deflateSync/inflateSync, which are raw DEFLATE (RFC 1951) with no wrapper. Emitting or expecting the wrong framing produces a stream every conformant PDF/PNG reader rejects.
 
+const BYTES_PER_KIB = 1024;
+const KIB_PER_MIB = 1024;
+const MAX_INFLATE_OUTPUT_MIB = 512;
+
 // Guards every call in this module against a maliciously or accidentally huge decompressed output — both PDF and PNG streams here come from arbitrary, potentially adversarial input.
-export const MAX_INFLATE_OUTPUT_BYTES = 512 * 1024 * 1024;
+export const MAX_INFLATE_OUTPUT_BYTES =
+  MAX_INFLATE_OUTPUT_MIB * KIB_PER_MIB * BYTES_PER_KIB;
 
 export type DeflateLevel = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9;
 

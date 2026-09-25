@@ -103,9 +103,16 @@ const FIRST_HIGH_BYTE = 0x80;
 const C1_CONTROL_START = 0x80;
 const C1_CONTROL_END = 0x9f;
 
+const ASCII_TAB = 0x09;
+const ASCII_LINE_FEED = 0x0a;
+const ASCII_FORM_FEED = 0x0c;
+const ASCII_CARRIAGE_RETURN = 0x0d;
 /** C0 controls that appear in real text: tab, line feed, form feed, carriage return. Every other code below {@link FIRST_NON_CONTROL_CODE} belongs to binary content. */
 const TEXTUAL_CONTROL_CODES: ReadonlySet<number> = new Set([
-  0x09, 0x0a, 0x0c, 0x0d,
+  ASCII_TAB,
+  ASCII_LINE_FEED,
+  ASCII_FORM_FEED,
+  ASCII_CARRIAGE_RETURN,
 ]);
 
 /** One C0 control outside {@link TEXTUAL_CONTROL_CODES} is permitted per this many characters before the content is taken for binary. Plain text carries none at all, so the allowance exists only to tolerate a stray one, an end-of-file Ctrl-Z left by a DOS-era editor being the case that actually occurs; compressed and image data puts roughly an eighth of its bytes in the C0 range, more than an order of magnitude above this. Counted as integer arithmetic against the length rather than a floating-point ratio so the boundary is exact. */
@@ -147,7 +154,10 @@ const LOW_SURROGATE_MASK = 0x3ff;
  *
  * Exported so tests can place inputs on and around a chunk boundary without repeating the figure.
  */
-export const TEXT_DECODE_CHUNK_CODE_UNITS = 65_536 / 2;
+const MAX_APPLY_ARGUMENTS = 65_536;
+const APPLY_ARGUMENTS_CHUNK_DIVISOR = 2;
+export const TEXT_DECODE_CHUNK_CODE_UNITS =
+  MAX_APPLY_ARGUMENTS / APPLY_ARGUMENTS_CHUNK_DIVISOR;
 
 /**
  * A code unit accumulator threaded by reference into {@link appendCodePoint}, rather than the bare mutable array it wraps: the array itself is owned entirely by whichever decoder loop builds it, appended to hundreds or thousands of times per call, and this wrapper's own `units` property is not itself a primitive or callback, which is what keeps it out of scope for exadev/prefer-readonly-object-param (see this package's own eslint.config.ts, and PackageLintOptions.preferReadonlyParams in the workspace's shared eslint.shared.ts) the same way a bare `number[]` parameter is squarely inside exadev/prefer-readonly-array-param's.
@@ -189,16 +199,22 @@ export function fromCodeUnits(units: readonly number[]): string {
   ).join("");
 }
 
+const BOM_FE = 0xfe;
+const BOM_FF = 0xff;
+const BOM_EF = 0xef;
+const BOM_BB = 0xbb;
+const BOM_BF = 0xbf;
+
 /** Every byte order mark, longest first: UTF-32LE's begins with UTF-16LE's, so the four-byte marks have to be tested before the two-byte ones. Unicode resolves that overlap the same way, the alternative reading being a UTF-16LE file whose first character is U+0000, which is not a file that occurs. */
 const BOM_SIGNATURES: readonly {
   readonly encoding: TextEncodingLabel;
   readonly bytes: readonly number[];
 }[] = [
-  { encoding: "utf-32be", bytes: [0x00, 0x00, 0xfe, 0xff] },
-  { encoding: "utf-32le", bytes: [0xff, 0xfe, 0x00, 0x00] },
-  { encoding: "utf-8", bytes: [0xef, 0xbb, 0xbf] },
-  { encoding: "utf-16be", bytes: [0xfe, 0xff] },
-  { encoding: "utf-16le", bytes: [0xff, 0xfe] },
+  { encoding: "utf-32be", bytes: [0x00, 0x00, BOM_FE, BOM_FF] },
+  { encoding: "utf-32le", bytes: [BOM_FF, BOM_FE, 0x00, 0x00] },
+  { encoding: "utf-8", bytes: [BOM_EF, BOM_BB, BOM_BF] },
+  { encoding: "utf-16be", bytes: [BOM_FE, BOM_FF] },
+  { encoding: "utf-16le", bytes: [BOM_FF, BOM_FE] },
 ];
 
 function findBom(
@@ -295,8 +311,10 @@ function tryDecodeUtf16(
   }
 }
 
+const BYTES_PER_UTF32_CODE_UNIT = 4;
+
 function decodeUtf32(bytes: Uint8Array, littleEndian: boolean): string {
-  if (bytes.byteLength % 4 !== 0) {
+  if (bytes.byteLength % BYTES_PER_UTF32_CODE_UNIT !== 0) {
     throw new UndecodableTextError(
       "malformed",
       "UTF-32 text must hold a whole number of 32-bit code units",
@@ -304,7 +322,11 @@ function decodeUtf32(bytes: Uint8Array, littleEndian: boolean): string {
   }
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   const sink: CodeUnitSink = { units: [] };
-  for (let offset = 0; offset < bytes.byteLength; offset += 4) {
+  for (
+    let offset = 0;
+    offset < bytes.byteLength;
+    offset += BYTES_PER_UTF32_CODE_UNIT
+  ) {
     const codePoint = view.getUint32(offset, littleEndian);
     if (
       codePoint > MAX_CODE_POINT ||
@@ -345,6 +367,7 @@ function decodeUtf8(bytes: Uint8Array): string {
 
 /** The code unit {@link LEGACY_SINGLE_BYTE_TABLES} holds for a byte its encoding leaves without a character of its own. No legacy single-byte encoding maps a real byte to the replacement character, which is what makes it safe to use as that table's own gap marker. */
 const LEGACY_SINGLE_BYTE_GAP_CODE = 0xfffd;
+const HEX_RADIX = 16;
 
 /** Decodes bytes under a {@link LegacySingleByteEncodingLabel}, using `table` (128 code units, one per byte from {@link FIRST_HIGH_BYTE} to 0xFF) for the high half and ASCII identity for the low half, exactly as {@link decodeWindows1252} already does with its own hand-picked table. Unlike windows-1252, a byte these encodings leave without a character throws rather than decoding to a C1 control: windows-1252's own gaps are given C1 controls by the Encoding Standard itself so that its decoder is total, but the standard leaves every other legacy single-byte encoding's gaps genuinely undefined, so a caller naming one of these for bytes that hit a gap gets a loud, actionable refusal instead of a silently wrong character. */
 function decodeLegacySingleByte(
@@ -362,7 +385,7 @@ function decodeLegacySingleByte(
     if (unit === LEGACY_SINGLE_BYTE_GAP_CODE) {
       throw new UndecodableTextError(
         "malformed",
-        `${label} has no character for byte 0x${byte.toString(16)}`,
+        `${label} has no character for byte 0x${byte.toString(HEX_RADIX)}`,
       );
     }
     units.push(unit);
