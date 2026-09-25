@@ -5,7 +5,7 @@ import { el, txt } from "../../xml/fragment";
 import { readOdfParagraph } from "./paragraph";
 import { assertNeverOdfBookmarkMarkerSide } from "./paragraph-segmentation";
 import type { ContentParagraph, DefinitionEntry } from "document-schema.js";
-import type { OdfDefinitionsSink } from "./constructs";
+import type { OdfDefinitionsSink } from "./constructs-definitions";
 
 // DefinitionEntry's body is deliberately tenant-open (document-schema.js's definitions.ts), so a test reading an entry's body as block content narrows it itself rather than asserting.
 function bodyParagraphs(

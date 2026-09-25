@@ -21,17 +21,19 @@ import {
   type OdfListIdState,
 } from "./list";
 import {
-  isOdfBlockScopedHalf,
   isOdfExtensionElement,
   odfAttributeElement,
   odfBookmarkAnchorDescriptor,
   odfFieldDescriptor,
   odfResidue,
-  pairOdfMarkerHalves,
-  type OdfDefinitionsSink,
-  type OdfMarkerHalf,
   type OdfResidueFormat,
 } from "./constructs";
+import {
+  isOdfBlockScopedHalf,
+  pairOdfMarkerHalves,
+  type OdfMarkerHalf,
+} from "./constructs-markers";
+import { type OdfDefinitionsSink } from "./constructs-definitions";
 import { resolveStyleElementChain } from "./cascade";
 import {
   buildOdfParagraphItems,
