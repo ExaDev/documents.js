@@ -23,6 +23,12 @@ const MARKER_SOT = 0xff90;
 const MARKER_SOD = 0xff93;
 const MARKER_EOC = 0xffd9;
 
+const BITS_PER_BYTE = 8;
+const HEX_RADIX = 16;
+const NIBBLE_MASK = 0x0f; // extracts a 4-bit nibble from a packed byte
+const NIBBLE_BITS = 4; // width of a nibble in bits, the shift width separating a packed byte's high nibble from its low one
+const UINT16_MODULUS = 0x10000; // 2^16: multiplying the high uint16 by this and adding the low one assembles a uint32 without going through a 32-bit signed left-shift
+
 // T.800 A.6.1 Table A.16: the five progression orders, in the order the Table's own values run.
 export type Jpeg2000ProgressionOrder =
   "LRCP" | "RLCP" | "RPCL" | "PCRL" | "CPRL";
@@ -155,12 +161,12 @@ export class MarkerCursor {
   }
 
   uint16(): number {
-    return (this.uint8() << 8) | this.uint8();
+    return (this.uint8() << BITS_PER_BYTE) | this.uint8();
   }
 
   uint32(): number {
     // Assembled through multiplication rather than shifts: a 32-bit field with its top bit set (Psot on a large tile, or the 0xFFFFFFFF "unknown" sentinel) would come back negative from `<<`.
-    return this.uint16() * 0x10000 + this.uint16();
+    return this.uint16() * UINT16_MODULUS + this.uint16();
   }
 
   bytes(length: number): Uint8Array<ArrayBuffer> {
@@ -174,6 +180,10 @@ export class MarkerCursor {
     return slice;
   }
 }
+
+const SIZ_COMPONENT_RECORD_SIZE = 3; // T.800 Table A.9: each SIZ component record is Ssiz (uint8) + XRsiz (uint8) + YRsiz (uint8)
+const SSIZ_SIGNED_BIT = 0x80; // T.800 Table A.11: bit 7 of Ssiz, set when the component's samples are signed
+const SSIZ_BIT_DEPTH_MASK = 0x7f; // T.800 Table A.11: bits 0-6 of Ssiz hold bit-depth-minus-1
 
 function readImageSize(
   cursor: MarkerCursor,
@@ -192,7 +202,7 @@ function readImageSize(
   if (count === 0) {
     throw new Jpeg2000ParseError("SIZ declares zero components");
   }
-  if (cursor.position + count * 3 > segmentEnd) {
+  if (cursor.position + count * SIZ_COMPONENT_RECORD_SIZE > segmentEnd) {
     throw new Jpeg2000ParseError(
       `SIZ declares ${String(count)} components but its own length leaves room for fewer`,
     );
@@ -201,8 +211,8 @@ function readImageSize(
   for (let i = 0; i < count; i++) {
     const ssiz = cursor.uint8();
     components.push({
-      signed: (ssiz & 0x80) !== 0,
-      bitDepth: (ssiz & 0x7f) + 1,
+      signed: (ssiz & SSIZ_SIGNED_BIT) !== 0,
+      bitDepth: (ssiz & SSIZ_BIT_DEPTH_MASK) + 1,
       dx: cursor.uint8(),
       dy: cursor.uint8(),
     });
@@ -221,13 +231,15 @@ function readImageSize(
 // The maximal precinct partition (2^15) is what a codestream means when Scod's bit 0 is clear: T.800 A.6.1 defines that case as PPx = PPy = 15, which for any real image size is one precinct covering the whole resolution level.
 const DEFAULT_PRECINCT_EXPONENT = 15;
 
+const CODE_BLOCK_AREA_EXPONENT_MAX = 12; // T.800 Table A.18: the code-block area is capped at 2^12 (4096) samples, so xcb + ycb (the already-offset exponents) may not exceed this
+
 function readCodingStyleParameters(
   cursor: MarkerCursor,
   explicitPrecincts: boolean,
 ): Jpeg2000CodingStyle {
   const decompositionLevels = cursor.uint8();
-  const codeBlockWidthExp = (cursor.uint8() & 0x0f) + 2;
-  const codeBlockHeightExp = (cursor.uint8() & 0x0f) + 2;
+  const codeBlockWidthExp = (cursor.uint8() & NIBBLE_MASK) + 2;
+  const codeBlockHeightExp = (cursor.uint8() & NIBBLE_MASK) + 2;
   const codeBlockStyle = cursor.uint8();
   const transformCode = cursor.uint8();
   if (transformCode !== 0 && transformCode !== 1) {
@@ -236,7 +248,7 @@ function readCodingStyleParameters(
     );
   }
   // T.800 Table A.18: the transmitted values are xcb-2 and ycb-2, and the standard caps the code-block area at 4096 samples with each side at most 2^10. No separate per-side check is needed alongside the area cap: each exponent's own floor of 2 (from the `+ 2` above) means either one alone exceeding 10 already puts the sum past 12 (11 + 2 = 13), so the sum check below already catches every case an individual >10 check would.
-  if (codeBlockWidthExp + codeBlockHeightExp > 12) {
+  if (codeBlockWidthExp + codeBlockHeightExp > CODE_BLOCK_AREA_EXPONENT_MAX) {
     throw new Jpeg2000ParseError(
       `code-block size 2^${String(codeBlockWidthExp)} by 2^${String(codeBlockHeightExp)} is outside the range ISO/IEC 15444-1 Table A.18 permits`,
     );
@@ -245,7 +257,10 @@ function readCodingStyleParameters(
   if (explicitPrecincts) {
     for (let r = 0; r <= decompositionLevels; r++) {
       const packed = cursor.uint8();
-      precinctSizes.push({ ppx: packed & 0x0f, ppy: (packed >> 4) & 0x0f });
+      precinctSizes.push({
+        ppx: packed & NIBBLE_MASK,
+        ppy: (packed >> NIBBLE_BITS) & NIBBLE_MASK,
+      });
     }
   } else {
     for (let r = 0; r <= decompositionLevels; r++) {
@@ -264,6 +279,8 @@ function readCodingStyleParameters(
     precinctSizes,
   };
 }
+
+const SCOD_USE_EPH_BIT = 0x04; // T.800 Table A.13: bit 2 of Scod, set when EPH markers are used
 
 function readCodingDefaults(cursor: MarkerCursor): Jpeg2000CodingDefaults {
   // T.800 A.6.1 Table A.16: the five progression orders, in the order the Table's own values run. Built inside this function rather than as a module-level constant so a mutation to one of its entries is attributed, by Stryker's per-test coverage analysis, to the tests that actually call this function — a module-level `const` here would run once at import time as a static mutant, which Stryker tests against a single arbitrary covering test rather than the full set that genuinely exercises this lookup.
@@ -293,28 +310,40 @@ function readCodingDefaults(cursor: MarkerCursor): Jpeg2000CodingDefaults {
     layers,
     multipleComponentTransform,
     useSop: (scod & 0x02) !== 0,
-    useEph: (scod & 0x04) !== 0,
+    useEph: (scod & SCOD_USE_EPH_BIT) !== 0,
   };
 }
+
+const SQCD_GUARD_BITS_SHIFT = 5; // T.800 Table A.27/A.28: Sqcd/Sqcc's top 3 bits (bits 5-7) are the number of guard bits
+const SQCD_STYLE_MASK = 0x1f; // T.800 Table A.27/A.28: Sqcd/Sqcc's bottom 5 bits are the quantization style
+const SPQCD_NONE_EXPONENT_SHIFT = 3; // T.800 Table A.29: with no quantization, SPqcd/SPqcc's top 5 bits (bits 3-7) are the exponent, and the bottom 3 bits are reserved
+const SPQCD_EXPONENT_SHIFT = 11; // T.800 Table A.30: with derived or expounded quantization, SPqcd/SPqcc's top 5 bits (bits 11-15) are the exponent
+const SPQCD_MANTISSA_MASK = 0x7ff; // T.800 Table A.30: the bottom 11 bits (2^11 - 1) are the mantissa
 
 function readQuantization(
   cursor: MarkerCursor,
   segmentEnd: number,
 ): Jpeg2000Quantization {
   const sq = cursor.uint8();
-  const guardBits = sq >> 5;
-  const styleCode = sq & 0x1f;
+  const guardBits = sq >> SQCD_GUARD_BITS_SHIFT;
+  const styleCode = sq & SQCD_STYLE_MASK;
   const stepSizes: Jpeg2000StepSize[] = [];
   if (styleCode === 0) {
     while (cursor.position < segmentEnd) {
-      stepSizes.push({ exponent: cursor.uint8() >> 3, mantissa: 0 });
+      stepSizes.push({
+        exponent: cursor.uint8() >> SPQCD_NONE_EXPONENT_SHIFT,
+        mantissa: 0,
+      });
     }
     return { style: "none", guardBits, stepSizes };
   }
   if (styleCode === 1 || styleCode === 2) {
     while (cursor.position + 1 < segmentEnd) {
       const packed = cursor.uint16();
-      stepSizes.push({ exponent: packed >> 11, mantissa: packed & 0x7ff });
+      stepSizes.push({
+        exponent: packed >> SPQCD_EXPONENT_SHIFT,
+        mantissa: packed & SPQCD_MANTISSA_MASK,
+      });
     }
     return {
       style: styleCode === 1 ? "derived" : "expounded",
@@ -328,11 +357,15 @@ function readQuantization(
 }
 
 // T.800 A.6.2/A.6.5: the component index is one byte when the image has fewer than 257 components and two otherwise — the one place in the codestream where a field's width depends on a value from a different marker segment.
+const COMPONENT_INDEX_WIDTH_THRESHOLD = 257;
+
 function readComponentIndex(
   cursor: MarkerCursor,
   componentCount: number,
 ): number {
-  return componentCount < 257 ? cursor.uint8() : cursor.uint16();
+  return componentCount < COMPONENT_INDEX_WIDTH_THRESHOLD
+    ? cursor.uint8()
+    : cursor.uint16();
 }
 
 interface MutableHeader {
@@ -399,13 +432,13 @@ function readHeaderSegment(
   const length = cursor.uint16();
   if (length < 2) {
     throw new Jpeg2000ParseError(
-      `marker segment 0x${marker.toString(16)} declares a length of ${String(length)}, which is shorter than the length field itself`,
+      `marker segment 0x${marker.toString(HEX_RADIX)} declares a length of ${String(length)}, which is shorter than the length field itself`,
     );
   }
   const segmentEnd = cursor.position + length - 2;
   if (segmentEnd > cursor.data.length) {
     throw new Jpeg2000ParseError(
-      `marker segment 0x${marker.toString(16)} declares more data than the codestream carries`,
+      `marker segment 0x${marker.toString(HEX_RADIX)} declares more data than the codestream carries`,
     );
   }
   if (marker === MARKER_COD) {
@@ -455,11 +488,13 @@ function validateMainHeader(header: MutableHeader): void {
   }
 }
 
+const MIN_HEADER_BYTES = 4; // enough to read the SOC marker (2 bytes) plus the marker immediately following it, which A.3 requires to be SIZ
+
 export function parseJpeg2000Codestream(
   data: Uint8Array<ArrayBuffer>,
 ): Jpeg2000Codestream {
   const cursor = new MarkerCursor(data);
-  if (cursor.remaining < 4 || cursor.uint16() !== MARKER_SOC) {
+  if (cursor.remaining < MIN_HEADER_BYTES || cursor.uint16() !== MARKER_SOC) {
     throw new Jpeg2000ParseError(
       "codestream does not begin with an SOC marker",
     );
@@ -500,7 +535,7 @@ export function parseJpeg2000Codestream(
     }
     if (marker === MARKER_SOD || marker === MARKER_SOC) {
       throw new Jpeg2000ParseError(
-        `unexpected marker 0x${marker.toString(16)} in the main header`,
+        `unexpected marker 0x${marker.toString(HEX_RADIX)} in the main header`,
       );
     }
     readHeaderSegment(marker, cursor, main, siz.components.length, comments);
@@ -522,6 +557,8 @@ export function parseJpeg2000Codestream(
   };
 }
 
+const SOT_SEGMENT_LENGTH = 10; // ISO/IEC 15444-1 A.4.2: Lsot is always 10 (Lsot uint16 + Isot uint16 + Psot uint32 + TPsot uint8 + TNsot uint8)
+
 // T.800 A.4.2/A.4.4: SOT ... SOD ... coded data, with Psot giving the length of the whole tile-part measured from the first byte of the SOT marker. Psot 0 means "runs to the end of the codestream" (or to the next SOT), which only the last tile-part may use.
 function readTilePart(
   cursor: MarkerCursor,
@@ -531,7 +568,7 @@ function readTilePart(
   const sotStart = cursor.position;
   cursor.uint16(); // SOT
   const lsot = cursor.uint16();
-  if (lsot !== 10) {
+  if (lsot !== SOT_SEGMENT_LENGTH) {
     throw new Jpeg2000ParseError(
       `SOT declares a length of ${String(lsot)}, but ISO/IEC 15444-1 A.4.2 fixes it at 10`,
     );
@@ -554,7 +591,7 @@ function readTilePart(
     }
     if (marker === MARKER_SOT || marker === MARKER_EOC) {
       throw new Jpeg2000ParseError(
-        `a tile-part header ended at marker 0x${marker.toString(16)} rather than at SOD`,
+        `a tile-part header ended at marker 0x${marker.toString(HEX_RADIX)} rather than at SOD`,
       );
     }
     readHeaderSegment(marker, cursor, header, componentCount, comments);
@@ -580,9 +617,15 @@ function readTilePart(
   };
 }
 
+const MARKER_EOC_HIGH_BYTE = 0xff; // the high byte of MARKER_EOC (0xffd9); matched against raw codestream bytes directly, rather than through MarkerCursor.uint16(), since the two-byte range checked here can legitimately be shorter than a full marker read would tolerate
+const MARKER_EOC_LOW_BYTE = 0xd9;
+
 // A Psot of 0 runs the tile-part to the end of the codestream, which includes the EOC marker; the packet decoder must not see those two bytes as coded data. Takes no separate start/length: readTilePart, this function's sole caller, always calls it with a range beginning immediately after a real SOD marker (0xFF 0x93), so whenever that range is under 2 bytes long, one of the two positions checked below falls on that marker's own fixed bytes rather than on data — and 0x93 can never be mistaken for 0xD9 — making the byte comparisons already refuse a too-short range on their own, with no need to measure it first.
 function trimTrailingEoc(data: Uint8Array<ArrayBuffer>, end: number): number {
-  if (data[end - 2] === 0xff && data[end - 1] === 0xd9) {
+  if (
+    data[end - 2] === MARKER_EOC_HIGH_BYTE &&
+    data[end - 1] === MARKER_EOC_LOW_BYTE
+  ) {
     return end - 2;
   }
   return end;
