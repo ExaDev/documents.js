@@ -10,13 +10,29 @@ import { decodePackage, encodePackage } from "./codec";
 // A flat number[] of alternating [nameIdx, valueIdx, ...] pairs into the string table.
 export type CompactAttrPairs = number[];
 
+// The leading tuple element of every CompactXmlNode variant: a numeric type-code discriminant, in the same order as model/node.ts's own XmlNode variants. Declared as consts, not bare literals, so the tuple type aliases below (referenced via `typeof`, since a type alias needs a type rather than a value) and every value-position check against the same discriminant (isCompactXmlNode, encodeNode, decodeNode) share one named source rather than six independently-typed magic numbers.
+const NODE_TAG_ELEMENT = 0;
+const NODE_TAG_TEXT = 1;
+const NODE_TAG_CDATA = 2;
+const NODE_TAG_COMMENT = 3;
+const NODE_TAG_DECLARATION = 4;
+const NODE_TAG_PI = 5;
+
 // Tuple-encoded XmlNode: a leading numeric type code, then the node's fields as string-table indices. Order matches model/node.ts's XmlNode variants.
-export type CompactElement = [0, number, CompactAttrPairs, CompactXmlNode[]];
-export type CompactText = [1, number];
-export type CompactCdata = [2, number];
-export type CompactComment = [3, number];
-export type CompactDeclaration = [4, CompactAttrPairs];
-export type CompactPi = [5, number, number];
+export type CompactElement = [
+  typeof NODE_TAG_ELEMENT,
+  number,
+  CompactAttrPairs,
+  CompactXmlNode[],
+];
+export type CompactText = [typeof NODE_TAG_TEXT, number];
+export type CompactCdata = [typeof NODE_TAG_CDATA, number];
+export type CompactComment = [typeof NODE_TAG_COMMENT, number];
+export type CompactDeclaration = [
+  typeof NODE_TAG_DECLARATION,
+  CompactAttrPairs,
+];
+export type CompactPi = [typeof NODE_TAG_PI, number, number];
 
 export type CompactXmlNode =
   | CompactElement
@@ -41,22 +57,29 @@ export function isCompactXmlNode(value: unknown): value is CompactXmlNode {
     return false;
   }
   const code = value[0];
-  if (code === 1 || code === 2 || code === 3) {
+  if (
+    code === NODE_TAG_TEXT ||
+    code === NODE_TAG_CDATA ||
+    code === NODE_TAG_COMMENT
+  ) {
     return value.length === 2 && typeof value[1] === "number";
   }
-  if (code === 4) {
+  if (code === NODE_TAG_DECLARATION) {
     return value.length === 2 && isCompactAttrPairs(value[1]);
   }
-  if (code === 5) {
+  // Each tuple's own fixed length: [tag, target, content] for pi, [tag, tagIdx, attrs, children] for element.
+  const PI_TUPLE_LENGTH = 3;
+  const ELEMENT_TUPLE_LENGTH = 4;
+  if (code === NODE_TAG_PI) {
     return (
-      value.length === 3 &&
+      value.length === PI_TUPLE_LENGTH &&
       typeof value[1] === "number" &&
       typeof value[2] === "number"
     );
   }
-  if (code === 0) {
+  if (code === NODE_TAG_ELEMENT) {
     return (
-      value.length === 4 &&
+      value.length === ELEMENT_TUPLE_LENGTH &&
       typeof value[1] === "number" &&
       isCompactAttrPairs(value[2]) &&
       Array.isArray(value[3]) &&
@@ -112,18 +135,22 @@ function encodeAttrs(
 function encodeNode(node: XmlNode, table: StringTable): CompactXmlNode {
   switch (node.type) {
     case "text":
-      return [1, table.intern(node.value)];
+      return [NODE_TAG_TEXT, table.intern(node.value)];
     case "cdata":
-      return [2, table.intern(node.value)];
+      return [NODE_TAG_CDATA, table.intern(node.value)];
     case "comment":
-      return [3, table.intern(node.value)];
+      return [NODE_TAG_COMMENT, table.intern(node.value)];
     case "declaration":
-      return [4, encodeAttrs(node.attributes, table)];
+      return [NODE_TAG_DECLARATION, encodeAttrs(node.attributes, table)];
     case "pi":
-      return [5, table.intern(node.target), table.intern(node.content)];
+      return [
+        NODE_TAG_PI,
+        table.intern(node.target),
+        table.intern(node.content),
+      ];
     case "element":
       return [
-        0,
+        NODE_TAG_ELEMENT,
         table.intern(node.tag),
         encodeAttrs(node.attributes, table),
         node.children.map((child) => encodeNode(child, table)),
@@ -182,21 +209,24 @@ export function assertNeverCompactXmlNodeCode(value: never): never {
 
 function decodeNode(node: CompactXmlNode, strings: readonly string[]): XmlNode {
   switch (node[0]) {
-    case 1:
+    case NODE_TAG_TEXT:
       return { type: "text", value: stringAt(strings, node[1]) };
-    case 2:
+    case NODE_TAG_CDATA:
       return { type: "cdata", value: stringAt(strings, node[1]) };
-    case 3:
+    case NODE_TAG_COMMENT:
       return { type: "comment", value: stringAt(strings, node[1]) };
-    case 4:
-      return { type: "declaration", attributes: decodeAttrs(node[1], strings) };
-    case 5:
+    case NODE_TAG_DECLARATION:
+      return {
+        type: "declaration",
+        attributes: decodeAttrs(node[1], strings),
+      };
+    case NODE_TAG_PI:
       return {
         type: "pi",
         target: stringAt(strings, node[1]),
         content: stringAt(strings, node[2]),
       };
-    case 0:
+    case NODE_TAG_ELEMENT:
       return {
         type: "element",
         tag: stringAt(strings, node[1]),
