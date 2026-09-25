@@ -18,6 +18,12 @@ const SLIDE_LAYOUT_REL =
   "http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideLayout";
 const SLIDE_MASTER_REL =
   "http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideMaster";
+
+// The fixture master's own p:titleStyle/p:bodyStyle/p:otherStyle font sizes, and a placeholder level chosen to sit above resolveDefaultRunProperties' own 0-8 clamp range.
+const FIXTURE_TITLE_STYLE_SIZE_PT = 44;
+const FIXTURE_BODY_STYLE_SIZE_PT = 18;
+const FIXTURE_OTHER_STYLE_SIZE_PT = 12;
+const LEVEL_ABOVE_CLAMP_MAX = 20;
 const THEME_REL =
   "http://schemas.openxmlformats.org/officeDocument/2006/relationships/theme";
 
@@ -405,7 +411,7 @@ describe("resolveDefaultRunProperties", () => {
     const pkg = buildFixturePackage();
     const context = resolveSlideInheritance(pkg, "ppt/slides/slide1.xml");
     const props = resolveDefaultRunProperties("title", 0, context);
-    expect(props.sizePt).toBe(44);
+    expect(props.sizePt).toBe(FIXTURE_TITLE_STYLE_SIZE_PT);
     expect(props.bold).toBe(true);
     expect(props.fontFamily).toBe("Aptos Display");
     expect(props.color).toEqual({ r: 0, g: 0, b: 0 });
@@ -415,7 +421,7 @@ describe("resolveDefaultRunProperties", () => {
     const pkg = buildFixturePackage();
     const context = resolveSlideInheritance(pkg, "ppt/slides/slide1.xml");
     const props = resolveDefaultRunProperties("body", 0, context);
-    expect(props.sizePt).toBe(18);
+    expect(props.sizePt).toBe(FIXTURE_BODY_STYLE_SIZE_PT);
     expect(props.bold).toBeUndefined();
     expect(props.fontFamily).toBeUndefined();
   });
@@ -423,8 +429,12 @@ describe("resolveDefaultRunProperties", () => {
   it("normalizes ctrTitle/subTitle to the title/body style", () => {
     const pkg = buildFixturePackage();
     const context = resolveSlideInheritance(pkg, "ppt/slides/slide1.xml");
-    expect(resolveDefaultRunProperties("ctrTitle", 0, context).sizePt).toBe(44);
-    expect(resolveDefaultRunProperties("subTitle", 0, context).sizePt).toBe(18);
+    expect(resolveDefaultRunProperties("ctrTitle", 0, context).sizePt).toBe(
+      FIXTURE_TITLE_STYLE_SIZE_PT,
+    );
+    expect(resolveDefaultRunProperties("subTitle", 0, context).sizePt).toBe(
+      FIXTURE_BODY_STYLE_SIZE_PT,
+    );
   });
 
   it("returns an empty object when there is no master to resolve against", () => {
@@ -444,13 +454,17 @@ describe("resolveDefaultRunProperties", () => {
   it("falls back to the otherStyle level for a placeholder type that is neither title nor body", () => {
     const pkg = buildFixturePackage();
     const context = resolveSlideInheritance(pkg, "ppt/slides/slide1.xml");
-    expect(resolveDefaultRunProperties(undefined, 0, context).sizePt).toBe(12);
+    expect(resolveDefaultRunProperties(undefined, 0, context).sizePt).toBe(
+      FIXTURE_OTHER_STYLE_SIZE_PT,
+    );
   });
 
   it("clamps a negative level to 0, resolving the identical style level 0 itself would", () => {
     const pkg = buildFixturePackage();
     const context = resolveSlideInheritance(pkg, "ppt/slides/slide1.xml");
-    expect(resolveDefaultRunProperties("title", -1, context).sizePt).toBe(44);
+    expect(resolveDefaultRunProperties("title", -1, context).sizePt).toBe(
+      FIXTURE_TITLE_STYLE_SIZE_PT,
+    );
   });
 
   it("clamps a level above 8 down to 8, never wrapping back to an earlier level's own style", () => {
@@ -458,7 +472,8 @@ describe("resolveDefaultRunProperties", () => {
     const pkg = buildFixturePackage();
     const context = resolveSlideInheritance(pkg, "ppt/slides/slide1.xml");
     expect(
-      resolveDefaultRunProperties("title", 20, context).sizePt,
+      resolveDefaultRunProperties("title", LEVEL_ABOVE_CLAMP_MAX, context)
+        .sizePt,
     ).toBeUndefined();
   });
 });

@@ -130,14 +130,22 @@ describe("buildSheetDrawing: one image and one chart, every element and attribut
   });
 
   it("builds the picture anchor with its own xdr:from/xdr:ext/xdr:pic/xdr:clientData shape", () => {
+    // pngImage()'s own default offsetXPt/offsetYPt/widthPt/heightPt fixture values, mirrored here for the expected anchor's own EMU conversions.
+    const PNG_IMAGE_OFFSET_X_PT = 5;
+    const PNG_IMAGE_OFFSET_Y_PT = 10;
+    const PNG_IMAGE_WIDTH_PT = 100;
+    const PNG_IMAGE_HEIGHT_PT = 50;
     const picAnchor = el("xdr:oneCellAnchor", {}, [
       el("xdr:from", {}, [
         el("xdr:col", {}, [txt("3")]),
-        el("xdr:colOff", {}, [txt(String(ptToEmu(5)))]),
+        el("xdr:colOff", {}, [txt(String(ptToEmu(PNG_IMAGE_OFFSET_X_PT)))]),
         el("xdr:row", {}, [txt("2")]),
-        el("xdr:rowOff", {}, [txt(String(ptToEmu(10)))]),
+        el("xdr:rowOff", {}, [txt(String(ptToEmu(PNG_IMAGE_OFFSET_Y_PT)))]),
       ]),
-      el("xdr:ext", { cx: String(ptToEmu(100)), cy: String(ptToEmu(50)) }),
+      el("xdr:ext", {
+        cx: String(ptToEmu(PNG_IMAGE_WIDTH_PT)),
+        cy: String(ptToEmu(PNG_IMAGE_HEIGHT_PT)),
+      }),
       el("xdr:pic", {}, [
         el("xdr:nvPicPr", {}, [
           el("xdr:cNvPr", { id: "2", name: "Picture 2" }),
@@ -151,8 +159,8 @@ describe("buildSheetDrawing: one image and one chart, every element and attribut
           el("a:xfrm", {}, [
             el("a:off", { x: "0", y: "0" }),
             el("a:ext", {
-              cx: String(ptToEmu(100)),
-              cy: String(ptToEmu(50)),
+              cx: String(ptToEmu(PNG_IMAGE_WIDTH_PT)),
+              cy: String(ptToEmu(PNG_IMAGE_HEIGHT_PT)),
             }),
           ]),
           el("a:prstGeom", { prst: "rect" }, [el("a:avLst")]),
@@ -164,6 +172,9 @@ describe("buildSheetDrawing: one image and one chart, every element and attribut
   });
 
   it("builds the chart anchor with its own xdr:from/xdr:ext/xdr:graphicFrame shape", () => {
+    // chartObject()'s own default frame.widthPt/heightPt fixture values, mirrored here for the expected anchor's own EMU conversions.
+    const CHART_FRAME_WIDTH_PT = 200;
+    const CHART_FRAME_HEIGHT_PT = 150;
     const chartAnchor = el("xdr:oneCellAnchor", {}, [
       el("xdr:from", {}, [
         el("xdr:col", {}, [txt("1")]),
@@ -171,7 +182,10 @@ describe("buildSheetDrawing: one image and one chart, every element and attribut
         el("xdr:row", {}, [txt("5")]),
         el("xdr:rowOff", {}, [txt(String(ptToEmu(0)))]),
       ]),
-      el("xdr:ext", { cx: String(ptToEmu(200)), cy: String(ptToEmu(150)) }),
+      el("xdr:ext", {
+        cx: String(ptToEmu(CHART_FRAME_WIDTH_PT)),
+        cy: String(ptToEmu(CHART_FRAME_HEIGHT_PT)),
+      }),
       el("xdr:graphicFrame", {}, [
         el("xdr:nvGraphicFramePr", {}, [
           el("xdr:cNvPr", { id: "3", name: "Chart 3" }),
@@ -180,8 +194,8 @@ describe("buildSheetDrawing: one image and one chart, every element and attribut
         el("xdr:xfrm", {}, [
           el("a:off", { x: "0", y: "0" }),
           el("a:ext", {
-            cx: String(ptToEmu(200)),
-            cy: String(ptToEmu(150)),
+            cx: String(ptToEmu(CHART_FRAME_WIDTH_PT)),
+            cy: String(ptToEmu(CHART_FRAME_HEIGHT_PT)),
           }),
         ]),
         el("a:graphic", {}, [
