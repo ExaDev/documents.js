@@ -62,6 +62,69 @@ const UNKNOWN_DATA_LENGTH = 0xffffffff;
 // T.88 7.4.8.5: a page whose height is not known when its page information segment is written, resolved either by end-of-stripe segments or — in a PDF, where the image dictionary already declares it — by the caller's own height.
 const UNKNOWN_PAGE_HEIGHT = 0xffffffff;
 
+const BITS_PER_BYTE = 8;
+const UINT8_MODULUS = 1 << BITS_PER_BYTE; // 256: subtracted once to fold an unsigned byte reading back into two's-complement signed range
+const INT8_MAX = UINT8_MODULUS / 2 - 1; // 127: the greatest value a signed byte still reads as non-negative
+const UINT32_BYTE_2_SHIFT = 16; // shifts the third-most-significant of a big-endian uint32's four bytes into place
+const UINT32_BYTE_3_SHIFT = 24; // shifts the most-significant byte into place
+
+// T.88 7.2.3: the segment header flags byte's own fields.
+const SEGMENT_TYPE_MASK = 0x3f; // bits 0-5: the segment type
+const PAGE_ASSOCIATION_SIZE_FLAG = 0x40; // bit 6: page association field is 4 bytes rather than 1
+
+// T.88 7.2.4: the referred-to segment count field.
+const REFERRED_COUNT_SHORT_SHIFT = 5; // the short form is the top three bits of one byte
+const REFERRED_COUNT_LONG_FORM_SENTINEL = 7; // a short-form value of 7 means a 29-bit long-form count follows instead
+const REFERRED_COUNT_LONG_MASK = 0x1fffffff; // the long-form count's own 29 bits
+
+// T.88 7.2.5: a referred-to segment number is sized by how large the CURRENT segment's own number is, since no segment may refer forwards.
+const SEGMENT_NUMBER_1BYTE_LIMIT = 256;
+const SEGMENT_NUMBER_2BYTE_LIMIT = 65536;
+const REFERRED_NUMBER_SIZE_4_BYTES = 4;
+
+// T.88 7.4.1: the region segment information field's own combination-operator sub-field (Table 12: 0-4, so 3 bits).
+const REGION_COMBOP_MASK = 0x07;
+
+// T.88 7.4.8.5: the page information segment's own flags byte fields.
+const PAGE_DEFAULT_COMBOP_SHIFT = 3;
+const PAGE_DEFAULT_COMBOP_MASK = 0x03;
+const PAGE_COMBOP_OVERRIDE_FLAG = 0x40;
+
+// T.88 6.2.5.3 / 6.5.8.1: the generic-region coding procedure's own AT pixel count, shared by an actual generic region segment and by a symbol dictionary's per-symbol generic-style coding, since both use the identical procedure and AT pixel convention.
+const GENERIC_CODING_AT_PIXEL_COUNT_TEMPLATE_0 = 4;
+// Template 0's own context-pixel count (see GENERIC_CONTEXT_BITS/REFINEMENT_CONTEXT_BITS in jbig2-generic.ts): used as the fallback where noUncheckedIndexedAccess types the array read as possibly undefined, even though `template` is always decoded from a field whose width keeps it in range.
+const GENERIC_TEMPLATE_0_CONTEXT_BITS = 16;
+const REFINEMENT_TEMPLATE_0_CONTEXT_BITS = 13;
+
+// T.88 7.4.6.2: the generic region segment's own flags byte fields.
+const GENERIC_REGION_TEMPLATE_MASK = 0x03;
+const GENERIC_REGION_TPGDON_FLAG = 0x08;
+const GENERIC_REGION_EXTTEMPLATE_FLAG = 0x10;
+
+// T.88 7.4.3.1.1: the symbol dictionary segment's own flags field.
+const SYMBOL_DICT_BITMAP_CODING_CONTEXT_USED = 0x0100; // bit 8
+const SYMBOL_DICT_BITMAP_CODING_CONTEXT_RETAINED = 0x0200; // bit 9
+const SYMBOL_DICT_TEMPLATE_SHIFT = 10;
+const SYMBOL_DICT_TEMPLATE_MASK = 0x03;
+const SYMBOL_DICT_REFINEMENT_TEMPLATE_SHIFT = 12;
+
+// T.88 7.4.4.1.1: the text region segment's own flags field.
+const TEXT_REGION_STRIP_SIZE_LOG_MASK = 0x03;
+const TEXT_REGION_REFCORNER_SHIFT = 4;
+const TEXT_REGION_REFCORNER_MASK = 0x03;
+const TEXT_REGION_TRANSPOSED_FLAG = 0x40;
+const TEXT_REGION_SBCOMBOP_SHIFT = 7;
+const TEXT_REGION_SBCOMBOP_MASK = 0x03;
+const TEXT_REGION_DEFAULT_PIXEL_SHIFT = 9;
+const TEXT_REGION_REFINEMENT_TEMPLATE_SHIFT = 15;
+// SBDSOFFSET is a signed field at bits 10-14: sign-extended by shifting it to the top of a 32-bit word and back (see readTextRegion below), so its own shift amounts are derived from its field position and width rather than named as independent numbers.
+const SBDSOFFSET_FIELD_START = 10;
+const SBDSOFFSET_FIELD_WIDTH = 5;
+const INT32_BITS = 32;
+const SBDSOFFSET_SIGN_EXTEND_LEFT_SHIFT =
+  INT32_BITS - (SBDSOFFSET_FIELD_START + SBDSOFFSET_FIELD_WIDTH);
+const SBDSOFFSET_SIGN_EXTEND_RIGHT_SHIFT = INT32_BITS - SBDSOFFSET_FIELD_WIDTH;
+
 interface SegmentHeader {
   readonly number: number;
   readonly type: number;
@@ -97,14 +160,14 @@ class ByteCursor {
   }
 
   uint16(): number {
-    return (this.uint8() << 8) | this.uint8();
+    return (this.uint8() << BITS_PER_BYTE) | this.uint8();
   }
 
   uint32(): number {
     return (
-      ((this.uint8() << 24) |
-        (this.uint8() << 16) |
-        (this.uint8() << 8) |
+      ((this.uint8() << UINT32_BYTE_3_SHIFT) |
+        (this.uint8() << UINT32_BYTE_2_SHIFT) |
+        (this.uint8() << BITS_PER_BYTE) |
         this.uint8()) >>>
       0
     );
@@ -112,7 +175,7 @@ class ByteCursor {
 
   int8(): number {
     const value = this.uint8();
-    return value > 127 ? value - 256 : value;
+    return value > INT8_MAX ? value - UINT8_MODULUS : value;
   }
 }
 
@@ -122,20 +185,25 @@ function readSegmentHeader(
 ): SegmentHeader {
   const number = cursor.uint32();
   const flags = cursor.uint8();
-  const type = flags & 0x3f;
-  const pageAssociationIsLong = (flags & 0x40) !== 0;
+  const type = flags & SEGMENT_TYPE_MASK;
+  const pageAssociationIsLong = (flags & PAGE_ASSOCIATION_SIZE_FLAG) !== 0;
 
   // T.88 7.2.4: the referred-to count is the top three bits of one byte, unless that value is 7, in which case a 29-bit count follows and a retain-flag bit array after it.
   const countByte = cursor.uint8();
-  let referredCount = countByte >> 5;
-  if (referredCount === 7) {
+  let referredCount = countByte >> REFERRED_COUNT_SHORT_SHIFT;
+  if (referredCount === REFERRED_COUNT_LONG_FORM_SENTINEL) {
     cursor.position -= 1;
-    referredCount = cursor.uint32() & 0x1fffffff;
-    cursor.position += Math.ceil((referredCount + 1) / 8);
+    referredCount = cursor.uint32() & REFERRED_COUNT_LONG_MASK;
+    cursor.position += Math.ceil((referredCount + 1) / BITS_PER_BYTE);
   }
 
   // T.88 7.2.5: each referred-to segment number is sized by THIS segment's own number, since no segment may refer forwards.
-  const referredSize = number <= 256 ? 1 : number <= 65536 ? 2 : 4;
+  const referredSize =
+    number <= SEGMENT_NUMBER_1BYTE_LIMIT
+      ? 1
+      : number <= SEGMENT_NUMBER_2BYTE_LIMIT
+        ? 2
+        : REFERRED_NUMBER_SIZE_4_BYTES;
   const referredTo: number[] = [];
   for (let i = 0; i < referredCount; i++) {
     referredTo.push(
@@ -181,10 +249,12 @@ function readRegionInfo(cursor: ByteCursor): RegionInfo {
   const x = cursor.uint32();
   const y = cursor.uint32();
   const flags = cursor.uint8();
-  const combinationOperator = combinationOperatorFromCode(flags & 0x07);
+  const combinationOperator = combinationOperatorFromCode(
+    flags & REGION_COMBOP_MASK,
+  );
   if (combinationOperator === undefined) {
     throw new Jbig2ParseError(
-      `JBIG2 region declares external combination operator ${String(flags & 0x07)}, outside the 0-4 range T.88 Table 12 defines`,
+      `JBIG2 region declares external combination operator ${String(flags & REGION_COMBOP_MASK)}, outside the 0-4 range T.88 Table 12 defines`,
     );
   }
   return { width, height, x, y, combinationOperator };
@@ -318,7 +388,7 @@ class Jbig2Decoder {
 
     const defaultPixel = (flags >> 2) & 1;
     const defaultCombinationOperator = combinationOperatorFromCode(
-      (flags >> 3) & 0x03,
+      (flags >> PAGE_DEFAULT_COMBOP_SHIFT) & PAGE_DEFAULT_COMBOP_MASK,
     );
     if (defaultCombinationOperator === undefined) {
       throw new Jbig2ParseError(
@@ -328,7 +398,7 @@ class Jbig2Decoder {
     this.page = {
       bitmap: createBitmap(width, declaredOrHintedHeight, defaultPixel),
       defaultCombinationOperator,
-      combinationOperatorOverridden: (flags & 0x40) !== 0,
+      combinationOperatorOverridden: (flags & PAGE_COMBOP_OVERRIDE_FLAG) !== 0,
     };
   }
 
@@ -359,14 +429,19 @@ class Jbig2Decoder {
     const region = readRegionInfo(cursor);
     const flags = cursor.uint8();
     const mmr = (flags & 0x01) !== 0;
-    const template = (flags >> 1) & 0x03;
-    const tpgdon = (flags & 0x08) !== 0;
-    if ((flags & 0x10) !== 0) {
+    const template = (flags >> 1) & GENERIC_REGION_TEMPLATE_MASK;
+    const tpgdon = (flags & GENERIC_REGION_TPGDON_FLAG) !== 0;
+    if ((flags & GENERIC_REGION_EXTTEMPLATE_FLAG) !== 0) {
       throw new Jbig2UnsupportedError(
         "JBIG2 generic region sets EXTTEMPLATE, the twelve-adaptive-pixel template of T.88 Amendment 2, which is not implemented",
       );
     }
-    const at = mmr ? [] : readAtPixels(cursor, template === 0 ? 4 : 1);
+    const at = mmr
+      ? []
+      : readAtPixels(
+          cursor,
+          template === 0 ? GENERIC_CODING_AT_PIXEL_COUNT_TEMPLATE_0 : 1,
+        );
     const payload = cursor.position;
 
     if (mmr) {
@@ -388,7 +463,9 @@ class Jbig2Decoder {
     }
 
     const mq = new MqDecoder(cursor.data, payload, dataEnd);
-    const contexts = createArithContexts(GENERIC_CONTEXT_BITS[template] ?? 16);
+    const contexts = createArithContexts(
+      GENERIC_CONTEXT_BITS[template] ?? GENERIC_TEMPLATE_0_CONTEXT_BITS,
+    );
     this.compose(
       region,
       decodeGenericRegion(
@@ -425,7 +502,7 @@ class Jbig2Decoder {
 
     const mq = new MqDecoder(cursor.data, cursor.position, dataEnd);
     const contexts = createArithContexts(
-      REFINEMENT_CONTEXT_BITS[template] ?? 13,
+      REFINEMENT_CONTEXT_BITS[template] ?? REFINEMENT_TEMPLATE_0_CONTEXT_BITS,
     );
     const refined = decodeRefinementRegion(
       region.width,
@@ -455,15 +532,23 @@ class Jbig2Decoder {
         "JBIG2 symbol dictionary is Huffman-coded (SDHUFF = 1); only the arithmetic form is implemented",
       );
     }
-    if ((flags & 0x0100) !== 0 || (flags & 0x0200) !== 0) {
+    if (
+      (flags & SYMBOL_DICT_BITMAP_CODING_CONTEXT_USED) !== 0 ||
+      (flags & SYMBOL_DICT_BITMAP_CODING_CONTEXT_RETAINED) !== 0
+    ) {
       throw new Jbig2UnsupportedError(
         "JBIG2 symbol dictionary uses or retains a shared bitmap coding context (T.88 7.4.3.1.1 bits 8-9), which is not implemented",
       );
     }
     const refinementAggregate = (flags & 0x02) !== 0;
-    const template = (flags >> 10) & 0x03;
-    const refinementTemplate = (flags >> 12) & 0x01;
-    const at = readAtPixels(cursor, template === 0 ? 4 : 1);
+    const template =
+      (flags >> SYMBOL_DICT_TEMPLATE_SHIFT) & SYMBOL_DICT_TEMPLATE_MASK;
+    const refinementTemplate =
+      (flags >> SYMBOL_DICT_REFINEMENT_TEMPLATE_SHIFT) & 0x01;
+    const at = readAtPixels(
+      cursor,
+      template === 0 ? GENERIC_CODING_AT_PIXEL_COUNT_TEMPLATE_0 : 1,
+    );
     const refinementAt =
       refinementAggregate && refinementTemplate === 0
         ? readAtPixels(cursor, 2)
@@ -506,26 +591,32 @@ class Jbig2Decoder {
       );
     }
     const refine = (flags & 0x02) !== 0;
-    const stripSize = 1 << ((flags >> 2) & 0x03);
-    const referenceCorner = referenceCornerFromCode((flags >> 4) & 0x03);
+    const stripSize = 1 << ((flags >> 2) & TEXT_REGION_STRIP_SIZE_LOG_MASK);
+    const referenceCorner = referenceCornerFromCode(
+      (flags >> TEXT_REGION_REFCORNER_SHIFT) & TEXT_REGION_REFCORNER_MASK,
+    );
     if (referenceCorner === undefined) {
       throw new Jbig2ParseError(
         "JBIG2 text region declares an unrecognised REFCORNER",
       );
     }
-    const transposed = (flags & 0x40) !== 0;
+    const transposed = (flags & TEXT_REGION_TRANSPOSED_FLAG) !== 0;
     const combinationOperator = combinationOperatorFromCode(
-      (flags >> 7) & 0x03,
+      (flags >> TEXT_REGION_SBCOMBOP_SHIFT) & TEXT_REGION_SBCOMBOP_MASK,
     );
     if (combinationOperator === undefined) {
       throw new Jbig2ParseError(
         "JBIG2 text region declares an unrecognised SBCOMBOP",
       );
     }
-    const defaultPixel = (flags >> 9) & 0x01;
+    const defaultPixel = (flags >> TEXT_REGION_DEFAULT_PIXEL_SHIFT) & 0x01;
     // SBDSOFFSET is a signed five-bit field at bits 10-14 (T.88 7.4.4.1.1), sign-extended here by shifting it to the top of a 32-bit word and back.
-    const dsOffset = ((flags << 17) >> 27) | 0;
-    const refinementTemplate = (flags >> 15) & 0x01;
+    const dsOffset =
+      ((flags << SBDSOFFSET_SIGN_EXTEND_LEFT_SHIFT) >>
+        SBDSOFFSET_SIGN_EXTEND_RIGHT_SHIFT) |
+      0;
+    const refinementTemplate =
+      (flags >> TEXT_REGION_REFINEMENT_TEMPLATE_SHIFT) & 0x01;
     const refinementAt =
       refine && refinementTemplate === 0
         ? readAtPixels(cursor, 2)
