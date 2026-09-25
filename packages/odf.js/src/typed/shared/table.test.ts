@@ -80,8 +80,10 @@ function cell(
 
 describe("readOdfTable: columns", () => {
   it("resolves each table:table-column's own width via its table:style-name -> table-column family style", () => {
-    const co1 = columnStyle("co1", 100);
-    const co2 = columnStyle("co2", 150);
+    const firstColumnWidthPt = 100;
+    const secondColumnWidthPt = 150;
+    const co1 = columnStyle("co1", firstColumnWidthPt);
+    const co2 = columnStyle("co2", secondColumnWidthPt);
     const table = el("table:table", {}, [
       el("table:table-column", { "table:style-name": "co1" }),
       el("table:table-column", { "table:style-name": "co2" }),
@@ -90,7 +92,8 @@ describe("readOdfTable: columns", () => {
       parts: { "content.xml": contentPackage([co1, co2]) },
     };
     expect(readOdfTable(table, pkg).columns.map((c) => c.widthPt)).toEqual([
-      100, 150,
+      firstColumnWidthPt,
+      secondColumnWidthPt,
     ]);
   });
 
@@ -102,28 +105,31 @@ describe("readOdfTable: columns", () => {
   });
 
   it("expands table:number-columns-repeated into that many repeated width entries", () => {
-    const co1 = columnStyle("co1", 80);
+    const columnWidthPt = 80;
+    const repeatCount = 3;
+    const co1 = columnStyle("co1", columnWidthPt);
     const table = el("table:table", {}, [
       el("table:table-column", {
         "table:style-name": "co1",
-        "table:number-columns-repeated": "3",
+        "table:number-columns-repeated": `${repeatCount}`,
       }),
     ]);
     const pkg: Package = { parts: { "content.xml": contentPackage([co1]) } };
-    expect(readOdfTable(table, pkg).columns.map((c) => c.widthPt)).toEqual([
-      80, 80, 80,
-    ]);
+    expect(readOdfTable(table, pkg).columns.map((c) => c.widthPt)).toEqual(
+      Array.from({ length: repeatCount }, () => columnWidthPt),
+    );
   });
 });
 
 describe("readOdfTable: rows", () => {
   it("resolves each table:table-row's own height via its table:style-name -> table-row family style", () => {
-    const ro1 = rowStyle("ro1", 20);
+    const rowHeightPt = 20;
+    const ro1 = rowStyle("ro1", rowHeightPt);
     const table = el("table:table", {}, [
       el("table:table-row", { "table:style-name": "ro1" }, [cell("x")]),
     ]);
     const pkg: Package = { parts: { "content.xml": contentPackage([ro1]) } };
-    expect(readOdfTable(table, pkg).rows[0]?.heightPt).toBe(20);
+    expect(readOdfTable(table, pkg).rows[0]?.heightPt).toBe(rowHeightPt);
   });
 
   it('leaves heightPt undefined (not 0) when unresolvable — unlike column width, a missing row height is genuinely "unspecified"', () => {
@@ -217,16 +223,18 @@ describe("readOdfTable: cell content, spans, and covered cells", () => {
   });
 
   it("expands a covered-table-cell's own table:number-columns-repeated into that many empty placeholder cells", () => {
+    const coveredCellRepeatCount = 2;
     const table = el("table:table", {}, [
       el("table:table-row", {}, [
         cell("Header", { "table:number-columns-spanned": "3" }),
         el("table:covered-table-cell", {
-          "table:number-columns-repeated": "2",
+          "table:number-columns-repeated": `${coveredCellRepeatCount}`,
         }),
       ]),
     ]);
     const row = readOdfTable(table, { parts: {} }).rows[0];
-    expect(row?.cells).toHaveLength(3);
+    // The header cell itself, plus one placeholder per repeated covered cell.
+    expect(row?.cells).toHaveLength(1 + coveredCellRepeatCount);
     expect(row?.cells[1]).toEqual({ blocks: [] });
     expect(row?.cells[2]).toEqual({ blocks: [] });
   });
@@ -241,13 +249,14 @@ describe("readOdfTable: cell content, spans, and covered cells", () => {
   });
 
   it("expands a cell's own table:number-columns-repeated into that many repeated cells", () => {
+    const repeatCount = 3;
     const table = el("table:table", {}, [
       el("table:table-row", {}, [
-        cell("same", { "table:number-columns-repeated": "3" }),
+        cell("same", { "table:number-columns-repeated": `${repeatCount}` }),
       ]),
     ]);
     const row = readOdfTable(table, { parts: {} }).rows[0];
-    expect(row?.cells).toHaveLength(3);
+    expect(row?.cells).toHaveLength(repeatCount);
     expect(row?.cells.every((c) => c.blocks[0]?.kind === "paragraph")).toBe(
       true,
     );
@@ -362,8 +371,17 @@ describe("readOdfTable: cell borders (odt/odp — single-level table:style-name 
   });
 
   it('reads a border style ODF allows but ContentBorderSchema has no member for (e.g. "groove") as a real border with width/colour, but no style field', () => {
+    const RGB_CHANNEL_MAX = 255;
+    const red = 0x12;
+    const green = 0x34;
+    const blue = 0x56;
+    const hexRadix = 16;
+    const hexColor = [red, green, blue]
+      .map((c) => c.toString(hexRadix).padStart(2, "0"))
+      .join("");
+    const borderWidthPt = 0.5;
     const ce1 = cellBorderStyle("ce1", {
-      "fo:border-left": "0.5pt groove #123456",
+      "fo:border-left": `${borderWidthPt}pt groove #${hexColor}`,
     });
     const table = el("table:table", {}, [
       el("table:table-row", {}, [
@@ -373,8 +391,12 @@ describe("readOdfTable: cell borders (odt/odp — single-level table:style-name 
     const pkg: Package = { parts: { "content.xml": contentPackage([ce1]) } };
     const borders = readOdfTable(table, pkg).rows[0]?.cells[0]?.borders;
     expect(borders?.left).toEqual({
-      color: { r: 0x12 / 255, g: 0x34 / 255, b: 0x56 / 255 },
-      widthPt: 0.5,
+      color: {
+        r: red / RGB_CHANNEL_MAX,
+        g: green / RGB_CHANNEL_MAX,
+        b: blue / RGB_CHANNEL_MAX,
+      },
+      widthPt: borderWidthPt,
     });
     expect(borders?.right).toBeUndefined();
   });
@@ -448,10 +470,15 @@ describe("readOdfTable: repeat-count edge cases (readRepeatCount)", () => {
   });
 
   it("a genuinely positive repeated count on a row is honoured in full, not truncated", () => {
+    const repeatCount = 4;
     const table = el("table:table", {}, [
-      el("table:table-row", { "table:number-rows-repeated": "4" }, [cell("x")]),
+      el(
+        "table:table-row",
+        { "table:number-rows-repeated": `${repeatCount}` },
+        [cell("x")],
+      ),
     ]);
-    expect(readOdfTable(table, { parts: {} }).rows).toHaveLength(4);
+    expect(readOdfTable(table, { parts: {} }).rows).toHaveLength(repeatCount);
   });
 });
 
@@ -752,7 +779,9 @@ describe("writeOdfTable", () => {
       "table:table-header-columns",
     ]);
     const reread = readOdfTable(written, pkg);
-    expect(reread.columns.map((c) => c.widthPt)).toEqual([10, 20, 30, 40, 50]);
+    expect(reread.columns.map((c) => c.widthPt)).toEqual(
+      table.columns.map((c) => c.widthPt),
+    );
     expect(reread.columns.map((c) => c.isHeader)).toEqual([
       undefined,
       true,
@@ -1233,12 +1262,16 @@ describe("the grid rule: readOdfTable output is dense", () => {
       );
   }
 
+  const THREE_COLUMN_COUNT = 3;
+
   function threeColumns(): XmlElement {
-    return el("table:table-column", { "table:number-columns-repeated": "3" });
+    return el("table:table-column", {
+      "table:number-columns-repeated": `${THREE_COLUMN_COUNT}`,
+    });
   }
 
   function expectEveryRowAsWideAsTheColumns(table: ContentTable): void {
-    expect(table.columns).toHaveLength(3);
+    expect(table.columns).toHaveLength(THREE_COLUMN_COUNT);
     for (const row of table.rows) {
       expect(row.cells).toHaveLength(table.columns.length);
     }
@@ -1743,9 +1776,12 @@ describe("readOdfTable: row wrappers (table:table-header-rows, table:table-rows,
   });
 
   it("keeps the grid rule when a merged region sits inside table:table-header-rows", () => {
+    const columnCount = 3;
     const table = readOdfTable(
       el("table:table", {}, [
-        el("table:table-column", { "table:number-columns-repeated": "3" }),
+        el("table:table-column", {
+          "table:number-columns-repeated": `${columnCount}`,
+        }),
         el("table:table-header-rows", {}, [
           el("table:table-row", {}, [
             cell("H", { "table:number-columns-spanned": "2" }),
@@ -1761,9 +1797,9 @@ describe("readOdfTable: row wrappers (table:table-header-rows, table:table-rows,
       ]),
       { parts: {} },
     );
-    expect(table.columns).toHaveLength(3);
+    expect(table.columns).toHaveLength(columnCount);
     for (const row of table.rows) {
-      expect(row.cells).toHaveLength(3);
+      expect(row.cells).toHaveLength(columnCount);
     }
     expect(rowTexts(table)).toEqual([
       ["H", "", "R"],
@@ -1782,8 +1818,9 @@ describe("readOdfTable: row wrappers (table:table-header-rows, table:table-rows,
   });
 
   it("reads a row height from a row inside a wrapper", () => {
+    const rowHeightPt = 18;
     const pkg: Package = {
-      parts: { "content.xml": contentPackage([rowStyle("ro1", 18)]) },
+      parts: { "content.xml": contentPackage([rowStyle("ro1", rowHeightPt)]) },
     };
     const table = readOdfTable(
       el("table:table", {}, [
@@ -1793,19 +1830,24 @@ describe("readOdfTable: row wrappers (table:table-header-rows, table:table-rows,
       ]),
       pkg,
     );
-    expect(table.rows[0]?.heightPt).toBe(18);
+    expect(table.rows[0]?.heightPt).toBe(rowHeightPt);
   });
 });
 
 describe("readOdfTable: column wrappers (table:table-header-columns, table:table-columns, table:table-column-group)", () => {
+  const CO1_WIDTH_PT = 10;
+  const CO2_WIDTH_PT = 20;
+  const CO3_WIDTH_PT = 30;
+  const CO4_WIDTH_PT = 40;
+
   function widthPkg(): Package {
     return {
       parts: {
         "content.xml": contentPackage([
-          columnStyle("co1", 10),
-          columnStyle("co2", 20),
-          columnStyle("co3", 30),
-          columnStyle("co4", 40),
+          columnStyle("co1", CO1_WIDTH_PT),
+          columnStyle("co2", CO2_WIDTH_PT),
+          columnStyle("co3", CO3_WIDTH_PT),
+          columnStyle("co4", CO4_WIDTH_PT),
         ]),
       },
     };
@@ -1821,7 +1863,10 @@ describe("readOdfTable: column wrappers (table:table-header-columns, table:table
       ]),
       widthPkg(),
     );
-    expect(table.columns.map((c) => c.widthPt)).toEqual([10, 20]);
+    expect(table.columns.map((c) => c.widthPt)).toEqual([
+      CO1_WIDTH_PT,
+      CO2_WIDTH_PT,
+    ]);
   });
 
   it("honours table:number-columns-repeated on a column inside a wrapper", () => {
@@ -1836,7 +1881,10 @@ describe("readOdfTable: column wrappers (table:table-header-columns, table:table
       ]),
       widthPkg(),
     );
-    expect(table.columns.map((c) => c.widthPt)).toEqual([10, 10]);
+    expect(table.columns.map((c) => c.widthPt)).toEqual([
+      CO1_WIDTH_PT,
+      CO1_WIDTH_PT,
+    ]);
   });
 
   it("counts the columns inside table:table-columns", () => {
@@ -1849,7 +1897,10 @@ describe("readOdfTable: column wrappers (table:table-header-columns, table:table
       ]),
       widthPkg(),
     );
-    expect(table.columns.map((c) => c.widthPt)).toEqual([10, 20]);
+    expect(table.columns.map((c) => c.widthPt)).toEqual([
+      CO1_WIDTH_PT,
+      CO2_WIDTH_PT,
+    ]);
   });
 
   it("counts the columns inside table:table-column-group, including a nested group and a header-columns wrapper inside one", () => {
@@ -1868,7 +1919,12 @@ describe("readOdfTable: column wrappers (table:table-header-columns, table:table
       ]),
       widthPkg(),
     );
-    expect(table.columns.map((c) => c.widthPt)).toEqual([10, 20, 30, 40]);
+    expect(table.columns.map((c) => c.widthPt)).toEqual([
+      CO1_WIDTH_PT,
+      CO2_WIDTH_PT,
+      CO3_WIDTH_PT,
+      CO4_WIDTH_PT,
+    ]);
   });
 
   it("does not read a table:table-column that sits inside a row wrapper", () => {
@@ -1881,15 +1937,19 @@ describe("readOdfTable: column wrappers (table:table-header-columns, table:table
       ]),
       widthPkg(),
     );
-    expect(table.columns.map((c) => c.widthPt)).toEqual([20]);
+    expect(table.columns.map((c) => c.widthPt)).toEqual([CO2_WIDTH_PT]);
   });
 
   it("states a grid as wide as the columns the file declares across wrappers, with every row as wide", () => {
+    const repeatedColumnCount = 2;
+    const totalColumnCount = 1 + repeatedColumnCount;
     const table = readOdfTable(
       el("table:table", {}, [
         el("table:table-header-columns", {}, [el("table:table-column")]),
         el("table:table-column-group", {}, [
-          el("table:table-column", { "table:number-columns-repeated": "2" }),
+          el("table:table-column", {
+            "table:number-columns-repeated": `${repeatedColumnCount}`,
+          }),
         ]),
         el("table:table-header-rows", {}, [
           el("table:table-row", {}, [cell("a"), cell("b"), cell("c")]),
@@ -1897,8 +1957,8 @@ describe("readOdfTable: column wrappers (table:table-header-columns, table:table
       ]),
       { parts: {} },
     );
-    expect(table.columns).toHaveLength(3);
-    expect(table.rows[0]?.cells).toHaveLength(3);
+    expect(table.columns).toHaveLength(totalColumnCount);
+    expect(table.rows[0]?.cells).toHaveLength(totalColumnCount);
   });
 
   it("marks every column inside table:table-header-columns as a header column, and leaves the plain columns unmarked", () => {
@@ -1949,7 +2009,11 @@ describe("readOdfTable: column wrappers (table:table-header-columns, table:table
       ]),
       widthPkg(),
     );
-    expect(table.columns.map((c) => c.widthPt)).toEqual([10, 20, 30]);
+    expect(table.columns.map((c) => c.widthPt)).toEqual([
+      CO1_WIDTH_PT,
+      CO2_WIDTH_PT,
+      CO3_WIDTH_PT,
+    ]);
     expect(table.columns.map((c) => c.isHeader)).toEqual([
       undefined,
       true,
