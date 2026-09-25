@@ -14,9 +14,55 @@ export type Token =
   | { readonly kind: "dictEnd" }
   | { readonly kind: "keyword"; readonly value: string };
 
+// PDF's own delimiter and syntax bytes (ISO 32000-1 7.2.2/7.3.4), named once per distinct ASCII character and reused wherever this lexer checks for it: several of these characters are tested in more than one context (a delimiter, an escape trigger, a hex-digit bound) but are still the exact same byte each time.
+const LEFT_PAREN = 0x28; // '('
+const RIGHT_PAREN = 0x29; // ')'
+const LESS_THAN = 0x3c; // '<'
+const GREATER_THAN = 0x3e; // '>'
+const LEFT_BRACKET = 0x5b; // '['
+const RIGHT_BRACKET = 0x5d; // ']'
+const LEFT_BRACE = 0x7b; // '{'
+const RIGHT_BRACE = 0x7d; // '}'
+const SOLIDUS = 0x2f; // '/'
+const PERCENT_SIGN = 0x25; // '%'
+const REVERSE_SOLIDUS = 0x5c; // backslash, ISO 32000-1's own name for it
+const NUMBER_SIGN = 0x23; // '#'
+const PLUS_SIGN = 0x2b; // '+'
+const MINUS_SIGN = 0x2d; // '-'
+const FULL_STOP = 0x2e; // '.'
+const LINE_FEED = 0x0a; // LF
+const CARRIAGE_RETURN = 0x0d; // CR
+const HORIZONTAL_TAB = 0x09; // \t
+const BACKSPACE = 0x08; // \b
+const FORM_FEED = 0x0c; // \f
+const DIGIT_ZERO = 0x30; // '0'
+const DIGIT_SEVEN = 0x37; // '7': the highest digit a PDF octal escape (\ddd) permits
+const DIGIT_NINE = 0x39; // '9'
+const UPPER_A = 0x41; // 'A'
+const UPPER_F = 0x46; // 'F'
+const LOWER_A = 0x61; // 'a'
+const LOWER_B = 0x62; // 'b'
+const LOWER_F = 0x66; // 'f'
+const LOWER_N = 0x6e; // 'n'
+const LOWER_R = 0x72; // 'r'
+const LOWER_T = 0x74; // 't'
+const HEX_DIGIT_ALPHA_OFFSET = 10; // 'A'/'a' is hex digit value 10, per hexDigitValue below
+const HEX_RADIX = 16;
+const OCTAL_RADIX = 8;
+const BYTE_MASK = 0xff;
+
 // PDF's own delimiter characters (7.2.2): ( ) < > [ ] { } / % — everything else that isn't whitespace is a "regular" character, the alphabet keywords and names are built from.
 const DELIMITER_BYTES = new Set([
-  0x28, 0x29, 0x3c, 0x3e, 0x5b, 0x5d, 0x7b, 0x7d, 0x2f, 0x25,
+  LEFT_PAREN,
+  RIGHT_PAREN,
+  LESS_THAN,
+  GREATER_THAN,
+  LEFT_BRACKET,
+  RIGHT_BRACKET,
+  LEFT_BRACE,
+  RIGHT_BRACE,
+  SOLIDUS,
+  PERCENT_SIGN,
 ]);
 
 function isRegularByte(byte: number): boolean {
@@ -24,39 +70,39 @@ function isRegularByte(byte: number): boolean {
 }
 
 function isDigit(byte: number | undefined): boolean {
-  return byte !== undefined && byte >= 0x30 && byte <= 0x39;
+  return byte !== undefined && byte >= DIGIT_ZERO && byte <= DIGIT_NINE;
 }
 
 function isHexDigit(byte: number | undefined): boolean {
   return (
     byte !== undefined &&
-    ((byte >= 0x30 && byte <= 0x39) ||
-      (byte >= 0x41 && byte <= 0x46) ||
-      (byte >= 0x61 && byte <= 0x66))
+    ((byte >= DIGIT_ZERO && byte <= DIGIT_NINE) ||
+      (byte >= UPPER_A && byte <= UPPER_F) ||
+      (byte >= LOWER_A && byte <= LOWER_F))
   );
 }
 
 function hexDigitValue(byte: number): number {
-  if (byte >= 0x30 && byte <= 0x39) {
-    return byte - 0x30;
+  if (byte >= DIGIT_ZERO && byte <= DIGIT_NINE) {
+    return byte - DIGIT_ZERO;
   }
-  if (byte >= 0x41 && byte <= 0x46) {
-    return byte - 0x41 + 10;
+  if (byte >= UPPER_A && byte <= UPPER_F) {
+    return byte - UPPER_A + HEX_DIGIT_ALPHA_OFFSET;
   }
-  return byte - 0x61 + 10;
+  return byte - LOWER_A + HEX_DIGIT_ALPHA_OFFSET;
 }
 
 // Comments (% to end of line) are lexically equivalent to whitespace — they may appear between any two tokens and must never be mistaken for content.
 function skipWhitespaceAndComments(reader: ByteReader): void {
   for (;;) {
     reader.skipWhitespace();
-    if (reader.peek() !== 0x25) {
+    if (reader.peek() !== PERCENT_SIGN) {
       return;
     }
     while (
       !reader.atEnd() &&
-      reader.peek() !== 0x0a &&
-      reader.peek() !== 0x0d
+      reader.peek() !== LINE_FEED &&
+      reader.peek() !== CARRIAGE_RETURN
     ) {
       reader.next();
     }
@@ -65,13 +111,13 @@ function skipWhitespaceAndComments(reader: ByteReader): void {
 
 function readNumberToken(reader: ByteReader): Token {
   const start = reader.offset;
-  if (reader.peek() === 0x2b || reader.peek() === 0x2d) {
+  if (reader.peek() === PLUS_SIGN || reader.peek() === MINUS_SIGN) {
     reader.next();
   }
   while (isDigit(reader.peek())) {
     reader.next();
   }
-  if (reader.peek() === 0x2e) {
+  if (reader.peek() === FULL_STOP) {
     reader.next();
     while (isDigit(reader.peek())) {
       reader.next();
@@ -93,14 +139,14 @@ function readNameToken(reader: ByteReader): Token {
       break;
     }
     if (
-      byte === 0x23 &&
+      byte === NUMBER_SIGN &&
       isHexDigit(reader.peek(1)) &&
       isHexDigit(reader.peek(2))
     ) {
       reader.next();
       const hi = hexDigitValue(reader.next()!);
       const lo = hexDigitValue(reader.next()!);
-      bytes.push(hi * 16 + lo);
+      bytes.push(hi * HEX_RADIX + lo);
     } else {
       bytes.push(reader.next()!);
     }
@@ -121,55 +167,59 @@ function readLiteralStringToken(reader: ByteReader): Token {
     if (byte === undefined) {
       break; // truncated input — return what was read so far; the caller (parse.ts) is responsible for deciding whether that's fatal
     }
-    if (byte === 0x5c) {
+    if (byte === REVERSE_SOLIDUS) {
       const esc = reader.next();
       if (esc === undefined) {
         break;
       }
-      if (esc === 0x6e) {
-        bytes.push(0x0a); // \n
-      } else if (esc === 0x72) {
-        bytes.push(0x0d); // \r
-      } else if (esc === 0x74) {
-        bytes.push(0x09); // \t
-      } else if (esc === 0x62) {
-        bytes.push(0x08); // \b
-      } else if (esc === 0x66) {
-        bytes.push(0x0c); // \f
-      } else if (esc === 0x28 || esc === 0x29 || esc === 0x5c) {
+      if (esc === LOWER_N) {
+        bytes.push(LINE_FEED); // \n
+      } else if (esc === LOWER_R) {
+        bytes.push(CARRIAGE_RETURN); // \r
+      } else if (esc === LOWER_T) {
+        bytes.push(HORIZONTAL_TAB); // \t
+      } else if (esc === LOWER_B) {
+        bytes.push(BACKSPACE); // \b
+      } else if (esc === LOWER_F) {
+        bytes.push(FORM_FEED); // \f
+      } else if (
+        esc === LEFT_PAREN ||
+        esc === RIGHT_PAREN ||
+        esc === REVERSE_SOLIDUS
+      ) {
         bytes.push(esc); // \( \) \\
-      } else if (esc === 0x0d) {
-        if (reader.peek() === 0x0a) {
+      } else if (esc === CARRIAGE_RETURN) {
+        if (reader.peek() === LINE_FEED) {
           reader.next();
         }
         // line-continuation escape (\<CR> or \<CRLF>) — produces no byte
-      } else if (esc === 0x0a) {
+      } else if (esc === LINE_FEED) {
         // line-continuation escape (\<LF>) — produces no byte
-      } else if (esc >= 0x30 && esc <= 0x37) {
-        let value = esc - 0x30;
+      } else if (esc >= DIGIT_ZERO && esc <= DIGIT_SEVEN) {
+        let value = esc - DIGIT_ZERO;
         for (
           let i = 0;
           i < 2 &&
           reader.peek() !== undefined &&
-          reader.peek()! >= 0x30 &&
-          reader.peek()! <= 0x37;
+          reader.peek()! >= DIGIT_ZERO &&
+          reader.peek()! <= DIGIT_SEVEN;
           i++
         ) {
-          value = value * 8 + (reader.next()! - 0x30);
+          value = value * OCTAL_RADIX + (reader.next()! - DIGIT_ZERO);
         }
-        bytes.push(value & 0xff);
+        bytes.push(value & BYTE_MASK);
       } else {
         // "if the character following the REVERSE SOLIDUS is not one of those shown... the REVERSE SOLIDUS shall be ignored" (7.3.4.2) — the escaped character is emitted literally.
         bytes.push(esc);
       }
       continue;
     }
-    if (byte === 0x28) {
+    if (byte === LEFT_PAREN) {
       depth++;
       bytes.push(byte);
       continue;
     }
-    if (byte === 0x29) {
+    if (byte === RIGHT_PAREN) {
       depth--;
       if (depth === 0) {
         break;
@@ -177,11 +227,11 @@ function readLiteralStringToken(reader: ByteReader): Token {
       bytes.push(byte);
       continue;
     }
-    if (byte === 0x0d) {
-      if (reader.peek() === 0x0a) {
+    if (byte === CARRIAGE_RETURN) {
+      if (reader.peek() === LINE_FEED) {
         reader.next();
       }
-      bytes.push(0x0a);
+      bytes.push(LINE_FEED);
       continue;
     }
     bytes.push(byte);
@@ -195,7 +245,7 @@ function readHexStringToken(reader: ByteReader): Token {
   const digits: number[] = [];
   for (;;) {
     const byte = reader.next();
-    if (byte === undefined || byte === 0x3e) {
+    if (byte === undefined || byte === GREATER_THAN) {
       break;
     }
     if (isHexDigit(byte)) {
@@ -207,7 +257,7 @@ function readHexStringToken(reader: ByteReader): Token {
   }
   const bytes = new Uint8Array(digits.length / 2);
   for (let i = 0; i < bytes.length; i++) {
-    bytes[i] = digits[i * 2]! * 16 + digits[i * 2 + 1]!;
+    bytes[i] = digits[i * 2]! * HEX_RADIX + digits[i * 2 + 1]!;
   }
   return { kind: "hexString", value: bytes };
 }
@@ -231,22 +281,22 @@ export function nextToken(reader: ByteReader): Token | undefined {
   if (byte === undefined) {
     return undefined;
   }
-  if (byte === 0x2f) {
+  if (byte === SOLIDUS) {
     return readNameToken(reader);
   }
-  if (byte === 0x28) {
+  if (byte === LEFT_PAREN) {
     return readLiteralStringToken(reader);
   }
-  if (byte === 0x3c) {
-    if (reader.peek(1) === 0x3c) {
+  if (byte === LESS_THAN) {
+    if (reader.peek(1) === LESS_THAN) {
       reader.next();
       reader.next();
       return { kind: "dictStart" };
     }
     return readHexStringToken(reader);
   }
-  if (byte === 0x3e) {
-    if (reader.peek(1) === 0x3e) {
+  if (byte === GREATER_THAN) {
+    if (reader.peek(1) === GREATER_THAN) {
       reader.next();
       reader.next();
       return { kind: "dictEnd" };
@@ -254,19 +304,24 @@ export function nextToken(reader: ByteReader): Token | undefined {
     reader.next(); // a lone '>' is lexically invalid; skip it and continue rather than treating one stray byte as fatal
     return nextToken(reader);
   }
-  if (byte === 0x5b) {
+  if (byte === LEFT_BRACKET) {
     reader.next();
     return { kind: "arrayStart" };
   }
-  if (byte === 0x5d) {
+  if (byte === RIGHT_BRACKET) {
     reader.next();
     return { kind: "arrayEnd" };
   }
-  if (byte === 0x7b || byte === 0x7d) {
+  if (byte === LEFT_BRACE || byte === RIGHT_BRACE) {
     reader.next();
     return nextToken(reader);
   }
-  if (byte === 0x2b || byte === 0x2d || byte === 0x2e || isDigit(byte)) {
+  if (
+    byte === PLUS_SIGN ||
+    byte === MINUS_SIGN ||
+    byte === FULL_STOP ||
+    isDigit(byte)
+  ) {
     return readNumberToken(reader);
   }
   return readKeywordToken(reader);
