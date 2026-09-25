@@ -7,11 +7,13 @@ import { CURRENT_USER_STREAM, POWERPOINT_DOCUMENT_STREAM } from "ppt-codec";
 import { isCompoundFile, readCompoundFile } from "archive-codec";
 import { decodeSvgText } from "../svg/text";
 
-// 'PK\x03\x04' — the ZIP local-file-header signature (ISO/IEC 21320-1 / APPNOTE 4.3.7). Both docx and pptx are OPC packages, i.e. ZIP archives, so this is the fastest and most reliable way to reject a non-package input before any XML parsing is attempted.
-const ZIP_LOCAL_FILE_HEADER = [0x50, 0x4b, 0x03, 0x04];
+// 'PK\x03\x04' — the ZIP local-file-header signature (ISO/IEC 21320-1 / APPNOTE 4.3.7). Both docx and pptx are OPC packages, i.e. ZIP archives, so this is the fastest and most reliable way to reject a non-package input before any XML parsing is attempted. Derived from its own ASCII spelling so the signature a reader compares against and the one a human recognises cannot drift apart.
+const ZIP_LOCAL_FILE_HEADER = Array.from("PK\u0003\u0004", (char) =>
+  char.charCodeAt(0),
+);
 
 // '%PDF-' — the PDF header (ISO 32000-1 section 7.5.2). Per the spec it may be preceded by arbitrary bytes (some producers prepend a comment or BOM), so this checks for the signature within the first kilobyte rather than requiring it at offset 0.
-const PDF_HEADER = [0x25, 0x50, 0x44, 0x46, 0x2d];
+const PDF_HEADER = Array.from("%PDF-", (char) => char.charCodeAt(0));
 const PDF_HEADER_SEARCH_WINDOW = 1024;
 
 function startsWithBytes(
@@ -77,20 +79,27 @@ const MIMETYPE_CONTENT_OFFSET =
 const COMPRESSION_METHOD_OFFSET = 8; // 2-byte LE field; 0 = stored (uncompressed), which ODF mandates for the mimetype entry specifically.
 const COMPRESSED_SIZE_OFFSET = 18; // 4-byte LE field; for a stored entry this equals the entry's raw content length.
 
+// Little-endian reassembly shifts: each byte's own weight is 256 to the power of its position.
+const BYTE_1_SHIFT = 8;
+const BYTE_2_SHIFT = 16;
+const BYTE_3_SHIFT = 24;
+
 function readUint16LE(bytes: Uint8Array, offset: number): number | undefined {
   const b0 = bytes[offset];
   const b1 = bytes[offset + 1];
   if (b0 === undefined || b1 === undefined) {
     return undefined;
   }
-  return b0 | (b1 << 8);
+  return b0 | (b1 << BYTE_1_SHIFT);
 }
 
 function readUint32LE(bytes: Uint8Array, offset: number): number | undefined {
+  // Byte positions within a 4-byte little-endian word; positions one and two fall inside the rule's ignored range, three is the one worth naming.
+  const BYTE_3_POSITION = 3;
   const b0 = bytes[offset];
   const b1 = bytes[offset + 1];
   const b2 = bytes[offset + 2];
-  const b3 = bytes[offset + 3];
+  const b3 = bytes[offset + BYTE_3_POSITION];
   if (
     b0 === undefined ||
     b1 === undefined ||
@@ -99,7 +108,13 @@ function readUint32LE(bytes: Uint8Array, offset: number): number | undefined {
   ) {
     return undefined;
   }
-  return (b0 | (b1 << 8) | (b2 << 16) | (b3 << 24)) >>> 0;
+  return (
+    (b0 |
+      (b1 << BYTE_1_SHIFT) |
+      (b2 << BYTE_2_SHIFT) |
+      (b3 << BYTE_3_SHIFT)) >>>
+    0
+  );
 }
 
 function readAsciiSlice(

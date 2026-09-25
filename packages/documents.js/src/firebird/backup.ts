@@ -17,29 +17,52 @@ const REC_END = 10;
 // rec_physical_db precedes rec_database in real output (confirmed against a real generated fixture) — restore.epp's own create_database checks for it explicitly first (`if (get_record(&record, tdgbl) == rec_physical_db)`) and reads it through the SAME att_type vocabulary rec_database uses (att_page_size/att_SQL_dialect/etc share one "Database attributes" SERIES block in burp.h, covering both record kinds), so this reader treats the two identically via readDatabaseHeader rather than a separate skip path.
 const REC_PHYSICAL_DB = 14;
 
+// burp.h's own rec_* record-kind numbers for the flat skippable kinds below, stated once here rather than as bare members of the set, so each entry reads by what the format calls it.
+const REC_GLOBAL_FIELD = 2;
+const REC_FIELD_DIMENSIONS = 24;
+const REC_REL_CONSTRAINT = 31;
+const REC_REF_CONSTRAINT = 32;
+const REC_CHK_CONSTRAINT = 33;
+const REC_CHARSET = 34;
+const REC_COLLATION = 35;
+const REC_SYSTEM_TYPE = 19;
+const REC_FILTER = 20;
+const REC_GENERATOR = 26;
+const REC_SECURITY_CLASS = 12;
+const REC_FILES = 25;
+const REC_SQL_ROLES = 36;
+const REC_MAPPING = 37;
+const REC_DB_CREATOR = 39;
+const REC_TRIGGER_MESSAGE = 21;
+const REC_USER_PRIVILEGE = 22;
+const REC_PUBLICATION = 40;
+const REC_PUB_TABLE = 41;
+const REC_SCHEMA = 42;
+const REC_CONSTANTS = 43;
+
 // Flat record kinds (attribute list only, no nested records of their own) this reader has verified are safe to skip generically by reading attributes until att_end — restore.epp's own get_rel_constraint/get_charset/get_collation/etc. each follow exactly this shape. A record kind NOT in this set that isn't rec_relation/rec_relation_data/rec_database/rec_end throws FirebirdCompositeRecordUnsupportedError rather than being guessed at — see that error's own doc comment.
 const FLAT_SKIPPABLE_RECORD_TYPES = new Set([
-  2, // rec_global_field
-  24, // rec_field_dimensions
-  31, // rec_rel_constraint
-  32, // rec_ref_constraint
-  33, // rec_chk_constraint
-  34, // rec_charset
-  35, // rec_collation
-  19, // rec_system_type
-  20, // rec_filter (NOTE: shares no relationship with att_backup_... numbering — rec_type and att_type are independent enumerations)
-  26, // rec_generator
-  12, // rec_security_class
-  25, // rec_files
-  36, // rec_sql_roles
-  37, // rec_mapping
-  39, // rec_db_creator
-  21, // rec_trigger_message
-  22, // rec_user_privilege
-  40, // rec_publication
-  41, // rec_pub_table
-  42, // rec_schema
-  43, // rec_constants
+  REC_GLOBAL_FIELD,
+  REC_FIELD_DIMENSIONS,
+  REC_REL_CONSTRAINT,
+  REC_REF_CONSTRAINT,
+  REC_CHK_CONSTRAINT,
+  REC_CHARSET,
+  REC_COLLATION,
+  REC_SYSTEM_TYPE,
+  REC_FILTER, // shares no relationship with att_backup_... numbering: rec_type and att_type are independent enumerations
+  REC_GENERATOR,
+  REC_SECURITY_CLASS,
+  REC_FILES,
+  REC_SQL_ROLES,
+  REC_MAPPING,
+  REC_DB_CREATOR,
+  REC_TRIGGER_MESSAGE,
+  REC_USER_PRIVILEGE,
+  REC_PUBLICATION,
+  REC_PUB_TABLE,
+  REC_SCHEMA,
+  REC_CONSTANTS,
 ]);
 
 export class FirebirdBackupFormatError extends Error {

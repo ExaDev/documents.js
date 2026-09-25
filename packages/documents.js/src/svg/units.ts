@@ -1,10 +1,19 @@
 // SVG length parsing: the one unit surface the read side needs. SVG lengths (width/height/viewBox companions and per-shape geometry) are expressed in CSS user units against the user coordinate system in force, so every absolute unit has an exact conversion factor into CSS px and then into the points this package's whole geometry pipeline runs on (CSS defines 1in = 96px and 1in = 72pt, so 1px = 72/96 = 0.75pt exactly — a ratio, not a measured value).
-const PT_PER_PX = 0.75;
-const PT_PER_MM = 72 / 25.4;
-const PT_PER_CM = 720 / 25.4;
+export const PT_PER_PX = 0.75;
 const PT_PER_IN = 72;
+// CSS lengths are defined against the inch (1in = 25.4mm exactly), so each metric unit derives from it.
+const MM_PER_INCH = 25.4;
+const PT_PER_MM = PT_PER_IN / MM_PER_INCH;
+const MM_PER_CM = 10;
+const PT_PER_CM = PT_PER_MM * MM_PER_CM;
+// The two non-metric absolute units: 1pica = 12pt and 1q = 1/40cm, both exactly.
+const PT_PER_PC = 12;
+const Q_PER_CM = 40;
 
 // A single SVG number, the shared grammar of every length and coordinate this file touches: optional sign, digits with optional fraction in either "1.5" or ".5" form, optional exponent. Kept as one pattern (rather than Number() alone) so a trailing unit is split off cleanly and a malformed value yields undefined instead of NaN poisoning downstream geometry.
+// A viewBox states exactly four numbers: minX, minY, width, height.
+const VIEWBOX_COMPONENT_COUNT = 4;
+
 const SVG_NUMBER_PATTERN = /^[+-]?(?:\d+\.?\d*|\.\d+)(?:[eE][-+]?\d+)?$/;
 
 // Resolves one SVG length against the user-unit convention in force and returns it in points. A bare number is a user unit; under the root coordinate systems this reader builds (viewBox mapped 1:1 onto the viewport, or the 0.75pt fallback when the svg declares neither — see readSvgContent's own root notes), one user unit is one CSS px, hence the PT_PER_PX factor. The absolute units convert by their exact factors, pc and q included (1pc = 12pt, 1q = 1/40cm exactly). Returns undefined for em/ex/% — each needs a font context or a referent this reader keeps no model of — and for malformed values; an unresolvable length is the caller's diagnostic to report, never a silent zero.
@@ -36,9 +45,9 @@ export function parseSvgLengthPt(raw: string | undefined): number | undefined {
     case "in":
       return value * PT_PER_IN;
     case "pc":
-      return value * 12;
+      return value * PT_PER_PC;
     case "q":
-      return (value * PT_PER_CM) / 40;
+      return value * (PT_PER_CM / Q_PER_CM);
     default:
       return undefined;
   }
@@ -65,7 +74,8 @@ export function parseSvgViewBox(
     return undefined;
   }
   const parts = raw.trim().replace(/,/g, " ").split(/\s+/);
-  if (parts.length !== 4) {
+  // A viewBox is exactly minX minY width height.
+  if (parts.length !== VIEWBOX_COMPONENT_COUNT) {
     return undefined;
   }
   const numbers = parts.map((part) =>
