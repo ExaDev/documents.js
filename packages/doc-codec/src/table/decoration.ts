@@ -18,6 +18,24 @@ import {
 } from "../color";
 import { DocFormatError, DocUnsupportedError } from "../errors";
 
+// Border and shading field layout: a BRC80's flags word at byte 4 and type byte at byte 5; the four borders each one operand-header byte apart, indexed by field size; PICT's fore colour at byte 4 and back colour at byte 8; a shading word packing a 5-bit foreground palette index, a 5-bit background index at bit 5, and a 6-bit pattern at bit 10; the half-point half used in eighth-point conversion; and the 16-bit split's own byte mask and shift.
+const BRC_FLAGS_OFFSET = 4;
+const BRC_TYPE_OFFSET = 5;
+const RIGHT_FIELD_INDEX = 3;
+const INSIDE_H_FIELD_INDEX = 4;
+const INSIDE_V_FIELD_INDEX = 5;
+const PICT_FORE_COLOR_OFFSET = 4;
+const PICT_BACK_COLOR_OFFSET = 8;
+const ICO_MASK = 0x1f;
+const ICO_BACK_SHIFT = 5;
+const IPAT_SHIFT = 10;
+const IPAT_MASK = 0x3f;
+const MIN_DPT_HALF = 0.5;
+const MAX_DPT_HALF = 0.5;
+const NIL_BYTE = 0xff;
+const U8_MASK = 0xff;
+const BITS_PER_BYTE = 8;
+
 // A table cell's own border and background-shading encodings, read and written in one place — the role xls-codec's biff/xf-colors.ts plays for BIFF8's own CellXF payload, and for the same reason: table/tap.ts unpacks these on the read side and table/tap-write.ts packs them on the write side, so a bit layout either of them got wrong on its own would round-trip through this package undetected while disagreeing with every other [MS-DOC] implementation.
 //
 // [MS-DOC] states a cell's borders in two places at once, and this module handles both because a real, independent implementation writes both. TC80 ([MS-DOC] 2.9.313) carries four Brc80MayBeNil fields ([MS-DOC] 2.9.18, a Brc80 — 2.9.17) whose colour is an Ico palette index, so a border colour outside that fixed 17-entry palette cannot be stated there at all; sprmTSetBrc (0xD62F, a TableBrcOperand — [MS-DOC] 2.9.305) states the same border for a named cell range with a full 8-byte Brc ([MS-DOC] 2.9.16) carrying an exact COLORREF. LibreOffice 26.2.5.2 writes both for every bordered cell, with the Brc80's own ico snapped to the palette and the Brc's cv exact — confirmed by converting a hand-authored .fodt table through `soffice --headless --convert-to doc` and parsing the resulting row mark's raw grpprl with this package's own primitives: a 0.5pt solid #ff0000 top border came back as TC80.brcTop = `04 01 06 00` (Brc80: dptLineWidth 4, brcType 0x01 single, ico 0x06 red) alongside sprmTSetBrc `0b 01 02 01 ff 00 00 00 04 01 00 00` (TableBrcOperand: cells [1,2), bordersToApply 0x01 top, Brc cv = exact #ff0000). This package reads both — sprmTSetBrc folding onto TC80's own layer, exactly as sprmTMerge/sprmTVertMerge already fold onto sprmTDefTable's — and writes both, emitting the sprmTSetBrc precision layer only where the palette genuinely cannot state the colour (see borderNeedsExactColor).
@@ -148,9 +166,9 @@ export function readBrc(
   bytes: Uint8Array,
   offset: number,
 ): ContentBorder | undefined {
-  const brcType = readUint8(bytes, offset + 5);
+  const brcType = readUint8(bytes, offset + BRC_TYPE_OFFSET);
   return borderFrom(
-    readUint8(bytes, offset + 4),
+    readUint8(bytes, offset + BRC_FLAGS_OFFSET),
     brcType,
     readColorRef(bytes, offset),
   );
@@ -175,9 +193,9 @@ function readTableBordersFields(
     top: readField(operand, 1),
     left: readField(operand, 1 + fieldSize),
     bottom: readField(operand, 1 + fieldSize * 2),
-    right: readField(operand, 1 + fieldSize * 3),
-    insideHorizontal: readField(operand, 1 + fieldSize * 4),
-    insideVertical: readField(operand, 1 + fieldSize * 5),
+    right: readField(operand, 1 + fieldSize * RIGHT_FIELD_INDEX),
+    insideHorizontal: readField(operand, 1 + fieldSize * INSIDE_H_FIELD_INDEX),
+    insideVertical: readField(operand, 1 + fieldSize * INSIDE_V_FIELD_INDEX),
   };
 }
 
@@ -194,7 +212,7 @@ export function readTableBordersOperand80(
 }
 
 /** Brc80MayBeNil's own no-border value, [MS-DOC] 2.9.18: "When all bits are set (0xFFFFFFFF when interpreted as a 4-byte unsigned integer), this structure specifies that the region in question has no border." */
-const NIL_BRC80: readonly number[] = [0xff, 0xff, 0xff, 0xff];
+const NIL_BRC80: readonly number[] = [NIL_BYTE, NIL_BYTE, NIL_BYTE, NIL_BYTE];
 
 /** dptLineWidth for a border of `widthPt` rendered as `brcType`, in the 1/8-point increments [MS-DOC] states it in. For BRC_TYPE_DOUBLE, `widthPt` is the border's own total rendered width and the field holds one third of it (see DOUBLE_BORDER_WIDTH_MULTIPLIER's own note); every other brcType states `widthPt` directly. Refuses a width the single-byte field cannot hold rather than silently clamping it to a thinner border than the caller asked for, matching how every other out-of-range operand in this writer is handled — the minimum itself is brcType-dependent (see MIN_DPT_LINE_WIDTH_DOUBLE's own note for why double's own floor is lower than the general one). Accepting a width does not mean it always survives a round trip unchanged, though: for any `double` `widthPt` in the 0.1875pt (inclusive) to 0.5625pt (exclusive) range, the stored dptLineWidth is exactly 1 — the one value MIN_DPT_LINE_WIDTH_DOUBLE permits that MIN_DPT_LINE_WIDTH would not — and borderFrom's own read-side floor then raises that 1 to 2 before DOUBLE_BORDER_WIDTH_MULTIPLIER's tripling applies, so e.g. a border written at 0.5pt reads back as 0.75pt, 50% wider than requested. This is a real, [MS-DOC]-consistent narrowing this function deliberately accepts rather than refuses ("values less than 2 are considered to be equivalent to 2" is exactly what a real producer's own reader would apply to the identical bytes), not a silent bug — decoration.test.ts pins the exact numbers. */
 function dptLineWidthFor(widthPt: number, brcType: number): number {
@@ -207,8 +225,10 @@ function dptLineWidthFor(widthPt: number, brcType: number): number {
   const eighths = Math.round((widthPt / multiplier) * EIGHTHS_PER_POINT);
   if (eighths < minEighths || eighths > MAX_DPT_LINE_WIDTH) {
     // Math.round's own tie-breaking moves both ends of this check half an eighth off each field's own nominal figure, not minEighths / EIGHTHS_PER_POINT * multiplier or MAX_DPT_LINE_WIDTH / EIGHTHS_PER_POINT * multiplier — those naive figures are what a stored dptLineWidth of exactly minEighths or MAX_DPT_LINE_WIDTH converts back to on read, not the boundary this check itself enforces on the way in. The floor's tie rounds up into acceptance — Math.round(1.5) is 2, not 1 — so the smallest widthPt this check lets through IS half an eighth below minEighths's own point value: 0.1875pt for both branches — (2 - 0.5) / 8 for a single-line border, (1 - 0.5) * 3 / 8 for a double one — a coincidence of the two constants' own values rather than a designed equivalence. The ceiling's tie rounds up into refusal instead — Math.round(255.5) is 256, not 255 — so the largest widthPt this check actually lets through only approaches, and never quite reaches, half an eighth above MAX_DPT_LINE_WIDTH's own point value: 31.9375pt single-line, 95.8125pt double, both still well past the 31.875pt/95.625pt a stored maximum converts back to on read, and the closest single number either side of the true boundary can state.
-    const minPt = ((minEighths - 0.5) * multiplier) / EIGHTHS_PER_POINT;
-    const maxPt = ((MAX_DPT_LINE_WIDTH + 0.5) * multiplier) / EIGHTHS_PER_POINT;
+    const minPt =
+      ((minEighths - MIN_DPT_HALF) * multiplier) / EIGHTHS_PER_POINT;
+    const maxPt =
+      ((MAX_DPT_LINE_WIDTH + MAX_DPT_HALF) * multiplier) / EIGHTHS_PER_POINT;
     throw new DocFormatError(
       `a table cell border is ${widthPt}pt, outside the ${minPt}..${maxPt}pt range [MS-DOC]'s own single-byte dptLineWidth can state in 1/8-point increments${brcType === BRC_TYPE_DOUBLE ? " of one line's own width, a double border's field being one third of its total rendered width" : ""}`,
     );
@@ -320,8 +340,8 @@ export function readShd(
 ): ContentCellFill | undefined {
   return shdFill(
     readColorRef(bytes, offset),
-    readColorRef(bytes, offset + 4),
-    readUint16LE(bytes, offset + 8),
+    readColorRef(bytes, offset + PICT_FORE_COLOR_OFFSET),
+    readUint16LE(bytes, offset + PICT_BACK_COLOR_OFFSET),
   );
 }
 
@@ -353,8 +373,8 @@ export function writeShd(fill: ContentCellFill | undefined): number[] {
     return [
       ...autoColorRefBytes(),
       ...autoColorRefBytes(),
-      IPAT_AUTO & 0xff,
-      (IPAT_AUTO >> 8) & 0xff,
+      IPAT_AUTO & U8_MASK,
+      (IPAT_AUTO >> BITS_PER_BYTE) & U8_MASK,
     ];
   }
   switch (fill.kind) {
@@ -362,8 +382,8 @@ export function writeShd(fill: ContentCellFill | undefined): number[] {
       return [
         ...autoColorRefBytes(),
         ...colorRefBytes(fill.color),
-        IPAT_AUTO & 0xff,
-        (IPAT_AUTO >> 8) & 0xff,
+        IPAT_AUTO & U8_MASK,
+        (IPAT_AUTO >> BITS_PER_BYTE) & U8_MASK,
       ];
     case "pattern": {
       const ipat = PATTERN_TYPE_TO_IPAT.get(fill.patternType);
@@ -379,8 +399,8 @@ export function writeShd(fill: ContentCellFill | undefined): number[] {
         ...(fill.backgroundColor === undefined
           ? autoColorRefBytes()
           : colorRefBytes(fill.backgroundColor)),
-        ipat & 0xff,
-        (ipat >> 8) & 0xff,
+        ipat & U8_MASK,
+        (ipat >> BITS_PER_BYTE) & U8_MASK,
       ];
     }
     default:
@@ -393,9 +413,9 @@ export function writeShd(fill: ContentCellFill | undefined): number[] {
 
 /** One Shd80 ([MS-DOC] 2.9.248) as a ContentCellFill: the same Ipat vocabulary readShd resolves, over the Ico palette rather than COLORREFs. This is the Word 97-era spelling of cell shading, superseded by Shd but still written — alongside it — by a real producer, so a file carrying only this one still reads. Never written by this package, which states shading through Shd alone. icoFore/icoBack are each a 5-bit field, so a value the 17-entry palette cannot hold is a real possibility rather than a format-level impossibility; decorativeIcoColor resolves that case to no concrete colour (the same fallback cvAuto already gets) instead of aborting the whole document read. Shd80Nil (0xFFFF: icoFore 0x1F, icoBack 0x1F, ipat 0x3F — every bit set, "specifies that no shading is applied") is never checked explicitly, the same reasoning readBrc80/readBrc's own note gives for their sentinels: 0x1F is past the 17-entry Ico palette either fallback above already resolves to no colour, and 0x3F has no entry in IPAT_TO_PATTERN_TYPE below, so shdFill already returns undefined for it on its own. */
 export function readShd80(value: number): ContentCellFill | undefined {
-  const icoFore = value & 0x1f;
-  const icoBack = (value >> 5) & 0x1f;
-  const ipat = (value >> 10) & 0x3f;
+  const icoFore = value & ICO_MASK;
+  const icoBack = (value >> ICO_BACK_SHIFT) & ICO_MASK;
+  const ipat = (value >> IPAT_SHIFT) & IPAT_MASK;
   return shdFill(
     decorativeIcoColor(icoFore),
     decorativeIcoColor(icoBack),
