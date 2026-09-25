@@ -138,13 +138,17 @@ describe("readOdfParagraph: plain text and whitespace-run elements", () => {
 
 describe("readOdfParagraph: paragraph-level formatting", () => {
   it('resolves alignment/spacing/indent from the paragraph\'s own text:style-name, via the "paragraph" family cascade', () => {
+    const spacingBeforePt = 12;
+    const spacingAfterPt = 6;
+    const indentLeftPt = 18;
+    const indentFirstLinePt = 9;
     const p1 = styleStyle("P1", "paragraph", {}, [
       paragraphProps({
         "fo:text-align": "center",
-        "fo:margin-top": "12pt",
-        "fo:margin-bottom": "6pt",
-        "fo:margin-left": "18pt",
-        "fo:text-indent": "9pt",
+        "fo:margin-top": `${spacingBeforePt}pt`,
+        "fo:margin-bottom": `${spacingAfterPt}pt`,
+        "fo:margin-left": `${indentLeftPt}pt`,
+        "fo:text-indent": `${indentFirstLinePt}pt`,
       }),
     ]);
     const pkg: Package = { parts: { "content.xml": contentPackage([p1]) } };
@@ -152,21 +156,25 @@ describe("readOdfParagraph: paragraph-level formatting", () => {
     const result = readOdfParagraph(p, pkg);
     expect(result.styleId).toBe("P1");
     expect(result.alignment).toBe("center");
-    expect(result.spacingBeforePt).toBe(12);
-    expect(result.spacingAfterPt).toBe(6);
-    expect(result.indentLeftPt).toBe(18);
-    expect(result.indentFirstLinePt).toBe(9);
+    expect(result.spacingBeforePt).toBe(spacingBeforePt);
+    expect(result.spacingAfterPt).toBe(spacingAfterPt);
+    expect(result.indentLeftPt).toBe(indentLeftPt);
+    expect(result.indentFirstLinePt).toBe(indentFirstLinePt);
   });
 
   it("un-spanned text within a styled paragraph inherits the paragraph style's own text-properties as its run formatting", () => {
+    const fontSizePt = 14;
     const p1 = styleStyle("P1", "paragraph", {}, [
-      textProps({ "fo:font-weight": "bold", "fo:font-size": "14pt" }),
+      textProps({
+        "fo:font-weight": "bold",
+        "fo:font-size": `${fontSizePt}pt`,
+      }),
     ]);
     const pkg: Package = { parts: { "content.xml": contentPackage([p1]) } };
     const p = el("text:p", { "text:style-name": "P1" }, [txt("Bold text")]);
     const [run] = readOdfParagraph(p, pkg).runs;
     expect(run?.bold).toBe(true);
-    expect(run?.sizePt).toBe(14);
+    expect(run?.sizePt).toBe(fontSizePt);
   });
 
   it("resolves fo:break-before/fo:break-after=\"page\" from the paragraph's own style onto the paragraph's page-break flags", () => {
@@ -282,7 +290,8 @@ describe("readOdfParagraph: text:span run formatting", () => {
     ]);
 
     const runs = readOdfParagraph(p, pkg).runs;
-    expect(runs).toHaveLength(3);
+    const expectedRunCount = 3;
+    expect(runs).toHaveLength(expectedRunCount);
     expect(runs[0]).toMatchObject({
       text: "plain ",
       bold: true,
@@ -297,17 +306,18 @@ describe("readOdfParagraph: text:span run formatting", () => {
   });
 
   it("a text:span's own field wins over the paragraph base when both set the same field", () => {
+    const spanFontSizePt = 20;
     const p1 = styleStyle("P1", "paragraph", {}, [
       textProps({ "fo:font-size": "12pt" }),
     ]);
     const t1 = styleStyle("T1", "text", {}, [
-      textProps({ "fo:font-size": "20pt" }),
+      textProps({ "fo:font-size": `${spanFontSizePt}pt` }),
     ]);
     const pkg: Package = { parts: { "content.xml": contentPackage([p1, t1]) } };
     const p = el("text:p", { "text:style-name": "P1" }, [
       el("text:span", { "text:style-name": "T1" }, [txt("big")]),
     ]);
-    expect(readOdfParagraph(p, pkg).runs[0]?.sizePt).toBe(20);
+    expect(readOdfParagraph(p, pkg).runs[0]?.sizePt).toBe(spanFontSizePt);
   });
 
   it("a nested text:span layers its own properties over its own (already-merged) parent span, not just the top-level paragraph base", () => {
@@ -555,11 +565,15 @@ describe("readOdfParagraph: run-level construct extents (fields, bookmarks)", ()
       '<text:bookmark-ref text:ref-name="target" text:reference-format="chapter"></text:bookmark-ref>',
       '<text:note-ref text:ref-name="ftn1" text:reference-format="page"></text:note-ref>',
     ]);
+    const firstConstructStartRun = 0;
+    const firstConstructEndRun = 1;
+    const secondConstructStartRun = 2;
+    const secondConstructEndRun = 3;
     expect(
       paragraph.constructs?.map((extent) => [extent.startRun, extent.endRun]),
     ).toEqual([
-      [0, 1],
-      [2, 3],
+      [firstConstructStartRun, firstConstructEndRun],
+      [secondConstructStartRun, secondConstructEndRun],
     ]);
   });
 
@@ -654,6 +668,7 @@ describe("readOdfParagraph: run-level construct extents (fields, bookmarks)", ()
       txt(" b"),
     ]);
     const paragraph = readOdfParagraph(p, { parts: {} });
+    const sharedEndRun = 3;
     expect(
       paragraph.constructs?.map((extent) => [
         extent.descriptor,
@@ -661,8 +676,8 @@ describe("readOdfParagraph: run-level construct extents (fields, bookmarks)", ()
         extent.endRun,
       ]),
     ).toEqual([
-      [{ kind: "anchor", anchorType: "bookmark", name: "x" }, 1, 3],
-      [{ kind: "anchor", anchorType: "bookmark", name: "x" }, 2, 3],
+      [{ kind: "anchor", anchorType: "bookmark", name: "x" }, 1, sharedEndRun],
+      [{ kind: "anchor", anchorType: "bookmark", name: "x" }, 2, sharedEndRun],
     ]);
   });
 
@@ -683,11 +698,13 @@ describe("readOdfParagraph: run-level construct extents (fields, bookmarks)", ()
       { kind: "anchor", anchorType: "bookmark", name: "outer" },
       { kind: "anchor", anchorType: "bookmark", name: "inner" },
     ]);
+    const outerEndRun = 3;
+    const innerEndRun = 4;
     expect(
       paragraph.constructs?.map((extent) => [extent.startRun, extent.endRun]),
     ).toEqual([
-      [1, 3],
-      [2, 4],
+      [1, outerEndRun],
+      [2, innerEndRun],
     ]);
   });
 

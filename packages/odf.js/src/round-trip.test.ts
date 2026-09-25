@@ -27,8 +27,18 @@ const CONTENT_ODT = enc(
   '<?xml version="1.0" encoding="UTF-8"?>\n<office:document-content xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0" xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0"><office:body><office:text><text:p>Hello &amp; world</text:p></office:text></office:body></office:document-content>',
 );
 
+// The real 8-byte PNG signature (ISO/IEC 15948 5.2), derived from its own ASCII/control-character reading rather than restated as opaque hex, plus a handful of arbitrary filler bytes standing in for pixel data no test here actually parses.
+const PNG_SIGNATURE_BYTES: readonly number[] = Array.from(
+  "\x89PNG\r\n\x1a\n",
+  (c) => c.charCodeAt(0),
+);
+const PNG_FILLER_BYTES: readonly number[] = Array.from(
+  { length: 5 },
+  (_, i) => i + 1,
+);
 const PNG_BYTES: Uint8Array<ArrayBuffer> = new Uint8Array([
-  0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3, 4, 5,
+  ...PNG_SIGNATURE_BYTES,
+  ...PNG_FILLER_BYTES,
 ]);
 
 // Deliberately scrambled — mimetype and META-INF/manifest.xml are neither first nor adjacent here — so a test built on this fixture proves serializePackage's hoisting is driven by part identity, not by preserving whatever order the input happened to arrive in.
@@ -108,8 +118,12 @@ describe("serializePackage: mimetype/manifest hoisting", () => {
 
 describe("packageCodec / xmlCodec schema validation", () => {
   it("packageCodec rejects bytes that are not a valid zip archive", () => {
+    const notAZipSignature: readonly number[] = Array.from(
+      { length: 4 },
+      (_, i) => i,
+    );
     expect(() =>
-      z.decode(packageCodec, new Uint8Array([0, 1, 2, 3])),
+      z.decode(packageCodec, new Uint8Array(notAZipSignature)),
     ).toThrow();
   });
 
