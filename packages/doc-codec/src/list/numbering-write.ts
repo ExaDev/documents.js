@@ -7,6 +7,14 @@ import {
   type NumberingLevel,
 } from "./numbering";
 
+// Little-endian byte assembly: each byte's own place value is 8 bits.
+const U8_MASK = 0xff;
+const BITS_PER_BYTE = 8;
+const BITS_2_PER_BYTE = 2 * BITS_PER_BYTE;
+const BYTE_3_INDEX = 3;
+const BYTE_3_MULTIPLIER = 3;
+const BITS_3_PER_BYTE = BYTE_3_MULTIPLIER * BITS_PER_BYTE;
+
 // The inverse of numbering.ts: PlfLst/PlfLfo did not exist for writeDocContent to emit at all until this module, because ContentListMembership — unlike NumberingDefinitions — carries no full level table of its own, only one paragraph's own numId/level/format. gatherListUsage reconstructs a genuine NumberingDefinitions (numbering.ts's own reader-side type, reused rather than reinvented, matching the issue's own framing: encode from "whatever in-memory numbering representation the reader already produces") by walking every paragraph's own list membership in document order and minting a fresh one-based ilfo per distinct numId, in first-occurrence order — exactly the value numbering.ts's own readNumberingDefinitions would assign it back on a re-read (that function's own numId IS the ilfo, stringified: see its own top comment), which is what makes a round trip through this package alone stable. A numId string minted by a DIFFERENT producer or codec (an arbitrary string, not already a small positive integer matching its own ilfo) is NOT preserved verbatim — it is renumbered to whichever ilfo this document happens to mint it, since [MS-DOC] has no field to carry an opaque identifier through unchanged.
 //
 // buildNumberingTables then encodes a NumberingDefinitions into real bytes, independently of how gatherListUsage produced it — a hand-built NumberingDefinitions with its own startAt/restart values round-trips those too, since the LVLF fields they occupy are written from the definition's own fields rather than hardcoded. What it can never write is a level's own grpprlPapx/grpprlChpx (a level's direct paragraph/character formatting) — NumberingLevel has no field for either, since numbering.ts's own reader never decodes them (see that module's top comment), so every LVL this writer emits states cbGrpprlChpx/cbGrpprlPapx as 0: a real, valid, minimal LVL, just one carrying no per-level direct formatting a real Word list might otherwise have.
@@ -42,26 +50,26 @@ interface ByteSink {
 }
 
 function push16(sink: ByteSink, value: number): void {
-  sink.bytes.push(value & 0xff, (value >> 8) & 0xff);
+  sink.bytes.push(value & U8_MASK, (value >> BITS_PER_BYTE) & U8_MASK);
 }
 
 function push32(sink: ByteSink, value: number): void {
   const unsigned = value >>> 0;
   sink.bytes.push(
-    unsigned & 0xff,
-    (unsigned >> 8) & 0xff,
-    (unsigned >> 16) & 0xff,
-    (unsigned >>> 24) & 0xff,
+    unsigned & U8_MASK,
+    (unsigned >> BITS_PER_BYTE) & U8_MASK,
+    (unsigned >> BITS_2_PER_BYTE) & U8_MASK,
+    (unsigned >>> BITS_3_PER_BYTE) & U8_MASK,
   );
 }
 
 function writeUint32LE(sink: ByteSink, offset: number, value: number): void {
   const unsigned = value >>> 0;
   const target = sink.bytes;
-  target[offset] = unsigned & 0xff;
-  target[offset + 1] = (unsigned >> 8) & 0xff;
-  target[offset + 2] = (unsigned >> 16) & 0xff;
-  target[offset + 3] = (unsigned >>> 24) & 0xff;
+  target[offset] = unsigned & U8_MASK;
+  target[offset + 1] = (unsigned >> BITS_PER_BYTE) & U8_MASK;
+  target[offset + 2] = (unsigned >> BITS_2_PER_BYTE) & U8_MASK;
+  target[offset + BYTE_3_INDEX] = (unsigned >>> BITS_3_PER_BYTE) & U8_MASK;
 }
 
 // Xst ([MS-DOC] 2.9.343): a 2-byte cch then that many raw UTF-16 code units — the exact inverse of numbering.ts's own readXst, iterated by code unit (not by code point, which for...of would give) since a placeholder position is a code-unit offset and this writer's own text is always within the Basic Multilingual Plane regardless.

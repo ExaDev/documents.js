@@ -2,6 +2,18 @@ import { readInt16LE, readUint16LE, slice } from "../bytes";
 import { DocFormatError } from "../errors";
 import { readGrpprl, type Prl } from "../prop/sprm";
 
+// Hex, for printing a field the way [MS-DOC]'s own tables do. A Std's word0 packs a 12-bit sti and word1 a 4-bit stk under a 12-bit istdBase; istdMaxFixedWhenSaved and StshiLsd.cbLSD are the two constants the spec fixes; table styles run istd 1-9; and little-endian byte assembly masks each byte in turn.
+const HEX_RADIX = 16;
+const U8_MASK = 0xff;
+const BITS_PER_BYTE = 8;
+const ISTD_MASK = 0x0fff;
+const STK_MASK = 0x000f;
+const STK_BITS = 4;
+const ISTD_MAX_FIXED_WHEN_SAVED = 0x000f;
+const STSHILSD_CB_LSD = 4;
+const FIRST_TABLE_STYLE = 1;
+const LAST_TABLE_STYLE = 9;
+
 // The style sheet, [MS-DOC] 2.9.271 — a size-prefixed header followed by one entry per style, indexed by istd. This reader takes each style's identity from it (its name, its kind, and the style it inherits from) and, for a paragraph or character style, its own property set too: STD.grLPUpxSw, whose shape varies by style kind (parseGrLPUpxSw below) and whose values resolveStyleFormatting walks up the istdBase inheritance chain to fold, most-specific style winning, beneath a paragraph's or run's own direct exceptions (ExaDev/documents.js#1005). A table or numbering style's own formatting set (StkTableGRLPUPX/StkListGRLPUPX) is a genuine layer of the format this package has not built, and that consequence is stated plainly in the README rather than approximated here.
 //
 // Two sizing rules make the entry array walkable and are easy to skip past. cbStshi gives the header's total size, and it is the only safe way forward: the header ends with an explicitly ignorable STSHIB whose length is not otherwise derivable, so a reader that adds up the fields it knows lands short. And every LPStd begins on an even byte, with the padding excluded from cbStd — "LPStd structures are stored on even-byte boundaries, but this length MUST NOT include this padding" — so an odd-length entry is followed by one byte belonging to no entry.
@@ -61,7 +73,7 @@ export function parseStsh(stsh: Uint8Array): StyleSheet {
     cbStdBaseInFile !== STDF_SIZE_WITH_POST_2000
   ) {
     throw new DocFormatError(
-      `Stshif.cbSTDBaseInFile is 0x${cbStdBaseInFile.toString(16)}, neither of the two sizes [MS-DOC] permits for an Stdf (0x000A without an StdfPost2000, 0x0012 with one)`,
+      `Stshif.cbSTDBaseInFile is 0x${cbStdBaseInFile.toString(HEX_RADIX)}, neither of the two sizes [MS-DOC] permits for an Stdf (0x000A without an StdfPost2000, 0x0012 with one)`,
     );
   }
 
@@ -90,8 +102,8 @@ function parseStd(
   // StdfBase, the first 10 bytes of every Stdf, packed least-significant-field-first within each little-endian 16-bit word: sti occupies the low 12 bits of the first, stk the low 4 of the second with istdBase in the remaining 12, and cupx/istdNext the same split in the third.
   const word0 = readUint16LE(std, 0);
   const word1 = readUint16LE(std, 2);
-  const istdBase = (word1 >> 4) & 0x0fff;
-  const stk = word1 & 0x000f;
+  const istdBase = (word1 >> STK_BITS) & ISTD_MASK;
+  const stk = word1 & STK_MASK;
 
   const name = readXstz(
     std,
@@ -109,7 +121,7 @@ function parseStd(
 
   return {
     istd,
-    sti: word0 & 0x0fff,
+    sti: word0 & ISTD_MASK,
     stk,
     istdBase: istdBase === ISTD_BASE_NONE ? undefined : istdBase,
     name,
@@ -231,7 +243,9 @@ export function resolveStyleFormatting(
 //
 // This is deliberately derived from the istd rather than from the style's name: a document's own "Heading 1" may be renamed, localised, or absent from the style sheet entirely, but the istd-to-outline-level rule is stated normatively by the format and holds regardless.
 export function headingLevelFromIstd(istd: number): number | undefined {
-  return istd >= 1 && istd <= 9 ? istd : undefined;
+  return istd >= FIRST_TABLE_STYLE && istd <= LAST_TABLE_STYLE
+    ? istd
+    : undefined;
 }
 
 /** The first istd writeDocContent assigns a non-heading named style — istd 0 stays reserved for a paragraph with neither styleId nor an in-range headingLevel, and istd 1-9 for headingLevelFromIstd's own heading-implied slots, so the first genuinely free slot for an arbitrary style name is 10. */
@@ -297,23 +311,23 @@ export function buildStshForStyles(
   const cstd = Math.max(-1, ...names.keys()) + 1;
   const stshi: number[] = [];
   const push16 = (sink: ByteSink, value: number): void => {
-    sink.bytes.push(value & 0xff, (value >> 8) & 0xff);
+    sink.bytes.push(value & U8_MASK, (value >> BITS_PER_BYTE) & U8_MASK);
   };
   push16({ bytes: stshi }, cstd);
   push16({ bytes: stshi }, STDF_SIZE_WITHOUT_POST_2000); // cbSTDBaseInFile.
   push16({ bytes: stshi }, 0x0001); // fStdStylenamesWritten, which [MS-DOC] requires to be 1.
   push16({ bytes: stshi }, 0); // stiMaxWhenSaved.
-  push16({ bytes: stshi }, 0x000f); // istdMaxFixedWhenSaved, which [MS-DOC] requires to be 0x000F.
+  push16({ bytes: stshi }, ISTD_MAX_FIXED_WHEN_SAVED); // istdMaxFixedWhenSaved, which [MS-DOC] requires to be 0x000F.
   push16({ bytes: stshi }, 0); // nVerBuiltInNamesWhenSaved.
   push16({ bytes: stshi }, 0); // ftcAsci.
   push16({ bytes: stshi }, 0); // ftcFE.
   push16({ bytes: stshi }, 0); // ftcOther.
   push16({ bytes: stshi }, 0); // ftcBi.
-  push16({ bytes: stshi }, 4); // StshiLsd.cbLSD, which [MS-DOC] requires to be 4.
+  push16({ bytes: stshi }, STSHILSD_CB_LSD); // StshiLsd.cbLSD, which [MS-DOC] requires to be 4.
 
   const out: number[] = [
-    stshi.length & 0xff,
-    (stshi.length >> 8) & 0xff,
+    stshi.length & U8_MASK,
+    (stshi.length >> BITS_PER_BYTE) & U8_MASK,
     ...stshi,
   ];
 
@@ -331,8 +345,8 @@ export function buildStshForStyles(
     }
     const std: number[] = [];
     // StdfBase: sti (STI_USER_DEFINED — this mints a style identity, not a known application-defined one), stk (paragraph), istdBase (none), cupx/istdNext (unused), bchUpe/grfstd (zero).
-    const word0 = STI_USER_DEFINED & 0x0fff;
-    const word1 = (STK.paragraph & 0x000f) | (ISTD_BASE_NONE << 4);
+    const word0 = STI_USER_DEFINED & ISTD_MASK;
+    const word1 = (STK.paragraph & STK_MASK) | (ISTD_BASE_NONE << STK_BITS);
     push16({ bytes: std }, word0);
     push16({ bytes: std }, word1);
     push16({ bytes: std }, 0); // cupx and istdNext.
@@ -345,7 +359,10 @@ export function buildStshForStyles(
     }
     push16({ bytes: std }, 0);
     // grLPUpxSw: StkParaGRLPUPX's own two members, both empty — UpxPapx's own istd (redundant with this entry's own position in the array, [MS-DOC] 2.9.338's own "MUST be equal to the current style") plus a zero-length grpprlPapx, then a zero-length grpprlChpx.
-    pushLpUpx({ bytes: std }, [istd & 0xff, (istd >> 8) & 0xff]);
+    pushLpUpx({ bytes: std }, [
+      istd & U8_MASK,
+      (istd >> BITS_PER_BYTE) & U8_MASK,
+    ]);
     pushLpUpx({ bytes: std }, []);
     push16({ bytes: out }, std.length);
     out.push(...std);
