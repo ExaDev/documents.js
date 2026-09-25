@@ -78,19 +78,29 @@ export function resolveDocumentContainer(
     .documentContainer;
 }
 
+// Resolves the persist object named by the first entry of one of the document's slide lists. `what` names the list in both failures this can report, an absent or empty list and an entry the persist directory does not carry, so the word is stated once rather than once per message.
+function resolveFromSlideList(
+  context: PersistContext,
+  list: PptRecord | undefined,
+  what: string,
+): PptRecord {
+  return resolvePersistObject(
+    context.streamBytes,
+    context.directory,
+    firstPersistIdRef(list, what),
+    `test fixture's own ${what} persist entry`,
+  );
+}
+
 export function resolveMasterContainer(
   currentUserStream: Uint8Array<ArrayBuffer>,
   powerPointDocumentStream: Uint8Array<ArrayBuffer>,
 ): PptRecord {
-  const { streamBytes, directory, documentContainer } = persistContext(
-    currentUserStream,
-    powerPointDocumentStream,
-  );
-  return resolvePersistObject(
-    streamBytes,
-    directory,
-    firstPersistIdRef(slideLists(documentContainer).masters, "master"),
-    "test fixture's own master persist entry",
+  const context = persistContext(currentUserStream, powerPointDocumentStream);
+  return resolveFromSlideList(
+    context,
+    slideLists(context.documentContainer).masters,
+    "master",
   );
 }
 
@@ -98,15 +108,11 @@ export function resolveSlideContainer(
   currentUserStream: Uint8Array<ArrayBuffer>,
   powerPointDocumentStream: Uint8Array<ArrayBuffer>,
 ): PptRecord {
-  const { streamBytes, directory, documentContainer } = persistContext(
-    currentUserStream,
-    powerPointDocumentStream,
-  );
-  return resolvePersistObject(
-    streamBytes,
-    directory,
-    firstPersistIdRef(slideLists(documentContainer).slides, "slide"),
-    "test fixture's own slide persist entry",
+  const context = persistContext(currentUserStream, powerPointDocumentStream);
+  return resolveFromSlideList(
+    context,
+    slideLists(context.documentContainer).slides,
+    "slide",
   );
 }
 
