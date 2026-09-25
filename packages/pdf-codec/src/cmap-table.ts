@@ -25,6 +25,19 @@ const CMAP_HEADER_SIZE = 4;
 const SUBTABLE_RECORD_SIZE = 8;
 const MAX_UNICODE_CODE_POINT = 0x10ffff;
 
+// Field offset within one subtable record (platformID uint16 @0, encodingID uint16 @2, offset uint32 @4), matching SUBTABLE_RECORD_SIZE above.
+const SUBTABLE_RECORD_OFFSET_FIELD = 4;
+
+// The three subtable formats this module reads.
+const CMAP_FORMAT_4 = 4;
+const CMAP_FORMAT_6 = 6;
+const CMAP_FORMAT_12 = 12;
+
+// A 16-bit two's-complement integer's sign bit and the modulus subtracted to reinterpret an unsigned u16 as signed, and the mask that wraps a sum back into uint16 range: both the same convention sfnt.ts's own i16 uses, restated here for idDelta arithmetic.
+const INT16_SIGN_BIT = 0x8000;
+const UINT16_MODULUS = 0x10000;
+const UINT16_MASK = 0xffff;
+
 interface Format4Segment {
   readonly startCode: number;
   readonly endCode: number;
@@ -34,6 +47,10 @@ interface Format4Segment {
 }
 
 const FORMAT_4_HEADER_SIZE = 14; // format, length, language, segCountX2, searchRange, entrySelector, rangeShift
+const FORMAT_4_SEG_COUNT_X2_FIELD = 6; // Field offset of segCountX2 within the header above.
+const FORMAT_4_PARALLEL_ARRAY_COUNT = 4; // endCode, startCode, idDelta, idRangeOffset: the four parallel per-segment arrays.
+const MAX_BMP_CODE_POINT = 0xffff;
+const LAST_MAPPABLE_BMP_CODE = 0xfffe; // 0xFFFF is the mandatory terminating segment's own end code, and maps nothing.
 
 function parseFormat4(
   bytes: Uint8Array<ArrayBuffer>,
@@ -42,7 +59,7 @@ function parseFormat4(
   if (!hasBytes(bytes, subtableOffset, FORMAT_4_HEADER_SIZE)) {
     return undefined;
   }
-  const segCountX2 = u16(bytes, subtableOffset + 6);
+  const segCountX2 = u16(bytes, subtableOffset + FORMAT_4_SEG_COUNT_X2_FIELD);
   if (segCountX2 === 0 || segCountX2 % 2 !== 0) {
     return undefined;
   }
@@ -52,7 +69,13 @@ function parseFormat4(
   const idDeltasOffset = startCodesOffset + segCountX2;
   const idRangeOffsetsOffset = idDeltasOffset + segCountX2;
   // The four parallel per-segment arrays plus the reservedPad between the first two.
-  if (!hasBytes(bytes, endCodesOffset, segCountX2 * 4 + 2)) {
+  if (
+    !hasBytes(
+      bytes,
+      endCodesOffset,
+      segCountX2 * FORMAT_4_PARALLEL_ARRAY_COUNT + 2,
+    )
+  ) {
     return undefined;
   }
 
@@ -63,14 +86,15 @@ function parseFormat4(
     segments.push({
       endCode: u16(bytes, endCodesOffset + i * 2),
       startCode: u16(bytes, startCodesOffset + i * 2),
-      idDelta: rawDelta >= 0x8000 ? rawDelta - 0x10000 : rawDelta,
+      idDelta:
+        rawDelta >= INT16_SIGN_BIT ? rawDelta - UINT16_MODULUS : rawDelta,
       idRangeOffsetPos,
       idRangeOffset: u16(bytes, idRangeOffsetPos),
     });
   }
 
   const lookup = (codePoint: number): number | undefined => {
-    if (codePoint > 0xffff) {
+    if (codePoint > MAX_BMP_CODE_POINT) {
       return undefined;
     }
     for (const segment of segments) {
@@ -78,7 +102,7 @@ function parseFormat4(
         continue;
       }
       if (segment.idRangeOffset === 0) {
-        return (codePoint + segment.idDelta) & 0xffff;
+        return (codePoint + segment.idDelta) & UINT16_MASK;
       }
       const glyphIndexAddress =
         segment.idRangeOffsetPos +
@@ -88,7 +112,9 @@ function parseFormat4(
         return undefined; // a segment whose glyph-index array runs past the table maps nothing here, rather than reading past the end
       }
       const glyphId = u16(bytes, glyphIndexAddress);
-      return glyphId === 0 ? undefined : (glyphId + segment.idDelta) & 0xffff;
+      return glyphId === 0
+        ? undefined
+        : (glyphId + segment.idDelta) & UINT16_MASK;
     }
     return undefined;
   };
@@ -97,8 +123,7 @@ function parseFormat4(
     lookup,
     forEachMapping(visit) {
       for (const segment of segments) {
-        // 0xFFFF is the mandatory terminating segment's own end code, and maps nothing.
-        const end = Math.min(segment.endCode, 0xfffe);
+        const end = Math.min(segment.endCode, LAST_MAPPABLE_BMP_CODE);
         for (let code = segment.startCode; code <= end; code++) {
           const glyphId = lookup(code);
           if (glyphId !== undefined && glyphId !== 0) {
@@ -117,7 +142,11 @@ interface Format12Group {
 }
 
 const FORMAT_12_HEADER_SIZE = 16; // format, reserved, length, language, numGroups
+const FORMAT_12_NUM_GROUPS_FIELD = 12; // Field offset of numGroups within the header above (format/reserved uint16 each, length/language uint32 each).
 const FORMAT_12_GROUP_SIZE = 12;
+// Field offsets within one Format12Group record (startCharCode uint32 @0, then these two), matching FORMAT_12_GROUP_SIZE.
+const FORMAT_12_GROUP_END_CHAR_CODE_FIELD = 4;
+const FORMAT_12_GROUP_START_GLYPH_ID_FIELD = 8;
 
 function parseFormat12(
   bytes: Uint8Array<ArrayBuffer>,
@@ -126,7 +155,7 @@ function parseFormat12(
   if (!hasBytes(bytes, subtableOffset, FORMAT_12_HEADER_SIZE)) {
     return undefined;
   }
-  const numGroups = u32(bytes, subtableOffset + 12);
+  const numGroups = u32(bytes, subtableOffset + FORMAT_12_NUM_GROUPS_FIELD);
   const groupsOffset = subtableOffset + FORMAT_12_HEADER_SIZE;
   if (!hasBytes(bytes, groupsOffset, numGroups * FORMAT_12_GROUP_SIZE)) {
     return undefined;
@@ -136,8 +165,14 @@ function parseFormat12(
     const recordOffset = groupsOffset + i * FORMAT_12_GROUP_SIZE;
     groups.push({
       startCharCode: u32(bytes, recordOffset),
-      endCharCode: u32(bytes, recordOffset + 4),
-      startGlyphId: u32(bytes, recordOffset + 8),
+      endCharCode: u32(
+        bytes,
+        recordOffset + FORMAT_12_GROUP_END_CHAR_CODE_FIELD,
+      ),
+      startGlyphId: u32(
+        bytes,
+        recordOffset + FORMAT_12_GROUP_START_GLYPH_ID_FIELD,
+      ),
     });
   }
   return {
@@ -165,6 +200,8 @@ function parseFormat12(
 }
 
 const FORMAT_0_SIZE = 262; // format, length, language, then a fixed 256-byte glyph-ID array
+const FORMAT_0_GLYPH_ID_ARRAY_OFFSET = 6; // format/length/language uint16 each precede the glyph-ID array.
+const MAX_FORMAT_0_CODE = 0xff; // Format 0 maps only single-byte codes 0..255.
 
 // Format 0 ("byte encoding table"): one glyph ID per code 0..255. The oldest and simplest subtable format, and still what a symbol font's own (3, 0) or (1, 0) subtable often is, since such a font's whole encoding fits in a single byte.
 function parseFormat0(
@@ -174,9 +211,9 @@ function parseFormat0(
   if (!hasBytes(bytes, subtableOffset, FORMAT_0_SIZE)) {
     return undefined;
   }
-  const glyphIdArrayOffset = subtableOffset + 6;
+  const glyphIdArrayOffset = subtableOffset + FORMAT_0_GLYPH_ID_ARRAY_OFFSET;
   const lookup = (codePoint: number): number | undefined => {
-    if (codePoint < 0 || codePoint > 0xff) {
+    if (codePoint < 0 || codePoint > MAX_FORMAT_0_CODE) {
       return undefined;
     }
     const glyphId = u8(bytes, glyphIdArrayOffset + codePoint);
@@ -185,7 +222,7 @@ function parseFormat0(
   return {
     lookup,
     forEachMapping(visit) {
-      for (let code = 0; code <= 0xff; code++) {
+      for (let code = 0; code <= MAX_FORMAT_0_CODE; code++) {
         const glyphId = lookup(code);
         if (glyphId !== undefined) {
           visit(code, glyphId);
@@ -196,6 +233,8 @@ function parseFormat0(
 }
 
 const FORMAT_6_HEADER_SIZE = 10; // format, length, language, firstCode, entryCount
+const FORMAT_6_FIRST_CODE_FIELD = 6; // format/length/language uint16 each precede firstCode.
+const FORMAT_6_ENTRY_COUNT_FIELD = 8; // entryCount follows firstCode.
 
 // Format 6 ("trimmed table mapping"): one contiguous run of code points, each with an explicit glyph ID. Rare in a fully-featured font, but a subsetting tool that reduces a font to a single narrow character range sometimes emits it in place of a one-segment format 4, so it is worth reading as a fallback rather than declaring such a font unmappable.
 function parseFormat6(
@@ -205,8 +244,8 @@ function parseFormat6(
   if (!hasBytes(bytes, subtableOffset, FORMAT_6_HEADER_SIZE)) {
     return undefined;
   }
-  const firstCode = u16(bytes, subtableOffset + 6);
-  const entryCount = u16(bytes, subtableOffset + 8);
+  const firstCode = u16(bytes, subtableOffset + FORMAT_6_FIRST_CODE_FIELD);
+  const entryCount = u16(bytes, subtableOffset + FORMAT_6_ENTRY_COUNT_FIELD);
   const glyphIdArrayOffset = subtableOffset + FORMAT_6_HEADER_SIZE;
   if (!hasBytes(bytes, glyphIdArrayOffset, entryCount * 2)) {
     return undefined;
@@ -240,34 +279,54 @@ interface CmapSubtableRecord {
   readonly format: number;
 }
 
+// Platform/encoding IDs this module treats specially when ranking subtables (Apple's own platform/encoding ID registry).
+const PLATFORM_WINDOWS = 3;
+const PLATFORM_UNICODE = 0;
+const ENCODING_WINDOWS_UCS4 = 10;
+const ENCODING_WINDOWS_UNICODE_BMP = 1;
+
+// Preference ranks preferenceRank below assigns, lowest (best) first.
+const RANK_WINDOWS_UCS4_FORMAT_12 = 0;
+const RANK_UNICODE_FORMAT_12 = 1;
+const RANK_OTHER_FORMAT_12 = 2;
+const RANK_WINDOWS_BMP_FORMAT_4 = 3;
+const RANK_OTHER_FORMAT_4 = 4;
+const RANK_FORMAT_6 = 5;
+
 // Ranks the subtables this module can read, best first: (3, 10) Windows/UCS-4 format 12, (0, *) Unicode format 12, any format 12, (3, 1) Windows/BMP format 4, any format 4, then format 6.
 function preferenceRank(subtable: Readonly<CmapSubtable>): number {
-  if (subtable.format === 12) {
-    if (subtable.platformId === 3 && subtable.encodingId === 10) {
-      return 0;
+  if (subtable.format === CMAP_FORMAT_12) {
+    if (
+      subtable.platformId === PLATFORM_WINDOWS &&
+      subtable.encodingId === ENCODING_WINDOWS_UCS4
+    ) {
+      return RANK_WINDOWS_UCS4_FORMAT_12;
     }
-    if (subtable.platformId === 0) {
-      return 1;
+    if (subtable.platformId === PLATFORM_UNICODE) {
+      return RANK_UNICODE_FORMAT_12;
     }
-    return 2;
+    return RANK_OTHER_FORMAT_12;
   }
-  if (subtable.format === 4) {
-    return subtable.platformId === 3 && subtable.encodingId === 1 ? 3 : 4;
+  if (subtable.format === CMAP_FORMAT_4) {
+    return subtable.platformId === PLATFORM_WINDOWS &&
+      subtable.encodingId === ENCODING_WINDOWS_UNICODE_BMP
+      ? RANK_WINDOWS_BMP_FORMAT_4
+      : RANK_OTHER_FORMAT_4;
   }
-  return 5; // format 6
+  return RANK_FORMAT_6; // format 6
 }
 
 function parseSubtable(
   bytes: Uint8Array<ArrayBuffer>,
   record: CmapSubtableRecord,
 ): ParsedSubtable | undefined {
-  if (record.format === 12) {
+  if (record.format === CMAP_FORMAT_12) {
     return parseFormat12(bytes, record.offset);
   }
-  if (record.format === 4) {
+  if (record.format === CMAP_FORMAT_4) {
     return parseFormat4(bytes, record.offset);
   }
-  if (record.format === 6) {
+  if (record.format === CMAP_FORMAT_6) {
     return parseFormat6(bytes, record.offset);
   }
   return record.format === 0 ? parseFormat0(bytes, record.offset) : undefined;
@@ -289,7 +348,7 @@ export function readCmapSubtables(font: SfntFont): readonly CmapSubtable[] {
   const subtables: CmapSubtable[] = [];
   for (let i = 0; i < numTables; i++) {
     const recordOffset = CMAP_HEADER_SIZE + i * SUBTABLE_RECORD_SIZE;
-    const offset = u32(cmapBytes, recordOffset + 4);
+    const offset = u32(cmapBytes, recordOffset + SUBTABLE_RECORD_OFFSET_FIELD);
     if (!hasBytes(cmapBytes, offset, 2)) {
       continue; // a subtable record pointing past the table: skip it, another record may still be readable
     }
@@ -315,7 +374,12 @@ export function readCmapSubtables(font: SfntFont): readonly CmapSubtable[] {
 // Picks the best available Unicode-keyed cmap subtable and returns a lookup function, or `undefined` if the font has no readable 'cmap' at all — a font with no usable character-to-glyph mapping is one the caller must degrade around (skip the glyph, substitute another font), not one worth aborting a whole conversion over.
 export function buildCmapLookup(font: SfntFont): CmapLookup | undefined {
   const candidates = readCmapSubtables(font)
-    .filter((s) => s.format === 4 || s.format === 6 || s.format === 12)
+    .filter(
+      (s) =>
+        s.format === CMAP_FORMAT_4 ||
+        s.format === CMAP_FORMAT_6 ||
+        s.format === CMAP_FORMAT_12,
+    )
     .sort((a, b) => preferenceRank(a) - preferenceRank(b));
   return candidates[0]?.lookup;
 }
