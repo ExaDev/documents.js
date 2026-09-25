@@ -487,8 +487,8 @@ export function readCellFormatCodes(
 
 // --- the write side: interning the cell formats a written workbook needs -------------------------------------------
 
-// Where a file's own custom format ids start. ECMA-376 implies ids 0-49 (BUILTIN_NUMBER_FORMATS above) and reserves everything up to 163 for locale-specific built-ins a producer must not redefine; 164 is the first id a file may declare for itself, and is where every real producer starts — this directory's own kitchen-sink.xlsx fixture declares its six formats as 164-169.
-const FIRST_CUSTOM_NUM_FMT_ID = 164;
+// Where a file's own custom format ids start. ECMA-376 implies ids 0-49 (BUILTIN_NUMBER_FORMATS above) and reserves everything up to 163 for locale-specific built-ins a producer must not redefine; 164 is the first id a file may declare for itself, and is where every real producer starts — this directory's own kitchen-sink.xlsx fixture declares its six formats as 164-169. Exported so styles.test.ts can assert against this same constant rather than re-deriving the id.
+export const FIRST_CUSTOM_NUM_FMT_ID = 164;
 
 // The cell-format index every cell with nothing but General formatting and no decoration carries, and the one entry this table always starts with, so a workbook that needs no formats at all still writes exactly the single-<xf> cellXfs it did before this table existed.
 export const DEFAULT_CELL_FORMAT_INDEX = 0;
