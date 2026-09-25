@@ -22,7 +22,10 @@ describe("getOdfSpaceCount", () => {
   });
 
   it("parses an explicit text:c", () => {
-    expect(getOdfSpaceCount(el("text:s", { "text:c": "5" }))).toBe(5);
+    const explicitSpaceCount = 5;
+    expect(getOdfSpaceCount(el("text:s", { "text:c": "5" }))).toBe(
+      explicitSpaceCount,
+    );
   });
 
   it("throws for a malformed text:c", () => {
@@ -50,18 +53,23 @@ describe("getOdfSpaceCount", () => {
 
 describe("measureOdfNodeLength / sumOdfNodeLength", () => {
   it("measures a text node by its string length", () => {
-    expect(measureOdfNodeLength(txt("abc"))).toBe(3);
+    const text = "abc";
+    expect(measureOdfNodeLength(txt(text))).toBe(text.length);
   });
 
   it("measures text:s by its space count, text:tab and text:line-break as exactly 1", () => {
-    expect(measureOdfNodeLength(el("text:s", { "text:c": "4" }))).toBe(4);
+    const spaceCount = 4;
+    expect(measureOdfNodeLength(el("text:s", { "text:c": "4" }))).toBe(
+      spaceCount,
+    );
     expect(measureOdfNodeLength(el("text:tab"))).toBe(1);
     expect(measureOdfNodeLength(el("text:line-break"))).toBe(1);
   });
 
   it("measures a text:span recursively as the sum of its own children", () => {
     const span = el("text:span", {}, [txt("ab"), el("text:tab"), txt("c")]);
-    expect(measureOdfNodeLength(span)).toBe(4);
+    const expectedLength = 4; // "ab".length + text:tab(1) + "c".length
+    expect(measureOdfNodeLength(span)).toBe(expectedLength);
   });
 
   it("measures an inline field recursively as the sum of its own children — a field displays its cached text", () => {
@@ -84,9 +92,10 @@ describe("measureOdfNodeLength / sumOdfNodeLength", () => {
   });
 
   it("sums a flat node list", () => {
+    const expectedLength = 5; // "ab".length + text:s c=2 + "c".length
     expect(
       sumOdfNodeLength([txt("ab"), el("text:s", { "text:c": "2" }), txt("c")]),
-    ).toBe(5);
+    ).toBe(expectedLength);
   });
 });
 

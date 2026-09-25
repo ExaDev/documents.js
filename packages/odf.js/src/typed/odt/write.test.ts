@@ -437,6 +437,8 @@ describe("writeOdtContent: lists", () => {
   });
 
   it("states the ordered-versus-bullet kind the only way ODF can — a text:list-style's own level-1 child", () => {
+    // ODF's own maximum list-nesting depth (OASIS ODF 1.3 19.812): the writer always emits one level-style child per level, 1 through this bound, regardless of how deep the source list actually nests.
+    const maxListLevels = 10;
     const bullet = writeOdtContent(listDocument);
     const bulletStyle = childrenWithTag(
       contentAutomaticStyles(bullet),
@@ -446,7 +448,7 @@ describe("writeOdtContent: lists", () => {
     expect(attrValue(bulletStyle!, "style:name")).toBe("L1");
     expect(
       childrenWithTag(bulletStyle!, "text:list-level-style-bullet"),
-    ).toHaveLength(10);
+    ).toHaveLength(maxListLevels);
 
     const ordered = writeOdtContent(
       documentOf([
@@ -463,7 +465,7 @@ describe("writeOdtContent: lists", () => {
     )[0];
     expect(
       childrenWithTag(orderedStyle!, "text:list-level-style-number"),
-    ).toHaveLength(10);
+    ).toHaveLength(maxListLevels);
   });
 
   it("mints one list style per kind, not one per list", () => {
@@ -927,7 +929,8 @@ describe("writeOdtContent: page breaks", () => {
       ]),
     );
     const elements = bodyElements(pkg);
-    expect(elements).toHaveLength(3);
+    const expectedElementCount = 3;
+    expect(elements).toHaveLength(expectedElementCount);
     expect(attrValue(elements[1]!, "text:style-name")).toBe("P1");
     expect(attrValue(elements[2]!, "text:style-name")).toBe("P1");
   });

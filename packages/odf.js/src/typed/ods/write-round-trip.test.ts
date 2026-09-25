@@ -126,11 +126,17 @@ describe("writeOdsContent round trip", () => {
   });
 
   it("round-trips a number cell's exactValue as the recovered double, dropping the decimal string itself", () => {
+    const floatA = 0.1;
+    const floatB = 0.2;
     const cells: ContentSheetCell[] = [
       {
         row: 0,
         column: 0,
-        value: { kind: "number", value: 0.1 + 0.2, exactValue: "0.3" },
+        value: {
+          kind: "number",
+          value: floatA + floatB,
+          exactValue: "0.3",
+        },
         displayText: "0.3",
       },
     ];
