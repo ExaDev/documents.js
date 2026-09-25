@@ -269,15 +269,33 @@ function rotatedRectBounds(
 }
 
 type PageRotation = 0 | 90 | 180 | 270;
+type NonZeroPageRotation = 90 | 180 | 270;
+
+// The three non-zero values ISO 32000-1 7.7.3.3's /Rotate can normalize to.
+const QUARTER_TURN_DEG = 90;
+const HALF_TURN_DEG = 180;
+const THREE_QUARTER_TURN_DEG = 270;
+const DEGREES_PER_TURN = 360;
+
+// A user-defined type guard, rather than a plain boolean check, because `PageRotation` needs `normalized` narrowed to `NonZeroPageRotation` below: comparing against QUARTER_TURN_DEG/HALF_TURN_DEG/THREE_QUARTER_TURN_DEG (typed as plain `number`, since that is what a bare `const` initializer widens to) would not narrow the way comparing against inline literals does, and this predicate's own declared return type supplies that narrowing instead.
+function isNonZeroPageRotation(n: number): n is NonZeroPageRotation {
+  return (
+    n === QUARTER_TURN_DEG ||
+    n === HALF_TURN_DEG ||
+    n === THREE_QUARTER_TURN_DEG
+  );
+}
 
 export function normalizeRotation(rotate: number | undefined): PageRotation {
   if (rotate === undefined) {
     return 0;
   }
-  const normalized = (((Math.round(rotate / 90) * 90) % 360) + 360) % 360;
-  return normalized === 90 || normalized === 180 || normalized === 270
-    ? normalized
-    : 0;
+  const normalized =
+    (((Math.round(rotate / QUARTER_TURN_DEG) * QUARTER_TURN_DEG) %
+      DEGREES_PER_TURN) +
+      DEGREES_PER_TURN) %
+    DEGREES_PER_TURN;
+  return isNonZeroPageRotation(normalized) ? normalized : 0;
 }
 
 interface PageRotationResult {
@@ -292,19 +310,22 @@ export function pageRotationTransform(
   w: number,
   h: number,
 ): PageRotationResult {
-  if (rotation === 90) {
+  if (rotation === QUARTER_TURN_DEG) {
     return { matrix: [0, -1, 1, 0, 0, w], widthPt: h, heightPt: w };
   }
-  if (rotation === 180) {
+  if (rotation === HALF_TURN_DEG) {
     return { matrix: [-1, 0, 0, -1, w, h], widthPt: w, heightPt: h };
   }
-  if (rotation === 270) {
+  if (rotation === THREE_QUARTER_TURN_DEG) {
     return { matrix: [0, 1, -1, 0, h, 0], widthPt: h, heightPt: w };
   }
   return { matrix: [1, 0, 0, 1, 0, 0], widthPt: w, heightPt: h };
 }
 
 // --- Page content: /Contents (single stream or array), interpretation, and per-item conversion into LayoutItem. ---
+
+// ISO 32000-1 7.8.2: when /Contents is an array, readers must treat the concatenation of the referenced streams as if they were one stream, "as though they were preceded and followed by white-space characters". Inserted here as a defensive LINE FEED, so a token straddling the end of one chunk and the start of the next can never merge into one, even when a producer omitted trailing whitespace of its own.
+const CONTENT_STREAM_JOIN_BYTE = 0x0a;
 
 function readPageContentBytes(
   page: PdfDict,
@@ -322,7 +343,7 @@ function readPageContentBytes(
       if (streamObj?.kind === "stream") {
         chunks.push(
           decodeStream(streamObj.raw, streamObj.dict, sink).bytes,
-          new Uint8Array([0x0a]),
+          new Uint8Array([CONTENT_STREAM_JOIN_BYTE]),
         );
       }
     }
@@ -356,7 +377,7 @@ function contentItemBounds(item: LayoutItem): RotatedRectBounds | undefined {
     if (
       item.kind !== "text" ||
       item.rotationDeg === undefined ||
-      item.rotationDeg % 180 === 0
+      item.rotationDeg % HALF_TURN_DEG === 0
     ) {
       // widthPt is optional on text (reported, not measured, on some paths) — a missing width still bounds the run to its anchor plus size, never an unbounded extent.
       return frameBounds(
@@ -806,6 +827,8 @@ function imagePlacementFrom(matrix: Matrix): {
   };
 }
 
+const HEX_RADIX = 16;
+
 function registerExtractedImage(
   format: "png" | "jpeg",
   bytes: Uint8Array<ArrayBuffer>,
@@ -815,7 +838,7 @@ function registerExtractedImage(
   original: ExtractedPdfImage["original"],
 ): string {
   // The imageId is a crc32 of the DECODED canonical bytes (a JBIG2/JPX original must not fold into it: two different producers' compressed streams of the same raster content would then mint two ids for what every consumer sees as the same image, while a re-encoded canonical would mint a different id than the source's own re-read of the same file produced before this write — the canonical is the identity, the original is a re-emission spelling of it).
-  const imageId = `img${crc32(bytes).toString(16)}`;
+  const imageId = `img${crc32(bytes).toString(HEX_RADIX)}`;
   if (!(imageId in images)) {
     images[imageId] = {
       format,
