@@ -519,26 +519,40 @@ describe("writeOdpContent: refusals", () => {
 
 // A rotated shape's own frame/rotationDeg is an exact algebraic inverse (typed/draw/write-shapes.ts's own frameGeometryAttrs), verified with a numeric tolerance rather than the blanket expectRoundTrip helper above — see this file's own top-of-file note.
 describe("writeOdpContent: rotated shape geometry, within floating-point tolerance", () => {
-  it.each([30, 90, 180, -45, 12.5])(
-    "round-trips a %i-degree rotation",
-    (rotationDeg) => {
-      const document = documentOf([
-        slide([
-          shape({
-            rotationDeg,
-            frame: { xPt: 50, yPt: 60, widthPt: 200, heightPt: 80 },
-          }),
-        ]),
-      ]);
-      const written = roundTrip(document);
-      const writtenShape = written.slides[0]!.shapes[0]!;
-      expect(writtenShape.rotationDeg).toBeCloseTo(rotationDeg, 9);
-      expect(writtenShape.frame.xPt).toBeCloseTo(50, 6);
-      expect(writtenShape.frame.yPt).toBeCloseTo(60, 6);
-      expect(writtenShape.frame.widthPt).toBeCloseTo(200, 6);
-      expect(writtenShape.frame.heightPt).toBeCloseTo(80, 6);
-    },
-  );
+  const rotationPrecisionDigits = 9;
+  const framePrecisionDigits = 6;
+  const acuteRotationDeg = 30;
+  const rightAngleRotationDeg = 90;
+  const halfTurnRotationDeg = 180;
+  const negativeRotationDeg = -45;
+  const fractionalRotationDeg = 12.5;
+
+  it.each([
+    acuteRotationDeg,
+    rightAngleRotationDeg,
+    halfTurnRotationDeg,
+    negativeRotationDeg,
+    fractionalRotationDeg,
+  ])("round-trips a %i-degree rotation", (rotationDeg) => {
+    const frame = { xPt: 50, yPt: 60, widthPt: 200, heightPt: 80 };
+    const document = documentOf([slide([shape({ rotationDeg, frame })])]);
+    const written = roundTrip(document);
+    const writtenShape = written.slides[0]!.shapes[0]!;
+    expect(writtenShape.rotationDeg).toBeCloseTo(
+      rotationDeg,
+      rotationPrecisionDigits,
+    );
+    expect(writtenShape.frame.xPt).toBeCloseTo(frame.xPt, framePrecisionDigits);
+    expect(writtenShape.frame.yPt).toBeCloseTo(frame.yPt, framePrecisionDigits);
+    expect(writtenShape.frame.widthPt).toBeCloseTo(
+      frame.widthPt,
+      framePrecisionDigits,
+    );
+    expect(writtenShape.frame.heightPt).toBeCloseTo(
+      frame.heightPt,
+      framePrecisionDigits,
+    );
+  });
 
   it("collapses a literal 0-degree rotation to no rotation at all on the way back", () => {
     const document = documentOf([slide([shape({ rotationDeg: 0 })])]);
@@ -551,8 +565,38 @@ describe("writeOdpContent: rotated shape geometry, within floating-point toleran
 //
 // The values that reach that magnitude are ordinary, not contrived: frameGeometryAttrs's translate() components are trig-derived, so a frame whose own centre sits at or near the page origin cancels to 1e-15-ish rounding dust rather than a clean zero at most angles. The sweep below crosses every quadrant boundary and both signs of each component, against frames at the origin, straddling it, and well away from it.
 describe("writeOdpContent: rotated geometry near the page origin", () => {
+  // Each value is a fraction of a full turn (or its negative), except EXPONENT_NOTATION_EPSILON_DEG: the one value small enough that JS's own number-to-string spells it in exponent notation.
+  const NEGATIVE_THREE_QUARTER_TURN_DEG = -270;
+  const NEGATIVE_HALF_TURN_DEG = -180;
+  const NEGATIVE_THREE_EIGHTHS_TURN_DEG = -135;
+  const NEGATIVE_QUARTER_TURN_DEG = -90;
+  const NEGATIVE_EIGHTH_TURN_DEG = -45;
+  const NEGATIVE_TWELFTH_TURN_DEG = -30;
+  const TINY_NEGATIVE_DEG = -1;
+  const EXPONENT_NOTATION_EPSILON_DEG = 0.0001;
+  const TINY_POSITIVE_DEG = 1;
+  const TWELFTH_TURN_DEG = 30;
+  const EIGHTH_TURN_DEG = 45;
+  const QUARTER_TURN_DEG = 90;
+  const THREE_EIGHTHS_TURN_DEG = 135;
+  const HALF_TURN_DEG = 180;
+  const THREE_QUARTER_TURN_DEG = 270;
   const ANGLES_DEG = [
-    -270, -180, -135, -90, -45, -30, -1, 0.0001, 1, 30, 45, 90, 135, 180, 270,
+    NEGATIVE_THREE_QUARTER_TURN_DEG,
+    NEGATIVE_HALF_TURN_DEG,
+    NEGATIVE_THREE_EIGHTHS_TURN_DEG,
+    NEGATIVE_QUARTER_TURN_DEG,
+    NEGATIVE_EIGHTH_TURN_DEG,
+    NEGATIVE_TWELFTH_TURN_DEG,
+    TINY_NEGATIVE_DEG,
+    EXPONENT_NOTATION_EPSILON_DEG,
+    TINY_POSITIVE_DEG,
+    TWELFTH_TURN_DEG,
+    EIGHTH_TURN_DEG,
+    QUARTER_TURN_DEG,
+    THREE_EIGHTHS_TURN_DEG,
+    HALF_TURN_DEG,
+    THREE_QUARTER_TURN_DEG,
   ];
   const FRAMES = [
     { xPt: 0, yPt: 0, widthPt: 100, heightPt: 100 }, // centre at (50,50) — the classic cancelling case at 90/180/270.
@@ -572,15 +616,32 @@ describe("writeOdpContent: rotated geometry near the page origin", () => {
       ]);
       const written = roundTrip(document);
       const writtenShapes = written.slides[0]!.shapes;
+      const framePrecisionDigits = 6;
+      const rotationPrecisionDigits = 9;
       // The whole-shape loss first: an unparseable svg:x/svg:y or transform drops the frame from the read entirely, so a length count mismatch IS the bug, not a symptom of one.
       expect(writtenShapes).toHaveLength(FRAMES.length);
       FRAMES.forEach((frame, index) => {
         const writtenShape = writtenShapes[index]!;
-        expect(writtenShape.frame.xPt).toBeCloseTo(frame.xPt, 6);
-        expect(writtenShape.frame.yPt).toBeCloseTo(frame.yPt, 6);
-        expect(writtenShape.frame.widthPt).toBeCloseTo(frame.widthPt, 6);
-        expect(writtenShape.frame.heightPt).toBeCloseTo(frame.heightPt, 6);
-        expect(writtenShape.rotationDeg ?? 0).toBeCloseTo(rotationDeg, 9);
+        expect(writtenShape.frame.xPt).toBeCloseTo(
+          frame.xPt,
+          framePrecisionDigits,
+        );
+        expect(writtenShape.frame.yPt).toBeCloseTo(
+          frame.yPt,
+          framePrecisionDigits,
+        );
+        expect(writtenShape.frame.widthPt).toBeCloseTo(
+          frame.widthPt,
+          framePrecisionDigits,
+        );
+        expect(writtenShape.frame.heightPt).toBeCloseTo(
+          frame.heightPt,
+          framePrecisionDigits,
+        );
+        expect(writtenShape.rotationDeg ?? 0).toBeCloseTo(
+          rotationDeg,
+          rotationPrecisionDigits,
+        );
       });
     },
   );
@@ -606,20 +667,25 @@ describe("writeOdpContent: a shape name carrying XML special characters", () => 
 // paintOrder is the one ContentShape field the reader ALWAYS populates (typed/draw/shapes.ts's own paintOrderKey stamps every frame it walks), so the writer dropping it was a real, live loss for any odp -> odp or odg -> odp conversion. See typed/odp/write.ts's canonicalShape note for the exact canonical form, and typed/draw/write-shapes.ts's odfZIndexOf for what ODF can and cannot spell.
 describe("writeOdpContent: shape paint order", () => {
   it("round-trips an explicit paintOrder that disagrees with document order", () => {
+    const firstShapePaintOrder = 9;
+    const secondShapePaintOrder = 4;
     const document = documentOf([
       slide([
         shape({
-          paintOrder: 9,
+          paintOrder: firstShapePaintOrder,
           frame: { xPt: 0, yPt: 0, widthPt: 100, heightPt: 50 },
         }),
         shape({
-          paintOrder: 4,
+          paintOrder: secondShapePaintOrder,
           frame: { xPt: 120, yPt: 0, widthPt: 100, heightPt: 50 },
         }),
       ]),
     ]);
     const written = roundTrip(document);
-    expect(written.slides[0]!.shapes.map((s) => s.paintOrder)).toEqual([9, 4]);
+    expect(written.slides[0]!.shapes.map((s) => s.paintOrder)).toEqual([
+      firstShapePaintOrder,
+      secondShapePaintOrder,
+    ]);
     expectRoundTrip(document);
   });
 
