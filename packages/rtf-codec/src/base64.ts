@@ -6,6 +6,13 @@ const BASE64_ALPHABET =
   "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 const HEX_DIGITS = "0123456789abcdef";
 
+const BASE64_BITS_PER_CHARACTER = 6; // log2(64) — each base64 character encodes this many bits.
+const BITS_PER_BYTE = 8;
+const BYTE_MASK = 0xff;
+const NIBBLE_BITS = 4; // half a byte — bytesToHex's own high/low hex-digit split.
+const NIBBLE_MASK = 0x0f;
+const HEX_RADIX = 16;
+
 function base64Value(character: string): number | undefined {
   const index = BASE64_ALPHABET.indexOf(character);
   return index === -1 ? undefined : index;
@@ -24,11 +31,11 @@ export function base64ToBytes(input: string): Uint8Array | undefined {
     if (value === undefined) {
       return undefined;
     }
-    accumulator = (accumulator << 6) | value;
-    bits += 6;
-    if (bits >= 8) {
-      bits -= 8;
-      out.push((accumulator >> bits) & 0xff);
+    accumulator = (accumulator << BASE64_BITS_PER_CHARACTER) | value;
+    bits += BASE64_BITS_PER_CHARACTER;
+    if (bits >= BITS_PER_BYTE) {
+      bits -= BITS_PER_BYTE;
+      out.push((accumulator >> bits) & BYTE_MASK);
     }
   }
   return Uint8Array.from(out);
@@ -37,8 +44,8 @@ export function base64ToBytes(input: string): Uint8Array | undefined {
 export function bytesToHex(input: Uint8Array): string {
   let out = "";
   for (const byte of input) {
-    out += HEX_DIGITS.charAt(byte >> 4);
-    out += HEX_DIGITS.charAt(byte & 0x0f);
+    out += HEX_DIGITS.charAt(byte >> NIBBLE_BITS);
+    out += HEX_DIGITS.charAt(byte & NIBBLE_MASK);
   }
   return out;
 }
@@ -56,7 +63,7 @@ export function hexToBytes(input: string): Uint8Array<ArrayBuffer> {
       high = value;
       continue;
     }
-    out.push(high * 16 + value);
+    out.push(high * HEX_RADIX + value);
     high = undefined;
   }
   return Uint8Array.from(out);
