@@ -1,3 +1,10 @@
+## [14.4.46](https://github.com/ExaDev/documents.js/compare/documents.js%4014.4.45...documents.js%4014.4.46) (2026-09-25)
+
+
+### Dependencies
+
+- Updated rtf-codec to 8.1.20
+
 ## [14.4.45](https://github.com/ExaDev/documents.js/compare/documents.js%4014.4.44...documents.js%4014.4.45) (2026-09-25)
 
 ### Bug Fixes

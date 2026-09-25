@@ -471,7 +471,7 @@ importers:
         specifier: 7.15.3
         version: link:../document-schema.js
       documents.js:
-        specifier: 14.4.45
+        specifier: 14.4.46
         version: link:../documents.js
       ink:
         specifier: 7.1.1
@@ -566,7 +566,7 @@ importers:
         specifier: 26.2.0
         version: 26.2.0
       documents.js:
-        specifier: 14.4.45
+        specifier: 14.4.46
         version: link:../documents.js
       eslint:
         specifier: 10.8.1
@@ -602,10 +602,10 @@ importers:
         specifier: 2.0.0
         version: 2.0.0
       document-operations:
-        specifier: 1.1.108
+        specifier: 1.1.109
         version: link:../document-operations
       documents.js:
-        specifier: 14.4.45
+        specifier: 14.4.46
         version: link:../documents.js
       zod:
         specifier: 4.4.3
@@ -672,7 +672,7 @@ importers:
   packages/document-operations:
     dependencies:
       document-compute.js:
-        specifier: 1.6.55
+        specifier: 1.6.56
         version: link:../document-compute.js
       document-outline.js:
         specifier: 3.10.23
@@ -681,7 +681,7 @@ importers:
         specifier: 7.15.3
         version: link:../document-schema.js
       documents.js:
-        specifier: 14.4.45
+        specifier: 14.4.46
         version: link:../documents.js
       zod:
         specifier: 4.4.3
@@ -797,10 +797,10 @@ importers:
   packages/document-rest:
     dependencies:
       document-operations:
-        specifier: 1.1.108
+        specifier: 1.1.109
         version: link:../document-operations
       documents.js:
-        specifier: 14.4.45
+        specifier: 14.4.46
         version: link:../documents.js
       zod:
         specifier: 4.4.3
@@ -934,7 +934,7 @@ importers:
         specifier: 2.2.19
         version: link:../ppt-codec
       rtf-codec:
-        specifier: 8.1.19
+        specifier: 8.1.20
         version: link:../rtf-codec
       temml:
         specifier: 0.13.4
@@ -1606,7 +1606,7 @@ importers:
         specifier: 7.15.3
         version: link:../document-schema.js
       documents.js:
-        specifier: 14.4.45
+        specifier: 14.4.46
         version: link:../documents.js
       markdown-codec:
         specifier: 11.1.12
