@@ -32,11 +32,21 @@ export interface BuiltinEncoding {
 }
 
 // The private-use planes, which name no character: reversing a Unicode subtable that maps only these (what a symbol font's own (3, 1) subtable usually is) yields a code point that identifies the glyph within that one font and nothing beyond it, so it is treated as no answer rather than a wrong one.
+// The three ranges the Unicode Standard reserves for private use (Unicode 16.0 section 23.5, table 23-3): Plane 0's Private Use Area, and the two matching supplementary Private Use Areas A/B, each ending 2 code points short of its plane's final 0x...FFFE/0x...FFFF noncharacters.
+const PRIVATE_USE_BMP_START = 0xe000;
+const PRIVATE_USE_BMP_END = 0xf8ff;
+const PRIVATE_USE_PLANE_A_START = 0xf0000;
+const PRIVATE_USE_PLANE_A_END = 0xffffd;
+const PRIVATE_USE_PLANE_B_START = 0x100000;
+const PRIVATE_USE_PLANE_B_END = 0x10fffd;
+
 function isPrivateUse(codePoint: number): boolean {
   return (
-    (codePoint >= 0xe000 && codePoint <= 0xf8ff) ||
-    (codePoint >= 0xf0000 && codePoint <= 0xffffd) ||
-    (codePoint >= 0x100000 && codePoint <= 0x10fffd)
+    (codePoint >= PRIVATE_USE_BMP_START && codePoint <= PRIVATE_USE_BMP_END) ||
+    (codePoint >= PRIVATE_USE_PLANE_A_START &&
+      codePoint <= PRIVATE_USE_PLANE_A_END) ||
+    (codePoint >= PRIVATE_USE_PLANE_B_START &&
+      codePoint <= PRIVATE_USE_PLANE_B_END)
   );
 }
 
@@ -81,12 +91,21 @@ function encodingFromSources(
 
 const SYMBOL_CMAP_CODE_BASE = 0xf000; // ISO 32000-1 9.6.6.4: a (3, 0) subtable's codes are the font's own 8-bit codes offset into the 0xF000 private-use range
 
+// 'cmap' platform/encoding IDs this module distinguishes (OpenType spec 'cmap' table, platform ID 1 Macintosh and platform ID 0 Unicode are matched as bare literals below since 0/1 are structurally self-evident and exempt from this rule).
+const CMAP_PLATFORM_MICROSOFT = 3;
+const CMAP_MICROSOFT_ENCODING_SYMBOL = 0;
+const CMAP_MICROSOFT_ENCODING_UNICODE_FULL_REPERTOIRE = 10;
+const CMAP_MICROSOFT_ENCODING_UNICODE_BMP = 1;
+
 function symbolSubtable(
   subtables: readonly CmapSubtable[],
 ): CmapSubtable | undefined {
   return (
-    subtables.find((s) => s.platformId === 3 && s.encodingId === 0) ??
-    subtables.find((s) => s.platformId === 1 && s.encodingId === 0)
+    subtables.find(
+      (s) =>
+        s.platformId === CMAP_PLATFORM_MICROSOFT &&
+        s.encodingId === CMAP_MICROSOFT_ENCODING_SYMBOL,
+    ) ?? subtables.find((s) => s.platformId === 1 && s.encodingId === 0)
   );
 }
 
@@ -94,8 +113,16 @@ function unicodeSubtable(
   subtables: readonly CmapSubtable[],
 ): CmapSubtable | undefined {
   return (
-    subtables.find((s) => s.platformId === 3 && s.encodingId === 10) ??
-    subtables.find((s) => s.platformId === 3 && s.encodingId === 1) ??
+    subtables.find(
+      (s) =>
+        s.platformId === CMAP_PLATFORM_MICROSOFT &&
+        s.encodingId === CMAP_MICROSOFT_ENCODING_UNICODE_FULL_REPERTOIRE,
+    ) ??
+    subtables.find(
+      (s) =>
+        s.platformId === CMAP_PLATFORM_MICROSOFT &&
+        s.encodingId === CMAP_MICROSOFT_ENCODING_UNICODE_BMP,
+    ) ??
     subtables.find((s) => s.platformId === 0)
   );
 }
@@ -146,6 +173,8 @@ const CFF_PREDEFINED_CHARSET_ISO_ADOBE = 0;
 const CFF_PREDEFINED_ENCODING_STANDARD = 0;
 const CFF_ENCODING_FORMAT_MASK = 0x7f;
 const CFF_ENCODING_SUPPLEMENT_FLAG = 0x80;
+// A CFF Encoding supplement record (spec section 12): a 1-byte code followed by a 2-byte SID, 3 bytes total.
+const CFF_ENCODING_SUPPLEMENT_RECORD_SIZE = 3;
 
 // A CFF charset (spec section 13): glyph ID -> SID, for glyphs 1..nGlyphs-1 (glyph 0 is always .notdef). The predefined ISOAdobe charset numbers SIDs to match glyph order; the Expert charsets (1 and 2) are not read, so a font using one is left nameless rather than misnamed.
 function readCffCharset(
@@ -249,14 +278,14 @@ function readCffEncoding(
     const nSups = u8(bytes, cursor);
     cursor += 1;
     for (let i = 0; i < nSups; i++) {
-      if (!hasBytes(bytes, cursor, 3)) {
+      if (!hasBytes(bytes, cursor, CFF_ENCODING_SUPPLEMENT_RECORD_SIZE)) {
         return glyphByCode;
       }
       const glyphId = glyphBySid.get(u16(bytes, cursor + 1));
       if (glyphId !== undefined) {
         glyphByCode.set(u8(bytes, cursor), glyphId);
       }
-      cursor += 3;
+      cursor += CFF_ENCODING_SUPPLEMENT_RECORD_SIZE;
     }
   }
   return glyphByCode;
