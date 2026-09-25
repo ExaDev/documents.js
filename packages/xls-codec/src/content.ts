@@ -4,7 +4,6 @@ import {
 } from "archive-codec";
 import type {
   Alignment,
-  Color,
   ContentCellBorders,
   ContentCellFill,
   ContentCellValue,
@@ -14,9 +13,6 @@ import type {
   ContentSheet,
   ContentSheetCell,
   ContentSheetColumn,
-  ContentSheetConditionalFormat,
-  ContentSheetConditionalFormatStyle,
-  ContentSheetConditionalFormatValue,
   ContentSheetDataValidation,
   ContentSheetPrintSettings,
   ContentSheetRow,
@@ -25,6 +21,10 @@ import type {
 } from "document-schema.js";
 import { assembleTree, PAGE_SIZE_LETTER } from "document-schema.js";
 
+import {
+  mapConditionalFormats,
+  mapConditionalFormats12,
+} from "./content-conditional-format";
 import { pageSizeFromSetup } from "./biff/print-setup";
 import { contentFontOf, resolveFontColor } from "./biff/font";
 import {
@@ -38,12 +38,7 @@ import {
   splitSubstreams,
   type Substream,
 } from "./biff/substreams";
-import {
-  applyTint,
-  resolveFillBackground,
-  resolveBorderEdge,
-  resolveIcvColor,
-} from "./biff/xf-colors";
+import { resolveFillBackground, resolveBorderEdge } from "./biff/xf-colors";
 import { readWorkbookStreams } from "./container";
 import { readBlipStore, type BlipImage } from "./drawing/blips";
 import { concatBytes } from "./drawing/bytes";
@@ -71,15 +66,6 @@ import {
 } from "./workbook/sheet";
 import type { RawDataValidation } from "./workbook/data-validation";
 import { decryptWorkbookRecords } from "./workbook/encryption";
-import type {
-  RawConditionalFormat,
-  RawConditionalFormatStyle,
-} from "./workbook/conditional-format";
-import type {
-  RawCfColor,
-  RawColorScaleFormat,
-  RawConditionalFormat12,
-} from "./workbook/conditional-format-12";
 import { inchesToPoints } from "./units";
 
 // The page margins a written workbook assumes when none are stated: 0.75in top and bottom, 0.7in left and right, the values a fresh Excel workbook opens with.
@@ -392,186 +378,6 @@ function readSheet(
     ...(drawing.embeddedObjects.length > 0
       ? { embeddedObjects: [...drawing.embeddedObjects] }
       : {}),
-  };
-}
-
-// Base BIFF8 conditional formatting only ever produces a 'cellIs' rule (ExaDev/documents.js#1102's own scope). icv colour resolution is deferred to here, not workbook/conditional-format.ts, matching how a regular cell's own fill/border already resolve through globals.palette at this same layer (mapCellDecoration below).
-function mapConditionalFormats(
-  raw: readonly RawConditionalFormat[],
-  palette: readonly Color[] | undefined,
-): ContentSheetConditionalFormat[] {
-  return raw.map((format) => {
-    const style = mapConditionalFormatStyle(format.style, palette);
-    return {
-      type: "cellIs" as const,
-      ranges: format.ranges,
-      operator: format.operator,
-      formula1: format.formula1,
-      ...(format.formula2 !== undefined ? { formula2: format.formula2 } : {}),
-      ...(style !== undefined ? { style } : {}),
-    };
-  });
-}
-
-// CF12's colour scale/data bar/icon set/filter-template rules. A rule whose own colour cannot be resolved (an automatic or theme colour reference, this package has no BIFF8 Theme reader) is dropped whole rather than promoted with a missing or wrong colour, mirroring the same "narrow rather than guess" boundary the base CF/DXFN reading above already draws.
-function mapConditionalFormats12(
-  raw: readonly RawConditionalFormat12[],
-  palette: readonly Color[] | undefined,
-): ContentSheetConditionalFormat[] {
-  const results: ContentSheetConditionalFormat[] = [];
-  for (const format of raw) {
-    const common = {
-      ranges: format.ranges,
-      priority: format.priority,
-      ...(format.stopIfTrue ? { stopIfTrue: true } : {}),
-    };
-    if (format.kind === "colorScale") {
-      const stops = mapColorScaleStops(format.stops, palette);
-      if (stops === undefined) {
-        continue;
-      }
-      results.push({ type: "colorScale", stops, ...common });
-      continue;
-    }
-    if (format.kind === "dataBar") {
-      const color = mapCfColor(format.color, palette);
-      if (color === undefined) {
-        continue;
-      }
-      results.push({
-        type: "dataBar",
-        min: format.min,
-        max: format.max,
-        color,
-        ...(format.showValue ? {} : { showValue: false }),
-        ...common,
-      });
-      continue;
-    }
-    if (format.kind === "iconSet") {
-      results.push({
-        type: "iconSet",
-        iconSetType: format.iconSetType,
-        thresholds: [...format.thresholds],
-        ...(format.reverse ? { reverse: true } : {}),
-        ...(format.showValue ? {} : { showValue: false }),
-        ...common,
-      });
-      continue;
-    }
-    if (format.kind === "top10") {
-      const style = mapConditionalFormatStyle(format.style, palette);
-      results.push({
-        type: "top10",
-        rank: format.rank,
-        ...(format.percent ? { percent: true } : {}),
-        ...(format.bottom ? { bottom: true } : {}),
-        ...(style !== undefined ? { style } : {}),
-        ...common,
-      });
-      continue;
-    }
-    if (format.kind === "aboveAverage") {
-      const style = mapConditionalFormatStyle(format.style, palette);
-      results.push({
-        type: "aboveAverage",
-        ...(format.aboveAverage ? {} : { aboveAverage: false }),
-        ...(format.equalAverage ? { equalAverage: true } : {}),
-        ...(format.stdDev !== undefined ? { stdDev: format.stdDev } : {}),
-        ...(style !== undefined ? { style } : {}),
-        ...common,
-      });
-      continue;
-    }
-    if (format.kind === "timePeriod") {
-      const style = mapConditionalFormatStyle(format.style, palette);
-      results.push({
-        type: "timePeriod",
-        timePeriod: format.timePeriod,
-        ...(style !== undefined ? { style } : {}),
-        ...common,
-      });
-      continue;
-    }
-    if (
-      format.kind === "containsText" ||
-      format.kind === "notContainsText" ||
-      format.kind === "beginsWith" ||
-      format.kind === "endsWith"
-    ) {
-      const style = mapConditionalFormatStyle(format.style, palette);
-      results.push({
-        type: format.kind,
-        text: format.text,
-        ...(style !== undefined ? { style } : {}),
-        ...common,
-      });
-      continue;
-    }
-    const style = mapConditionalFormatStyle(format.style, palette);
-    results.push({
-      type: format.kind,
-      ...(style !== undefined ? { style } : {}),
-      ...common,
-    });
-  }
-  return results;
-}
-
-// CFColor's own tint applies to whichever base colour xclrType named, indexed or RGB alike, so it is applied here, once, after resolving that base colour — not inside conditional-format-12.ts's own readCfColor, which has no palette to resolve an indexed colour against in the first place.
-function mapCfColor(
-  raw: RawCfColor,
-  palette: readonly Color[] | undefined,
-): Color | undefined {
-  const base =
-    raw.kind === "rgb" ? raw.color : resolveIcvColor(raw.icv, palette);
-  return base === undefined ? undefined : applyTint(base, raw.tint);
-}
-
-function mapColorScaleStops(
-  stops: RawColorScaleFormat["stops"],
-  palette: readonly Color[] | undefined,
-): { value: ContentSheetConditionalFormatValue; color: Color }[] | undefined {
-  const mapped: { value: ContentSheetConditionalFormatValue; color: Color }[] =
-    [];
-  for (const stop of stops) {
-    const color = mapCfColor(stop.color, palette);
-    if (color === undefined) {
-      return undefined;
-    }
-    mapped.push({ value: stop.value, color });
-  }
-  return mapped;
-}
-
-function mapConditionalFormatStyle(
-  raw: RawConditionalFormatStyle | undefined,
-  palette: readonly Color[] | undefined,
-): ContentSheetConditionalFormatStyle | undefined {
-  if (raw === undefined) {
-    return undefined;
-  }
-  const textColor =
-    raw.fontColorIcv === undefined
-      ? undefined
-      : resolveIcvColor(raw.fontColorIcv, palette);
-  // ContentSheetConditionalFormatStyleSchema.background is a plain colour (the two properties actually observed on a real dxf, per that schema's own top comment); resolveFillBackground's own richer solid/pattern ContentCellFill is narrowed to the 'solid' case only, the same narrowing odf.js's own conditional-format.ts already applies for the identical schema field.
-  const fill =
-    raw.fill === undefined
-      ? undefined
-      : resolveFillBackground(
-          raw.fill.fillPattern,
-          raw.fill.fillForegroundIcv,
-          raw.fill.fillBackgroundIcv,
-          palette,
-        );
-  const background = fill?.kind === "solid" ? fill.color : undefined;
-  if (textColor === undefined && background === undefined) {
-    return undefined;
-  }
-  return {
-    ...(textColor !== undefined ? { textColor } : {}),
-    ...(background !== undefined ? { background } : {}),
   };
 }
 
