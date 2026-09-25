@@ -1,3 +1,14 @@
+## [2.16.11](https://github.com/ExaDev/documents.js/compare/web%402.16.10...web%402.16.11) (2026-09-25)
+
+### Bug Fixes
+
+* **web:** tell the reader when a format carries no embedded fonts ([6a0462f](https://github.com/ExaDev/documents.js/commit/6a0462f6b178e386bed54777512ceca09528f756))
+
+
+### Dependencies
+
+- Updated documents.js to 14.4.45
+
 ## [2.16.10](https://github.com/ExaDev/documents.js/compare/web%402.16.9...web%402.16.10) (2026-09-25)
 
 ### Miscellaneous Chores
