@@ -3,6 +3,13 @@
 // The uint16 header word carries no constraint: producers write 0x0002, but neither the spec nor the reverse-engineered corpus documents an invariant, and the two reference implementations read past it without checking — so this reader treats it as opaque for the same reason ([MS-OLEDS] gives OLEVersion the same "any value, MUST be ignored on receipt" licence).
 
 // Thrown when bytes claiming to be a Package stream do not parse as one: a string that never terminates, or a declared file size the remaining bytes cannot fill. A distinct class so a consumer can catch packaging failure by name, exactly as it catches compound-file structural failure.
+
+// OLE Package's own field sizes: an 8-byte opaque block in each header (widely believed a FILETIME), a 4-byte size field, and printable ASCII's own ceiling.
+const OPAQUE_FILETIME_BYTES = 8;
+const SIZE_FIELD_BYTES = 4;
+const ASCII_MAX = 0x7f;
+const HEX_RADIX = 16;
+const UNICODE_HEX_DIGITS = 4;
 export class OlePackageFormatError extends Error {
   constructor(message: string) {
     super(message);
@@ -46,16 +53,16 @@ export function readOlePackage(bytes: Uint8Array<ArrayBuffer>): OlePackage {
   offset = label.next;
   const sourcePath = readZeroTerminated(bytes, offset, "source path");
   offset = sourcePath.next;
-  offset += 8; // opaque (widely believed to be a FILETIME; nothing downstream reads it)
+  offset += OPAQUE_FILETIME_BYTES; // opaque, widely believed a FILETIME; unusedam reads it)
   const tempPath = readZeroTerminated(bytes, offset, "temp path");
   offset = tempPath.next;
-  if (offset + 4 > bytes.length) {
+  if (offset + SIZE_FIELD_BYTES > bytes.length) {
     throw new OlePackageFormatError(
       "Package stream ends before its packaged file size field",
     );
   }
   const fileByteCount = view.getUint32(offset, true);
-  offset += 4;
+  offset += SIZE_FIELD_BYTES;
   if (offset + fileByteCount > bytes.length) {
     throw new OlePackageFormatError(
       `Package stream declares ${fileByteCount} packaged-file bytes but holds only ${bytes.length - offset}`,
@@ -92,9 +99,9 @@ function asciiZeroTerminated(
         `Package stream's ${fieldName} contains an embedded NUL byte, which this field's own null-terminated encoding cannot carry: it would silently truncate the field and mis-frame every field written after it`,
       );
     }
-    if (code > 0x7f) {
+    if (code > ASCII_MAX) {
       throw new OlePackageWriteError(
-        `Package stream's ${fieldName} contains a character (U+${code.toString(16).padStart(4, "0")}) outside ASCII; encoding it to an arbitrary windows-1252 byte would need a full codepage table this package does not carry`,
+        `Package stream's ${fieldName} contains a character (U+${code.toString(HEX_RADIX).padStart(UNICODE_HEX_DIGITS, "0")}) outside ASCII; encoding it to an arbitrary windows-1252 byte would need a full codepage table this package does not carry`,
       );
     }
     view.setUint8(index, code);
@@ -111,9 +118,9 @@ export function writeOlePackage(pkg: OlePackage): Uint8Array<ArrayBuffer> {
     2 + // the opaque header word
     labelBytes.length +
     sourcePathBytes.length +
-    8 + // opaque
+    OPAQUE_FILETIME_BYTES + // opaque
     tempPathBytes.length +
-    4 + // packaged file's byte count
+    SIZE_FIELD_BYTES + // packaged file's byte count
     pkg.fileBytes.length;
   const out = new Uint8Array(totalLength);
   const view = new DataView(out.buffer);
@@ -124,11 +131,11 @@ export function writeOlePackage(pkg: OlePackage): Uint8Array<ArrayBuffer> {
   offset += labelBytes.length;
   out.set(sourcePathBytes, offset);
   offset += sourcePathBytes.length;
-  offset += 8; // opaque, left zero
+  offset += OPAQUE_FILETIME_BYTES; // opaque, left zero
   out.set(tempPathBytes, offset);
   offset += tempPathBytes.length;
   view.setUint32(offset, pkg.fileBytes.length, true);
-  offset += 4;
+  offset += SIZE_FIELD_BYTES;
   out.set(pkg.fileBytes, offset);
   return out;
 }

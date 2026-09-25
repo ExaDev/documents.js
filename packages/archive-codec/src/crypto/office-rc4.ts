@@ -1,6 +1,17 @@
 import { md5 } from "./md5";
 import { rc4 } from "./rc4";
 
+// [MS-OFFCRYPTO] 2.3.6.2's own quantities: the base hash repeats 16 times into the 336-byte buffer, and each block's key derivation appends its own 4-byte little-endian block number.
+const U8_MASK = 0xff;
+const BITS_PER_BYTE = 8;
+const HASH_ITERATIONS = 16;
+const BLOCK_NUMBER_BYTES = 4;
+const BYTE_2_MULTIPLIER = 2;
+const BYTE_2_SHIFT = BYTE_2_MULTIPLIER * BITS_PER_BYTE;
+const BYTE_3_INDEX = 3;
+const BYTE_3_MULTIPLIER = 3;
+const BYTE_3_SHIFT = BYTE_3_MULTIPLIER * BITS_PER_BYTE;
+
 // The RC4 key derivation for legacy Office binary documents (.doc/.xls/.ppt) protected by the original "RC4 encryption header" ([MS-OFFCRYPTO] 2.3.6.1, https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-xls/cf9ae8d5-4e8c-40a2-95f1-3b31f16b5529 names it for .xls's own FilePass record) — NOT the newer "RC4 CryptoAPI encryption header" (2.3.5.1), a different header shape and derivation this module does not implement. [MS-OFFCRYPTO] 2.3.6.2 (https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-offcrypto/09a537cc-44ba-4ffe-af8a-e1c866ed4221) specifies the algorithm itself: H0 = MD5(password), then a 21-byte buffer (H0's own first 5 bytes + the 16-byte salt) repeated 16 times into a 336-byte buffer, H1 = MD5(that), then per block: Hfinal = MD5(H1's own first 5 bytes + the block number as 4 little-endian bytes).
 //
 // The real derived RC4 key is Hfinal in full — all 16 bytes (128 bits) MD5 produces, with no truncation — despite [MS-OFFCRYPTO] 2.3.6.1's own EncryptedVerifier/EncryptedVerifierHash field descriptions both stating "encrypted using a 40-bit RC4 cipher": that specific sentence is wrong, a genuine defect in the published spec text rather than an implementation choice this module is free to pick either way on. This was gotten wrong once already in this package's own history (truncating to 5 bytes/40 bits, matching the spec's own prose) and corrected after cross-checking two independent, real, actively-maintained implementations against a real doctested test vector neither one merely asserts but actually verifies at import time: Apache POI's `BinaryRC4Decryptor`/`CryptoFunctions.generateKey` (github.com/apache/poi, org.apache.poi.poifs.crypt.binaryrc4 and org.apache.poi.poifs.crypt — `EncryptionMode.binaryRC4`, versionMajor=1/versionMinor=1, is the same mode both xls-codec's FilePass and doc-codec's own EncryptionHeader resolve to, so this one derivation genuinely serves both), and nolze/msoffcrypto-tool's `msoffcrypto/method/rc4.py` (github.com/nolze/msoffcrypto-tool), whose own `_makekey` carries a runnable doctest: password `"password1"`, a fixed 16-byte salt, block 0, asserting the exact 16-byte output `20bf32ddf540858c513744af0f24e03c` — reproduced independently against this module's own algorithm before this fix landed, byte for byte. The block re-keying interval (1024 bytes) is unrelated to this and was already correct, confirmed separately against the same POI source (`Biff8DecryptingStream.RC4_REKEYING_INTERVAL`).
@@ -39,8 +50,8 @@ export function deriveOfficeRc4BaseHash(
   );
   unit.set(truncated, 0);
   unit.set(salt, INTERMEDIATE_HASH_LENGTH_BYTES);
-  const buffer336 = new Uint8Array(unit.length * 16);
-  for (let i = 0; i < 16; i += 1) {
+  const buffer336 = new Uint8Array(unit.length * HASH_ITERATIONS);
+  for (let i = 0; i < HASH_ITERATIONS; i += 1) {
     buffer336.set(unit, i * unit.length);
   }
   const h1 = md5(buffer336);
@@ -52,12 +63,13 @@ export function deriveOfficeRc4BlockKey(
   baseHash: Uint8Array<ArrayBuffer>,
   blockNumber: number,
 ): Uint8Array<ArrayBuffer> {
-  const input = new Uint8Array(baseHash.length + 4);
+  const input = new Uint8Array(baseHash.length + BLOCK_NUMBER_BYTES);
   input.set(baseHash, 0);
-  input[baseHash.length] = blockNumber & 0xff;
-  input[baseHash.length + 1] = (blockNumber >>> 8) & 0xff;
-  input[baseHash.length + 2] = (blockNumber >>> 16) & 0xff;
-  input[baseHash.length + 3] = (blockNumber >>> 24) & 0xff;
+  input[baseHash.length] = blockNumber & U8_MASK;
+  input[baseHash.length + 1] = (blockNumber >>> BITS_PER_BYTE) & U8_MASK;
+  input[baseHash.length + 2] = (blockNumber >>> BYTE_2_SHIFT) & U8_MASK;
+  input[baseHash.length + BYTE_3_INDEX] =
+    (blockNumber >>> BYTE_3_SHIFT) & U8_MASK;
   return md5(input);
 }
 
