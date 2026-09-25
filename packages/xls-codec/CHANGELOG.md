@@ -1,3 +1,40 @@
+## [4.16.0](https://github.com/ExaDev/documents.js/compare/xls-codec%404.15.39...xls-codec%404.16.0) (2026-09-25)
+
+### Features
+
+* **xls-codec:** enable no-magic-numbers for production code ([d343e59](https://github.com/ExaDev/documents.js/commit/d343e59fce37bae6e84105306026b50c3e9920aa))
+
+### Code Refactoring
+
+* **xls-codec:** derive the CF12 lookup tables from spec order ([b7da387](https://github.com/ExaDev/documents.js/commit/b7da387e311e718bea8259dadb792f31d6ff90aa))
+* **xls-codec:** derive the cp operator table and name the DXF bit layout ([7b7c7f7](https://github.com/ExaDev/documents.js/commit/7b7c7f7f2e5d288dca7f92e124261a7b7d87bc48))
+* **xls-codec:** derive the data-validation tables and name the flags word ([f02af02](https://github.com/ExaDev/documents.js/commit/f02af0202f4a915211ad84ac505b1640c38105b0))
+* **xls-codec:** derive the data-validation write tables and name the flags word ([b43da84](https://github.com/ExaDev/documents.js/commit/b43da84b93922b84b31db0471fa4b9bcdc004da6))
+* **xls-codec:** keep the derived validation tables literal-keyed ([6c4194d](https://github.com/ExaDev/documents.js/commit/6c4194dd32ea0ebb3483e8bb07216ea17a2e1949))
+* **xls-codec:** make the Ftab table index-derived instead of keyed by literal iftab ([49a2dfc](https://github.com/ExaDev/documents.js/commit/49a2dfcbc546539bee0444c5e47fd60ec3765ba6))
+* **xls-codec:** name every magic number in the CF12 conditional-format writer ([61e8b3f](https://github.com/ExaDev/documents.js/commit/61e8b3f9e11a6155492fc013781bb2a15b1672d4))
+* **xls-codec:** name every magic number in the hand-written MD4 digest ([03f455f](https://github.com/ExaDev/documents.js/commit/03f455f453b13876638a17529868b14f819371d8))
+* **xls-codec:** name every magic number in the Setup paper-size table ([a36c540](https://github.com/ExaDev/documents.js/commit/a36c540b76188cc1d513ef64166170adb2dc8ec1))
+* **xls-codec:** name every magic number in xf-colors.ts's colour and bitfield logic ([908af71](https://github.com/ExaDev/documents.js/commit/908af71b678731e39e8573688d71cad0ea2edfe2))
+* **xls-codec:** name magic numbers in the BIFF8 fixture builder ([b49ce49](https://github.com/ExaDev/documents.js/commit/b49ce49b30e200f10935fd8d9e139aa9f6242047))
+* **xls-codec:** name magic numbers in the MS-CFB compound-file fixture builder ([3bec92c](https://github.com/ExaDev/documents.js/commit/3bec92c4160ce067d253815f4547d9cb7375bbd8))
+* **xls-codec:** name magic numbers in the MS-ODRAW Escher fixture builder ([0ce448f](https://github.com/ExaDev/documents.js/commit/0ce448ffc6aa083a8855f0bd1732fde1688940dd))
+* **xls-codec:** name the biff cursor, error, font and string-writer constants ([8b2b799](https://github.com/ExaDev/documents.js/commit/8b2b79987815f0b2e14188b899f6b83e27bb4ce2))
+* **xls-codec:** name the chart ptg opcodes and page margin defaults ([0edb3a2](https://github.com/ExaDev/documents.js/commit/0edb3a26b3705d9f80dc52e9debc6391a9a41dde))
+* **xls-codec:** name the comment, defined-name and print-name field constants ([db89d3c](https://github.com/ExaDev/documents.js/commit/db89d3cc261eb8ba4963c265d357c50907265be0))
+* **xls-codec:** name the drawing writer storage-id format ([ad0cc5f](https://github.com/ExaDev/documents.js/commit/ad0cc5f56493f6768337eb34a89d0fb4182c026e))
+* **xls-codec:** name the Escher record types and FSP flag bits ([44ce50c](https://github.com/ExaDev/documents.js/commit/44ce50c6500839886bd2205f0109396dcdfcdc2b))
+* **xls-codec:** name the FBSE field sizes and blip type instances ([8689d63](https://github.com/ExaDev/documents.js/commit/8689d6349b93395589f9c16c5294a183d9a7069a))
+* **xls-codec:** name the ptg reference wrapping and sheet record field sizes ([870ead6](https://github.com/ExaDev/documents.js/commit/870ead67f9cbdbf291aa397740961ab25d8a2c96))
+* **xls-codec:** name the record builder byte-place constants ([e662bb0](https://github.com/ExaDev/documents.js/commit/e662bb05df416220fbc675546f34dab30f749396))
+* **xls-codec:** name the serial date origins and ISO shapes ([43cc083](https://github.com/ExaDev/documents.js/commit/43cc083795101860f22b385aa00729e20b663c94))
+* **xls-codec:** name the XF grbit word layout ([1d0a639](https://github.com/ExaDev/documents.js/commit/1d0a63942a2440de48ec9c35a2926556791b6309))
+
+
+### Dependencies
+
+- Updated byte-codec to 2.0.2
+
 ## [4.15.39](https://github.com/ExaDev/documents.js/compare/xls-codec%404.15.38...xls-codec%404.15.39) (2026-09-25)
 
 

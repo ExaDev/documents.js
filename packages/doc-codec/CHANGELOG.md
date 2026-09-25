@@ -1,3 +1,10 @@
+## [6.1.19](https://github.com/ExaDev/documents.js/compare/doc-codec%406.1.18...doc-codec%406.1.19) (2026-09-25)
+
+
+### Dependencies
+
+- Updated byte-codec to 2.0.2
+
 ## [6.1.18](https://github.com/ExaDev/documents.js/compare/doc-codec%406.1.17...doc-codec%406.1.18) (2026-09-25)
 
 

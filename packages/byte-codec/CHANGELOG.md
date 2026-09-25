@@ -1,3 +1,10 @@
+## [2.0.2](https://github.com/ExaDev/documents.js/compare/byte-codec%402.0.1...byte-codec%402.0.2) (2026-09-25)
+
+### Bug Fixes
+
+* **byte-codec:** name magic numbers in bytes/, image/, and most of text/ ([5cbac8f](https://github.com/ExaDev/documents.js/commit/5cbac8fd490b58e7aa3ccab00f8fe7f8517ca629))
+* **byte-codec:** name magic numbers in image/png-decode.ts and text/decode-dbcs.ts ([38a5d13](https://github.com/ExaDev/documents.js/commit/38a5d13d62aa6c025e45ef5bcea90a39970e9663))
+
 ## [2.0.1](https://github.com/ExaDev/documents.js/compare/byte-codec%402.0.0...byte-codec%402.0.1) (2026-09-24)
 
 ### Bug Fixes
