@@ -1,6 +1,21 @@
 // The [MS-OLEPS] Property Set Stream wire format's shared vocabulary: the PropertyType codes, the two reserved property identifiers, the codepage constants, the fixed structural sizes, and the two symmetric codecs (GUID and FILETIME) both ./read.ts and ./write.ts need identically. A true single source of truth rather than each direction restating its own copy: unlike cfb/write.ts's own FAT special values (a handful of independent constants where duplication risks no real drift), a GUID or FILETIME transcribed slightly differently in each direction would silently break every round trip, so the one correct engineering choice here is one definition both sides import.
 
 // [MS-OLEPS] 2.21 PropertySetStream: mandated at the start of every property set stream.
+
+// A GUID's own layout ([MS-DTYP] 2.3.4): Data1 is 4 bytes (8 hex digits), Data2 and Data3 2 bytes each (4 digits), Data4 eight bytes whose first two form the string's fourth group. A file-time's 64-bit tick count splits into low and high 32-bit words. Hex digits are two per byte.
+const HEX_RADIX = 16;
+const DATA1_HEX_DIGITS = 8;
+const DATA23_HEX_DIGITS = 4;
+const HEX_DIGITS_PER_BYTE = 2;
+const DATA2_OFFSET = 4;
+const DATA3_OFFSET = 6;
+const DATA4_OFFSET = 8;
+const DATA4A_BYTES = 2;
+const DATA4_BYTE_COUNT = 8;
+const DATA4_HEX_START = 16;
+const DATA4_BYTE_INDEXES = [...Array(DATA4_BYTE_COUNT).keys()];
+const TICKS_HIGH_SHIFT = 32n;
+const TICKS_WORD_MASK = 0xffffffffn;
 export const BYTE_ORDER_MARK = 0xfffe;
 // ByteOrder(2) + Version(2) + SystemIdentifier(4) + CLSID(16) + NumPropertySets(4) + FMTID0(16) + Offset0(4): the fixed header this package always writes and only ever reads the single-property-set form of (see read.ts's own scope note on NumPropertySets).
 export const HEADER_SIZE = 48;
@@ -32,21 +47,33 @@ export const WINDOWS_1252_CODEPAGE = 1252;
 export const GUID_NULL = "{00000000-0000-0000-0000-000000000000}";
 
 function hex(n: number, width: number): string {
-  return n.toString(16).padStart(width, "0");
+  return n.toString(HEX_RADIX).padStart(width, "0");
 }
 
 // [MS-OLEPS] 2.7 GUID (Packet Version), reused from [MS-DTYP] 2.3.4: Data1 (4 bytes) and Data2/Data3 (2 bytes each) are little-endian; Data4 (8 bytes) is written byte-for-byte in the order the GUID's braced string form gives it, with no byte-swapping. The braced-hyphenated-uppercase-hex form is this package's own in-memory representation of a formatId (FMTID) or CLSID — not part of the wire format itself, just how ./read.ts hands one back and ./write.ts expects one in.
 export function readGuid(view: DataView, offset: number): string {
-  const data1 = hex(view.getUint32(offset, true), 8);
-  const data2 = hex(view.getUint16(offset + 4, true), 4);
-  const data3 = hex(view.getUint16(offset + 6, true), 4);
+  const data1 = hex(view.getUint32(offset, true), DATA1_HEX_DIGITS);
+  const data2 = hex(
+    view.getUint16(offset + DATA2_OFFSET, true),
+    DATA23_HEX_DIGITS,
+  );
+  const data3 = hex(
+    view.getUint16(offset + DATA3_OFFSET, true),
+    DATA23_HEX_DIGITS,
+  );
   let data4a = "";
   for (let i = 0; i < 2; i++) {
-    data4a += hex(view.getUint8(offset + 8 + i), 2);
+    data4a += hex(
+      view.getUint8(offset + DATA4_OFFSET + i),
+      HEX_DIGITS_PER_BYTE,
+    );
   }
   let data4b = "";
-  for (let i = 2; i < 8; i++) {
-    data4b += hex(view.getUint8(offset + 8 + i), 2);
+  for (let i = DATA4A_BYTES; i < DATA4_BYTE_COUNT; i += 1) {
+    data4b += hex(
+      view.getUint8(offset + DATA4_OFFSET + i),
+      HEX_DIGITS_PER_BYTE,
+    );
   }
   return `{${data1}-${data2}-${data3}-${data4a}-${data4b}}`.toUpperCase();
 }
@@ -58,12 +85,36 @@ function hexByte(digits: string, charIndex: number): number {
 
 export function writeGuid(view: DataView, offset: number, guid: string): void {
   const digits = guid.replace(/[{}-]/g, "");
-  view.setUint32(offset, Number.parseInt(digits.slice(0, 8), 16), true);
-  view.setUint16(offset + 4, Number.parseInt(digits.slice(8, 12), 16), true);
-  view.setUint16(offset + 6, Number.parseInt(digits.slice(12, 16), 16), true);
+  view.setUint32(
+    offset,
+    Number.parseInt(digits.slice(0, DATA1_HEX_DIGITS), HEX_RADIX),
+    true,
+  );
+  view.setUint16(
+    offset + DATA2_OFFSET,
+    Number.parseInt(
+      digits.slice(DATA1_HEX_DIGITS, DATA1_HEX_DIGITS + DATA23_HEX_DIGITS),
+      HEX_RADIX,
+    ),
+    true,
+  );
+  view.setUint16(
+    offset + DATA3_OFFSET,
+    Number.parseInt(
+      digits.slice(
+        DATA1_HEX_DIGITS + DATA23_HEX_DIGITS,
+        DATA1_HEX_DIGITS + DATA23_HEX_DIGITS + DATA23_HEX_DIGITS,
+      ),
+      HEX_RADIX,
+    ),
+    true,
+  );
   // Data4's own 8 bytes, over a literal index list rather than a `for` loop's own comparison bound: a bound one iteration too long or short would otherwise land on the byte immediately past the GUID's own 16 bytes, which every real call site overwrites with its own next field regardless, leaving the off-by-one silently unobservable.
-  for (const i of [0, 1, 2, 3, 4, 5, 6, 7]) {
-    view.setUint8(offset + 8 + i, hexByte(digits, 16 + i * 2));
+  for (const i of DATA4_BYTE_INDEXES) {
+    view.setUint8(
+      offset + DATA4_OFFSET + i,
+      hexByte(digits, DATA4_HEX_START + i * HEX_DIGITS_PER_BYTE),
+    );
   }
 }
 
@@ -72,7 +123,7 @@ const FILETIME_EPOCH_OFFSET_100NS = 116444736000000000n;
 const HUNDRED_NS_PER_MS = 10000n;
 
 export function filetimeToDate(low: number, high: number): Date {
-  const ticks = (BigInt(high) << 32n) | BigInt(low);
+  const ticks = (BigInt(high) << TICKS_HIGH_SHIFT) | BigInt(low);
   const ms = (ticks - FILETIME_EPOCH_OFFSET_100NS) / HUNDRED_NS_PER_MS;
   return new Date(Number(ms));
 }
@@ -84,8 +135,8 @@ export function dateToFiletime(date: Readonly<Date>): {
   const ticks =
     BigInt(date.getTime()) * HUNDRED_NS_PER_MS + FILETIME_EPOCH_OFFSET_100NS;
   return {
-    low: Number(ticks & 0xffffffffn),
-    high: Number((ticks >> 32n) & 0xffffffffn),
+    low: Number(ticks & TICKS_WORD_MASK),
+    high: Number((ticks >> TICKS_HIGH_SHIFT) & TICKS_WORD_MASK),
   };
 }
 
