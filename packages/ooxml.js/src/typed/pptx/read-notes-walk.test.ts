@@ -1,18 +1,10 @@
 import type { Package } from "../../model/package";
 import type { XmlElement } from "../../model/node";
 import { describe, expect, it } from "vitest";
-import type { ContentBlock, ContentParagraph } from "document-schema.js";
 import { el, txt } from "../../xml/fragment";
 import { bytesToBase64 } from "byte-codec";
 import { PNG_SIGNATURE } from "../../image/sniff";
 import { readPptxContent } from "./read";
-function asParagraph(block: ContentBlock | undefined): ContentParagraph {
-  if (block?.kind !== "paragraph") {
-    throw new Error("expected a paragraph block");
-  }
-  return block;
-}
-
 const SLIDE_REL =
   "http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide";
 const SLIDE_LAYOUT_REL =
@@ -491,135 +483,347 @@ function buildFixturePackage(): Package {
   };
 }
 
-describe("readPptxContent: slide size and order", () => {
-  it("reads slide size from p:sldSz", () => {
-    const doc = readPptxContent(buildFixturePackage());
-    expect(doc.slides[0]?.size).toEqual({ widthPt: 960, heightPt: 540 });
-  });
-
-  it("orders slides via p:sldIdLst, not slide filename order", () => {
-    const doc = readPptxContent(buildFixturePackage());
-    // sldIdLst lists slide2 before slide1, so slides[0] must be slide2's content ("Second Slide").
-    const firstShapeText = asParagraph(doc.slides[0]?.shapes[0]?.blocks[0])
-      .runs[0]?.text;
-    expect(firstShapeText).toBe("Second Slide");
-  });
-
-  it("reads document metadata via readCoreProperties", () => {
-    const doc = readPptxContent(buildFixturePackage());
-    expect(doc.metadata.title).toBe("Fixture Deck");
-  });
-});
-
-describe("readPptxContent: placeholder inheritance and run cascade", () => {
-  it("inherits the title placeholder's geometry from the layout when the slide has none of its own", () => {
-    const doc = readPptxContent(buildFixturePackage());
-    const titleShape = doc.slides[1]?.shapes.find((s) => s.name === "Title 1");
-    expect(titleShape?.frame).toEqual({
-      xPt: 72,
-      yPt: 36,
-      widthPt: 816,
-      heightPt: 90,
-    });
-  });
-
-  it("a run with no own rPr fully inherits size/bold/font/colour from the master titleStyle", () => {
-    const doc = readPptxContent(buildFixturePackage());
-    const titleShape = doc.slides[1]?.shapes.find((s) => s.name === "Title 1");
-    const run = asParagraph(titleShape?.blocks[0]).runs[0];
-    expect(run?.text).toBe("Hello");
-    const MASTER_TITLE_STYLE_SIZE_PT = 44; // the fixture's own master titleStyle font size, inherited since this run sets no own rPr
-    expect(run?.sizePt).toBe(MASTER_TITLE_STYLE_SIZE_PT);
-    expect(run?.bold).toBe(true);
-    expect(run?.fontFamily).toBe("Aptos Display"); // +mj-lt resolved via the theme
-    expect(run?.color).toEqual({ r: 0, g: 0, b: 0 }); // tx1 -> dk1 via clrMap -> black
-  });
-
-  it("a run's own explicit properties override the cascade only for the fields it sets", () => {
-    const doc = readPptxContent(buildFixturePackage());
-    const titleShape = doc.slides[1]?.shapes.find((s) => s.name === "Title 1");
-    const run = asParagraph(titleShape?.blocks[0]).runs[1];
-    expect(run?.text).toBe(" World");
-    const OVERRIDDEN_RUN_SIZE_PT = 20; // this run's own direct rPr size, overriding the master titleStyle
-    expect(run?.sizePt).toBe(OVERRIDDEN_RUN_SIZE_PT); // overridden
-    expect(run?.italic).toBe(true); // overridden
-    expect(run?.bold).toBe(true); // still inherited from the master
-    expect(run?.fontFamily).toBe("Aptos Display"); // still inherited
-  });
-});
-
-describe("readPptxContent: paragraph formatting", () => {
-  it("reads alignment, indent, absolute spacing, and percentage line spacing", () => {
-    const doc = readPptxContent(buildFixturePackage());
-    const bodyShape = doc.slides[1]?.shapes.find((s) => s.name === "Body 1");
-    const para = asParagraph(bodyShape?.blocks[0]);
-    expect(para.alignment).toBe("center");
-    // The fixture's own explicit paragraph-formatting values: a positive left indent, an equal-magnitude negative first-line indent (a hanging indent back to the margin), an absolute spacing-before, and a 150% line-spacing multiplier.
-    const FIXTURE_INDENT_LEFT_PT = 36;
-    const FIXTURE_HANGING_INDENT_PT = -36;
-    const FIXTURE_SPACING_BEFORE_PT = 6;
-    const FIXTURE_LINE_SPACING_MULTIPLIER = 1.5;
-    expect(para.indentLeftPt).toBe(FIXTURE_INDENT_LEFT_PT);
-    expect(para.indentFirstLinePt).toBe(FIXTURE_HANGING_INDENT_PT);
-    expect(para.spacingBeforePt).toBe(FIXTURE_SPACING_BEFORE_PT);
-    expect(para.lineSpacing).toBe(FIXTURE_LINE_SPACING_MULTIPLIER);
-  });
-
-  it("resolves an external hyperlink through the slide's own relationships", () => {
-    const doc = readPptxContent(buildFixturePackage());
-    const bodyShape = doc.slides[1]?.shapes.find((s) => s.name === "Body 1");
-    const para = asParagraph(bodyShape?.blocks[0]);
-    expect(para.runs[0]?.hyperlink).toBe("https://example.com");
-  });
-
-  it("reads underline and strikethrough", () => {
-    const doc = readPptxContent(buildFixturePackage());
-    const bodyShape = doc.slides[1]?.shapes.find((s) => s.name === "Body 1");
-    const para = asParagraph(bodyShape?.blocks[0]);
-    expect(para.runs[1]?.underline).toBe(true);
-    expect(para.runs[1]?.strike).toBe(true);
-  });
-});
-
-describe("readPptxContent: text-box insets and autofit", () => {
-  it("reads explicit a:bodyPr insets and a:normAutofit scaling", () => {
-    const doc = readPptxContent(buildFixturePackage());
-    const bodyShape = doc.slides[1]?.shapes.find((s) => s.name === "Body 1");
-    // The fixture's own explicit a:bodyPr insets (left/right wider than top/bottom, a common real-world text-box convention) and a:normAutofit scaling (92% font scale, 10% line-spacing reduction).
-    const FIXTURE_INSET_LEFT_RIGHT_PT = 14.4;
-    const FIXTURE_INSET_TOP_BOTTOM_PT = 7.2;
-    const FIXTURE_FONT_SCALE = 0.92;
-    const FIXTURE_LINE_SPACING_REDUCTION = 0.1;
-    expect(bodyShape?.insetLeftPt).toBe(FIXTURE_INSET_LEFT_RIGHT_PT);
-    expect(bodyShape?.insetTopPt).toBe(FIXTURE_INSET_TOP_BOTTOM_PT);
-    expect(bodyShape?.insetRightPt).toBe(FIXTURE_INSET_LEFT_RIGHT_PT);
-    expect(bodyShape?.insetBottomPt).toBe(FIXTURE_INSET_TOP_BOTTOM_PT);
-    expect(bodyShape?.fontScale).toBe(FIXTURE_FONT_SCALE);
-    expect(bodyShape?.lineSpacingReduction).toBe(
-      FIXTURE_LINE_SPACING_REDUCTION,
+function smartArtFixturePackage(): Package {
+  const para = (...runs: readonly XmlElement[]) => el("a:p", {}, runs);
+  const r = (text: string) => el("a:r", {}, [el("a:t", {}, [txt(text)])]);
+  const textPt = (
+    modelId: string,
+    type: string | undefined,
+    paragraphs: readonly XmlElement[],
+  ): XmlElement =>
+    el("dgm:pt", type === undefined ? { modelId } : { modelId, type }, [
+      el("dgm:t", {}, [el("a:bodyPr"), el("a:lstStyle"), ...paragraphs]),
+    ]);
+  const cxn = (srcId: string, destId: string, srcOrd: string, type?: string) =>
+    el(
+      "dgm:cxn",
+      type === undefined
+        ? { modelId: `${srcId}-${destId}`, srcId, destId, srcOrd, destOrd: "0" }
+        : {
+            modelId: `${srcId}-${destId}`,
+            type,
+            srcId,
+            destId,
+            srcOrd,
+            destOrd: "0",
+          },
     );
+
+  const dataModel = el("dgm:dataModel", {}, [
+    el("dgm:ptLst", {}, [
+      textPt("0", "doc", [para()]),
+      textPt("1", undefined, [para(r("Strategy"))]),
+      textPt("2", undefined, [para(r("Cost"))]),
+      textPt("3", undefined, [para(r("Quality")), para(r("Details"))]),
+      textPt("4", undefined, [para()]),
+      textPt("5", "asst", [para(r("Assistant"))]),
+      textPt("6", "parTrans", [para(r("transition text"))]),
+    ]),
+    el("dgm:cxnLst", {}, [
+      cxn("0", "2", "1"),
+      cxn("0", "1", "0"),
+      cxn("0", "4", "2"),
+      cxn("0", "5", "3"),
+      cxn("1", "3", "0"),
+      cxn("1", "6", "1"),
+      cxn("0", "2", "9", "presOf"),
+    ]),
+  ]);
+
+  const diagramFrame = el("p:graphicFrame", {}, [
+    el("p:nvGraphicFramePr", {}, [
+      el("p:cNvPr", { id: "2", name: "Diagram 1" }),
+    ]),
+    el("p:xfrm", {}, [
+      el("a:off", { x: "914400", y: "1828800" }),
+      el("a:ext", { cx: "4572000", cy: "2743200" }),
+    ]),
+    el("a:graphic", {}, [
+      el(
+        "a:graphicData",
+        { uri: "http://schemas.openxmlformats.org/drawingml/2006/diagram" },
+        [
+          el("dgm:relIds", {
+            "r:dm": "rIdDm",
+            "r:lo": "rIdLo",
+            "r:qs": "rIdQs",
+            "r:cs": "rIdCs",
+          }),
+        ],
+      ),
+    ]),
+  ]);
+  const slide = el("p:sld", {}, [
+    el("p:cSld", {}, [el("p:spTree", {}, [diagramFrame])]),
+  ]);
+  const presentation = el("p:presentation", {}, [
+    el("p:sldIdLst", {}, [el("p:sldId", { id: "256", "r:id": "rId1" })]),
+  ]);
+  const presentationRels = rels([
+    { id: "rId1", type: SLIDE_REL, target: "slides/slide1.xml" },
+  ]);
+  const slideRels = rels([
+    {
+      id: "rIdDm",
+      type: "http://schemas.openxmlformats.org/officeDocument/2006/relationships/diagramData",
+      target: "../diagrams/data1.xml",
+    },
+  ]);
+
+  return {
+    parts: {
+      "ppt/presentation.xml": { kind: "xml", nodes: [presentation] },
+      "ppt/_rels/presentation.xml.rels": {
+        kind: "xml",
+        nodes: [presentationRels],
+      },
+      "ppt/slides/slide1.xml": { kind: "xml", nodes: [slide] },
+      "ppt/slides/_rels/slide1.xml.rels": { kind: "xml", nodes: [slideRels] },
+      "ppt/diagrams/data1.xml": { kind: "xml", nodes: [dataModel] },
+    },
+  };
+}
+
+function minimalSlidePackage(
+  shapes: readonly ReturnType<typeof el>[],
+): Package {
+  const slide = el("p:sld", {}, [
+    el("p:cSld", {}, [el("p:spTree", {}, shapes)]),
+  ]);
+  const presentation = el("p:presentation", {}, [
+    el("p:sldIdLst", {}, [el("p:sldId", { id: "256", "r:id": "rIdSlide1" })]),
+    el("p:sldSz", { cx: "9144000", cy: "6858000" }),
+  ]);
+  const presentationRels = rels([
+    { id: "rIdSlide1", type: SLIDE_REL, target: "slides/slide1.xml" },
+  ]);
+  return {
+    parts: {
+      "ppt/presentation.xml": { kind: "xml", nodes: [presentation] },
+      "ppt/_rels/presentation.xml.rels": {
+        kind: "xml",
+        nodes: [presentationRels],
+      },
+      "ppt/slides/slide1.xml": { kind: "xml", nodes: [slide] },
+      "ppt/slides/_rels/slide1.xml.rels": {
+        kind: "xml",
+        nodes: [rels([])],
+      },
+    },
+  };
+}
+
+function notesPrecedenceFixturePackage(): Package {
+  const shapeWithPh = (
+    id: string,
+    name: string,
+    ph: Record<string, string> | undefined,
+    runs: readonly ReturnType<typeof el>[],
+  ) =>
+    el("p:sp", {}, [
+      el("p:nvSpPr", {}, [
+        el("p:cNvPr", { id, name }),
+        el("p:cNvSpPr"),
+        el("p:nvPr", {}, ph === undefined ? [] : [el("p:ph", ph)]),
+      ]),
+      el("p:spPr"),
+      el("p:txBody", {}, [el("a:p", {}, runs)]),
+    ]);
+  const r = (text: string) => el("a:r", {}, [el("a:t", {}, [txt(text)])]);
+  const noPlaceholder = shapeWithPh("2", "NoPlaceholder", undefined, [
+    r("NoPlaceholderText"),
+  ]);
+  const titleType = shapeWithPh("3", "TitleType", { type: "title" }, [
+    r("TitleTypeText"),
+  ]);
+  // A bare p:ph with no @type at all is the real body placeholder — readNotes' own bodyShape predicate treats a typeless placeholder the same as an explicit type="body" one.
+  const typelessBody = shapeWithPh("4", "TypelessBody", { idx: "1" }, [
+    r("Alpha"),
+    r("Beta"),
+  ]);
+  const explicitBody = shapeWithPh("5", "ExplicitBody", { type: "body" }, [
+    r("ExplicitBodyText"),
+  ]);
+  const notesSlide = el("p:notes", {}, [
+    el("p:cSld", {}, [
+      el("p:spTree", {}, [
+        noPlaceholder,
+        titleType,
+        typelessBody,
+        explicitBody,
+      ]),
+    ]),
+  ]);
+  const slide = el("p:sld", {}, [el("p:cSld", {}, [el("p:spTree")])]);
+  const presentation = el("p:presentation", {}, [
+    el("p:sldIdLst", {}, [el("p:sldId", { id: "256", "r:id": "rId1" })]),
+  ]);
+  const presentationRels = rels([
+    { id: "rId1", type: SLIDE_REL, target: "slides/slide1.xml" },
+  ]);
+  const slideRels = rels([
+    {
+      id: "rIdNotes",
+      type: NOTES_SLIDE_REL,
+      target: "../notesSlides/notesSlide1.xml",
+    },
+  ]);
+  return {
+    parts: {
+      "ppt/presentation.xml": { kind: "xml", nodes: [presentation] },
+      "ppt/_rels/presentation.xml.rels": {
+        kind: "xml",
+        nodes: [presentationRels],
+      },
+      "ppt/slides/slide1.xml": { kind: "xml", nodes: [slide] },
+      "ppt/slides/_rels/slide1.xml.rels": { kind: "xml", nodes: [slideRels] },
+      "ppt/notesSlides/notesSlide1.xml": { kind: "xml", nodes: [notesSlide] },
+    },
+  };
+}
+
+describe("readPptxContent: p:cxnSp connector shapes are never recursed into", () => {
+  it("skips a p:cxnSp whole, even one synthetically holding a nested p:sp child", () => {
+    // p:cxnSp cannot really carry a p:sp per ECMA-376 — this proves walkShapeTreeChildren's own tag check is what keeps a connector's content out of the flat shape list, not merely that connectors never have children in practice.
+    const nestedShape = el("p:sp", {}, [
+      el("p:nvSpPr", {}, [
+        el("p:cNvPr", { id: "3", name: "ShouldNotAppear" }),
+        el("p:cNvSpPr"),
+        el("p:nvPr"),
+      ]),
+      el("p:spPr", {}, [
+        el("a:xfrm", {}, [
+          el("a:off", { x: "0", y: "0" }),
+          el("a:ext", { cx: "914400", cy: "914400" }),
+        ]),
+      ]),
+      el("p:txBody", {}, [
+        el("a:p", {}, [el("a:r", {}, [el("a:t", {}, [txt("nested")])])]),
+      ]),
+    ]);
+    const cxnSp = el("p:cxnSp", {}, [
+      el("p:nvCxnSpPr", {}, [el("p:cNvPr", { id: "2", name: "Connector" })]),
+      nestedShape,
+    ]);
+    const doc = readPptxContent(minimalSlidePackage([cxnSp]));
+    expect(doc.slides[0]?.shapes).toEqual([]);
+  });
+});
+
+describe("readPptxContent: SmartArt colour part (r:cs) resolves into the diagram's own residue", () => {
+  it("includes the colour part's own XML in source.xml when r:cs resolves to a real part, the same way r:lo/r:qs already do", () => {
+    const pkg = smartArtFixturePackage();
+    const colors = el("dgm:colorsDef", { uniqueId: "colors1" });
+    pkg.parts["ppt/diagrams/colors1.xml"] = { kind: "xml", nodes: [colors] };
+    pkg.parts["ppt/slides/_rels/slide1.xml.rels"] = {
+      kind: "xml",
+      nodes: [
+        rels([
+          {
+            id: "rIdDm",
+            type: "http://schemas.openxmlformats.org/officeDocument/2006/relationships/diagramData",
+            target: "../diagrams/data1.xml",
+          },
+          {
+            id: "rIdCs",
+            type: "http://schemas.openxmlformats.org/officeDocument/2006/relationships/diagramColors",
+            target: "../diagrams/colors1.xml",
+          },
+        ]),
+      ],
+    };
+    const doc = readPptxContent(pkg);
+    const diagramShape = doc.slides[0]?.shapes.find(
+      (s) => s.name === "Diagram 1",
+    );
+    expect(diagramShape?.source?.format).toBe("pptx");
+    const xml = diagramShape?.source?.xml ?? "";
+    expect(xml.indexOf("dgm:colorsDef")).toBeGreaterThanOrEqual(0);
+  });
+});
+
+// Exercises readNotes' own bodyShape precedence: a shape with no placeholder at all, one with a placeholder of a different type, and one with an explicit type="body" placeholder — all of which the real body shape (a bare, typeless placeholder, PowerPoint's own default-to-body spelling) must be found ahead of, since shapes.find stops at the first match.
+describe("readPptxContent: notes bodyShape precedence and fallback paths", () => {
+  it("finds the typeless placeholder ahead of an earlier non-placeholder and non-body-typed shape, and joins its own runs with no separator", () => {
+    const doc = readPptxContent(notesPrecedenceFixturePackage());
+    expect(doc.slides[0]?.notes).toBe("AlphaBeta");
   });
 
-  it("falls back to ECMA-376's default insets when a:bodyPr is absent, with no autofit", () => {
-    const doc = readPptxContent(buildFixturePackage());
-    const titleShape = doc.slides[1]?.shapes.find((s) => s.name === "Title 1");
-    // ECMA-376's own default a:bodyPr insets when the element is absent: 0.1 inch left/right, 0.05 inch top/bottom.
-    const ECMA376_DEFAULT_INSET_LEFT_RIGHT_PT = 7.2;
-    const ECMA376_DEFAULT_INSET_TOP_BOTTOM_PT = 3.6;
-    expect(titleShape?.insetLeftPt).toBe(ECMA376_DEFAULT_INSET_LEFT_RIGHT_PT);
-    expect(titleShape?.insetTopPt).toBe(ECMA376_DEFAULT_INSET_TOP_BOTTOM_PT);
-    expect(titleShape?.insetRightPt).toBe(ECMA376_DEFAULT_INSET_LEFT_RIGHT_PT);
-    expect(titleShape?.insetBottomPt).toBe(ECMA376_DEFAULT_INSET_TOP_BOTTOM_PT);
-    expect(titleShape?.fontScale).toBeUndefined();
-    expect(titleShape?.lineSpacingReduction).toBeUndefined();
+  it('reads "" when the notesSlide relationship resolves but the target part is missing from the package', () => {
+    const pkg = buildFixturePackage();
+    delete pkg.parts["ppt/notesSlides/notesSlide1.xml"];
+    const doc = readPptxContent(pkg);
+    expect(doc.slides[1]?.notes).toBe("");
   });
 
-  it("reads zero insets for a picture, which has no text body at all", () => {
-    const doc = readPptxContent(buildFixturePackage());
-    const picShape = doc.slides[1]?.shapes.find((s) => s.name === "Picture 1");
-    expect(picShape?.insetLeftPt).toBe(0);
-    expect(picShape?.insetTopPt).toBe(0);
-    expect(picShape?.insetRightPt).toBe(0);
-    expect(picShape?.insetBottomPt).toBe(0);
+  it("falls back to concatenating every a:t in the notes part, with no separator, when no shape qualifies as the body placeholder", () => {
+    const titleOnly = el("p:sp", {}, [
+      el("p:nvSpPr", {}, [
+        el("p:cNvPr", { id: "2", name: "Title" }),
+        el("p:cNvSpPr"),
+        el("p:nvPr", {}, [el("p:ph", { type: "title" })]),
+      ]),
+      el("p:spPr"),
+      el("p:txBody", {}, [
+        el("a:p", {}, [el("a:r", {}, [el("a:t", {}, [txt("Title")])])]),
+      ]),
+    ]);
+    const slideNumOnly = el("p:sp", {}, [
+      el("p:nvSpPr", {}, [
+        el("p:cNvPr", { id: "3", name: "SlideNum" }),
+        el("p:cNvSpPr"),
+        el("p:nvPr", {}, [el("p:ph", { type: "sldNum" })]),
+      ]),
+      el("p:spPr"),
+      el("p:txBody", {}, [
+        el("a:p", {}, [
+          el(
+            "a:fld",
+            {
+              id: "{00000000-0000-0000-0000-000000000000}",
+              type: "slidenum",
+            },
+            [el("a:t", {}, [txt("1")])],
+          ),
+        ]),
+      ]),
+    ]);
+    const notesSlide = el("p:notes", {}, [
+      el("p:cSld", {}, [el("p:spTree", {}, [titleOnly, slideNumOnly])]),
+    ]);
+    const slide = el("p:sld", {}, [el("p:cSld", {}, [el("p:spTree")])]);
+    const presentation = el("p:presentation", {}, [
+      el("p:sldIdLst", {}, [el("p:sldId", { id: "256", "r:id": "rId1" })]),
+    ]);
+    const presentationRels = rels([
+      { id: "rId1", type: SLIDE_REL, target: "slides/slide1.xml" },
+    ]);
+    const slideRels = rels([
+      {
+        id: "rIdNotes",
+        type: NOTES_SLIDE_REL,
+        target: "../notesSlides/notesSlide1.xml",
+      },
+    ]);
+    const pkg: Package = {
+      parts: {
+        "ppt/presentation.xml": { kind: "xml", nodes: [presentation] },
+        "ppt/_rels/presentation.xml.rels": {
+          kind: "xml",
+          nodes: [presentationRels],
+        },
+        "ppt/slides/slide1.xml": { kind: "xml", nodes: [slide] },
+        "ppt/slides/_rels/slide1.xml.rels": {
+          kind: "xml",
+          nodes: [slideRels],
+        },
+        "ppt/notesSlides/notesSlide1.xml": {
+          kind: "xml",
+          nodes: [notesSlide],
+        },
+      },
+    };
+    const doc = readPptxContent(pkg);
+    expect(doc.slides[0]?.notes).toBe("Title1");
   });
 });

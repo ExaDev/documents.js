@@ -1,7 +1,12 @@
 import type { Package } from "../../model/package";
-import type { XmlElement } from "../../model/node";
+import type { XmlElement, XmlNode } from "../../model/node";
 import { describe, expect, it } from "vitest";
-import type { ContentBlock, ContentParagraph } from "document-schema.js";
+import type {
+  ContentBlock,
+  ContentImageBlock,
+  ContentParagraph,
+  ContentTable,
+} from "document-schema.js";
 import { el, txt } from "../../xml/fragment";
 import { bytesToBase64 } from "byte-codec";
 import { PNG_SIGNATURE } from "../../image/sniff";
@@ -11,6 +16,50 @@ function asParagraph(block: ContentBlock | undefined): ContentParagraph {
     throw new Error("expected a paragraph block");
   }
   return block;
+}
+
+function asTable(block: ContentBlock | undefined): ContentTable {
+  if (block?.kind !== "table") {
+    throw new Error("expected a table block");
+  }
+  return block;
+}
+
+function asImage(block: ContentBlock | undefined): ContentImageBlock {
+  if (block?.kind !== "image") {
+    throw new Error("expected an image block");
+  }
+  return block;
+}
+
+// A depth-first search for the first element named tag whose own attribute attrName equals attrValue — used to mutate one specific p:cNvPr in place within buildFixturePackage's already-parsed slide tree, rather than duplicating the whole fixture to exercise a single attribute variant.
+function findElementByTagAndAttr(
+  nodes: readonly XmlNode[],
+  tag: string,
+  attrName: string,
+  attrValue: string,
+): XmlElement | undefined {
+  for (const node of nodes) {
+    if (node.type !== "element") {
+      continue;
+    }
+    if (
+      node.tag === tag &&
+      node.attributes.some((a) => a.name === attrName && a.value === attrValue)
+    ) {
+      return node;
+    }
+    const found = findElementByTagAndAttr(
+      node.children,
+      tag,
+      attrName,
+      attrValue,
+    );
+    if (found !== undefined) {
+      return found;
+    }
+  }
+  return undefined;
 }
 
 const SLIDE_REL =
@@ -491,135 +540,254 @@ function buildFixturePackage(): Package {
   };
 }
 
-describe("readPptxContent: slide size and order", () => {
-  it("reads slide size from p:sldSz", () => {
+function findElementByTag(
+  nodes: readonly XmlNode[],
+  tag: string,
+): XmlElement | undefined {
+  for (const node of nodes) {
+    if (node.type !== "element") {
+      continue;
+    }
+    if (node.tag === tag) {
+      return node;
+    }
+    const found = findElementByTag(node.children, tag);
+    if (found !== undefined) {
+      return found;
+    }
+  }
+  return undefined;
+}
+
+function textCell(
+  text: string,
+  attrs: Readonly<Record<string, string>> = {},
+): XmlElement {
+  return el("a:tc", attrs, [
+    el("a:txBody", {}, [
+      el("a:p", {}, [el("a:r", {}, [el("a:t", {}, [txt(text)])])]),
+    ]),
+  ]);
+}
+
+// A covered a:tc: hMerge/vMerge state which side of the region it lies on, and its own a:tcPr (when given) carries the decoration. The a:txBody is the empty one PowerPoint itself writes for a covered position.
+function tableFromRows(rows: readonly XmlElement[][]): ContentTable {
+  const pkg = buildFixturePackage();
+  const slide1 = pkg.parts["ppt/slides/slide1.xml"];
+  if (slide1?.kind !== "xml") {
+    throw new Error("expected ppt/slides/slide1.xml");
+  }
+  const tbl = findElementByTag(slide1.nodes, "a:tbl");
+  if (tbl === undefined) {
+    throw new Error("expected the fixture's a:tbl");
+  }
+  const columnCount = rows[0]?.length ?? 0;
+  tbl.children = [
+    el(
+      "a:tblGrid",
+      {},
+      Array.from({ length: columnCount }, () =>
+        el("a:gridCol", { w: "1270000" }),
+      ),
+    ),
+    ...rows.map((cells) => el("a:tr", {}, cells)),
+  ];
+  const doc = readPptxContent(pkg);
+  const shape = doc.slides[1]?.shapes.find((s) => s.name === "Table 1");
+  return asTable(shape?.blocks[0]);
+}
+
+describe("readPptxContent: images", () => {
+  it("reads a PNG image, sized to the shape's own frame", () => {
     const doc = readPptxContent(buildFixturePackage());
-    expect(doc.slides[0]?.size).toEqual({ widthPt: 960, heightPt: 540 });
+    const picShape = doc.slides[1]?.shapes.find((s) => s.name === "Picture 1");
+    const image = asImage(picShape?.blocks[0]);
+    expect(image.kind).toBe("image");
+    expect(image.format).toBe("png");
+    const FIXTURE_PICTURE_SIZE_PT = 80; // the fixture's own square frame for Picture 1
+    expect(image.widthPt).toBe(FIXTURE_PICTURE_SIZE_PT);
+    expect(image.heightPt).toBe(FIXTURE_PICTURE_SIZE_PT);
   });
 
-  it("orders slides via p:sldIdLst, not slide filename order", () => {
+  it("reads p:cNvPr/@descr as ContentImageBlock.altText", () => {
     const doc = readPptxContent(buildFixturePackage());
-    // sldIdLst lists slide2 before slide1, so slides[0] must be slide2's content ("Second Slide").
-    const firstShapeText = asParagraph(doc.slides[0]?.shapes[0]?.blocks[0])
-      .runs[0]?.text;
-    expect(firstShapeText).toBe("Second Slide");
+    const picShape = doc.slides[1]?.shapes.find((s) => s.name === "Picture 1");
+    const image = asImage(picShape?.blocks[0]);
+    expect(image.altText).toBe("A red circle");
   });
 
-  it("reads document metadata via readCoreProperties", () => {
-    const doc = readPptxContent(buildFixturePackage());
-    expect(doc.metadata.title).toBe("Fixture Deck");
+  it("falls back to p:cNvPr/@title when @descr is absent", () => {
+    const pkg = buildFixturePackage();
+    const slide1 = pkg.parts["ppt/slides/slide1.xml"];
+    if (slide1?.kind !== "xml") {
+      throw new Error("expected ppt/slides/slide1.xml");
+    }
+    const cNvPr = findElementByTagAndAttr(
+      slide1.nodes,
+      "p:cNvPr",
+      "name",
+      "Picture 1",
+    );
+    if (cNvPr === undefined) {
+      throw new Error("expected Picture 1's p:cNvPr");
+    }
+    cNvPr.attributes = cNvPr.attributes
+      .filter((a) => a.name !== "descr")
+      .concat({ name: "title", value: "Titled only" });
+
+    const doc = readPptxContent(pkg);
+    const picShape = doc.slides[1]?.shapes.find((s) => s.name === "Picture 1");
+    const image = asImage(picShape?.blocks[0]);
+    expect(image.altText).toBe("Titled only");
   });
 });
 
-describe("readPptxContent: placeholder inheritance and run cascade", () => {
-  it("inherits the title placeholder's geometry from the layout when the slide has none of its own", () => {
+describe("readPptxContent: tables", () => {
+  it("reads column widths, a merged cell's colSpan, and its continuation cell as empty", () => {
     const doc = readPptxContent(buildFixturePackage());
-    const titleShape = doc.slides[1]?.shapes.find((s) => s.name === "Title 1");
-    expect(titleShape?.frame).toEqual({
-      xPt: 72,
-      yPt: 36,
-      widthPt: 816,
-      heightPt: 90,
+    const tableShape = doc.slides[1]?.shapes.find((s) => s.name === "Table 1");
+    const table = asTable(tableShape?.blocks[0]);
+    // The fixture's own two column widths for Table 1.
+    const FIXTURE_FIRST_COLUMN_WIDTH_PT = 100;
+    const FIXTURE_SECOND_COLUMN_WIDTH_PT = 150;
+    expect(table.columns.map((c) => c.widthPt)).toEqual([
+      FIXTURE_FIRST_COLUMN_WIDTH_PT,
+      FIXTURE_SECOND_COLUMN_WIDTH_PT,
+    ]);
+    expect(table.rows[0]?.cells[0]?.colSpan).toBe(2);
+    expect(asParagraph(table.rows[0]?.cells[0]?.blocks[0]).runs[0]?.text).toBe(
+      "Merged",
+    );
+    expect(table.rows[0]?.cells[1]?.blocks).toEqual([]);
+  });
+
+  it("reads a row's explicit height, and leaves it undefined when a:tr has no h attribute", () => {
+    const doc = readPptxContent(buildFixturePackage());
+    const tableShape = doc.slides[1]?.shapes.find((s) => s.name === "Table 1");
+    const table = asTable(tableShape?.blocks[0]);
+    const FIXTURE_FIRST_ROW_HEIGHT_PT = 36; // the fixture's own explicit a:tr/@h for the first row
+    expect(table.rows[0]?.heightPt).toBe(FIXTURE_FIRST_ROW_HEIGHT_PT);
+    expect(table.rows[1]?.heightPt).toBeUndefined();
+  });
+
+  it("reads a cell's background fill", () => {
+    const doc = readPptxContent(buildFixturePackage());
+    const tableShape = doc.slides[1]?.shapes.find((s) => s.name === "Table 1");
+    const table = asTable(tableShape?.blocks[0]);
+    expect(table.rows[1]?.cells[0]?.background).toEqual({
+      kind: "solid",
+      color: { r: 1, g: 0, b: 0 },
     });
   });
 
-  it("a run with no own rPr fully inherits size/bold/font/colour from the master titleStyle", () => {
+  // ExaDev/documents.js#1024: a genuine a:pattFill, not just a:solidFill, now resolves to a real 'pattern' ContentCellFill.
+  it("resolves an a:pattFill with a mapped percentage preset to a 'pattern' fill", () => {
     const doc = readPptxContent(buildFixturePackage());
-    const titleShape = doc.slides[1]?.shapes.find((s) => s.name === "Title 1");
-    const run = asParagraph(titleShape?.blocks[0]).runs[0];
-    expect(run?.text).toBe("Hello");
-    const MASTER_TITLE_STYLE_SIZE_PT = 44; // the fixture's own master titleStyle font size, inherited since this run sets no own rPr
-    expect(run?.sizePt).toBe(MASTER_TITLE_STYLE_SIZE_PT);
-    expect(run?.bold).toBe(true);
-    expect(run?.fontFamily).toBe("Aptos Display"); // +mj-lt resolved via the theme
-    expect(run?.color).toEqual({ r: 0, g: 0, b: 0 }); // tx1 -> dk1 via clrMap -> black
+    const tableShape = doc.slides[1]?.shapes.find((s) => s.name === "Table 1");
+    const table = asTable(tableShape?.blocks[0]);
+    expect(table.rows[4]?.cells[0]?.background).toEqual({
+      kind: "pattern",
+      patternType: "percent25",
+      foregroundColor: { r: 0, g: 1, b: 0 },
+      backgroundColor: { r: 0, g: 0, b: 1 },
+    });
   });
 
-  it("a run's own explicit properties override the cascade only for the fields it sets", () => {
+  it("reads an a:pattFill preset outside the mapped percentage subset as no background", () => {
     const doc = readPptxContent(buildFixturePackage());
-    const titleShape = doc.slides[1]?.shapes.find((s) => s.name === "Title 1");
-    const run = asParagraph(titleShape?.blocks[0]).runs[1];
-    expect(run?.text).toBe(" World");
-    const OVERRIDDEN_RUN_SIZE_PT = 20; // this run's own direct rPr size, overriding the master titleStyle
-    expect(run?.sizePt).toBe(OVERRIDDEN_RUN_SIZE_PT); // overridden
-    expect(run?.italic).toBe(true); // overridden
-    expect(run?.bold).toBe(true); // still inherited from the master
-    expect(run?.fontFamily).toBe("Aptos Display"); // still inherited
+    const tableShape = doc.slides[1]?.shapes.find((s) => s.name === "Table 1");
+    const table = asTable(tableShape?.blocks[0]);
+    expect(table.rows[4]?.cells[1]?.background).toBeUndefined();
+  });
+
+  it("reads a cell's four a:lnL/a:lnR/a:lnT/a:lnB border edges, each edge's colour, width, and preset dash pattern", () => {
+    const doc = readPptxContent(buildFixturePackage());
+    const tableShape = doc.slides[1]?.shapes.find((s) => s.name === "Table 1");
+    const table = asTable(tableShape?.blocks[0]);
+    expect(table.rows[1]?.cells[0]?.borders).toEqual({
+      left: { color: { r: 0, g: 0, b: 1 }, widthPt: 1 },
+      right: { color: { r: 0, g: 1, b: 0 }, widthPt: 2, style: "dashed" },
+      top: { color: { r: 1, g: 1, b: 0 }, widthPt: 0.5, style: "dotted" },
+      bottom: { color: { r: 0, g: 0, b: 0 }, widthPt: 1.5, style: "solid" },
+    });
+  });
+
+  it("reads no borders for a cell whose a:tcPr declares none", () => {
+    const doc = readPptxContent(buildFixturePackage());
+    const tableShape = doc.slides[1]?.shapes.find((s) => s.name === "Table 1");
+    const table = asTable(tableShape?.blocks[0]);
+    expect(table.rows[1]?.cells[1]?.borders).toBeUndefined();
+    expect(table.rows[0]?.cells[0]?.borders).toBeUndefined();
+  });
+
+  it("reads no borders for a cell whose a:tcPr is present but every edge is unresolvable (missing @w, explicit a:noFill, or the edge absent entirely)", () => {
+    const doc = readPptxContent(buildFixturePackage());
+    const tableShape = doc.slides[1]?.shapes.find((s) => s.name === "Table 1");
+    const table = asTable(tableShape?.blocks[0]);
+    expect(table.rows[2]?.cells[0]?.borders).toBeUndefined();
+  });
+
+  it("treats a resolved zero-width edge as no border, and defaults an unrecognised a:prstDash token to 'solid' rather than dropping the edge", () => {
+    const doc = readPptxContent(buildFixturePackage());
+    const tableShape = doc.slides[1]?.shapes.find((s) => s.name === "Table 1");
+    const table = asTable(tableShape?.blocks[0]);
+    expect(table.rows[2]?.cells[1]?.borders).toEqual({
+      right: { color: { r: 0, g: 0, b: 1 }, widthPt: 1, style: "solid" },
+    });
+  });
+
+  it("treats a genuinely non-numeric @w (not just zero) as an unresolvable edge, leaving the cell's other edges readable", () => {
+    const doc = readPptxContent(buildFixturePackage());
+    const tableShape = doc.slides[1]?.shapes.find((s) => s.name === "Table 1");
+    const table = asTable(tableShape?.blocks[0]);
+    expect(table.rows[3]?.cells[0]?.borders).toEqual({
+      right: { color: { r: 1, g: 0, b: 1 }, widthPt: 1 },
+    });
+  });
+
+  // ExaDev/documents.js#1376: a:tcPr/@anchor never used to be read at all.
+  it("reads a:tcPr/@anchor's three mapped values (t/ctr/b) as verticalAlign", () => {
+    const table = tableFromRows([
+      [
+        el("a:tc", {}, [
+          el("a:txBody", {}, [el("a:p")]),
+          el("a:tcPr", { anchor: "t" }),
+        ]),
+        el("a:tc", {}, [
+          el("a:txBody", {}, [el("a:p")]),
+          el("a:tcPr", { anchor: "ctr" }),
+        ]),
+        el("a:tc", {}, [
+          el("a:txBody", {}, [el("a:p")]),
+          el("a:tcPr", { anchor: "b" }),
+        ]),
+      ],
+    ]);
+    expect(table.rows[0]?.cells[0]?.verticalAlign).toBe("top");
+    expect(table.rows[0]?.cells[1]?.verticalAlign).toBe("center");
+    expect(table.rows[0]?.cells[2]?.verticalAlign).toBe("bottom");
+  });
+
+  it("leaves verticalAlign undefined when a:tcPr carries no @anchor, and for @anchor values with no pivot equivalent (just/dist)", () => {
+    const table = tableFromRows([
+      [
+        textCell("No tcPr"),
+        el("a:tc", {}, [el("a:txBody", {}, [el("a:p")]), el("a:tcPr", {})]),
+        el("a:tc", {}, [
+          el("a:txBody", {}, [el("a:p")]),
+          el("a:tcPr", { anchor: "just" }),
+        ]),
+        el("a:tc", {}, [
+          el("a:txBody", {}, [el("a:p")]),
+          el("a:tcPr", { anchor: "dist" }),
+        ]),
+      ],
+    ]);
+    expect(table.rows[0]?.cells[0]?.verticalAlign).toBeUndefined();
+    expect(table.rows[0]?.cells[1]?.verticalAlign).toBeUndefined();
+    expect(table.rows[0]?.cells[2]?.verticalAlign).toBeUndefined();
+    expect(table.rows[0]?.cells[3]?.verticalAlign).toBeUndefined();
   });
 });
 
-describe("readPptxContent: paragraph formatting", () => {
-  it("reads alignment, indent, absolute spacing, and percentage line spacing", () => {
-    const doc = readPptxContent(buildFixturePackage());
-    const bodyShape = doc.slides[1]?.shapes.find((s) => s.name === "Body 1");
-    const para = asParagraph(bodyShape?.blocks[0]);
-    expect(para.alignment).toBe("center");
-    // The fixture's own explicit paragraph-formatting values: a positive left indent, an equal-magnitude negative first-line indent (a hanging indent back to the margin), an absolute spacing-before, and a 150% line-spacing multiplier.
-    const FIXTURE_INDENT_LEFT_PT = 36;
-    const FIXTURE_HANGING_INDENT_PT = -36;
-    const FIXTURE_SPACING_BEFORE_PT = 6;
-    const FIXTURE_LINE_SPACING_MULTIPLIER = 1.5;
-    expect(para.indentLeftPt).toBe(FIXTURE_INDENT_LEFT_PT);
-    expect(para.indentFirstLinePt).toBe(FIXTURE_HANGING_INDENT_PT);
-    expect(para.spacingBeforePt).toBe(FIXTURE_SPACING_BEFORE_PT);
-    expect(para.lineSpacing).toBe(FIXTURE_LINE_SPACING_MULTIPLIER);
-  });
-
-  it("resolves an external hyperlink through the slide's own relationships", () => {
-    const doc = readPptxContent(buildFixturePackage());
-    const bodyShape = doc.slides[1]?.shapes.find((s) => s.name === "Body 1");
-    const para = asParagraph(bodyShape?.blocks[0]);
-    expect(para.runs[0]?.hyperlink).toBe("https://example.com");
-  });
-
-  it("reads underline and strikethrough", () => {
-    const doc = readPptxContent(buildFixturePackage());
-    const bodyShape = doc.slides[1]?.shapes.find((s) => s.name === "Body 1");
-    const para = asParagraph(bodyShape?.blocks[0]);
-    expect(para.runs[1]?.underline).toBe(true);
-    expect(para.runs[1]?.strike).toBe(true);
-  });
-});
-
-describe("readPptxContent: text-box insets and autofit", () => {
-  it("reads explicit a:bodyPr insets and a:normAutofit scaling", () => {
-    const doc = readPptxContent(buildFixturePackage());
-    const bodyShape = doc.slides[1]?.shapes.find((s) => s.name === "Body 1");
-    // The fixture's own explicit a:bodyPr insets (left/right wider than top/bottom, a common real-world text-box convention) and a:normAutofit scaling (92% font scale, 10% line-spacing reduction).
-    const FIXTURE_INSET_LEFT_RIGHT_PT = 14.4;
-    const FIXTURE_INSET_TOP_BOTTOM_PT = 7.2;
-    const FIXTURE_FONT_SCALE = 0.92;
-    const FIXTURE_LINE_SPACING_REDUCTION = 0.1;
-    expect(bodyShape?.insetLeftPt).toBe(FIXTURE_INSET_LEFT_RIGHT_PT);
-    expect(bodyShape?.insetTopPt).toBe(FIXTURE_INSET_TOP_BOTTOM_PT);
-    expect(bodyShape?.insetRightPt).toBe(FIXTURE_INSET_LEFT_RIGHT_PT);
-    expect(bodyShape?.insetBottomPt).toBe(FIXTURE_INSET_TOP_BOTTOM_PT);
-    expect(bodyShape?.fontScale).toBe(FIXTURE_FONT_SCALE);
-    expect(bodyShape?.lineSpacingReduction).toBe(
-      FIXTURE_LINE_SPACING_REDUCTION,
-    );
-  });
-
-  it("falls back to ECMA-376's default insets when a:bodyPr is absent, with no autofit", () => {
-    const doc = readPptxContent(buildFixturePackage());
-    const titleShape = doc.slides[1]?.shapes.find((s) => s.name === "Title 1");
-    // ECMA-376's own default a:bodyPr insets when the element is absent: 0.1 inch left/right, 0.05 inch top/bottom.
-    const ECMA376_DEFAULT_INSET_LEFT_RIGHT_PT = 7.2;
-    const ECMA376_DEFAULT_INSET_TOP_BOTTOM_PT = 3.6;
-    expect(titleShape?.insetLeftPt).toBe(ECMA376_DEFAULT_INSET_LEFT_RIGHT_PT);
-    expect(titleShape?.insetTopPt).toBe(ECMA376_DEFAULT_INSET_TOP_BOTTOM_PT);
-    expect(titleShape?.insetRightPt).toBe(ECMA376_DEFAULT_INSET_LEFT_RIGHT_PT);
-    expect(titleShape?.insetBottomPt).toBe(ECMA376_DEFAULT_INSET_TOP_BOTTOM_PT);
-    expect(titleShape?.fontScale).toBeUndefined();
-    expect(titleShape?.lineSpacingReduction).toBeUndefined();
-  });
-
-  it("reads zero insets for a picture, which has no text body at all", () => {
-    const doc = readPptxContent(buildFixturePackage());
-    const picShape = doc.slides[1]?.shapes.find((s) => s.name === "Picture 1");
-    expect(picShape?.insetLeftPt).toBe(0);
-    expect(picShape?.insetTopPt).toBe(0);
-    expect(picShape?.insetRightPt).toBe(0);
-    expect(picShape?.insetBottomPt).toBe(0);
-  });
-});
+// A depth-first search for the first element with the given tag, the untargeted counterpart of findElementByTagAndAttr.
