@@ -1,3 +1,10 @@
+## [11.1.15](https://github.com/ExaDev/documents.js/compare/markdown-codec%4011.1.14...markdown-codec%4011.1.15) (2026-09-26)
+
+
+### Dependencies
+
+- Updated document-schema.js to 7.16.0
+
 ## [11.1.14](https://github.com/ExaDev/documents.js/compare/markdown-codec%4011.1.13...markdown-codec%4011.1.14) (2026-09-25)
 
 ### Code Refactoring
