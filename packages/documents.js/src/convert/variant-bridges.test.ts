@@ -13,7 +13,7 @@ import { readOdgContent } from "../odf/odg/read";
 import { readOdpContent } from "../odf/odp/read";
 import { minimalOdgBytes } from "../test-support/odg";
 import { minimalOdpBytes } from "../test-support/odp";
-import { resolveCompositionPlan } from "./composition";
+import { resolveCompositionPlan } from "./composition-plan";
 import { convertDocument } from "./composition-to-pdf";
 import type { DocumentFormat } from "./port";
 import {

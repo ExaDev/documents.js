@@ -8,7 +8,7 @@ import { minimalOdpBytes } from "../test-support/odp";
 import { minimalPptxBytes } from "../test-support/pptx";
 import { richMarkdownText } from "../test-support/markdown";
 import { describe, expect, it } from "vitest";
-import { resolveCompositionPlan } from "./composition";
+import { resolveCompositionPlan } from "./composition-plan";
 import { convertDocument } from "./composition-to-pdf";
 import type { DocumentFormat } from "./port";
 import { createLocalDocumentConverter } from "./local";

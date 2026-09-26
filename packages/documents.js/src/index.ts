@@ -955,13 +955,13 @@ export { DocumentFormatSchema, DOCUMENT_FORMATS } from "./convert/port";
 export { createLocalDocumentConverter } from "./convert/local";
 
 // --- The composition engine's first-class entry point and supporting types — resolveCompositionPlan exposes the pathfinder directly (the minimum-cost hop plan between any two DocumentFormats, or undefined), and convertDocument runs that plan end to end through the real executors. UnifiedConversionOptions is the union of every option field any conversion hop accepts, threaded to whichever hop consumes each field. ConversionPlan/CompositionHop describe a resolved route's shape. The engine is split read/write by module: composition.ts holds the registry, pathfinder, and bridge/fromPdf executors, composition-to-pdf.ts the toPdf executor and the full convertDocument binding — see those modules' own headers. ---
-export { resolveCompositionPlan } from "./convert/composition";
+export { resolveCompositionPlan } from "./convert/composition-plan";
 export { convertDocument } from "./convert/composition-to-pdf";
 export type {
-  UnifiedConversionOptions,
   ConversionPlan,
   CompositionHop,
-} from "./convert/composition";
+} from "./convert/composition-plan";
+export type { UnifiedConversionOptions } from "./convert/composition";
 
 // --- A DocumentTree (content + its fused positions) -> any DocumentFormat's own bytes — the reverse of what every ergonomic X-to-PDF/PDF-to-X conversion's own onDocument callback hands back — plus the frames-to-layout inverse the pdf target rebuilds through (exported for a caller wanting the pdf-codec view of a package's positions without writing bytes). ---
 export {

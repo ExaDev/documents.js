@@ -2,7 +2,7 @@ import type { DocumentTree } from "document-schema.js";
 import type { PdfDiagnostic, WinAnsiSubstitution } from "pdf-codec";
 import type { FontSubstitution } from "document-schema.js";
 import { UnsupportedConversionError } from "./capability";
-import { resolveCompositionPlan } from "./composition";
+import { resolveCompositionPlan } from "./composition-plan";
 import { convertDocument } from "./composition-to-pdf";
 import { odfToPdf } from "./convert";
 import type {
