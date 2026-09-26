@@ -10,7 +10,8 @@ import {
 } from "./cff";
 import type { CmapSubtable } from "./cmap-table";
 import { readCmapSubtables } from "./cmap-table";
-import { glyphNameToUnicode, standardGlyphName } from "./encoding";
+import { glyphNameToUnicode } from "./encoding";
+import { standardGlyphName } from "./encoding-standard-tables";
 import { parsePostGlyphNames } from "./font-tables";
 import type { SfntFont } from "./sfnt";
 import { hasBytes, parseSfnt, sfntTableBytes, u8, u16 } from "./sfnt";

@@ -8,10 +8,13 @@ import { decodeStream } from "./filters";
 import {
   glyphNameToUnicode,
   namedEncodingGlyphName,
-  symbolGlyphName,
   winAnsiGlyphName,
-  zapfDingbatsGlyphName,
 } from "./encoding";
+import {
+  symbolGlyphName,
+  zapfDingbatsGlyphName,
+} from "./encoding-symbol-tables";
+
 import { resolveStandardFont } from "./fonts";
 import { styleFromBaseFontName } from "./font-style";
 import type { FontMetricsPort, PdfObjectResolver } from "./interpret";
