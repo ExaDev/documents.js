@@ -25,7 +25,7 @@ import type {
   Footnote,
   HeaderFooterPart,
   SectionHeaderFooterReferences,
-} from "./read";
+} from "./read-schemas";
 import type { NumberingDefinitions } from "./numbering";
 import { NUMBERING_PART_PATH, buildNumberingElement } from "./numbering";
 import {
