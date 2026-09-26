@@ -1,5 +1,5 @@
 import type { PdfDiagnosticSink } from "./diagnostics";
-import type { PdfObjectResolver } from "./interpret";
+import type { PdfObjectResolver } from "./interpret-types";
 import type { PdfDict, PdfObject } from "./objects";
 import { asArray, asDict, dictGet } from "./objects";
 import { decodePdfString } from "./pdf-text";

@@ -1,5 +1,5 @@
 import type { PdfDiagnosticSink } from "./diagnostics";
-import type { PdfObjectResolver } from "./interpret";
+import type { PdfObjectResolver } from "./interpret-types";
 import type { LayoutFormField, LayoutFormWidget } from "./layout";
 import type { PageIndexLookup } from "./navigation";
 import type { PdfDict, PdfObject } from "./objects";

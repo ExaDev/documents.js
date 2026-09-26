@@ -1,5 +1,5 @@
 import type { PdfDiagnosticSink } from "./diagnostics";
-import type { PdfObjectResolver } from "./interpret";
+import type { PdfObjectResolver } from "./interpret-types";
 import { decodeStream } from "./filters";
 import type { LayoutAttachment } from "./layout";
 import { walkNameTree } from "./names";
