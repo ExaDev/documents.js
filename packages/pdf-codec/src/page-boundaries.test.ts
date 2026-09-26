@@ -7,7 +7,7 @@ import {
   inheritedCropBoxPdf,
   printBoxesPdf,
   rotatedCropBoxPdf,
-} from "./test-support/pdf";
+} from "./test-support/pdf-structures";
 
 function textItems(items: readonly LayoutItem[]): LayoutText[] {
   return items.filter((item): item is LayoutText => item.kind === "text");
