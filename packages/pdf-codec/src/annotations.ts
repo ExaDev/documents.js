@@ -1,5 +1,5 @@
 import type { PdfDiagnosticSink } from "./diagnostics";
-import type { PdfObjectResolver } from "./interpret";
+import type { PdfObjectResolver } from "./interpret-types";
 import type { LayoutAnnotation, LayoutAnnotationQuad } from "./layout";
 import { NOTES_ANNOTATION_AUTHOR } from "./notes-annotation-author";
 import type { PdfDict } from "./objects";

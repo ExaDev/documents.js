@@ -16,12 +16,12 @@ import type {
   ExtractedEllipse,
   ExtractedImage,
   ExtractedInlineImage,
-  ExtractedItem,
   ExtractedLine,
   ExtractedPath,
   ExtractedRect,
   PdfObjectResolver,
-} from "./interpret";
+} from "./interpret-types";
+import type { ExtractedItem } from "./interpret-types";
 import { interpretContentStream } from "./interpret";
 import type { Matrix } from "./matrix";
 import {

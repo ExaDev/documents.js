@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { PdfDiagnostic } from "./diagnostics";
-import type { PdfObjectResolver } from "./interpret";
+import type { PdfObjectResolver } from "./interpret-types";
 import type { LayoutText } from "./layout";
 import { readOptionalContent } from "./optional-content";
 import type { PdfDict, PdfObject } from "./objects";

@@ -26,7 +26,7 @@ import { decodeStream } from "./filters";
 import { throwIfAborted } from "./util/abort";
 import type { FontResolverService } from "./font-read";
 import { createFontResolver } from "./font-read";
-import type { PdfObjectResolver } from "./interpret";
+import type { PdfObjectResolver } from "./interpret-types";
 import { interpretContentStream } from "./interpret";
 import type { Matrix } from "./matrix";
 import {

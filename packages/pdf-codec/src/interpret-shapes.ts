@@ -1,14 +1,14 @@
 // The characteristic-shape detection family, split from interpret.ts: tolerance helpers, polygon-corner and rect/ellipse detection from Bezier subpaths, stroke-style recovery, and classifyShape deciding which Extracted* family a painted path belongs to.
 import type { ContentStrokeStyle, Point } from "document-schema.js";
 import { BEZIER_KAPPA } from "./matrix";
+import type { MarkedContentProps } from "./interpret";
 import type {
-  MarkedContentProps,
   ExtractedEllipse,
   ExtractedLine,
   ExtractedPaint,
   ExtractedRect,
   ExtractedSubpath,
-} from "./interpret";
+} from "./interpret-types";
 // Every coordinate reaching these detectors has been through PDF's own number formatting (serialize.ts's formatNumber rounds to 4 decimal places), so it carries up to 5e-5pt of quantisation error before any geometry is derived from it. The absolute floor is twenty times that — still three orders of magnitude below any real output device's resolution — and the relative term scales it with the shape's own size, which is what lets a large ellipse from a producer that rounded its kappa constant to fewer digits than BEZIER_KAPPA (0.5523, say) still match.
 const SHAPE_ABS_TOLERANCE_PT = 1e-3;
 const SHAPE_REL_TOLERANCE = 1e-4;

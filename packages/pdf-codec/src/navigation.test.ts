@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { PdfDiagnostic, PdfDiagnosticSink } from "./diagnostics";
-import type { PdfObjectResolver } from "./interpret";
+import type { PdfObjectResolver } from "./interpret-types";
 import type { PageIndexLookup } from "./navigation";
 import {
   createDestinationRegistry,

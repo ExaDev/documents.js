@@ -9,7 +9,7 @@ import type { Jpeg2000Image } from "./image/jpeg2000";
 import { decodeJpeg2000 } from "./image/jpeg2000";
 import type { PdfDiagnosticSink } from "./diagnostics";
 import { decodeStream } from "./filters";
-import type { PdfObjectResolver } from "./interpret";
+import type { PdfObjectResolver } from "./interpret-types";
 import type { PdfDict, PdfObject } from "./objects";
 import { asArray, asBool, asName, asNumber, dictGet } from "./objects";
 

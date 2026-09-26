@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { widthOfCode } from "./afm-widths";
 import type { PdfDiagnostic, PdfDiagnosticSink } from "./diagnostics";
 import { createFontResolver } from "./font-read";
-import type { PdfObjectResolver } from "./interpret";
+import type { PdfObjectResolver } from "./interpret-types";
 import type { PdfDict, PdfObject } from "./objects";
 import {
   asDict,
