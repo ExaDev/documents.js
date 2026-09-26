@@ -667,6 +667,13 @@ describe("EditorsPage paragraph numbering", () => {
       ),
     ].map((element) => element.dataset.paragraphNumber);
     expect(numbers).toEqual(["1", "2", "3"]);
+    // The visible digits are the same values, not an off-by-one of them: asserted per element so an index-arithmetic mutant cannot hide behind the attribute above being correct.
+    const digits = [
+      ...mounted.container.querySelectorAll<HTMLElement>(
+        "[data-paragraph-number]",
+      ),
+    ].map((element) => element.textContent);
+    expect(digits).toEqual(["1", "2", "3"]);
     mounted.unmount();
   });
 
