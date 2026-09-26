@@ -1,36 +1,42 @@
 import { base64ToBytes } from "byte-codec";
 import { deflate } from "./bytes/flate";
 import { ByteWriter, concatBytes } from "./bytes/writer";
-import { ByteReader } from "./bytes/reader";
 import { randomBytes } from "./crypto/random";
 import type { PdfEncryptionOptions } from "./encrypt-write";
 import {
   createStandardEncryptor,
   encryptIndirectObject,
 } from "./encrypt-write";
-import { readJpegInfo } from "./image/jpeg-info";
-import { encodeCcittFax } from "./image/ccitt-encode";
-import { decodePng } from "./image/png-decode";
+import {
+  BITS_PER_BYTE,
+  BYTE_MASK,
+  prepareImage,
+  type PreparedImage,
+} from "./write-images";
+import {
+  buildInternalLinkAnnotDict,
+  buildLinkAnnotDict,
+  buildNotesAnnotDict,
+  isInternalLinkItem,
+  isLinkItem,
+  resolveDestinationArray,
+  type AllocatedObject,
+  restoreResidueRow,
+  xrefEntry,
+} from "./write-annotations";
 import type { LayoutFont, PositionedFormula } from "document-schema.js";
 import type {
-  LayoutDestinationTarget,
   LayoutDocument,
   LayoutFormField,
-  LayoutImageAsset,
-  LayoutInternalLink,
-  LayoutLink,
   LayoutOutlineItem,
   LayoutStructureElement,
 } from "./layout";
-import type { SourceResidue } from "document-schema.js";
 import type { FontMetrics, StandardFontName } from "./afm-widths";
 import { STANDARD_METRICS, widthOfCode } from "./afm-widths";
 import type { ContentWriteContext } from "./content-write";
 import { writeContentStream } from "./content-write";
-import { parseValue } from "./parse";
 import type { EmbeddedFace, EmbeddedFaceSubstitution } from "./embedded-font";
 import { collectEmbeddedGlyphs } from "./embedded-font";
-import { NOTES_ANNOTATION_AUTHOR } from "./notes-annotation-author";
 import { buildEmbeddedFontObjects } from "./embedded-font-write";
 import type { FontRegistry } from "./font-registry";
 import { resolveFaceWithRegistry } from "./font-registry";
@@ -44,7 +50,6 @@ import { createFontMeasurer } from "./measure";
 import type { PdfDict, PdfObject } from "./objects";
 import {
   pdfArray,
-  pdfBool,
   pdfDict,
   pdfHexString,
   pdfName,
@@ -106,14 +111,9 @@ export interface WritePdfOptions {
 const FILE_ID_BYTES = 16;
 
 // Shared byte-packing facts, used by the UTF-16BE string encoder, the PNG image writer, and the bilevel-to-CCITT bit packer below.
-const BITS_PER_BYTE = 8;
-const BYTE_SHIFT = Math.log2(BITS_PER_BYTE); // 3: shifting right by this divides by BITS_PER_BYTE, converting a bit position into a byte offset
-const BYTE_MASK = (1 << BITS_PER_BYTE) - 1; // 0xff: masks a value down to its low 8 bits; also the brightest possible sample an 8-bit channel can hold
-const PACKED_BIT_MSB_MASK = 1 << (BITS_PER_BYTE - 1); // 0x80: the leftmost (most significant) pixel bit within a byte packed MSB-first
-const BIT_INDEX_MASK = BITS_PER_BYTE - 1; // 7: x & this extracts which of the 8 bits within its byte a given pixel column occupies
 
 // PDF's UTF-16BE-with-BOM convention for text strings outside PDFDocEncoding's range (ISO 32000-1 7.9.2.2) — JS strings are already UTF-16 internally, so this is a direct byte-pair re-encoding of each existing code unit (surrogate pairs included), not a decode/re-encode round trip.
-function textToPdfString(text: string): PdfObject {
+export function textToPdfString(text: string): PdfObject {
   const bytes = new Uint8Array(2 + text.length * 2);
   bytes[0] = 0xfe;
   bytes[1] = 0xff;
@@ -238,394 +238,6 @@ function codePointsOf(texts: readonly string[]): Set<number> {
       [...text].map((character) => character.codePointAt(0)!),
     ),
   );
-}
-
-interface PreparedImage {
-  readonly dict: PdfDict; // /SMask, if any, is added in place once the SMask object number is known
-  readonly raw: Uint8Array<ArrayBuffer>;
-  readonly alpha?: {
-    readonly dict: PdfDict;
-    readonly raw: Uint8Array<ArrayBuffer>;
-  };
-}
-
-// A JPEG SOF marker's own component count (ISO/IEC 10918-1 B.2.2): 1 is grayscale, 3 is YCbCr/RGB, and 4 is CMYK, the shape a colour-managed CMYK scan or print workflow emits.
-const JPEG_COMPONENTS_CMYK = 4;
-
-function prepareJpegImage(bytes: Uint8Array<ArrayBuffer>): PreparedImage {
-  const info = readJpegInfo(bytes);
-  const colorSpace =
-    info.components === 1
-      ? "DeviceGray"
-      : info.components === JPEG_COMPONENTS_CMYK
-        ? "DeviceCMYK"
-        : "DeviceRGB";
-  const entries = new Map<string, PdfObject>([
-    ["Type", pdfName("XObject")],
-    ["Subtype", pdfName("Image")],
-    ["Width", pdfNum(info.width)],
-    ["Height", pdfNum(info.height)],
-    ["ColorSpace", pdfName(colorSpace)],
-    ["BitsPerComponent", pdfNum(info.precision)],
-    ["Filter", pdfName("DCTDecode")],
-  ]);
-  // A 4-component JPEG is CMYK data; Adobe's APP14 transform 2 (YCCK) or an untagged 4-component stream almost always needs this inversion to render with correct colours (see src/image/jpeg-info.ts's own note on adobeTransform) — transform 0 explicitly means "CMYK as-is", no inversion.
-  if (
-    info.components === JPEG_COMPONENTS_CMYK &&
-    (info.adobeTransform === 2 || info.adobeTransform === undefined)
-  ) {
-    entries.set(
-      "Decode",
-      pdfArray([1, 0, 1, 0, 1, 0, 1, 0].map((n) => pdfNum(n))),
-    );
-  }
-  return { dict: pdfDict(entries), raw: bytes };
-}
-
-function pngImageDict(
-  width: number,
-  height: number,
-  colorSpace: "DeviceGray" | "DeviceRGB",
-  compress: boolean,
-): PdfDict {
-  const entries = new Map<string, PdfObject>([
-    ["Type", pdfName("XObject")],
-    ["Subtype", pdfName("Image")],
-    ["Width", pdfNum(width)],
-    ["Height", pdfNum(height)],
-    ["ColorSpace", pdfName(colorSpace)],
-    ["BitsPerComponent", pdfNum(BITS_PER_BYTE)],
-  ]);
-  if (compress) {
-    entries.set("Filter", pdfName("FlateDecode"));
-  }
-  return pdfDict(entries);
-}
-
-// A bilevel (every sample 0 or 255) 8-bit grayscale decode re-packed to the 1-bit-per-pixel layout the CCITT encoder consumes: 255 -> 1 (white), 0 -> 0 (black), MSB first, rows padded to whole bytes. Undefined when any sample is intermediate — a genuinely greyscale image has no G4 spelling and stays on the Flate path.
-//
-// Driven by the sample array's own length rather than by width/height bounds: decodePng always returns exactly width*height samples, so an index past the array's end reads undefined, which the bilevel test below rejects — an off-by-one past the bound is visible as "not bilevel" instead of silently reading a phantom black pixel the packed array's own fixed size would then have dropped.
-function packBilevel(raw: {
-  readonly width: number;
-  readonly height: number;
-  readonly data: Uint8Array;
-}): Uint8Array | undefined {
-  const rowBytes = (raw.width + BIT_INDEX_MASK) >> BYTE_SHIFT;
-  const packed = new Uint8Array(rowBytes * raw.height);
-  // Accumulated through a DataView so a byte already holding earlier bits is read back as a
-  // plain number, never as the undefined an out-of-range typed-array read reports.
-  const view = new DataView(packed.buffer);
-  for (let index = 0; index < raw.data.length; index++) {
-    const sample = raw.data[index];
-    if (sample !== 0 && sample !== BYTE_MASK) {
-      return undefined;
-    }
-    if (sample === BYTE_MASK) {
-      const x = index % raw.width;
-      const byteIndex =
-        Math.floor(index / raw.width) * rowBytes + (x >> BYTE_SHIFT);
-      view.setUint8(
-        byteIndex,
-        view.getUint8(byteIndex) |
-          (PACKED_BIT_MSB_MASK >> (x & BIT_INDEX_MASK)),
-      );
-    }
-  }
-  return packed;
-}
-
-function preparePngImage(
-  bytes: Uint8Array<ArrayBuffer>,
-  compress: boolean,
-): PreparedImage {
-  const raw = decodePng(bytes);
-  const colorSpace = raw.channels === 1 ? "DeviceGray" : "DeviceRGB";
-  // A bilevel grayscale image with no soft mask is the exact shape CCITT Group 4 was built for (a fax or a 1-bit scan): when the G4 encoding comes out smaller than Flate over the same pixels — which for real bilevel content it does by an order of magnitude — the image is written as /CCITTFaxDecode with K -1, recovering the compression a scanned-document source originally carried instead of regressing it to Flate (#975). Whichever encoding is smaller wins, deterministically, so noise-heavy bilevel images where Flate happens to win keep it.
-  if (compress && raw.channels === 1 && raw.alpha === undefined) {
-    const bilevel = packBilevel(raw);
-    if (bilevel !== undefined) {
-      // Flate first, and G4 under Flate's own byte count as an abort budget: the moment the G4 stream grows past the size it is being compared against, it can no longer win and the encoder stops — an adversarial bilevel image (a checkerboard, G4's worst case) otherwise makes the encoder emit a losing multi-megabyte candidate in full before the caller discards it.
-      const flate = deflate(raw.data);
-      const g4 = encodeCcittFax(bilevel, {
-        columns: raw.width,
-        rows: raw.height,
-        maxBytes: flate.length,
-      });
-      if (g4 !== undefined) {
-        return {
-          dict: pdfDict(
-            new Map<string, PdfObject>([
-              ["Type", pdfName("XObject")],
-              ["Subtype", pdfName("Image")],
-              ["Width", pdfNum(raw.width)],
-              ["Height", pdfNum(raw.height)],
-              ["ColorSpace", pdfName("DeviceGray")],
-              ["BitsPerComponent", pdfNum(1)],
-              ["Filter", pdfName("CCITTFaxDecode")],
-              [
-                "DecodeParms",
-                pdfDict(
-                  new Map<string, PdfObject>([
-                    ["K", pdfNum(-1)],
-                    ["Columns", pdfNum(raw.width)],
-                    ["Rows", pdfNum(raw.height)],
-                    ["BlackIs1", pdfBool(false)],
-                  ]),
-                ),
-              ],
-            ]),
-          ),
-          raw: g4,
-          alpha: undefined,
-        };
-      }
-      return {
-        dict: pngImageDict(raw.width, raw.height, colorSpace, true),
-        raw: flate,
-        alpha: undefined,
-      };
-    }
-  }
-  const dict = pngImageDict(raw.width, raw.height, colorSpace, compress);
-  const data = compress ? deflate(raw.data) : raw.data;
-  const alpha =
-    raw.alpha === undefined
-      ? undefined
-      : {
-          dict: pngImageDict(raw.width, raw.height, "DeviceGray", compress),
-          raw: compress ? deflate(raw.alpha) : raw.alpha,
-        };
-  return { dict, raw: data, alpha };
-}
-
-// Verbatim re-embedding of a no-encoder filter's original stream (JBIG2, JPEG 2000): the asset's own decoded canonical never reaches the file at all — these bytes are the compressed stream as the source carried it, re-emitted under the same filter, so a pdf-to-pdf round trip pays zero generation loss for exactly the two filters this package cannot re-encode. Width/Height still come from the asset (a viewer needs them whatever the stream says). A JBIG2 image is 1-bit /DeviceGray by construction (T.88's bitmap inverted into PDF's 0-is-black convention at decode), stated explicitly; a JPEG 2000 stream's component count and sample depth are the codestream's own to state (ISO 32000-1 7.4.9: /BitsPerComponent "shall not be present", /ColorSpace optional), so neither is written. /DecodeParms with the /JBIG2Globals reference is added in place at emission, once the globals stream's own object number is known — the identical late-binding the SMask reference already uses. A source soft mask still re-emits: the decoded canonical's alpha is extracted through the ordinary PNG prepare path and rides along as a generated /SMask, since the original compressed stream does not encode it.
-function preparePassthroughImage(
-  asset: LayoutImageAsset,
-  original: Readonly<NonNullable<LayoutImageAsset["original"]>>,
-  compress: boolean,
-): PreparedImage {
-  const png = preparePngImage(base64ToBytes(asset.base64), compress);
-  const entries = new Map<string, PdfObject>([
-    ["Type", pdfName("XObject")],
-    ["Subtype", pdfName("Image")],
-    ["Width", pdfNum(asset.widthPx)],
-    ["Height", pdfNum(asset.heightPx)],
-    [
-      "Filter",
-      pdfName(original.filter === "jbig2" ? "JBIG2Decode" : "JPXDecode"),
-    ],
-  ]);
-  if (original.filter === "jbig2") {
-    entries.set("ColorSpace", pdfName("DeviceGray"));
-    entries.set("BitsPerComponent", pdfNum(1));
-  }
-  return {
-    dict: pdfDict(entries),
-    raw: base64ToBytes(original.base64),
-    // Stated directly rather than conditionally spread: an undefined alpha is exactly what every
-    // consumer already tests for (`prepared.alpha === undefined`), so an absent property and an
-    // explicitly-undefined one mean the same thing here.
-    alpha: png.alpha,
-  };
-}
-
-function prepareImage(
-  asset: LayoutImageAsset,
-  compress: boolean,
-): PreparedImage {
-  if (asset.original !== undefined) {
-    return preparePassthroughImage(asset, asset.original, compress);
-  }
-  const bytes = base64ToBytes(asset.base64);
-  return asset.format === "jpeg"
-    ? prepareJpegImage(bytes)
-    : preparePngImage(bytes, compress);
-}
-
-function buildLinkAnnotDict(link: Readonly<LayoutLink>): PdfObject {
-  return pdfDict({
-    Type: pdfName("Annot"),
-    Subtype: pdfName("Link"),
-    Rect: pdfArray(
-      [
-        link.xPt,
-        link.yPt,
-        link.xPt + link.widthPt,
-        link.yPt + link.heightPt,
-      ].map((n) => pdfNum(n)),
-    ),
-    Border: pdfArray([0, 0, 0].map((n) => pdfNum(n))), // zero-width: an invisible clickable region, not a drawn box
-    A: pdfDict({
-      Type: pdfName("Action"),
-      S: pdfName("URI"),
-      URI: pdfHexString(new TextEncoder().encode(link.uri)),
-    }),
-  });
-}
-
-// A display destination array's view half (ISO 32000-1 Table 151) — the inverse of navigation.ts's parseDestination, spelling the target back as the direct array form so the written link needs no /Dests or /Names tree to resolve. Absent coordinates are null, exactly as a producer that omitted them would write.
-function destinationViewArray(
-  target: Readonly<LayoutDestinationTarget>,
-): PdfObject[] {
-  const n = (value: number | undefined): PdfObject =>
-    value === undefined ? pdfNull() : pdfNum(value);
-  if (target.kind === "xyz") {
-    return [pdfName("XYZ"), n(target.leftPt), n(target.topPt), n(target.zoom)];
-  }
-  if (target.kind === "fitH") {
-    return [pdfName("FitH"), n(target.topPt)];
-  }
-  if (target.kind === "fitV") {
-    return [pdfName("FitV"), n(target.leftPt)];
-  }
-  if (target.kind === "fitR") {
-    return [
-      pdfName("FitR"),
-      n(target.leftPt),
-      n(target.bottomPt),
-      n(target.rightPt),
-      n(target.topPt),
-    ];
-  }
-  if (target.kind === "fitBH") {
-    return [pdfName("FitBH"), n(target.topPt)];
-  }
-  if (target.kind === "fitBV") {
-    return [pdfName("FitBV"), n(target.leftPt)];
-  }
-  return [pdfName(target.kind === "fitB" ? "FitB" : "Fit")];
-}
-
-// The direct destination array a destinations-table NAME resolves to — [pageRef, view] — shared by internal links and outline items so the two can never spell the same target differently. The error message names the referer (what) so a caller violating the destinations-table invariant knows which construct tripped it.
-function resolveDestinationArray(
-  doc: LayoutDocument,
-  pageAllocs: readonly { pageNum: number }[],
-  name: string,
-  what: string,
-): PdfObject[] {
-  const destination = doc.destinations?.find((d) => d.name === name);
-  if (destination === undefined) {
-    throw new Error(
-      `${what} names destination "${name}", which the document's destinations table does not carry — this is a caller-invariant violation`,
-    );
-  }
-  const targetPage = pageAllocs[destination.pageIndex];
-  if (targetPage === undefined) {
-    throw new Error(
-      `destination "${destination.name}" names page index ${destination.pageIndex}, which is beyond the document's own pages — this is a caller-invariant violation`,
-    );
-  }
-  return [
-    pdfRef(targetPage.pageNum, 0),
-    ...destinationViewArray(destination.target),
-  ];
-}
-
-function buildInternalLinkAnnotDict(
-  link: Readonly<LayoutInternalLink>,
-  doc: LayoutDocument,
-  pageAllocs: readonly { pageNum: number }[],
-): PdfObject {
-  return pdfDict({
-    Type: pdfName("Annot"),
-    Subtype: pdfName("Link"),
-    Rect: pdfArray(
-      [
-        link.xPt,
-        link.yPt,
-        link.xPt + link.widthPt,
-        link.yPt + link.heightPt,
-      ].map((v) => pdfNum(v)),
-    ),
-    Border: pdfArray([0, 0, 0].map((v) => pdfNum(v))),
-    Dest: pdfArray(
-      resolveDestinationArray(
-        doc,
-        pageAllocs,
-        link.destination,
-        "internal link",
-      ),
-    ),
-  });
-}
-
-function isLinkItem(item: { readonly kind: string }): item is LayoutLink {
-  return item.kind === "link";
-}
-
-function isInternalLinkItem(item: {
-  readonly kind: string;
-}): item is LayoutInternalLink {
-  return item.kind === "internalLink";
-}
-
-// PDF has no native concept of hidden presenter notes, but it does have a standard construct for "a note attached to a page that isn't part of the page's visible content": a /Subtype /Text annotation (the same one Acrobat's own sticky-note tool creates), with the Hidden annotation flag (ISO 32000-1 Table 165, bit position 2, value 2 — "do not display the annotation... regardless of its annotation flags... in any way") set so it never renders or prints. This is how pptx speaker notes survive pptxToPdf -> pdfToPptx: reusing a real, standard PDF construct that generic PDF tooling already knows to preserve in an Annots array, rather than a bespoke private dictionary key nothing else would recognise. /T marks authorship so read.ts's readPageNotes only ever treats an annotation genuinely written by this function as recovered notes, not a real sticky note a human or another tool happened to leave on the page.
-const NOTES_ANNOTATION_HIDDEN_FLAG = 2;
-
-function buildNotesAnnotDict(notes: string): PdfObject {
-  return pdfDict({
-    Type: pdfName("Annot"),
-    Subtype: pdfName("Text"),
-    Rect: pdfArray([0, 0, 0, 0].map((n) => pdfNum(n))),
-    Contents: textToPdfString(notes),
-    T: textToPdfString(NOTES_ANNOTATION_AUTHOR),
-    F: pdfNum(NOTES_ANNOTATION_HIDDEN_FLAG),
-  });
-}
-
-interface AllocatedObject {
-  readonly num: number;
-  readonly value: PdfObject;
-}
-
-// Writes a fixed 20-byte classic xref entry: 10-digit offset, space, 5-digit generation, space, 'n'/'f', space, LF — exactly 10+1+5+1+1+1+1 = 20 bytes, one of the three EOL forms the spec permits (ISO 32000-1 7.5.4).
-const XREF_OFFSET_DIGITS = 10;
-const XREF_GENERATION_DIGITS = 5;
-
-function xrefEntry(offset: number, generation: number, inUse: boolean): string {
-  return `${offset.toString().padStart(XREF_OFFSET_DIGITS, "0")} ${generation.toString().padStart(XREF_GENERATION_DIGITS, "0")} ${inUse ? "n" : "f"} \n`;
-}
-
-// #967 residue parse-back: the inverse of serializeObjectToText the read side's readDocumentResidue used to quarantine each row. One object from the row's text through the ordinary lexer/parser; a row that does not parse at all restores as nothing (skip, never throw — residue is opacity, not data this writer depends on).
-function parseResidueRow(
-  residue: Readonly<SourceResidue>,
-): PdfObject | undefined {
-  // Parse diagnostics here describe the SOURCE producer's serialisation, not this writer's output — nothing downstream can act on them, so the sink drops them on the floor.
-  const reader = new ByteReader(new TextEncoder().encode(residue.xml));
-  return parseValue(reader, () => undefined);
-}
-
-// True when the parsed object names an indirect object anywhere inside — the marker that the row is tied to the source file's own object graph and cannot be restorable in this one.
-function objectContainsReference(obj: PdfObject): boolean {
-  if (obj.kind === "ref") {
-    return true;
-  }
-  if (obj.kind === "array") {
-    return obj.items.some(objectContainsReference);
-  }
-  if (obj.kind === "dict") {
-    return [...obj.entries.values()].some(objectContainsReference);
-  }
-  if (obj.kind === "stream") {
-    return [...obj.dict.entries.values()].some(objectContainsReference);
-  }
-  return false;
-}
-
-// One residue row restored, or undefined when absent, unparseable, or reference-carrying.
-function restoreResidueRow(
-  source: Record<string, SourceResidue> | undefined,
-  key: string,
-): PdfObject | undefined {
-  const row = source?.[key];
-  if (row === undefined) {
-    return undefined;
-  }
-  const parsed = parseResidueRow(row);
-  if (parsed === undefined || objectContainsReference(parsed)) {
-    return undefined;
-  }
-  return parsed;
 }
 
 // Assembles a LayoutDocument into a complete PDF file: the object graph (Catalog, Pages, Info, one Font+FontDescriptor pair per standard-14 face actually used, one Image XObject (+SMask) per image asset actually referenced, one embedded math composite font group when options.formulas is non-empty (Type0/CIDFontType0/FontDescriptor/FontFile3/ToUnicode — see math-font-write.ts), one embedded text font group per subsetted face when options.fonts resolved any (Type0/CIDFontType2/FontDescriptor/FontFile2/ToUnicode — see embedded-font-write.ts), then each page's own Page dict, Contents stream (ordinary LayoutItem bytes followed by that page's own formula bytes, if any — see math-content-write.ts), and optional Annots), a classic cross-reference table, and a trailer. Objects are allocated in this fixed order — never derived from Map/object iteration order — so identical input always produces byte-identical output (see the determinism tests).
