@@ -9,4 +9,5 @@ export default packageLintConfig({
   // scripts/ holds a standalone build step importing from ../dist, the same reason test/ is ignored.
   additionalIgnores: ["scripts"],
   magicNumbers: "error",
+  maxLines: "error",
 });
