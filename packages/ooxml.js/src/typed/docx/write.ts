@@ -1,54 +1,25 @@
 import type {
-  Alignment,
-  AnchorDescriptor,
   ConstructDescriptor,
   ContentBlock,
-  ContentCellBorders,
   ContentControlDescriptor,
   ContentDocument,
-  ContentEmbeddedObjectBlock,
   ContentImageBlock,
-  ContentParagraph,
-  ContentRun,
   ContentSection,
-  ContentTable,
-  ContentTableCell,
-  FieldDescriptor,
-  LinkDescriptor,
-  ProvenanceChange,
   ProvenanceDescriptor,
 } from "document-schema.js";
-import {
-  colorToRgbHex,
-  describeTableGridFault,
-  findConstructMarkerImbalance,
-  findRunConstructFault,
-  findTableGridFault,
-  tableCellColumnSpan,
-  tableCellRowSpan,
-  walkTableGrid,
-} from "document-schema.js";
+import {} from "document-schema.js";
 import type { Package, XmlPart } from "../../model/package";
 import type { XmlElement, XmlNode } from "../../model/node";
 import { el, txt } from "../../xml/fragment";
 import { encodeXmlText } from "../../xml/entities";
 import { parseXml } from "../../xml/parse";
-import { encodePackage } from "../../codec";
-import { bytesToBase64 } from "byte-codec";
 import type { DocumentMetadata } from "../shared/metadata";
-import {
-  ptToEighthPoints,
-  ptToEmu,
-  ptToHalfPoints,
-  ptToTwips,
-} from "../shared/units";
-import { buildXlsxPackageFromContent } from "../xlsx/build";
+import {} from "../shared/units";
 import {
   NOOP_DOCX_WRITE_DIAGNOSTIC_SINK,
-  DocxWriteDiagnosticCodes,
   type DocxWriteDiagnosticSink,
 } from "./diagnostics";
-import { TABLE_OF_CONTENTS_GALLERY, isDeletedChange } from "./constructs";
+import { TABLE_OF_CONTENTS_GALLERY } from "./constructs";
 import type {
   Comment,
   Footnote,
@@ -57,7 +28,61 @@ import type {
 } from "./read";
 import type { NumberingDefinitions } from "./numbering";
 import { NUMBERING_PART_PATH, buildNumberingElement } from "./numbering";
-import { buildCellShading } from "./shading";
+import {
+  COMMENTS_PART_PATH,
+  CONTENT_TYPES_NS,
+  CORE_PROPS_NS,
+  CT_COMMENTS,
+  CT_CORE_PROPS,
+  CT_DOCUMENT,
+  CT_ENDNOTES,
+  CT_EXTENDED_PROPS,
+  CT_FOOTER,
+  CT_FOOTNOTES,
+  CT_HEADER,
+  CT_NUMBERING,
+  CT_STYLES,
+  DCTERMS_NS,
+  DC_NS,
+  DOCUMENT_PART_PATH,
+  DRAWINGML_NS,
+  DRAWING_PIC_NS,
+  DRAWING_WP_NS,
+  EMBEDDED_PART_CONTENT_TYPES,
+  ENDNOTES_PART_PATH,
+  EXTENDED_PROPS_NS,
+  FOOTNOTES_PART_PATH,
+  MARKUP_COMPAT_NS,
+  PKG_RELS_NS,
+  REL_COMMENTS,
+  REL_CORE_PROPS,
+  REL_ENDNOTES,
+  REL_EXTENDED_PROPS,
+  REL_FOOTNOTES,
+  REL_HYPERLINK,
+  REL_IMAGE,
+  REL_NS,
+  REL_NUMBERING,
+  REL_OFFICE_DOCUMENT,
+  REL_STYLES,
+  STYLES_PART_PATH,
+  VML_OFFICE_NS,
+  W14_NS,
+  W15_NS,
+  WML_NS,
+  XSI_NS,
+} from "./write-constants";
+import { buildBlockFlow, findParagraph } from "./write-constructs";
+import {
+  buildCommentsPart,
+  buildHeaderFooterParts,
+  buildNotesPart,
+  buildSectionHeaderFooterReferences,
+  buildSectionProperties,
+  buildStylesPart,
+  collectParagraphStyleIds,
+} from "./write-parts";
+import type { EmbeddedPayload } from "./write-embedded";
 
 // ContentSection[] -> Package: the write side of readDocxContent, and this package's second writer of genuinely new content after typed/xlsx/build.ts's buildXlsxPackageFromContent (whose part-scaffolding conventions this follows). It builds a complete, fresh docx package — content types, package and document relationships, media parts, core/extended properties, and word/document.xml — rather than editing a decoded one, so a ContentDocument that never came from a docx writes out just as well as one that did.
 //
@@ -71,84 +96,6 @@ import { buildCellShading } from "./shading";
 // - A field construct whose extent contains no paragraph at all, and a section whose last block is not a paragraph, each gain one empty paragraph on the way out (the field characters and the section break both need a paragraph to live in). Everything readDocxContent itself produces already has one.
 // - A page break immediately before a table or an image — w:pageBreakBefore is a paragraph property, so neither can carry it directly — becomes its own empty paragraph carrying the break, immediately before that content rather than displaced to the end of the flow.
 
-const WML_NS = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
-const REL_NS =
-  "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
-const PKG_RELS_NS =
-  "http://schemas.openxmlformats.org/package/2006/relationships";
-const CONTENT_TYPES_NS =
-  "http://schemas.openxmlformats.org/package/2006/content-types";
-const CORE_PROPS_NS =
-  "http://schemas.openxmlformats.org/package/2006/metadata/core-properties";
-const DC_NS = "http://purl.org/dc/elements/1.1/";
-const DCTERMS_NS = "http://purl.org/dc/terms/";
-const XSI_NS = "http://www.w3.org/2001/XMLSchema-instance";
-const EXTENDED_PROPS_NS =
-  "http://schemas.openxmlformats.org/officeDocument/2006/extended-properties";
-const DRAWINGML_NS = "http://schemas.openxmlformats.org/drawingml/2006/main";
-const DRAWING_WP_NS =
-  "http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing";
-const DRAWING_PIC_NS =
-  "http://schemas.openxmlformats.org/drawingml/2006/picture";
-const MARKUP_COMPAT_NS =
-  "http://schemas.openxmlformats.org/markup-compatibility/2006";
-const W14_NS = "http://schemas.microsoft.com/office/word/2010/wordml";
-const W15_NS = "http://schemas.microsoft.com/office/word/2012/wordml";
-const VML_OFFICE_NS = "urn:schemas-microsoft-com:office:office";
-
-const CT_DOCUMENT =
-  "application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml";
-const CT_CORE_PROPS =
-  "application/vnd.openxmlformats-package.core-properties+xml";
-const CT_EXTENDED_PROPS =
-  "application/vnd.openxmlformats-officedocument.extended-properties+xml";
-const CT_EMBEDDED_DOCX =
-  "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
-const CT_EMBEDDED_XLSX =
-  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
-const CT_EMBEDDED_PPTX =
-  "application/vnd.openxmlformats-officedocument.presentationml.presentation";
-const CT_STYLES =
-  "application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml";
-const CT_NUMBERING =
-  "application/vnd.openxmlformats-officedocument.wordprocessingml.numbering+xml";
-const CT_COMMENTS =
-  "application/vnd.openxmlformats-officedocument.wordprocessingml.comments+xml";
-const CT_FOOTNOTES =
-  "application/vnd.openxmlformats-officedocument.wordprocessingml.footnotes+xml";
-const CT_ENDNOTES =
-  "application/vnd.openxmlformats-officedocument.wordprocessingml.endnotes+xml";
-const CT_HEADER =
-  "application/vnd.openxmlformats-officedocument.wordprocessingml.header+xml";
-const CT_FOOTER =
-  "application/vnd.openxmlformats-officedocument.wordprocessingml.footer+xml";
-
-// The content type an embeddings part is declared with, by the extension the payload serialised into — each names the format of the nested document the part holds, so an Override can declare exactly that part without claiming anything about other files sharing the extension elsewhere.
-const EMBEDDED_PART_CONTENT_TYPES: Readonly<
-  Record<"docx" | "xlsx" | "pptx", string>
-> = { docx: CT_EMBEDDED_DOCX, xlsx: CT_EMBEDDED_XLSX, pptx: CT_EMBEDDED_PPTX };
-
-const REL_OFFICE_DOCUMENT = `${REL_NS}/officeDocument`;
-const REL_CORE_PROPS = `${PKG_RELS_NS}/metadata/core-properties`;
-const REL_EXTENDED_PROPS = `${REL_NS}/extended-properties`;
-const REL_HYPERLINK = `${REL_NS}/hyperlink`;
-const REL_IMAGE = `${REL_NS}/image`;
-const REL_OLE_OBJECT = `${REL_NS}/oleObject`;
-const REL_STYLES = `${REL_NS}/styles`;
-const REL_NUMBERING = `${REL_NS}/numbering`;
-const REL_COMMENTS = `${REL_NS}/comments`;
-const REL_FOOTNOTES = `${REL_NS}/footnotes`;
-const REL_ENDNOTES = `${REL_NS}/endnotes`;
-const REL_HEADER = `${REL_NS}/header`;
-const REL_FOOTER = `${REL_NS}/footer`;
-
-const DOCUMENT_PART_PATH = "word/document.xml";
-const STYLES_PART_PATH = "word/styles.xml";
-const COMMENTS_PART_PATH = "word/comments.xml";
-const FOOTNOTES_PART_PATH = "word/footnotes.xml";
-const ENDNOTES_PART_PATH = "word/endnotes.xml";
-
-// The input readDocxContent's own output satisfies directly (a DocxDocument is assignable to it): every field beyond metadata/sections is optional here so a caller building a DocxContent by hand — most of this package's own tests, some of documents.js's — need not populate parts it does not care about, while a genuine DocxDocument (every field always present, several as empty arrays/records rather than absent) still assigns straight across.
 export interface DocxContent {
   readonly metadata?: DocumentMetadata;
   readonly sections: readonly ContentSection[];
@@ -190,7 +137,7 @@ interface WriteCounters {
   readonly embeddingFiles: Map<string, string>;
 }
 
-interface WriteState {
+export interface WriteState {
   readonly relationships: WriteRelationship[];
   readonly hyperlinkIds: Map<string, string>;
   readonly mediaIds: Map<string, string>;
@@ -207,7 +154,7 @@ interface WriteState {
 }
 
 // One WriteState per emitted part (the document body, and each header/footer part below): relationships and hyperlink/media/embedding RELATIONSHIP dedup are deliberately part-local rather than shared — a relationship id (rId1, rId2, ...) is only meaningful within the one part whose own _rels file declares it, so a header reusing an image the body already embedded gets its own relationship, never risking a body-scoped id read back through a header's own relationships. The media/embedding FILES those relationships point at are content-addressed through the shared counters instead (one file per distinct payload document-wide, see WriteCounters' own note), so the per-part mediaParts/embeddingParts registries below are bookkeeping for the assembly merge and content-types build, not copies: two parts referencing one image both record the same file name. `counters` is the one piece of state genuinely shared across every part, for the reason WriteCounters' own comment states.
-function newWriteState(
+export function newWriteState(
   options: BuildDocxContentOptions | undefined,
   counters?: WriteCounters,
 ): WriteState {
@@ -231,7 +178,7 @@ function newWriteState(
   };
 }
 
-function addRelationship(
+export function addRelationship(
   state: WriteState,
   type: string,
   target: string,
@@ -243,7 +190,10 @@ function addRelationship(
 }
 
 // One relationship per distinct external target and one media part per distinct image payload: a hyperlink or logo repeated through a document is one relationship and one part, not one per occurrence.
-function hyperlinkRelationshipId(state: WriteState, uri: string): string {
+export function hyperlinkRelationshipId(
+  state: WriteState,
+  uri: string,
+): string {
   const existing = state.hyperlinkIds.get(uri);
   if (existing !== undefined) {
     return existing;
@@ -273,7 +223,7 @@ function mediaExtension(format: "png" | "jpeg" | "gif"): string {
   return assertNeverRasterImageFormat(format);
 }
 
-function imageRelationshipId(
+export function imageRelationshipId(
   state: WriteState,
   image: ContentImageBlock,
 ): string {
@@ -309,227 +259,19 @@ function xmlDeclaration(): XmlNode {
   };
 }
 
-function xmlPart(root: XmlElement): XmlPart {
+export function xmlPart(root: XmlElement): XmlPart {
   return { kind: "xml", nodes: [xmlDeclaration(), root] };
 }
 
 // --- runs -----------------------------------------------------------------------------------------------------------
 
 // ST_OnOff spelled explicitly in both directions: an absent w:b is "inherit" to the read-side cascade, not "off", so a run whose bold is false must say so rather than omitting the element.
-function toggleElement(tag: string, value: boolean): XmlElement {
+export function toggleElement(tag: string, value: boolean): XmlElement {
   return el(tag, { "w:val": value ? "1" : "0" });
 }
 
-function buildRunProperties(run: ContentRun): XmlElement | undefined {
-  const children: XmlElement[] = [];
-  if (run.fontFamily !== undefined) {
-    const font = encodeXmlText(run.fontFamily);
-    children.push(el("w:rFonts", { "w:ascii": font, "w:hAnsi": font }));
-  }
-  if (run.bold !== undefined) {
-    children.push(toggleElement("w:b", run.bold));
-  }
-  if (run.italic !== undefined) {
-    children.push(toggleElement("w:i", run.italic));
-  }
-  if (run.strike !== undefined) {
-    children.push(toggleElement("w:strike", run.strike));
-  }
-  if (run.color !== undefined) {
-    children.push(el("w:color", { "w:val": colorToRgbHex(run.color) }));
-  }
-  if (run.sizePt !== undefined) {
-    children.push(el("w:sz", { "w:val": String(ptToHalfPoints(run.sizePt)) }));
-  }
-  if (run.underline !== undefined) {
-    children.push(el("w:u", { "w:val": run.underline ? "single" : "none" }));
-  }
-  if (run.verticalAlign !== undefined) {
-    children.push(el("w:vertAlign", { "w:val": run.verticalAlign }));
-  }
-  // An explicitly left-to-right run says so with the off spelling, mirroring bold: false — an absent w:rtl is "inherit" to the read-side cascade, not "left-to-right", so a resolved ltr must be spelled rather than omitted.
-  if (run.direction !== undefined) {
-    children.push(toggleElement("w:rtl", run.direction === "rtl"));
-  }
-  return children.length === 0 ? undefined : el("w:rPr", {}, children);
-}
-
-// readRunText's inverse: a tab is its own w:tab element and a newline its own w:br, so the text either side of them stays in w:t elements that round-trip character for character. xml:space="preserve" keeps leading and trailing spaces, which Word otherwise collapses.
-function buildRunContent(text: string, deleted: boolean): XmlElement[] {
-  const textTag = deleted ? "w:delText" : "w:t";
-  const children: XmlElement[] = [];
-  for (const piece of text.split(/(\t|\n)/)) {
-    if (piece === "\t") {
-      children.push(el("w:tab"));
-    } else if (piece === "\n") {
-      children.push(el("w:br"));
-    } else if (piece.length > 0) {
-      children.push(
-        el(textTag, { "xml:space": "preserve" }, [txt(encodeXmlText(piece))]),
-      );
-    }
-  }
-  if (children.length === 0) {
-    children.push(el(textTag, { "xml:space": "preserve" }));
-  }
-  return children;
-}
-
-function buildRun(
-  run: ContentRun,
-  state: WriteState,
-  deleted: boolean,
-): XmlElement {
-  const rPr = buildRunProperties(run);
-  const runElement = el("w:r", {}, [
-    ...(rPr === undefined ? [] : [rPr]),
-    ...buildRunContent(run.text, deleted),
-  ]);
-  if (run.hyperlink === undefined) {
-    return runElement;
-  }
-  return el(
-    "w:hyperlink",
-    { "r:id": hyperlinkRelationshipId(state, run.hyperlink) },
-    [runElement],
-  );
-}
-
-// --- paragraphs -------------------------------------------------------------------------------------------------------
-
-const JUSTIFICATION_BY_ALIGNMENT: Readonly<Record<Alignment, string>> = {
-  left: "left",
-  center: "center",
-  right: "right",
-  justify: "both",
-};
-
-// w:spacing/@w:line's own 240ths-of-a-line unit, the write-side counterpart of shared/units.ts's lineUnitsToMultiplier — kept local rather than exported from there because nothing else writes it.
-const LINE_UNITS_PER_LINE = 240;
-
-// CT_PPr's own child sequence, which Word enforces: pStyle, pageBreakBefore, numPr, bidi, spacing, ind, jc, outlineLvl. An indentFirstLinePt is w:firstLine when positive and w:hanging (the signed inverse) when negative, matching the convention readParagraphPropertiesLayer reads it back through.
-function buildParagraphProperties(
-  paragraph: ContentParagraph,
-  pageBreakBefore: boolean,
-): XmlElement | undefined {
-  const children: XmlElement[] = [];
-  if (paragraph.styleId !== undefined) {
-    children.push(
-      el("w:pStyle", { "w:val": encodeXmlText(paragraph.styleId) }),
-    );
-  }
-  if (pageBreakBefore) {
-    children.push(el("w:pageBreakBefore"));
-  }
-  if (paragraph.list !== undefined) {
-    const numPrChildren: XmlElement[] = [
-      el("w:ilvl", { "w:val": String(paragraph.list.level) }),
-    ];
-    if (paragraph.list.numId !== undefined) {
-      numPrChildren.push(
-        el("w:numId", { "w:val": encodeXmlText(paragraph.list.numId) }),
-      );
-    }
-    children.push(el("w:numPr", {}, numPrChildren));
-  }
-  // CT_PPrBase places bidi between the numPr family and spacing; an explicitly left-to-right paragraph says so with the off spelling, the same discipline w:rtl's own writer below applies at run level.
-  if (paragraph.direction !== undefined) {
-    children.push(toggleElement("w:bidi", paragraph.direction === "rtl"));
-  }
-  const spacing: Record<string, string> = {};
-  if (paragraph.spacingBeforePt !== undefined) {
-    spacing["w:before"] = String(ptToTwips(paragraph.spacingBeforePt));
-  }
-  if (paragraph.spacingAfterPt !== undefined) {
-    spacing["w:after"] = String(ptToTwips(paragraph.spacingAfterPt));
-  }
-  if (paragraph.lineSpacing !== undefined) {
-    spacing["w:line"] = String(
-      Math.round(paragraph.lineSpacing * LINE_UNITS_PER_LINE),
-    );
-    spacing["w:lineRule"] = "auto";
-  }
-  if (Object.keys(spacing).length > 0) {
-    children.push(el("w:spacing", spacing));
-  }
-  const indent: Record<string, string> = {};
-  if (paragraph.indentLeftPt !== undefined) {
-    indent["w:left"] = String(ptToTwips(paragraph.indentLeftPt));
-  }
-  if (paragraph.indentFirstLinePt !== undefined) {
-    if (paragraph.indentFirstLinePt < 0) {
-      indent["w:hanging"] = String(ptToTwips(-paragraph.indentFirstLinePt));
-    } else {
-      indent["w:firstLine"] = String(ptToTwips(paragraph.indentFirstLinePt));
-    }
-  }
-  if (Object.keys(indent).length > 0) {
-    children.push(el("w:ind", indent));
-  }
-  if (paragraph.alignment !== undefined) {
-    children.push(
-      el("w:jc", { "w:val": JUSTIFICATION_BY_ALIGNMENT[paragraph.alignment] }),
-    );
-  }
-  if (paragraph.headingLevel !== undefined) {
-    children.push(
-      el("w:outlineLvl", { "w:val": String(paragraph.headingLevel - 1) }),
-    );
-  }
-  return children.length === 0 ? undefined : el("w:pPr", {}, children);
-}
-
-// A tracked change carrying a whole paragraph still has to mark the paragraph's own mark as changed (w:pPr/w:rPr/w:ins and kin), or Word shows the change as covering the text but not the paragraph break that ends it — CT_PPr puts that w:rPr after every property element and before w:sectPr, which is exactly where appending it lands. The change element itself wraps the paragraph's RUNS, never the w:p: CT_RunTrackChange (reached through EG_RunLevelElts) has no w:p in its content model, so a change wrapping whole paragraphs is not valid WordprocessingML even though the reader tolerates it as input. A paragraph carrying no runs at all still gets an empty change element (rather than none), since that empty element is exactly what marks the paragraph as wholly changed to a reader walking its content-bearing children.
-// Moved above buildParagraph, which is the first (and only earlier) reader: the four tracked-change elements that wrap a block flow. formatChange has no entry: w:pPrChange is a child of w:pPr recording one paragraph's superseded properties, not a wrapper over blocks, so a formatChange construct writes its content unwrapped rather than as an element that would not parse where it sits.
-const TRACKED_CHANGE_TAG_BY_CHANGE: Readonly<
-  Record<ProvenanceChange, string | undefined>
-> = {
-  insertion: "w:ins",
-  deletion: "w:del",
-  moveFrom: "w:moveFrom",
-  moveTo: "w:moveTo",
-  formatChange: undefined,
-};
-
-function buildParagraph(
-  paragraph: ContentParagraph,
-  state: WriteState,
-  pageBreakBefore: boolean,
-  deleted: boolean,
-  provenance: ProvenanceDescriptor | undefined,
-): XmlElement {
-  const properties = buildParagraphProperties(paragraph, pageBreakBefore);
-  const changeTag =
-    provenance === undefined
-      ? undefined
-      : TRACKED_CHANGE_TAG_BY_CHANGE[provenance.change];
-  const pPr =
-    properties === undefined && changeTag !== undefined
-      ? el("w:pPr", {}, [])
-      : properties;
-  if (
-    pPr !== undefined &&
-    changeTag !== undefined &&
-    provenance !== undefined
-  ) {
-    pPr.children.push(
-      el("w:rPr", {}, [el(changeTag, trackChangeAttrs(state, provenance))]),
-    );
-  }
-  const runs = interleaveRunConstructExtents(
-    paragraph.runs.map((run) => buildRun(run, state, deleted)),
-    paragraph,
-    state,
-  );
-  const content =
-    changeTag === undefined || provenance === undefined
-      ? runs
-      : [el(changeTag, trackChangeAttrs(state, provenance), runs)];
-  return el("w:p", {}, [...(pPr === undefined ? [] : [pPr]), ...content]);
-}
-
 // docx `w:id` values a reference-mark run's own child element carries, one per AnchorType this writer gives a run-level spelling to beyond bookmarks and comment ranges.
-const NOTE_REFERENCE_TAG: Readonly<
+export const NOTE_REFERENCE_TAG: Readonly<
   Record<"comment" | "footnote" | "endnote", string>
 > = {
   comment: "w:commentReference",
@@ -538,7 +280,7 @@ const NOTE_REFERENCE_TAG: Readonly<
 };
 
 // The run-element identities of an interleaved paragraph content list, keyed by their positions in the runs the paragraph carries — what wrapInternalLinks locates a link's slice by, since the markers and field characters interleaved between runs shift raw array indices. Moved above interleaveRunConstructExtents, which is the first (and only earlier) reader.
-class RunPositions {
+export class RunPositions {
   private readonly indexOfElement = new Map<XmlElement, number>();
 
   constructor(runElements: readonly XmlElement[]) {
@@ -552,568 +294,15 @@ class RunPositions {
   }
 }
 
-// The write side of a run-level construct extent (document-schema.js's ContentParagraph.constructs): a bookmark's two halves, a comment extent's commentRangeStart/End pair, and a field's fldChar characters go back between the runs their ranges name, the exact inverse of the reader's run-position walk, so each reads back at the positions it was written from. A comment/footnote/endnote reference mark is not a boundary marker at all: it mutates the run element already sitting at its own recorded index (handled above this function's own boundary-map loop, before the early-return guard, since a paragraph carrying only a reference mark and no bookmark/field/comment-extent must still get it). An internal link wraps its runs in one w:hyperlink/@w:anchor element (wrapInternalLinks below); everything else, a run-scoped content control, writes its paragraph's content untouched and loses only the descriptor, the same content-preserving policy the block-level foreign constructs follow. At a shared boundary the halves go out in three groups, closes of extents that opened earlier, then opens, then point extents (startRun === endRun) as one adjacent group each, a convention the reader is indifferent to (both halves land on the same run position either way) but one the written XML needs: WordprocessingML pairs the halves by w:id with start-before-end ordering, so a point's end emitted among the boundary's closes would precede its own start, and pairing point halves keeps two points at one position from interleaving by id, which is the shape Word itself writes for adjacent point bookmarks.
-function interleaveRunConstructExtents(
-  runElements: readonly XmlElement[],
-  paragraph: ContentParagraph,
-  state: WriteState,
-): XmlElement[] {
-  if (paragraph.constructs === undefined) {
-    return [...runElements];
-  }
-  const fault = findRunConstructFault(paragraph);
-  if (fault !== undefined) {
-    throw new Error(
-      `buildDocxPackageFromContent: run-level construct extent at index ${String(fault.index)} of a paragraph does not name real runs (${fault.kind})`,
-    );
-  }
-  const bookmarks = paragraph.constructs.filter(
-    (
-      extent,
-    ): extent is {
-      descriptor: AnchorDescriptor;
-      startRun: number;
-      endRun: number;
-    } =>
-      extent.descriptor.kind === "anchor" &&
-      extent.descriptor.anchorType === "bookmark",
-  );
-  const fields = paragraph.constructs.filter(
-    (
-      extent,
-    ): extent is {
-      descriptor: FieldDescriptor;
-      startRun: number;
-      endRun: number;
-    } => extent.descriptor.kind === "field",
-  );
-  const links: InternalLinkExtent[] = [];
-  for (const extent of paragraph.constructs) {
-    if (
-      extent.descriptor.kind === "link" &&
-      extent.descriptor.target.kind === "internal"
-    ) {
-      links.push({
-        descriptor: extent.descriptor,
-        startRun: extent.startRun,
-        endRun: extent.endRun,
-        anchor: extent.descriptor.target.anchor,
-      });
-    }
-  }
-  // A comment's extent (startRun !== endRun) and its reference mark (always startRun === endRun, whether it names a comment, footnote, or endnote) are two independently-recorded RunConstructExtent entries the reader can never tell apart from a genuinely zero-width comment extent once both have flattened onto the same anchorType — a real producer never writes one of those, so width is the honest discriminator here, the same "no clean encoding, so no attempt to guess" policy this file already applies to a crossing extent.
-  const commentRanges = paragraph.constructs.filter(
-    (
-      extent,
-    ): extent is {
-      descriptor: AnchorDescriptor;
-      startRun: number;
-      endRun: number;
-    } =>
-      extent.descriptor.kind === "anchor" &&
-      extent.descriptor.anchorType === "comment" &&
-      extent.startRun !== extent.endRun,
-  );
-  const noteReferences = paragraph.constructs.filter(
-    (
-      extent,
-    ): extent is {
-      descriptor: AnchorDescriptor & {
-        anchorType: "comment" | "footnote" | "endnote";
-      };
-      startRun: number;
-      endRun: number;
-    } =>
-      extent.descriptor.kind === "anchor" &&
-      (extent.descriptor.anchorType === "comment" ||
-        extent.descriptor.anchorType === "footnote" ||
-        extent.descriptor.anchorType === "endnote") &&
-      extent.startRun === extent.endRun,
-  );
-  // A reference mark renders as a child of the run it sits at, never as its own inserted run (readDocxContent's recordReferenceAnchor records the point at the reference-carrying run's own index, not a boundary before or after it — see typed/docx/read.ts's own comment on that function), so this mutates the already-built run element in place rather than going through the position-indexed opening/closing/point maps every other construct kind below uses.
-  for (const reference of noteReferences) {
-    const target = runElements[reference.startRun];
-    if (target === undefined) {
-      throw new Error(
-        `buildDocxPackageFromContent: a ${reference.descriptor.anchorType} reference at run index ${String(reference.startRun)} of a paragraph does not name a real run`,
-      );
-    }
-    target.children.push(
-      el(NOTE_REFERENCE_TAG[reference.descriptor.anchorType], {
-        "w:id": encodeXmlText(reference.descriptor.name),
-      }),
-    );
-  }
-  // No early return for the all-empty case: when bookmarks, fields and commentRanges are all empty, closingAt/openingAt/pointAt below never gain an entry, so the general loop's `out` ends up exactly `[...runElements]` anyway — the early return was a second spelling of the same result, never an observable difference.
-  const closingAt = new Map<number, XmlElement[]>();
-  const openingAt = new Map<number, XmlElement[]>();
-  const pointAt = new Map<number, XmlElement[]>();
-  const push = (
-    map: Map<number, XmlElement[]>,
-    position: number,
-    element: XmlElement,
-  ): void => {
-    const existing = map.get(position);
-    if (existing === undefined) {
-      map.set(position, [element]);
-    } else {
-      existing.push(element);
-    }
-  };
-  for (const bookmark of bookmarks) {
-    const id = String(state.counters.nextMarkerId++);
-    const open = el("w:bookmarkStart", {
-      "w:id": id,
-      "w:name": encodeXmlText(bookmark.descriptor.name),
-    });
-    const close = el("w:bookmarkEnd", { "w:id": id });
-    if (bookmark.startRun === bookmark.endRun) {
-      // A point extent's halves are emitted as one adjacent pair, never split across the close/open groups: its end among the closes would precede its own start, and its start among the opens would let a second point at the same position interleave with it by id.
-      push(pointAt, bookmark.startRun, open);
-      push(pointAt, bookmark.startRun, close);
-    } else {
-      push(openingAt, bookmark.startRun, open);
-      push(closingAt, bookmark.endRun, close);
-    }
-  }
-  // A field's own characters spell begin + instruction + separate as one group at the extent's opening boundary (the instruction rides its own w:instrText run, exactly where the reader's code-run walk collects it from), and the end character at the closing boundary.
-  for (const field of fields) {
-    const opening = [
-      fieldCharRun("begin"),
-      el("w:r", {}, [
-        el("w:instrText", { "xml:space": "preserve" }, [
-          txt(encodeXmlText(field.descriptor.instruction)),
-        ]),
-      ]),
-      fieldCharRun("separate"),
-    ];
-    if (field.startRun === field.endRun) {
-      for (const run of opening) {
-        push(pointAt, field.startRun, run);
-      }
-      push(pointAt, field.startRun, fieldCharRun("end"));
-    } else {
-      for (const run of opening) {
-        push(openingAt, field.startRun, run);
-      }
-      push(closingAt, field.endRun, fieldCharRun("end"));
-    }
-  }
-  // Unlike a bookmark's own w:id (an internal marker id this writer mints fresh, since nothing outside the pair reads it), a comment extent's w:id must be the SAME value word/comments.xml's own w:comment carries for this comment — the join key the reader pairs them back through — so descriptor.name is written verbatim rather than through state.counters.
-  for (const range of commentRanges) {
-    const id = encodeXmlText(range.descriptor.name);
-    push(openingAt, range.startRun, el("w:commentRangeStart", { "w:id": id }));
-    push(closingAt, range.endRun, el("w:commentRangeEnd", { "w:id": id }));
-  }
-  const out: XmlElement[] = [];
-  const positions = new RunPositions(runElements);
-  for (let position = 0; position <= runElements.length; position++) {
-    for (const close of closingAt.get(position) ?? []) {
-      out.push(close);
-    }
-    for (const open of openingAt.get(position) ?? []) {
-      out.push(open);
-    }
-    for (const half of pointAt.get(position) ?? []) {
-      out.push(half);
-    }
-    const run = runElements[position];
-    if (run !== undefined) {
-      out.push(run);
-    }
-  }
-  return wrapInternalLinks(out, positions, links);
-}
-
-// One internal-target link extent, the only link shape with a run-level spelling here: an external target rides ContentRun.hyperlink on each covered run instead.
-interface InternalLinkExtent {
-  readonly descriptor: LinkDescriptor;
-  readonly startRun: number;
-  readonly endRun: number;
-  readonly anchor: string;
-}
-
-// Wraps each internal link extent's runs in one w:hyperlink/@w:anchor element — the inverse of the reader's internal-hyperlink walk. A link whose slice cannot be wrapped — it crosses another link's (WordprocessingML has no nested w:hyperlink, and Word itself cannot produce the shape), or it covers a run carrying an external hyperlink of its own (already a w:hyperlink) — writes its runs plain and loses only the descriptor, the content-preserving policy every unwritable construct kind here follows.
-//
-// No wrap-overlap bookkeeping is needed for the internal-link wraps themselves, and an earlier version that tracked wrapped index ranges was removed: nesting is already impossible by construction here. A link crossing or contained in an earlier link's wrap has its start or end run sitting inside that wrap's w:hyperlink element, so `first`/`last` never both resolve and the guard below skips it; a link CONTAINING an earlier one cannot be processed after it, because the sort order (ascending start, then longer extent first at a shared start) always reaches the containing extent first. Index-range overlap tracking in addition to that could only ever fire on links whose slices are genuinely disjoint (adjacent links, whose stale pre-wrap indices still intersect), losing a descriptor the writer could have written.
-function wrapInternalLinks(
-  elements: readonly XmlElement[],
-  positions: RunPositions,
-  links: readonly InternalLinkExtent[],
-): XmlElement[] {
-  // No links-length early return: the loop below handles an empty list identically (zero iterations, out still the input array), so the guard would only be a second spelling of the same fact.
-  let out: readonly XmlElement[] = elements;
-  for (const link of [...links].sort(
-    (a, b) => a.startRun - b.startRun || b.endRun - a.endRun,
-  )) {
-    let first = -1;
-    let last = -1;
-    out.forEach((element, index) => {
-      const position = positions.positionOf(element);
-      if (position === link.startRun) {
-        first = index;
-      }
-      if (position === link.endRun - 1) {
-        last = index;
-      }
-    });
-    // No separate `last === -1` check: last starts at -1 and only ever moves forward, so whenever first has resolved to a real index (>= 0), `last < first` already catches an unresolved last on its own — the two conditions were never independently observable.
-    if (first === -1 || last < first) {
-      continue;
-    }
-    const slice = out.slice(first, last + 1);
-    // No nesting a hyperlink inside a hyperlink — the only shape that can still reach this test is a slice carrying a run's own external-target wrapper element, since internal-link overlap is unreachable by the sort-and-lookup argument above.
-    const carriesHyperlink = slice.some(
-      (element) => element.tag === "w:hyperlink",
-    );
-    if (carriesHyperlink) {
-      continue;
-    }
-    out = [
-      ...out.slice(0, first),
-      el("w:hyperlink", { "w:anchor": encodeXmlText(link.anchor) }, slice),
-      ...out.slice(last + 1),
-    ];
-  }
-  return [...out];
-}
-
-// readDocxContent lifts a paragraph's own images out into sibling blocks after it, so the inverse puts each one back into the run it came out of: the paragraph's trailing empty-text runs, in order, are exactly the runs a drawing-only run reads back as. An image with no such run left takes a fresh one.
-function trailingEmptyRunElements(
-  paragraph: ContentParagraph,
-  element: XmlElement,
-): XmlElement[] {
-  const runElements: XmlElement[] = [];
-  for (const child of element.children) {
-    if (
-      child.type === "element" &&
-      (child.tag === "w:r" || child.tag === "w:hyperlink")
-    ) {
-      runElements.push(child);
-    }
-  }
-  const trailing: XmlElement[] = [];
-  for (let index = paragraph.runs.length - 1; index >= 0; index--) {
-    const run = paragraph.runs[index];
-    const runElement = runElements[index];
-    // No separate run.hyperlink check: buildRun always wraps a hyperlink-carrying run in its own w:hyperlink element, so the structural tag test below already states that fact — spelling it twice left each spelling unobservable (either one alone still caught the case).
-    if (
-      run === undefined ||
-      runElement === undefined ||
-      run.text !== "" ||
-      runElement.tag !== "w:r"
-    ) {
-      break;
-    }
-    trailing.unshift(runElement);
-  }
-  return trailing;
-}
-
-// --- tables -------------------------------------------------------------------------------------------------------
-
 // The four ContentStrokeStyle members' own ST_Border keywords. 'solid' writes as 'single', the plain one-line border readCellBorderEdge maps straight back to solid; the other three are their own keywords.
-const STROKE_STYLE_KEYWORD: Readonly<
+export const STROKE_STYLE_KEYWORD: Readonly<
   Record<"solid" | "dashed" | "dotted" | "double", string>
 > = { solid: "single", dashed: "dashed", dotted: "dotted", double: "double" };
-
-function buildCellBorders(borders: ContentCellBorders): XmlElement {
-  const edges: XmlElement[] = [];
-  const edge = (tag: string, border: ContentCellBorders["top"]): void => {
-    if (border === undefined) {
-      return;
-    }
-    // ContentBorder.style is optional and document-schema.js defines its absence as meaning solid, so an absent style writes the solid keyword rather than no w:val — w:val is what makes a w:tcBorders edge a border at all.
-    const style = border.style ?? "solid";
-    edges.push(
-      el(tag, {
-        "w:val": STROKE_STYLE_KEYWORD[style],
-        "w:sz": String(ptToEighthPoints(border.widthPt)),
-        "w:color": colorToRgbHex(border.color),
-      }),
-    );
-  };
-  edge("w:top", borders.top);
-  edge("w:left", borders.left);
-  edge("w:bottom", borders.bottom);
-  edge("w:right", borders.right);
-  return el("w:tcBorders", {}, edges);
-}
-
-function buildCell(
-  cell: ContentTableCell,
-  state: WriteState,
-  deleted: boolean,
-  gridSpan: number,
-  vMerge: "restart" | "continue" | undefined,
-): XmlElement {
-  const tcPrChildren: XmlElement[] = [];
-  if (gridSpan > 1) {
-    tcPrChildren.push(el("w:gridSpan", { "w:val": String(gridSpan) }));
-  }
-  if (vMerge === "restart") {
-    tcPrChildren.push(el("w:vMerge", { "w:val": "restart" }));
-  } else if (vMerge === "continue") {
-    tcPrChildren.push(el("w:vMerge"));
-  }
-  if (cell.background !== undefined) {
-    tcPrChildren.push(buildCellShading(cell.background));
-  }
-  if (cell.borders !== undefined) {
-    tcPrChildren.push(buildCellBorders(cell.borders));
-  }
-  const content = buildBlockFlow(cell.blocks, state, deleted);
-  // ECMA-376 requires a cell to end with a block-level element, so an empty cell (a vertical-merge continuation, or a genuinely blank one) still gets an empty paragraph.
-  const body = content.length === 0 ? [el("w:p")] : content;
-  return el("w:tc", {}, [
-    ...(tcPrChildren.length === 0 ? [] : [el("w:tcPr", {}, tcPrChildren)]),
-    ...body,
-  ]);
-}
-
-// A column's own isHeader (ContentTableColumn, ExaDev/documents.js#1381) is reported through state.onDiagnostic rather than written: w:tblGrid has no header-column marker at all, so the column's own cells are written exactly like any other column and only the flag is dropped. Reported once per flagged column, naming its index, matching ppt-codec's/documents.js's own pptx TABLE_HEADER_COLUMN_DROPPED precedent (src/drawing/shapes-write.ts, src/edit/pptx/content.ts) for the identical field.
-function reportDroppedHeaderColumns(
-  table: ContentTable,
-  state: WriteState,
-): void {
-  table.columns.forEach((column, columnIndex) => {
-    if (column.isHeader === true) {
-      state.onDiagnostic(
-        {
-          code: DocxWriteDiagnosticCodes.TABLE_HEADER_COLUMN_DROPPED,
-          severity: "warning",
-          message: `buildDocxPackageFromContent: table column ${String(columnIndex)} is a header column, and that is dropped; w:tblGrid has no header-column marker, so the column is written exactly as any other`,
-        },
-        { sourcePath: table.sourcePath },
-      );
-    }
-  });
-}
-
-// Vertical merges are written back the way ECMA-376 spells them — a w:vMerge restart on the anchor and a bare w:vMerge below it — derived from the anchors' own rowSpan, which is exactly what readTable derived that rowSpan from. Horizontal merges are the asymmetric half: ECMA-376 has no element for a column a w:gridSpan already reaches, so a position covered along its own row contributes no w:tc at all, while a position covered from an earlier row contributes one at the covering anchor's first column and none at the rest, carrying that anchor's gridSpan so the continuation is exactly as wide as the cell it continues.
-function buildTable(
-  table: ContentTable,
-  state: WriteState,
-  deleted: boolean,
-): XmlElement {
-  const gridFault = findTableGridFault(table);
-  if (gridFault !== undefined) {
-    throw new Error(
-      `buildDocxPackageFromContent: table breaks the grid rule (${describeTableGridFault(gridFault)})`,
-    );
-  }
-  // w:tblGrid has no element for a column repeating at the left of each printed page (docx has no header-column concept at all), so column.isHeader is never written here — reported through state.onDiagnostic instead (ExaDev/documents.js#1398), once per flagged column, before the grid itself is built.
-  reportDroppedHeaderColumns(table, state);
-  const grid = el(
-    "w:tblGrid",
-    {},
-    table.columns.map((column) =>
-      el("w:gridCol", { "w:w": String(ptToTwips(column.widthPt)) }),
-    ),
-  );
-  const gridPositions = walkTableGrid(table);
-  const rows = table.rows.map((row, rowIndex) => {
-    const cells: XmlElement[] = [];
-    for (const position of gridPositions[rowIndex]!) {
-      if (position.anchorRowIndex === undefined) {
-        const rowSpan = tableCellRowSpan(position.cell);
-        cells.push(
-          buildCell(
-            position.cell,
-            state,
-            deleted,
-            tableCellColumnSpan(position.cell),
-            rowSpan > 1 ? "restart" : undefined,
-          ),
-        );
-        continue;
-      }
-      const anchor =
-        gridPositions[position.anchorRowIndex]![position.anchorColumnIndex]!;
-      // No "anchorRowIndex < rowIndex" check ahead of the column comparison: walkTableGrid only ever assigns a covered position's anchorColumnIndex to a STRICTLY earlier column within the same row (columns are walked left to right, so a same-row anchor's own column is always used up before a later covered position reaches it), so a horizontally-covered position (anchorRowIndex === rowIndex) can never also satisfy columnIndex === anchorColumnIndex — the column comparison alone already excludes it, the same "covered along its own row contributes no w:tc" case this branch's own doc comment above names.
-      if (position.columnIndex === position.anchorColumnIndex) {
-        cells.push(
-          buildCell(
-            position.cell,
-            state,
-            deleted,
-            tableCellColumnSpan(anchor.cell),
-            "continue",
-          ),
-        );
-      }
-    }
-    // w:trHeight is written before w:tblHeader because that is the order CT_TrPr's own property list runs in (cnfStyle, divId, gridBefore, gridAfter, wBefore, wAfter, cantSplit, trHeight, tblHeader, tblCellSpacing, jc, hidden), transcribed from the schema by python-docx's CT_TrPr._tag_seq and not guessed at here. The reader finds each child by tag rather than by position, so nothing on this side depends on the order; a real consumer reading the file might.
-    const trProperties = [
-      ...(row.heightPt === undefined
-        ? []
-        : [el("w:trHeight", { "w:val": String(ptToTwips(row.heightPt)) })]),
-      // An on/off property states itself by being present: no w:val is the same as w:val="true", and the reader's own readToggle reads it back that way.
-      ...(row.isHeader === true ? [el("w:tblHeader", {})] : []),
-    ];
-    const trPr =
-      trProperties.length === 0 ? undefined : el("w:trPr", {}, trProperties);
-    return el("w:tr", {}, [...(trPr === undefined ? [] : [trPr]), ...cells]);
-  });
-  const tblPr = el("w:tblPr", {}, [
-    el("w:tblW", { "w:w": "0", "w:type": "auto" }),
-  ]);
-  return el("w:tbl", {}, [tblPr, grid, ...rows]);
-}
-
-// --- images -----------------------------------------------------------------------------------------------------------
-
-function buildDrawing(image: ContentImageBlock, state: WriteState): XmlElement {
-  const relId = imageRelationshipId(state, image);
-  const drawingId = state.counters.nextDrawingId++;
-  const cx = String(ptToEmu(image.widthPt));
-  const cy = String(ptToEmu(image.heightPt));
-  const docPrAttrs: Record<string, string> = {
-    id: String(drawingId),
-    name: `Picture ${String(drawingId)}`,
-  };
-  if (image.altText !== undefined) {
-    docPrAttrs.descr = encodeXmlText(image.altText);
-  }
-  const picture = el("pic:pic", { "xmlns:pic": DRAWING_PIC_NS }, [
-    el("pic:nvPicPr", {}, [
-      el("pic:cNvPr", {
-        id: String(drawingId),
-        name: `Picture ${String(drawingId)}`,
-      }),
-      el("pic:cNvPicPr"),
-    ]),
-    el("pic:blipFill", {}, [
-      el("a:blip", { "r:embed": relId }),
-      el("a:stretch", {}, [el("a:fillRect")]),
-    ]),
-    el("pic:spPr", {}, [
-      el("a:xfrm", {}, [
-        el("a:off", { x: "0", y: "0" }),
-        el("a:ext", { cx, cy }),
-      ]),
-      el("a:prstGeom", { prst: "rect" }, [el("a:avLst")]),
-    ]),
-  ]);
-  return el("w:drawing", {}, [
-    el("wp:inline", { distT: "0", distB: "0", distL: "0", distR: "0" }, [
-      el("wp:extent", { cx, cy }),
-      el("wp:docPr", docPrAttrs),
-      el("a:graphic", { "xmlns:a": DRAWINGML_NS }, [
-        el("a:graphicData", { uri: DRAWING_PIC_NS }, [picture]),
-      ]),
-    ]),
-  ]);
-}
-
-// --- embedded objects -------------------------------------------------------------------------------------------------
-
-// The OLE payload part this writer produces for one embedded object: the nested document re-serialised through its own format's builder and zipped — the direct-ZIP spelling, not a classic OLE compound-file wrapper, matching what readEmbeddedOoxmlPayload accepts at any embeddings path (the payload is detected by ZIP magic and entry part, never by extension or content type).
-interface EmbeddedPayload {
-  readonly extension: "docx" | "xlsx" | "pptx";
-  readonly progId: string;
-  readonly base64: string;
-}
-
-// Serialises an embedded object's nested document into its OLE payload bytes, dispatching on the document's own kind rather than the block's objectKind label: the payload's bytes, part extension, and ProgID are all properties of the document being serialised, and while schema treats the objectKind/document.kind pairing as a producer convention rather than a constraint, the only coherent rule for a writer is one source of truth — the document itself. The ProgIDs are the canonical OLE names of the OOXML-era Office applications (what a real producer's o:OLEObject carries and what Word launches to activate the embed); the schema carries no progId field, so the writer synthesises one per kind.
-//
-// A presentation document serialises through the injected port (state.serialiseEmbeddedPresentation — EmbeddedPresentationSerialiser's own comment states why it is a port), and a document kind with no serialiser at all is refused loudly rather than silently dropped: readDocxContent recovers embedded wordprocessing, presentation, and spreadsheet documents alike, so silently skipping any of them would re-create exactly the read-once-never-written loss this emitter exists to close. Drawing/formula are ODF/MathML spellings no OOXML OLE payload corresponds to — the reader's degrade-tier rule (second-order content never fails the host read) inverts at the write boundary, where the caller is explicitly asking for a document and a writer that cannot produce one faithfully says so.
-function embeddedPayloadOf(
-  document: ContentEmbeddedObjectBlock["document"],
-  state: WriteState,
-): EmbeddedPayload {
-  switch (document.kind) {
-    case "wordprocessing":
-      return {
-        extension: "docx",
-        progId: "Word.Document.12",
-        base64: bytesToBase64(
-          encodePackage(buildDocxPackageFromContent(document)),
-        ),
-      };
-    case "spreadsheet":
-      return {
-        extension: "xlsx",
-        progId: "Excel.Sheet.12",
-        base64: bytesToBase64(
-          encodePackage(buildXlsxPackageFromContent(document)),
-        ),
-      };
-    case "presentation": {
-      const serialise = state.serialiseEmbeddedPresentation;
-      if (serialise === undefined) {
-        throw new Error(
-          "buildDocxPackageFromContent: an embedded object carrying a presentation document has no serialiser (this package has no PresentationML writer; pass options.serialiseEmbeddedPresentation — documents.js wires one from its own pptx builder)",
-        );
-      }
-      return {
-        extension: "pptx",
-        progId: "PowerPoint.Show.12",
-        base64: bytesToBase64(serialise(document)),
-      };
-    }
-    default:
-      throw new Error(
-        `buildDocxPackageFromContent: an embedded object carrying a ${document.kind} document has no OOXML OLE payload this writer can produce (embedded wordprocessing and spreadsheet documents serialise through their own builders, a presentation through options.serialiseEmbeddedPresentation, and drawing/formula are ODF/MathML spellings)`,
-      );
-  }
-}
-
-// One embeddings part and one relationship per distinct payload, mirroring imageRelationshipId: copy-pasted objects (the common case — the reader decodes one shared part and hands both blocks the same nested document) serialise to identical bytes and therefore re-share one part, never one duplicate part per occurrence.
-function embeddedObjectRelationshipId(
-  state: WriteState,
-  payload: EmbeddedPayload,
-): string {
-  const existing = state.embeddingIds.get(payload.base64);
-  if (existing !== undefined) {
-    return existing;
-  }
-  let name = state.counters.embeddingFiles.get(payload.base64);
-  if (name === undefined) {
-    name = `oleObject${String(state.counters.nextEmbeddingFileId++)}.${payload.extension}`;
-    state.counters.embeddingFiles.set(payload.base64, name);
-  }
-  state.embeddingParts.set(name, payload);
-  const id = addRelationship(
-    state,
-    REL_OLE_OBJECT,
-    `embeddings/${name}`,
-    false,
-  );
-  state.embeddingIds.set(payload.base64, id);
-  return id;
-}
-
-// readObjectEmbeddedObject's inverse: w:dxaOrig/w:dyaOrig carry the block frame's size in twips (the reader skips a w:object missing either attribute, so both are always written — position is not written, since an inline flow object has none and the reader's own frame sits at the origin), and o:OLEObject names the payload part through its relationship. No VML preview picture (v:shape/v:imagedata) is emitted: the reader never read one into the model (no VML reader exists, and real producers ship WMF/EMF previews this ecosystem has no writer for), so there are no preview bytes to carry and regenerating one is out of scope — Word shows the object as blank until activated. ProgID and DrawAspect are Word's own activation vocabulary; this package's reader reads only r:id.
-function buildObjectElement(
-  block: ContentEmbeddedObjectBlock,
-  state: WriteState,
-): XmlElement {
-  const payload = embeddedPayloadOf(block.document, state);
-  const relId = embeddedObjectRelationshipId(state, payload);
-  return el(
-    "w:object",
-    {
-      "w:dxaOrig": String(ptToTwips(block.frame.widthPt)),
-      "w:dyaOrig": String(ptToTwips(block.frame.heightPt)),
-    },
-    [
-      el("o:OLEObject", {
-        Type: "Embed",
-        ProgID: payload.progId,
-        DrawAspect: "Content",
-        "r:id": relId,
-      }),
-    ],
-  );
-}
-
-// --- construct markers ------------------------------------------------------------------------------------------------
 
 // CT_TrackChange's own w:id and w:author are both required attributes (ECMA-376's schema, not merely convention); w:date is optional. ProvenanceDescriptor.author is optional — not every ContentDocument source records one — so an absent author falls back to this rather than the writer omitting a required attribute. Each call mints its own w:id, since every tracked-change element (a paragraph mark's rPr/w:ins and the run wrapper around its content alike) needs a unique one, not one id shared across a whole multi-paragraph extent.
 const UNKNOWN_PROVENANCE_AUTHOR = "Unknown";
 
-function trackChangeAttrs(
+export function trackChangeAttrs(
   state: WriteState,
   descriptor: ProvenanceDescriptor,
 ): Record<string, string> {
@@ -1152,7 +341,9 @@ const SDT_LOCK_VALUE: Readonly<
   both: "sdtContentLocked",
 };
 
-function buildSdtProperties(descriptor: ContentControlDescriptor): XmlElement {
+export function buildSdtProperties(
+  descriptor: ContentControlDescriptor,
+): XmlElement {
   const children: XmlElement[] = [];
   if (descriptor.alias !== undefined) {
     children.push(el("w:alias", { "w:val": encodeXmlText(descriptor.alias) }));
@@ -1255,7 +446,7 @@ function restoreGalleryElement(
 }
 
 // The reader turns a matched marker pair back into a construct by bracket position, so the writer works from the same shape: the flat list is parsed into the nesting its brackets already describe, and each construct then chooses whether it is an element wrapping its extent (w:sdt, w:ins) or a pair of sibling markers around it (w:bookmarkStart/End) or characters injected into the extent's own paragraphs (a field).
-type FlowItem =
+export type FlowItem =
   | { readonly kind: "block"; readonly block: ContentBlock }
   | {
       readonly kind: "construct";
@@ -1263,548 +454,10 @@ type FlowItem =
       readonly children: FlowItem[];
     };
 
-function parseFlow(blocks: readonly ContentBlock[]): FlowItem[] {
-  const imbalance = findConstructMarkerImbalance(blocks);
-  if (imbalance !== undefined) {
-    throw new Error(
-      `buildDocxPackageFromContent: construct markers do not balance (${imbalance.kind} at block ${String(imbalance.index)})`,
-    );
-  }
-  const roots: FlowItem[] = [];
-  const stack: FlowItem[][] = [roots];
-  for (const block of blocks) {
-    const current = stack[stack.length - 1]!;
-    if (block.kind === "constructStart") {
-      const item: FlowItem = {
-        kind: "construct",
-        descriptor: block.descriptor,
-        children: [],
-      };
-      current.push(item);
-      stack.push(item.children);
-      continue;
-    }
-    if (block.kind === "constructEnd") {
-      stack.pop();
-      continue;
-    }
-    current.push({ kind: "block", block });
-  }
-  return roots;
-}
-
-// A field's own w:fldChar characters have to sit inside the extent's paragraphs rather than beside them, since that is exactly where the reader's block-scope test looks for them: the begin/instruction/separate group at the head of the first paragraph, the end at the tail of the last. These two walk the freshly-built nodes for those paragraphs, descending through whatever wrapper elements (w:ins, w:sdt) the extent's own nested constructs put in the way.
-function findParagraph(
-  nodes: readonly XmlNode[],
-  last: boolean,
-): XmlElement | undefined {
-  const ordered = last ? [...nodes].reverse() : nodes;
-  for (const node of ordered) {
-    if (node.type !== "element") {
-      continue;
-    }
-    if (node.tag === "w:p") {
-      return node;
-    }
-    if (node.tag === "w:tbl") {
-      continue;
-    }
-    const nested = findParagraph(node.children, last);
-    if (nested !== undefined) {
-      return nested;
-    }
-  }
-  return undefined;
-}
-
-function fieldCharRun(type: string): XmlElement {
-  return el("w:r", {}, [el("w:fldChar", { "w:fldCharType": type })]);
-}
-
-function fieldOpeningRuns(instruction: string): XmlElement[] {
-  return [
-    fieldCharRun("begin"),
-    el("w:r", {}, [
-      el("w:instrText", { "xml:space": "preserve" }, [
-        txt(encodeXmlText(instruction)),
-      ]),
-    ]),
-    fieldCharRun("separate"),
-  ];
-}
-
-function insertAfterProperties(
-  paragraph: XmlElement,
-  runs: readonly XmlElement[],
-): void {
-  const first = paragraph.children[0];
-  const offset = first?.type === "element" && first.tag === "w:pPr" ? 1 : 0;
-  paragraph.children.splice(offset, 0, ...runs);
-}
-
-function buildFieldNodes(
-  instruction: string,
-  content: readonly XmlNode[],
-): XmlNode[] {
-  const first = findParagraph(content, false);
-  const last = findParagraph(content, true);
-  if (first === undefined || last === undefined) {
-    return [
-      el("w:p", {}, fieldOpeningRuns(instruction)),
-      ...content,
-      el("w:p", {}, [fieldCharRun("end")]),
-    ];
-  }
-  insertAfterProperties(first, fieldOpeningRuns(instruction));
-  last.children.push(fieldCharRun("end"));
-  return [...content];
-}
-
-// `provenance` is the ambient tracked change, if any, this construct sits inside — a bookmark, content control, or field nested inside a tracked-change range does not interrupt that change, since it wraps at a different level (block-sibling markers, or an element around the extent) that coexists with the change wrapping the paragraphs' own marks and runs underneath. Every branch but the provenance one itself threads the ambient value straight through to whatever paragraphs its own content eventually reaches; the provenance branch replaces it with its own descriptor for its own extent, the ordinary nesting rule for two constructs of the same kind.
-function buildConstructNodes(
-  descriptor: ConstructDescriptor,
-  children: readonly FlowItem[],
-  state: WriteState,
-  deleted: boolean,
-  provenance: ProvenanceDescriptor | undefined,
-): XmlNode[] {
-  if (descriptor.kind === "contentControl") {
-    return [
-      el("w:sdt", {}, [
-        buildSdtProperties(descriptor),
-        el(
-          "w:sdtContent",
-          {},
-          buildFlowItems(children, state, deleted, provenance),
-        ),
-      ]),
-    ];
-  }
-  if (descriptor.kind === "provenance") {
-    // No block-level element here, and no branch on whether TRACKED_CHANGE_TAG_BY_CHANGE has an entry for this change: buildParagraph reads descriptor.change back out of the threaded provenance itself and decides there whether to wrap each paragraph's own runs in a tag, so this only needs to thread the descriptor through unconditionally — the ordinary nesting rule for two constructs of the same kind, replacing whatever ambient provenance this extent sits inside for every paragraph the extent reaches. A formatChange nested inside an outer tracked change (an insertion's own pPrChange, say) therefore correctly stops inheriting the outer change's own w:ins/w:del wrapper for its own extent, rather than silently carrying it through untouched.
-    return buildFlowItems(
-      children,
-      state,
-      deleted || isDeletedChange(descriptor.change),
-      descriptor,
-    );
-  }
-  if (descriptor.kind === "anchor" && descriptor.anchorType === "bookmark") {
-    const id = String(state.counters.nextMarkerId++);
-    return [
-      el("w:bookmarkStart", {
-        "w:id": id,
-        "w:name": encodeXmlText(descriptor.name),
-      }),
-      ...buildFlowItems(children, state, deleted, provenance),
-      el("w:bookmarkEnd", { "w:id": id }),
-    ];
-  }
-  // A comment extent spanning more than one paragraph reads back as a block-scoped construct (constructs.ts's own block/run split, mirroring the identical bookmark case immediately above) rather than a run-level one — its own w:id is descriptor.name verbatim, the SAME join key the run-level comment-range branch in interleaveRunConstructExtents writes, since both are the identical comments.xml entry's own id. The comment's own reference mark (w:commentReference) is never block-scoped — it is always a single run inside whichever one paragraph carries it — so it is handled entirely by the run-level noteReferences branch regardless of whether the range wrapping it here is block- or run-scoped.
-  if (descriptor.kind === "anchor" && descriptor.anchorType === "comment") {
-    const id = encodeXmlText(descriptor.name);
-    return [
-      el("w:commentRangeStart", { "w:id": id }),
-      ...buildFlowItems(children, state, deleted, provenance),
-      el("w:commentRangeEnd", { "w:id": id }),
-    ];
-  }
-  if (descriptor.kind === "field") {
-    return buildFieldNodes(
-      descriptor.instruction,
-      buildFlowItems(children, state, deleted, provenance),
-    );
-  }
-  return buildFlowItems(children, state, deleted, provenance);
-}
-
-// `provenance` propagates a tracked change down to the paragraphs it wraps so each paragraph's own mark — and its own runs — carry the same change; it flows straight through a nested non-provenance construct (buildConstructNodes threads it on), since a bookmark or content control nested inside a tracked-change range does not interrupt the change, and only stops where a nested provenance construct replaces it with its own descriptor for its own extent.
-//
-// `pendingPageBreak` carries a still-unattached w:pageBreakBefore forward across sibling items in `items`, since the paragraph that break belongs to may not be the very next item: it can be inside a nested construct (a page-break-before paragraph that also opens a bookmark or tracked change), or there may be no paragraph at all before the next table or image. The construct branch below re-delegates a pending break into that construct's own children (as a synthetic leading pageBreak block) so the same paragraph-attachment logic finds it however deep it is nested; the table and image branches, which cannot carry w:pageBreakBefore themselves, materialise it as their own leading empty paragraph instead.
-function buildFlowItems(
-  items: readonly FlowItem[],
-  state: WriteState,
-  deleted: boolean,
-  provenance: ProvenanceDescriptor | undefined,
-): XmlNode[] {
-  const nodes: XmlNode[] = [];
-  let pendingPageBreak = false;
-  let lastParagraph: XmlElement | undefined;
-  let availableImageRuns: XmlElement[] = [];
-  for (const item of items) {
-    if (item.kind === "construct") {
-      const pageBreakItem: FlowItem = {
-        kind: "block",
-        block: { kind: "pageBreak" },
-      };
-      const constructChildren = pendingPageBreak
-        ? [pageBreakItem, ...item.children]
-        : item.children;
-      nodes.push(
-        ...buildConstructNodes(
-          item.descriptor,
-          constructChildren,
-          state,
-          deleted,
-          provenance,
-        ),
-      );
-      pendingPageBreak = false;
-      lastParagraph = undefined;
-      availableImageRuns = [];
-      continue;
-    }
-    const block = item.block;
-    if (block.kind === "pageBreak") {
-      pendingPageBreak = true;
-      continue;
-    }
-    if (block.kind === "paragraph") {
-      const paragraph = buildParagraph(
-        block,
-        state,
-        pendingPageBreak,
-        deleted,
-        provenance,
-      );
-      pendingPageBreak = false;
-      lastParagraph = paragraph;
-      availableImageRuns = trailingEmptyRunElements(block, paragraph);
-      nodes.push(paragraph);
-      continue;
-    }
-    if (block.kind === "image") {
-      if (pendingPageBreak) {
-        const breakParagraph = el("w:p", {}, [
-          el("w:pPr", {}, [el("w:pageBreakBefore")]),
-        ]);
-        nodes.push(breakParagraph);
-        lastParagraph = breakParagraph;
-        availableImageRuns = [];
-        pendingPageBreak = false;
-      }
-      const drawing = buildDrawing(block, state);
-      const reusable = availableImageRuns.shift();
-      if (reusable !== undefined) {
-        reusable.children.push(drawing);
-      } else if (lastParagraph !== undefined) {
-        lastParagraph.children.push(el("w:r", {}, [drawing]));
-      } else {
-        const paragraph = el("w:p", {}, [el("w:r", {}, [drawing])]);
-        lastParagraph = paragraph;
-        nodes.push(paragraph);
-      }
-      continue;
-    }
-    if (block.kind === "table") {
-      if (pendingPageBreak) {
-        nodes.push(el("w:p", {}, [el("w:pPr", {}, [el("w:pageBreakBefore")])]));
-        pendingPageBreak = false;
-      }
-      nodes.push(buildTable(block, state, deleted));
-      lastParagraph = undefined;
-      availableImageRuns = [];
-      continue;
-    }
-    // The embedded-object inverse of readParagraphLiftedBlocks: the reader lifted the w:object out of the paragraph that contained it as a sibling block, so the writer puts it back into that paragraph's trailing empty run (the run an object-only w:r reads back as), falling back to a fresh run on the last paragraph or a paragraph of its own — the same placement ladder an image follows, since both were lifted by the same convention. A pending page break is materialised first because a w:object cannot carry w:pageBreakBefore itself, exactly as for an image.
-    if (block.kind === "embeddedObject") {
-      if (pendingPageBreak) {
-        const breakParagraph = el("w:p", {}, [
-          el("w:pPr", {}, [el("w:pageBreakBefore")]),
-        ]);
-        nodes.push(breakParagraph);
-        lastParagraph = breakParagraph;
-        availableImageRuns = [];
-        pendingPageBreak = false;
-      }
-      const object = buildObjectElement(block, state);
-      const reusable = availableImageRuns.shift();
-      if (reusable !== undefined) {
-        reusable.children.push(object);
-      } else if (lastParagraph !== undefined) {
-        lastParagraph.children.push(el("w:r", {}, [object]));
-      } else {
-        const paragraph = el("w:p", {}, [el("w:r", {}, [object])]);
-        lastParagraph = paragraph;
-        nodes.push(paragraph);
-      }
-      continue;
-    }
-  }
-  if (pendingPageBreak) {
-    nodes.push(el("w:p", {}, [el("w:pPr", {}, [el("w:pageBreakBefore")])]));
-  }
-  return nodes;
-}
-
-function buildBlockFlow(
-  blocks: readonly ContentBlock[],
-  state: WriteState,
-  deleted: boolean,
-): XmlNode[] {
-  return buildFlowItems(parseFlow(blocks), state, deleted, undefined);
-}
-
 // --- styles.xml -------------------------------------------------------------------------------------------------------
 
-const NORMAL_STYLE_ID = "Normal";
+export const NORMAL_STYLE_ID = "Normal";
 
-// Every distinct ContentParagraph.styleId a document's own blocks reference, recursed into table cells (the only place a block flow nests inside this schema — a construct's own children stay in the same flat array, per parseFlow's own doc comment above). Collected across every section AND every header/footer part, since a w:pStyle inside a header is exactly as dangling as one in the body if styles.xml never defines it.
-function collectParagraphStyleIds(
-  blocks: readonly ContentBlock[],
-  styleIds: Set<string>,
-): void {
-  for (const block of blocks) {
-    if (block.kind === "paragraph") {
-      if (block.styleId !== undefined) {
-        styleIds.add(block.styleId);
-      }
-    } else if (block.kind === "table") {
-      for (const row of block.rows) {
-        for (const cell of row.cells) {
-          collectParagraphStyleIds(cell.blocks, styleIds);
-        }
-      }
-    }
-  }
-}
-
-// document-schema.js's own styleId field comment states the constraint this writer works under: "round-trip-only: a producer's own style name, meaningful only to a consumer that already knows that producer's naming convention" — ContentParagraph carries no basedOn chain, no resolved paragraph/run properties, not even a human-readable display name for a styleId, because resolveParagraphProperties/resolveRunProperties (styles.ts) fully materialise the style cascade into direct formatting at read time and nothing keeps the original cascade around. So this is not a lossy shortcut around a richer model this package chooses not to use — there is no richer model to write from. What this DOES fix is the defect the issue names: previously a paragraph's own w:pStyle referenced a styleId that resolved to nothing at all, because styles.xml was never written; every styleId this writer has ever seen referenced now resolves to a real, valid w:style entry (empty of properties, since the properties it would have carried are already spelled as direct formatting on every paragraph/run that used it — Word renders identically whether or not this stub carries them). w:docDefaults and a w:default="1" Normal/DefaultParagraphFont pair are always written, even for a document that references no styleId at all, matching what a real Word-produced styles.xml always carries and keeping every producer's file shape uniform rather than making the part's very presence a signal about paragraph content.
-function buildStylesPart(styleIds: ReadonlySet<string>): XmlPart {
-  const styles: XmlElement[] = [
-    el("w:docDefaults", {}, [el("w:rPrDefault"), el("w:pPrDefault")]),
-    el(
-      "w:style",
-      { "w:type": "paragraph", "w:default": "1", "w:styleId": NORMAL_STYLE_ID },
-      [el("w:name", { "w:val": NORMAL_STYLE_ID })],
-    ),
-    el(
-      "w:style",
-      {
-        "w:type": "character",
-        "w:default": "1",
-        "w:styleId": "DefaultParagraphFont",
-      },
-      [el("w:name", { "w:val": "Default Paragraph Font" })],
-    ),
-  ];
-  const orderedIds = [...styleIds]
-    .filter((id) => id !== NORMAL_STYLE_ID)
-    .sort();
-  for (const id of orderedIds) {
-    const encoded = encodeXmlText(id);
-    styles.push(
-      el("w:style", { "w:type": "paragraph", "w:styleId": encoded }, [
-        el("w:name", { "w:val": encoded }),
-        el("w:basedOn", { "w:val": NORMAL_STYLE_ID }),
-      ]),
-    );
-  }
-  return xmlPart(el("w:styles", { "xmlns:w": WML_NS }, styles));
-}
-
-// --- comments, footnotes, and endnotes ---------------------------------------------------------------------------------
-
-// readComment's inverse: one w:comment per Comment, its text as a single paragraph. A comment with no id (Comment.id is optional — see read.ts's own field comment) gets one minted here starting past every explicitly-carried numeric id, so every comment this writer emits has a real w:id even though nothing in `content` can then reference it by name; every comment produced by readDocxContent itself always carries the id its own w:comment/@w:id supplied, so this path is only ever exercised by a hand-built DocxContent.
-function buildCommentsPart(comments: readonly Comment[]): XmlPart {
-  const explicitIds = comments
-    .map((comment) => Number(comment.id))
-    .filter((id) => Number.isInteger(id));
-  let nextMintedId =
-    explicitIds.length === 0 ? 1 : Math.max(...explicitIds) + 1;
-  const children = comments.map((comment) => {
-    const id = comment.id ?? String(nextMintedId++);
-    const attrs: Record<string, string> = { "w:id": encodeXmlText(id) };
-    if (comment.author !== undefined) {
-      attrs["w:author"] = encodeXmlText(comment.author);
-    }
-    return el("w:comment", attrs, [
-      el("w:p", {}, [el("w:r", {}, buildRunContent(comment.text, false))]),
-    ]);
-  });
-  return xmlPart(el("w:comments", { "xmlns:w": WML_NS }, children));
-}
-
-// The two boilerplate notes every real footnotes.xml/endnotes.xml carries — ids -1 (separator, the short horizontal rule Word draws above the first note) and 0 (continuationSeparator, the longer rule drawn when a note continues onto another page) — which readNotesPart (read.ts) deliberately filters out of DocxDocument.footnotes/endnotes, so a genuine reader of this writer's own output round-trips cleanly even though the source w:footnotes/w:endnotes element these two live in does not.
-function noteBoilerplate(tag: "w:footnote" | "w:endnote"): XmlElement[] {
-  return [
-    el(tag, { "w:type": "separator", "w:id": "-1" }, [
-      el("w:p", {}, [el("w:r", {}, [el("w:separator")])]),
-    ]),
-    el(tag, { "w:type": "continuationSeparator", "w:id": "0" }, [
-      el("w:p", {}, [el("w:r", {}, [el("w:continuationSeparator")])]),
-    ]),
-  ];
-}
-
-// readFootnote's inverse, shared between word/footnotes.xml and word/endnotes.xml exactly as readNotesPart shares the read side. A note's own w:id is written back verbatim when Footnote.id is present — load-bearing, since a paragraph's own footnote/endnote reference-mark construct (interleaveRunConstructExtents above) carries that SAME id as its descriptor.name, the join key WordprocessingML pairs a w:footnoteReference/w:endnoteReference to its body through; minting a fresh id here instead would silently break every reference mark this writer also emits. A note with no id (the same optional-field, hand-built-content case buildCommentsPart's own comment explains) gets one minted past every explicitly-carried numeric id, on the same reasoning: nothing in a hand-built `content` could have referenced it by name anyway. w:type is written only when the source recorded one other than the ordinary "normal" implied by its absence.
-function buildNotesPart(
-  tag: "w:footnote" | "w:endnote",
-  notes: readonly Footnote[],
-): XmlElement {
-  const explicitIds = notes
-    .map((note) => Number(note.id))
-    .filter((id) => Number.isInteger(id));
-  let nextMintedId =
-    explicitIds.length === 0 ? 1 : Math.max(...explicitIds) + 1;
-  const noteElements = notes.map((note) => {
-    const id = note.id ?? String(nextMintedId++);
-    const attrs: Record<string, string> = { "w:id": encodeXmlText(id) };
-    if (note.type !== undefined && note.type !== "normal") {
-      attrs["w:type"] = encodeXmlText(note.type);
-    }
-    return el(tag, attrs, [
-      el("w:p", {}, [el("w:r", {}, buildRunContent(note.text, false))]),
-    ]);
-  });
-  return el(
-    tag === "w:footnote" ? "w:footnotes" : "w:endnotes",
-    {
-      "xmlns:w": WML_NS,
-    },
-    [...noteBoilerplate(tag), ...noteElements],
-  );
-}
-
-// --- headers and footers ------------------------------------------------------------------------------------------
-
-// One header/footer part's own body — the same block-flow machinery the document body itself is built through, so an image or hyperlink inside a header resolves through THIS part's own relationships (registered on the fresh WriteState passed in), never the document's — readHeaderFooterParts' own doc comment states this is exactly how it is read back.
-function buildHeaderFooterPart(
-  part: HeaderFooterPart,
-  partState: WriteState,
-): XmlPart {
-  const nodes = buildBlockFlow(part.blocks, partState, false);
-  const root = el(
-    part.kind === "header" ? "w:hdr" : "w:ftr",
-    {
-      "xmlns:w": WML_NS,
-      "xmlns:r": REL_NS,
-      "xmlns:a": DRAWINGML_NS,
-      "xmlns:wp": DRAWING_WP_NS,
-      "xmlns:pic": DRAWING_PIC_NS,
-      "xmlns:mc": MARKUP_COMPAT_NS,
-      "xmlns:o": VML_OFFICE_NS,
-      "xmlns:w14": W14_NS,
-      "xmlns:w15": W15_NS,
-      "mc:Ignorable": "w14 w15",
-    },
-    nodes,
-  );
-  return xmlPart(root);
-}
-
-interface BuiltHeaderFooterParts {
-  // Every emitted part keyed by its OWN package path (word/header1.xml, word/_rels/header1.xml.rels, and any word/media|embeddings file its own WriteState minted) — merged straight into the package's own `parts` record by buildDocxPackageFromContent.
-  readonly parts: Package["parts"];
-  // The document-level relationship id (registered on the BODY's own WriteState/document.xml.rels, since that is what a w:headerReference/w:footerReference's own r:id resolves against) for each header/footer part, keyed by that part's ORIGINAL path — the exact string DocxContent.sectionHeaderFooters names a slot's target with, so resolving a section's own reference is a straight map lookup.
-  readonly relIdByPath: ReadonlyMap<string, string>;
-  // Every header/footer part's own media/embeddings registry, merged: buildContentTypesPart needs the format/extension metadata behind these files (a word/media/*.png's own Default entry, an embeddings part's own Override) that the flat binary `parts` record above does not carry back out on its own.
-  readonly mediaParts: ReadonlyMap<
-    string,
-    { format: "png" | "jpeg" | "gif"; base64: string }
-  >;
-  readonly embeddingParts: ReadonlyMap<string, EmbeddedPayload>;
-}
-
-// Builds every header/footer part DocxContent carries, registering one document-level relationship per part (shared by every section that references it, exactly as Word itself shares one relationship across several w:headerReference/w:footerReference elements) on `documentState` — the same WriteState buildDocumentPart's own sections will be built against, so its word/_rels/document.xml.rels ends up carrying these relationships too.
-function buildHeaderFooterParts(
-  headerFooterParts: readonly HeaderFooterPart[],
-  documentState: WriteState,
-  options: BuildDocxContentOptions | undefined,
-): BuiltHeaderFooterParts {
-  const parts: Package["parts"] = {};
-  const relIdByPath = new Map<string, string>();
-  const mediaParts = new Map<
-    string,
-    { format: "png" | "jpeg" | "gif"; base64: string }
-  >();
-  const embeddingParts = new Map<string, EmbeddedPayload>();
-  headerFooterParts.forEach((part, index) => {
-    const partState = newWriteState(options, documentState.counters);
-    const partName = `word/${part.kind}${String(index + 1)}.xml`;
-    parts[partName] = buildHeaderFooterPart(part, partState);
-    if (partState.relationships.length > 0) {
-      parts[`word/_rels/${part.kind}${String(index + 1)}.xml.rels`] =
-        buildDocumentRelsPart(partState);
-    }
-    for (const [name, media] of partState.mediaParts) {
-      parts[`word/media/${name}`] = { kind: "binary", base64: media.base64 };
-      mediaParts.set(name, media);
-    }
-    for (const [name, payload] of partState.embeddingParts) {
-      parts[`word/embeddings/${name}`] = {
-        kind: "binary",
-        base64: payload.base64,
-      };
-      embeddingParts.set(name, payload);
-    }
-    const relType = part.kind === "header" ? REL_HEADER : REL_FOOTER;
-    const rId = addRelationship(
-      documentState,
-      relType,
-      `${part.kind}${String(index + 1)}.xml`,
-      false,
-    );
-    relIdByPath.set(part.path, rId);
-  });
-  return { parts, relIdByPath, mediaParts, embeddingParts };
-}
-
-// One section's own w:headerReference/w:footerReference elements, resolved from DocxDocument.sectionHeaderFooters' own path-keyed slots through the relationship ids buildHeaderFooterParts registered — a slot naming a path that was not itself in DocxContent.headerFooterParts (a caller error; never true of readDocxContent's own output, which always emits the referenced part alongside the reference) resolves to no element rather than a reference with no relationship behind it.
-function buildSectionHeaderFooterReferences(
-  references: SectionHeaderFooterReferences | undefined,
-  relIdByPath: ReadonlyMap<string, string>,
-): XmlElement[] {
-  if (references === undefined) {
-    return [];
-  }
-  const elements: XmlElement[] = [];
-  const slots = ["default", "first", "even"] as const;
-  for (const tag of ["w:headerReference", "w:footerReference"] as const) {
-    const slotRefs =
-      tag === "w:headerReference" ? references.header : references.footer;
-    if (slotRefs === undefined) {
-      continue;
-    }
-    for (const slot of slots) {
-      const path = slotRefs[slot];
-      const rId = path === undefined ? undefined : relIdByPath.get(path);
-      if (rId !== undefined) {
-        elements.push(el(tag, { "w:type": slot, "r:id": rId }));
-      }
-    }
-  }
-  return elements;
-}
-
-// --- sections and the document part ---------------------------------------------------------------------------------
-
-function buildSectionProperties(
-  section: ContentSection,
-  headerFooterReferences: readonly XmlElement[] = [],
-): XmlElement {
-  // CT_SectPr's own child sequence puts EG_HdrFtrReferences (headerReference*/footerReference*) before w:type before w:pgSz, so the reference elements lead, then an emitted break kind lands ahead of the geometry it qualifies. An absent breakType writes no w:type at all: that absence IS WordprocessingML's own nextPage default, and spelling it would turn "no break kind declared" into "break kind declared as the default" on the way back in.
-  const type =
-    section.breakType === undefined
-      ? []
-      : [el("w:type", { "w:val": section.breakType })];
-  return el("w:sectPr", {}, [
-    ...headerFooterReferences,
-    ...type,
-    el("w:pgSz", {
-      "w:w": String(ptToTwips(section.pageSize.widthPt)),
-      "w:h": String(ptToTwips(section.pageSize.heightPt)),
-    }),
-    el("w:pgMar", {
-      "w:top": String(ptToTwips(section.margins.topPt)),
-      "w:right": String(ptToTwips(section.margins.rightPt)),
-      "w:bottom": String(ptToTwips(section.margins.bottomPt)),
-      "w:left": String(ptToTwips(section.margins.leftPt)),
-    }),
-  ]);
-}
-
-// A mid-document section break rides on the last paragraph of the section it closes — the shape readSections reads it back from, which keeps that paragraph as content rather than adding one. That paragraph is not necessarily nodes' own last element: a bookmark closing the section trails a childless w:bookmarkEnd marker, and a content control closing it wraps its content in w:sdt, so findParagraph (searching from the end, the same way buildFieldNodes locates a field's own paragraphs) descends through whatever construct wrapper sits last to find the real one. Only the final section's w:sectPr is a direct child of w:body; a section with no paragraph anywhere in its flow gets an empty one to carry the break.
 // The body node list attachSectionBreak appends a fresh sectPr-carrying paragraph onto when the section's own content ends without a paragraph to hang the break on. Wrapped rather than passed as a bare array so the parameter stays out of prefer-readonly-array-param's scope while the array it holds stays genuinely mutable.
 interface NodeSink {
   readonly nodes: XmlNode[];
@@ -1949,7 +602,7 @@ function buildPackageRelsPart(): XmlPart {
   return xmlPart(root);
 }
 
-function buildDocumentRelsPart(state: WriteState): XmlPart {
+export function buildDocumentRelsPart(state: WriteState): XmlPart {
   const relationships = state.relationships.map((rel) =>
     el(
       "Relationship",
