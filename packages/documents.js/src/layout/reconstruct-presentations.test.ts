@@ -15,6 +15,8 @@ import type { CellTypeInference } from "./cell-typing";
 import {
   reconstructDrawing,
   reconstructPresentation,
+} from "./reconstruct-presentations-prod";
+import {
   reconstructSpreadsheet,
   reconstructWordprocessing,
 } from "./reconstruct";

@@ -9,7 +9,7 @@ import type {
 
 import type { LayoutItem, LayoutPath, TextMeasurer } from "pdf-codec";
 import { convertDrawingToLayout } from "./drawing";
-import { reconstructDrawing } from "./reconstruct";
+import { reconstructDrawing } from "./reconstruct-presentations-prod";
 
 const BLACK = { r: 0, g: 0, b: 0 };
 const RED = { r: 1, g: 0, b: 0 };
