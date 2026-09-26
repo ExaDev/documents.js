@@ -15,7 +15,7 @@ import { el, txt } from "../../xml/fragment";
 import { decodePackage, encodePackage } from "../../codec";
 import { attr, childrenWithTag, elementsWithTag, rootElement } from "../util";
 import { ptToEmu } from "../shared/units";
-import type { DocxDocument } from "./read";
+import type { DocxDocument } from "./read-schemas";
 import { readDocxContent } from "./read";
 import {
   assertNeverRasterImageFormat,
