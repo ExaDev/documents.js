@@ -1,14 +1,16 @@
 import { describe, expect, it } from "vitest";
 import {
-  MACROMAN_GLYPH_NAMES,
-  STANDARD_GLYPH_NAMES,
   WINANSI_GLYPH_NAMES,
   glyphNameToUnicode,
-  macRomanGlyphName,
   namedEncodingGlyphName,
-  standardGlyphName,
   winAnsiGlyphName,
 } from "./encoding";
+import {
+  MACROMAN_GLYPH_NAMES,
+  STANDARD_GLYPH_NAMES,
+  macRomanGlyphName,
+  standardGlyphName,
+} from "./encoding-standard-tables";
 
 describe("WINANSI_GLYPH_NAMES", () => {
   it("has exactly 256 entries", () => {
