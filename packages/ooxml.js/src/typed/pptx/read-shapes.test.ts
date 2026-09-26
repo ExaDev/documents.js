@@ -1,7 +1,11 @@
 import type { Package } from "../../model/package";
 import type { XmlElement } from "../../model/node";
 import { describe, expect, it } from "vitest";
-import type { ContentBlock, ContentParagraph } from "document-schema.js";
+import type {
+  ContentBlock,
+  ContentParagraph,
+  ContentTable,
+} from "document-schema.js";
 import { el, txt } from "../../xml/fragment";
 import { bytesToBase64 } from "byte-codec";
 import { PNG_SIGNATURE } from "../../image/sniff";
@@ -9,6 +13,13 @@ import { readPptxContent } from "./read";
 function asParagraph(block: ContentBlock | undefined): ContentParagraph {
   if (block?.kind !== "paragraph") {
     throw new Error("expected a paragraph block");
+  }
+  return block;
+}
+
+function asTable(block: ContentBlock | undefined): ContentTable {
+  if (block?.kind !== "table") {
+    throw new Error("expected a table block");
   }
   return block;
 }
@@ -491,135 +502,288 @@ function buildFixturePackage(): Package {
   };
 }
 
-describe("readPptxContent: slide size and order", () => {
-  it("reads slide size from p:sldSz", () => {
-    const doc = readPptxContent(buildFixturePackage());
-    expect(doc.slides[0]?.size).toEqual({ widthPt: 960, heightPt: 540 });
-  });
+function rotationCompositionFixturePackage(): Package {
+  // Group A: off=(100,100)pt ext=(200,200)pt chOff=(0,0)pt chExt=(200,200)pt (scale 1:1) rot=90deg, no flip. Child shape (unrotated) at local off=(150,50)pt ext=(20,20)pt. Group centre = (200,200); child's canonical (unrotated) box centre = (260,160), i.e. (60,-40) from the group centre. Rotating 90deg clockwise (verified: east (1,0) -> south (0,1)) sends (60,-40) = 60*east + 40*north to 60*south + 40*east = (40,60). Final centre (240,260), top-left (230,250). Rotation: shape's own rot (0) composed with the group's unmirrored composite (90) = 90.
+  const rotGroupChild = el("p:sp", {}, [
+    el("p:nvSpPr", {}, [
+      el("p:cNvPr", { id: "101", name: "InRotGroup" }),
+      el("p:cNvSpPr"),
+      el("p:nvPr"),
+    ]),
+    el("p:spPr", {}, [
+      el("a:xfrm", {}, [
+        el("a:off", { x: "1905000", y: "635000" }),
+        el("a:ext", { cx: "254000", cy: "254000" }),
+      ]),
+    ]),
+    el("p:txBody", {}, [
+      el("a:p", {}, [
+        el("a:r", {}, [el("a:t", {}, [txt("In rotated group")])]),
+      ]),
+    ]),
+  ]);
+  const rotGroup = el("p:grpSp", {}, [
+    el("p:nvGrpSpPr", {}, [el("p:cNvPr", { id: "100", name: "RotGroup" })]),
+    el("p:grpSpPr", {}, [
+      el("a:xfrm", { rot: "5400000" }, [
+        el("a:off", { x: "1270000", y: "1270000" }),
+        el("a:ext", { cx: "2540000", cy: "2540000" }),
+        el("a:chOff", { x: "0", y: "0" }),
+        el("a:chExt", { cx: "2540000", cy: "2540000" }),
+      ]),
+    ]),
+    rotGroupChild,
+  ]);
 
-  it("orders slides via p:sldIdLst, not slide filename order", () => {
-    const doc = readPptxContent(buildFixturePackage());
-    // sldIdLst lists slide2 before slide1, so slides[0] must be slide2's content ("Second Slide").
-    const firstShapeText = asParagraph(doc.slides[0]?.shapes[0]?.blocks[0])
-      .runs[0]?.text;
-    expect(firstShapeText).toBe("Second Slide");
-  });
+  // Group B: identical geometry to Group A, but rot=90deg AND flipH=1. Child shape carries its OWN rot=30deg, to prove the flip negates the sense of that own rotation (composeShapeRotationDeg: mirrored parent -> 90 - 30 = 60, not 90 + 30 = 120). Position: the group's flip mirrors dx across the vertical axis before rotating: 60 -> -60, dy stays -40. Rotating 90deg clockwise sends (-60,-40) = 60*west + 40*north to 60*north + 40*east = (40,-60). Final centre (240,140), top-left (230,130).
+  const rotFlipGroupChild = el("p:sp", {}, [
+    el("p:nvSpPr", {}, [
+      el("p:cNvPr", { id: "111", name: "InRotFlipGroup" }),
+      el("p:cNvSpPr"),
+      el("p:nvPr"),
+    ]),
+    el("p:spPr", {}, [
+      el("a:xfrm", { rot: "1800000" }, [
+        el("a:off", { x: "1905000", y: "635000" }),
+        el("a:ext", { cx: "254000", cy: "254000" }),
+      ]),
+    ]),
+    el("p:txBody", {}, [
+      el("a:p", {}, [
+        el("a:r", {}, [el("a:t", {}, [txt("In rotated and flipped group")])]),
+      ]),
+    ]),
+  ]);
+  const rotFlipGroup = el("p:grpSp", {}, [
+    el("p:nvGrpSpPr", {}, [el("p:cNvPr", { id: "110", name: "RotFlipGroup" })]),
+    el("p:grpSpPr", {}, [
+      el("a:xfrm", { rot: "5400000", flipH: "1" }, [
+        el("a:off", { x: "1270000", y: "1270000" }),
+        el("a:ext", { cx: "2540000", cy: "2540000" }),
+        el("a:chOff", { x: "0", y: "0" }),
+        el("a:chExt", { cx: "2540000", cy: "2540000" }),
+      ]),
+    ]),
+    rotFlipGroupChild,
+  ]);
 
-  it("reads document metadata via readCoreProperties", () => {
-    const doc = readPptxContent(buildFixturePackage());
-    expect(doc.metadata.title).toBe("Fixture Deck");
-  });
-});
+  // Two-level nesting: outer group off=(0,0)pt ext=(400,400)pt chOff=(0,0)pt chExt=(400,400)pt rot=90deg, no flip; inner group nested inside it at off=(200,0)pt ext=(200,200)pt chOff=(0,0)pt chExt=(200,200)pt rot=90deg, no flip; shape inside the inner group at local off=(50,50)pt ext=(20,20)pt, unrotated. Inner group's own off/ext, mapped through the outer group's 90deg rotation about its centre (200,200): canonical box centre (300,100) -> (100,-100) from outer centre -> rotated to (100,100) -> final centre (300,300), top-left (200,200); composite rotation = 90+90 = 180 (outer unmirrored, so angles add). Shape's canonical box centre inside the inner group's own (200,200)-centred, 180deg-composite frame: local centre (60,60) -> canonical (260,260) -> (-40,-40) from inner centre (300,300) -> rotating 180deg negates both -> (40,40) -> final centre (340,340), top-left (330,330). Rotation: shape's own rot (0) composed with the (unmirrored) 180deg composite = 180.
+  const nestedInnerChild = el("p:sp", {}, [
+    el("p:nvSpPr", {}, [
+      el("p:cNvPr", { id: "122", name: "InNestedGroups" }),
+      el("p:cNvSpPr"),
+      el("p:nvPr"),
+    ]),
+    el("p:spPr", {}, [
+      el("a:xfrm", {}, [
+        el("a:off", { x: "635000", y: "635000" }),
+        el("a:ext", { cx: "254000", cy: "254000" }),
+      ]),
+    ]),
+    el("p:txBody", {}, [
+      el("a:p", {}, [
+        el("a:r", {}, [el("a:t", {}, [txt("In nested rotated groups")])]),
+      ]),
+    ]),
+  ]);
+  const nestedInnerGroup = el("p:grpSp", {}, [
+    el("p:nvGrpSpPr", {}, [
+      el("p:cNvPr", { id: "121", name: "InnerRotGroup" }),
+    ]),
+    el("p:grpSpPr", {}, [
+      el("a:xfrm", { rot: "5400000" }, [
+        el("a:off", { x: "2540000", y: "0" }),
+        el("a:ext", { cx: "2540000", cy: "2540000" }),
+        el("a:chOff", { x: "0", y: "0" }),
+        el("a:chExt", { cx: "2540000", cy: "2540000" }),
+      ]),
+    ]),
+    nestedInnerChild,
+  ]);
+  const nestedOuterGroup = el("p:grpSp", {}, [
+    el("p:nvGrpSpPr", {}, [
+      el("p:cNvPr", { id: "120", name: "OuterRotGroup" }),
+    ]),
+    el("p:grpSpPr", {}, [
+      el("a:xfrm", { rot: "5400000" }, [
+        el("a:off", { x: "0", y: "0" }),
+        el("a:ext", { cx: "5080000", cy: "5080000" }),
+        el("a:chOff", { x: "0", y: "0" }),
+        el("a:chExt", { cx: "5080000", cy: "5080000" }),
+      ]),
+    ]),
+    nestedInnerGroup,
+  ]);
 
-describe("readPptxContent: placeholder inheritance and run cascade", () => {
-  it("inherits the title placeholder's geometry from the layout when the slide has none of its own", () => {
+  const spTree = el("p:spTree", {}, [rotGroup, rotFlipGroup, nestedOuterGroup]);
+  const slide = el("p:sld", {}, [el("p:cSld", {}, [spTree])]);
+  const presentation = el("p:presentation", {}, [
+    el("p:sldIdLst", {}, [el("p:sldId", { id: "256", "r:id": "rId1" })]),
+  ]);
+  const presentationRels = rels([
+    { id: "rId1", type: SLIDE_REL, target: "slides/slide1.xml" },
+  ]);
+
+  return {
+    parts: {
+      "ppt/presentation.xml": { kind: "xml", nodes: [presentation] },
+      "ppt/_rels/presentation.xml.rels": {
+        kind: "xml",
+        nodes: [presentationRels],
+      },
+      "ppt/slides/slide1.xml": { kind: "xml", nodes: [slide] },
+    },
+  };
+}
+
+describe("readPptxContent: group shapes", () => {
+  it("flattens a group's child shape into the slide's flat shape list at its absolute (transformed) position", () => {
     const doc = readPptxContent(buildFixturePackage());
-    const titleShape = doc.slides[1]?.shapes.find((s) => s.name === "Title 1");
-    expect(titleShape?.frame).toEqual({
-      xPt: 72,
-      yPt: 36,
-      widthPt: 816,
-      heightPt: 90,
+    const grouped = doc.slides[1]?.shapes.find(
+      (s) => s.name === "Grouped shape",
+    );
+    // group off=(100,100)pt ext=(200,200)pt, chOff=(0,0) chExt=(100,100)pt -> scale 2x; child local (10,10,20,20)pt -> absolute (120,120,40,40)pt.
+    expect(grouped?.frame).toEqual({
+      xPt: 120,
+      yPt: 120,
+      widthPt: 40,
+      heightPt: 40,
     });
   });
+});
 
-  it("a run with no own rPr fully inherits size/bold/font/colour from the master titleStyle", () => {
+describe("readPptxContent: rotation", () => {
+  it("carries a shape's own rotationDeg through unchanged", () => {
     const doc = readPptxContent(buildFixturePackage());
-    const titleShape = doc.slides[1]?.shapes.find((s) => s.name === "Title 1");
-    const run = asParagraph(titleShape?.blocks[0]).runs[0];
-    expect(run?.text).toBe("Hello");
-    const MASTER_TITLE_STYLE_SIZE_PT = 44; // the fixture's own master titleStyle font size, inherited since this run sets no own rPr
-    expect(run?.sizePt).toBe(MASTER_TITLE_STYLE_SIZE_PT);
-    expect(run?.bold).toBe(true);
-    expect(run?.fontFamily).toBe("Aptos Display"); // +mj-lt resolved via the theme
-    expect(run?.color).toEqual({ r: 0, g: 0, b: 0 }); // tx1 -> dk1 via clrMap -> black
+    const rotated = doc.slides[0]?.shapes.find((s) => s.name === "Rotated");
+    const FIXTURE_ROTATION_DEG = 45; // the fixture's own p:xfrm@rot for the Rotated shape, in whole degrees
+    expect(rotated?.rotationDeg).toBe(FIXTURE_ROTATION_DEG);
   });
 
-  it("a run's own explicit properties override the cascade only for the fields it sets", () => {
+  it("leaves rotationDeg undefined for an unrotated shape", () => {
     const doc = readPptxContent(buildFixturePackage());
     const titleShape = doc.slides[1]?.shapes.find((s) => s.name === "Title 1");
-    const run = asParagraph(titleShape?.blocks[0]).runs[1];
-    expect(run?.text).toBe(" World");
-    const OVERRIDDEN_RUN_SIZE_PT = 20; // this run's own direct rPr size, overriding the master titleStyle
-    expect(run?.sizePt).toBe(OVERRIDDEN_RUN_SIZE_PT); // overridden
-    expect(run?.italic).toBe(true); // overridden
-    expect(run?.bold).toBe(true); // still inherited from the master
-    expect(run?.fontFamily).toBe("Aptos Display"); // still inherited
+    expect(titleShape?.rotationDeg).toBeUndefined();
   });
 });
 
-describe("readPptxContent: paragraph formatting", () => {
-  it("reads alignment, indent, absolute spacing, and percentage line spacing", () => {
-    const doc = readPptxContent(buildFixturePackage());
-    const bodyShape = doc.slides[1]?.shapes.find((s) => s.name === "Body 1");
-    const para = asParagraph(bodyShape?.blocks[0]);
-    expect(para.alignment).toBe("center");
-    // The fixture's own explicit paragraph-formatting values: a positive left indent, an equal-magnitude negative first-line indent (a hanging indent back to the margin), an absolute spacing-before, and a 150% line-spacing multiplier.
-    const FIXTURE_INDENT_LEFT_PT = 36;
-    const FIXTURE_HANGING_INDENT_PT = -36;
-    const FIXTURE_SPACING_BEFORE_PT = 6;
-    const FIXTURE_LINE_SPACING_MULTIPLIER = 1.5;
-    expect(para.indentLeftPt).toBe(FIXTURE_INDENT_LEFT_PT);
-    expect(para.indentFirstLinePt).toBe(FIXTURE_HANGING_INDENT_PT);
-    expect(para.spacingBeforePt).toBe(FIXTURE_SPACING_BEFORE_PT);
-    expect(para.lineSpacing).toBe(FIXTURE_LINE_SPACING_MULTIPLIER);
+// Real ECMA-376 composition through rotated/flipped ancestor groups (see composeGroupTransform/applyGroupTransform/composeShapeRotationDeg in src/typed/shared/drawingml.ts for the derivation these fixtures exercise end to end, through actual XML parsing rather than calling the helpers directly).
+describe("readPptxContent: rotation composed through rotated/flipped ancestor groups", () => {
+  // toBeCloseTo precision (decimal places) for the composed-position assertions below: tight enough to catch a real composition-math bug, loose enough for ordinary floating-point noise from the rotation transform.
+  const POSITION_PRECISION_DIGITS = 9;
+
+  it("composes an unrotated shape's position and rotation through a single rotated (unflipped) group", () => {
+    const doc = readPptxContent(rotationCompositionFixturePackage());
+    const shape = doc.slides[0]?.shapes.find((s) => s.name === "InRotGroup");
+    // The fixture's own composed position and size for InRotGroup, and its rotation as inherited unchanged from the single unflipped ancestor group.
+    const COMPOSED_X_PT = 230;
+    const COMPOSED_Y_PT = 250;
+    const COMPOSED_SIZE_PT = 20;
+    const INHERITED_ROTATION_DEG = 90;
+    expect(shape?.frame.xPt).toBeCloseTo(
+      COMPOSED_X_PT,
+      POSITION_PRECISION_DIGITS,
+    );
+    expect(shape?.frame.yPt).toBeCloseTo(
+      COMPOSED_Y_PT,
+      POSITION_PRECISION_DIGITS,
+    );
+    expect(shape?.frame.widthPt).toBe(COMPOSED_SIZE_PT);
+    expect(shape?.frame.heightPt).toBe(COMPOSED_SIZE_PT);
+    expect(shape?.rotationDeg).toBe(INHERITED_ROTATION_DEG);
   });
 
-  it("resolves an external hyperlink through the slide's own relationships", () => {
-    const doc = readPptxContent(buildFixturePackage());
-    const bodyShape = doc.slides[1]?.shapes.find((s) => s.name === "Body 1");
-    const para = asParagraph(bodyShape?.blocks[0]);
-    expect(para.runs[0]?.hyperlink).toBe("https://example.com");
+  it("composes a shape's own rotation through a rotated AND flipped group, negating the sense of the shape's own rotation", () => {
+    const doc = readPptxContent(rotationCompositionFixturePackage());
+    const shape = doc.slides[0]?.shapes.find(
+      (s) => s.name === "InRotFlipGroup",
+    );
+    const COMPOSED_X_PT = 230;
+    const COMPOSED_Y_PT = 130;
+    // 90 (group) - 30 (own) = 60, not 90 + 30 = 120: the group's flipH negates the sign of the shape's own rotation.
+    const NEGATED_ROTATION_DEG = 60;
+    expect(shape?.frame.xPt).toBeCloseTo(
+      COMPOSED_X_PT,
+      POSITION_PRECISION_DIGITS,
+    );
+    expect(shape?.frame.yPt).toBeCloseTo(
+      COMPOSED_Y_PT,
+      POSITION_PRECISION_DIGITS,
+    );
+    expect(shape?.rotationDeg).toBe(NEGATED_ROTATION_DEG);
   });
 
-  it("reads underline and strikethrough", () => {
-    const doc = readPptxContent(buildFixturePackage());
-    const bodyShape = doc.slides[1]?.shapes.find((s) => s.name === "Body 1");
-    const para = asParagraph(bodyShape?.blocks[0]);
-    expect(para.runs[1]?.underline).toBe(true);
-    expect(para.runs[1]?.strike).toBe(true);
+  it("composes position and rotation through two levels of nested rotated groups", () => {
+    const doc = readPptxContent(rotationCompositionFixturePackage());
+    const shape = doc.slides[0]?.shapes.find(
+      (s) => s.name === "InNestedGroups",
+    );
+    const COMPOSED_POSITION_PT = 330;
+    // 90 (outer) + 90 (inner) + 0 (own) = 180.
+    const SUMMED_ROTATION_DEG = 180;
+    expect(shape?.frame.xPt).toBeCloseTo(
+      COMPOSED_POSITION_PT,
+      POSITION_PRECISION_DIGITS,
+    );
+    expect(shape?.frame.yPt).toBeCloseTo(
+      COMPOSED_POSITION_PT,
+      POSITION_PRECISION_DIGITS,
+    );
+    expect(shape?.rotationDeg).toBe(SUMMED_ROTATION_DEG);
   });
 });
 
-describe("readPptxContent: text-box insets and autofit", () => {
-  it("reads explicit a:bodyPr insets and a:normAutofit scaling", () => {
+describe("readPptxContent: sourcePath", () => {
+  it("assigns slides[N].shapes[N] to each shape, in the flattened document order", () => {
     const doc = readPptxContent(buildFixturePackage());
+    // sldIdLst orders slide2 before slide1, so slides[0] is slide2 (one shape) and slides[1] is slide1.
+    expect(doc.slides[0]?.shapes[0]?.sourcePath).toBe("slides[0].shapes[0]");
+    const titleShape = doc.slides[1]?.shapes.find((s) => s.name === "Title 1");
     const bodyShape = doc.slides[1]?.shapes.find((s) => s.name === "Body 1");
-    // The fixture's own explicit a:bodyPr insets (left/right wider than top/bottom, a common real-world text-box convention) and a:normAutofit scaling (92% font scale, 10% line-spacing reduction).
-    const FIXTURE_INSET_LEFT_RIGHT_PT = 14.4;
-    const FIXTURE_INSET_TOP_BOTTOM_PT = 7.2;
-    const FIXTURE_FONT_SCALE = 0.92;
-    const FIXTURE_LINE_SPACING_REDUCTION = 0.1;
-    expect(bodyShape?.insetLeftPt).toBe(FIXTURE_INSET_LEFT_RIGHT_PT);
-    expect(bodyShape?.insetTopPt).toBe(FIXTURE_INSET_TOP_BOTTOM_PT);
-    expect(bodyShape?.insetRightPt).toBe(FIXTURE_INSET_LEFT_RIGHT_PT);
-    expect(bodyShape?.insetBottomPt).toBe(FIXTURE_INSET_TOP_BOTTOM_PT);
-    expect(bodyShape?.fontScale).toBe(FIXTURE_FONT_SCALE);
-    expect(bodyShape?.lineSpacingReduction).toBe(
-      FIXTURE_LINE_SPACING_REDUCTION,
+    expect(titleShape?.sourcePath).toBe("slides[1].shapes[0]");
+    expect(bodyShape?.sourcePath).toBe("slides[1].shapes[1]");
+  });
+
+  it("assigns slides[N].shapes[N].blocks[N] and .runs[N] to a shape's paragraph content", () => {
+    const doc = readPptxContent(buildFixturePackage());
+    const titleShape = doc.slides[1]?.shapes.find((s) => s.name === "Title 1");
+    const titlePara = asParagraph(titleShape?.blocks[0]);
+    expect(titlePara.sourcePath).toBe("slides[1].shapes[0].blocks[0]");
+    expect(titlePara.runs[0]?.sourcePath).toBe(
+      "slides[1].shapes[0].blocks[0].runs[0]",
+    );
+    expect(titlePara.runs[1]?.sourcePath).toBe(
+      "slides[1].shapes[0].blocks[0].runs[1]",
     );
   });
 
-  it("falls back to ECMA-376's default insets when a:bodyPr is absent, with no autofit", () => {
+  it("assigns a group's flattened child shape its own position in the slide's flat shape list", () => {
     const doc = readPptxContent(buildFixturePackage());
-    const titleShape = doc.slides[1]?.shapes.find((s) => s.name === "Title 1");
-    // ECMA-376's own default a:bodyPr insets when the element is absent: 0.1 inch left/right, 0.05 inch top/bottom.
-    const ECMA376_DEFAULT_INSET_LEFT_RIGHT_PT = 7.2;
-    const ECMA376_DEFAULT_INSET_TOP_BOTTOM_PT = 3.6;
-    expect(titleShape?.insetLeftPt).toBe(ECMA376_DEFAULT_INSET_LEFT_RIGHT_PT);
-    expect(titleShape?.insetTopPt).toBe(ECMA376_DEFAULT_INSET_TOP_BOTTOM_PT);
-    expect(titleShape?.insetRightPt).toBe(ECMA376_DEFAULT_INSET_LEFT_RIGHT_PT);
-    expect(titleShape?.insetBottomPt).toBe(ECMA376_DEFAULT_INSET_TOP_BOTTOM_PT);
-    expect(titleShape?.fontScale).toBeUndefined();
-    expect(titleShape?.lineSpacingReduction).toBeUndefined();
+    const grouped = doc.slides[1]?.shapes.find(
+      (s) => s.name === "Grouped shape",
+    );
+    // spTree1 order: title(0), body(1), pic(2), table(3), grouped child(4).
+    expect(grouped?.sourcePath).toBe("slides[1].shapes[4]");
+    expect(asParagraph(grouped?.blocks[0]).sourcePath).toBe(
+      "slides[1].shapes[4].blocks[0]",
+    );
   });
 
-  it("reads zero insets for a picture, which has no text body at all", () => {
+  it("nests a table shape's own cell content under slides[N].shapes[N].blocks[N].rows[N].cells[N].blocks[N]", () => {
     const doc = readPptxContent(buildFixturePackage());
-    const picShape = doc.slides[1]?.shapes.find((s) => s.name === "Picture 1");
-    expect(picShape?.insetLeftPt).toBe(0);
-    expect(picShape?.insetTopPt).toBe(0);
-    expect(picShape?.insetRightPt).toBe(0);
-    expect(picShape?.insetBottomPt).toBe(0);
+    const tableShape = doc.slides[1]?.shapes.find((s) => s.name === "Table 1");
+    const table = asTable(tableShape?.blocks[0]);
+    expect(table.sourcePath).toBe("slides[1].shapes[3].blocks[0]");
+    const mergedCellPara = asParagraph(table.rows[0]?.cells[0]?.blocks[0]);
+    expect(mergedCellPara.sourcePath).toBe(
+      "slides[1].shapes[3].blocks[0].rows[0].cells[0].blocks[0]",
+    );
+    expect(mergedCellPara.runs[0]?.sourcePath).toBe(
+      "slides[1].shapes[3].blocks[0].rows[0].cells[0].blocks[0].runs[0]",
+    );
+    const cellBPara = asParagraph(table.rows[1]?.cells[1]?.blocks[0]);
+    expect(cellBPara.sourcePath).toBe(
+      "slides[1].shapes[3].blocks[0].rows[1].cells[1].blocks[0]",
+    );
   });
 });

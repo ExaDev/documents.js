@@ -491,135 +491,84 @@ function buildFixturePackage(): Package {
   };
 }
 
-describe("readPptxContent: slide size and order", () => {
-  it("reads slide size from p:sldSz", () => {
+describe("readPptxContent: notes", () => {
+  it("prefers the notes slide's own body placeholder over concatenating every a:t (excluding the slide-number field)", () => {
     const doc = readPptxContent(buildFixturePackage());
-    expect(doc.slides[0]?.size).toEqual({ widthPt: 960, heightPt: 540 });
+    expect(doc.slides[1]?.notes).toBe("Speaker notes here");
   });
 
-  it("orders slides via p:sldIdLst, not slide filename order", () => {
+  it("is an empty string for a slide with no notesSlide relationship", () => {
     const doc = readPptxContent(buildFixturePackage());
-    // sldIdLst lists slide2 before slide1, so slides[0] must be slide2's content ("Second Slide").
-    const firstShapeText = asParagraph(doc.slides[0]?.shapes[0]?.blocks[0])
-      .runs[0]?.text;
-    expect(firstShapeText).toBe("Second Slide");
-  });
-
-  it("reads document metadata via readCoreProperties", () => {
-    const doc = readPptxContent(buildFixturePackage());
-    expect(doc.metadata.title).toBe("Fixture Deck");
+    expect(doc.slides[0]?.notes).toBe("");
   });
 });
 
-describe("readPptxContent: placeholder inheritance and run cascade", () => {
-  it("inherits the title placeholder's geometry from the layout when the slide has none of its own", () => {
-    const doc = readPptxContent(buildFixturePackage());
-    const titleShape = doc.slides[1]?.shapes.find((s) => s.name === "Title 1");
-    expect(titleShape?.frame).toEqual({
-      xPt: 72,
-      yPt: 36,
-      widthPt: 816,
-      heightPt: 90,
-    });
-  });
+// A chart graphic frame's c:chart child resolves through the slide's own relationships to a chart part, whose cached series/category model reads as the same table block shape an a:tbl frame produces (readChartTable in src/typed/pptx/chart.ts). Series 1 is named through a cached c:strRef and stops at two categories; series 2 is named through an inline c:v literal and carries a third category series 1 never labels — exercising both name forms and the category union.
+describe("readPptxContent: dynamic fields (a:fld)", () => {
+  function fieldFixturePackage(): Package {
+    const shape = el("p:sp", {}, [
+      el("p:nvSpPr", {}, [
+        el("p:cNvPr", { id: "2", name: "Footer" }),
+        el("p:cNvSpPr"),
+        el("p:nvPr"),
+      ]),
+      el("p:spPr", {}, [
+        el("a:xfrm", {}, [
+          el("a:off", { x: "914400", y: "6400800" }),
+          el("a:ext", { cx: "7315200", cy: "457200" }),
+        ]),
+      ]),
+      el("p:txBody", {}, [
+        el("a:p", {}, [
+          el("a:r", {}, [el("a:t", {}, [txt("Slide ")])]),
+          el(
+            "a:fld",
+            { id: "{00000000-0000-0000-0000-000000000000}", type: "slidenum" },
+            [el("a:t", {}, [txt("3")])],
+          ),
+          el("a:r", {}, [el("a:t", {}, [txt(" of many")])]),
+        ]),
+      ]),
+    ]);
+    const slide = el("p:sld", {}, [
+      el("p:cSld", {}, [el("p:spTree", {}, [shape])]),
+    ]);
+    const presentation = el("p:presentation", {}, [
+      el("p:sldIdLst", {}, [el("p:sldId", { id: "256", "r:id": "rId1" })]),
+    ]);
+    const presentationRels = rels([
+      { id: "rId1", type: SLIDE_REL, target: "slides/slide1.xml" },
+    ]);
+    return {
+      parts: {
+        "ppt/presentation.xml": { kind: "xml", nodes: [presentation] },
+        "ppt/_rels/presentation.xml.rels": {
+          kind: "xml",
+          nodes: [presentationRels],
+        },
+        "ppt/slides/slide1.xml": { kind: "xml", nodes: [slide] },
+      },
+    };
+  }
 
-  it("a run with no own rPr fully inherits size/bold/font/colour from the master titleStyle", () => {
-    const doc = readPptxContent(buildFixturePackage());
-    const titleShape = doc.slides[1]?.shapes.find((s) => s.name === "Title 1");
-    const run = asParagraph(titleShape?.blocks[0]).runs[0];
-    expect(run?.text).toBe("Hello");
-    const MASTER_TITLE_STYLE_SIZE_PT = 44; // the fixture's own master titleStyle font size, inherited since this run sets no own rPr
-    expect(run?.sizePt).toBe(MASTER_TITLE_STYLE_SIZE_PT);
-    expect(run?.bold).toBe(true);
-    expect(run?.fontFamily).toBe("Aptos Display"); // +mj-lt resolved via the theme
-    expect(run?.color).toEqual({ r: 0, g: 0, b: 0 }); // tx1 -> dk1 via clrMap -> black
-  });
-
-  it("a run's own explicit properties override the cascade only for the fields it sets", () => {
-    const doc = readPptxContent(buildFixturePackage());
-    const titleShape = doc.slides[1]?.shapes.find((s) => s.name === "Title 1");
-    const run = asParagraph(titleShape?.blocks[0]).runs[1];
-    expect(run?.text).toBe(" World");
-    const OVERRIDDEN_RUN_SIZE_PT = 20; // this run's own direct rPr size, overriding the master titleStyle
-    expect(run?.sizePt).toBe(OVERRIDDEN_RUN_SIZE_PT); // overridden
-    expect(run?.italic).toBe(true); // overridden
-    expect(run?.bold).toBe(true); // still inherited from the master
-    expect(run?.fontFamily).toBe("Aptos Display"); // still inherited
-  });
-});
-
-describe("readPptxContent: paragraph formatting", () => {
-  it("reads alignment, indent, absolute spacing, and percentage line spacing", () => {
-    const doc = readPptxContent(buildFixturePackage());
-    const bodyShape = doc.slides[1]?.shapes.find((s) => s.name === "Body 1");
-    const para = asParagraph(bodyShape?.blocks[0]);
-    expect(para.alignment).toBe("center");
-    // The fixture's own explicit paragraph-formatting values: a positive left indent, an equal-magnitude negative first-line indent (a hanging indent back to the margin), an absolute spacing-before, and a 150% line-spacing multiplier.
-    const FIXTURE_INDENT_LEFT_PT = 36;
-    const FIXTURE_HANGING_INDENT_PT = -36;
-    const FIXTURE_SPACING_BEFORE_PT = 6;
-    const FIXTURE_LINE_SPACING_MULTIPLIER = 1.5;
-    expect(para.indentLeftPt).toBe(FIXTURE_INDENT_LEFT_PT);
-    expect(para.indentFirstLinePt).toBe(FIXTURE_HANGING_INDENT_PT);
-    expect(para.spacingBeforePt).toBe(FIXTURE_SPACING_BEFORE_PT);
-    expect(para.lineSpacing).toBe(FIXTURE_LINE_SPACING_MULTIPLIER);
-  });
-
-  it("resolves an external hyperlink through the slide's own relationships", () => {
-    const doc = readPptxContent(buildFixturePackage());
-    const bodyShape = doc.slides[1]?.shapes.find((s) => s.name === "Body 1");
-    const para = asParagraph(bodyShape?.blocks[0]);
-    expect(para.runs[0]?.hyperlink).toBe("https://example.com");
-  });
-
-  it("reads underline and strikethrough", () => {
-    const doc = readPptxContent(buildFixturePackage());
-    const bodyShape = doc.slides[1]?.shapes.find((s) => s.name === "Body 1");
-    const para = asParagraph(bodyShape?.blocks[0]);
-    expect(para.runs[1]?.underline).toBe(true);
-    expect(para.runs[1]?.strike).toBe(true);
-  });
-});
-
-describe("readPptxContent: text-box insets and autofit", () => {
-  it("reads explicit a:bodyPr insets and a:normAutofit scaling", () => {
-    const doc = readPptxContent(buildFixturePackage());
-    const bodyShape = doc.slides[1]?.shapes.find((s) => s.name === "Body 1");
-    // The fixture's own explicit a:bodyPr insets (left/right wider than top/bottom, a common real-world text-box convention) and a:normAutofit scaling (92% font scale, 10% line-spacing reduction).
-    const FIXTURE_INSET_LEFT_RIGHT_PT = 14.4;
-    const FIXTURE_INSET_TOP_BOTTOM_PT = 7.2;
-    const FIXTURE_FONT_SCALE = 0.92;
-    const FIXTURE_LINE_SPACING_REDUCTION = 0.1;
-    expect(bodyShape?.insetLeftPt).toBe(FIXTURE_INSET_LEFT_RIGHT_PT);
-    expect(bodyShape?.insetTopPt).toBe(FIXTURE_INSET_TOP_BOTTOM_PT);
-    expect(bodyShape?.insetRightPt).toBe(FIXTURE_INSET_LEFT_RIGHT_PT);
-    expect(bodyShape?.insetBottomPt).toBe(FIXTURE_INSET_TOP_BOTTOM_PT);
-    expect(bodyShape?.fontScale).toBe(FIXTURE_FONT_SCALE);
-    expect(bodyShape?.lineSpacingReduction).toBe(
-      FIXTURE_LINE_SPACING_REDUCTION,
-    );
-  });
-
-  it("falls back to ECMA-376's default insets when a:bodyPr is absent, with no autofit", () => {
-    const doc = readPptxContent(buildFixturePackage());
-    const titleShape = doc.slides[1]?.shapes.find((s) => s.name === "Title 1");
-    // ECMA-376's own default a:bodyPr insets when the element is absent: 0.1 inch left/right, 0.05 inch top/bottom.
-    const ECMA376_DEFAULT_INSET_LEFT_RIGHT_PT = 7.2;
-    const ECMA376_DEFAULT_INSET_TOP_BOTTOM_PT = 3.6;
-    expect(titleShape?.insetLeftPt).toBe(ECMA376_DEFAULT_INSET_LEFT_RIGHT_PT);
-    expect(titleShape?.insetTopPt).toBe(ECMA376_DEFAULT_INSET_TOP_BOTTOM_PT);
-    expect(titleShape?.insetRightPt).toBe(ECMA376_DEFAULT_INSET_LEFT_RIGHT_PT);
-    expect(titleShape?.insetBottomPt).toBe(ECMA376_DEFAULT_INSET_TOP_BOTTOM_PT);
-    expect(titleShape?.fontScale).toBeUndefined();
-    expect(titleShape?.lineSpacingReduction).toBeUndefined();
-  });
-
-  it("reads zero insets for a picture, which has no text body at all", () => {
-    const doc = readPptxContent(buildFixturePackage());
-    const picShape = doc.slides[1]?.shapes.find((s) => s.name === "Picture 1");
-    expect(picShape?.insetLeftPt).toBe(0);
-    expect(picShape?.insetTopPt).toBe(0);
-    expect(picShape?.insetRightPt).toBe(0);
-    expect(picShape?.insetBottomPt).toBe(0);
+  it("reads an a:fld as a field run construct covering its own run, with @type as the instruction and the cached a:t as the result", () => {
+    const doc = readPptxContent(fieldFixturePackage());
+    const paragraph = asParagraph(doc.slides[0]?.shapes[0]?.blocks[0]);
+    expect(paragraph.runs.map((run) => run.text)).toEqual([
+      "Slide ",
+      "3",
+      " of many",
+    ]);
+    expect(paragraph.constructs).toEqual([
+      {
+        descriptor: {
+          kind: "field",
+          instruction: "slidenum",
+          cachedResult: "3",
+        },
+        startRun: 1,
+        endRun: 2,
+      },
+    ]);
   });
 });
