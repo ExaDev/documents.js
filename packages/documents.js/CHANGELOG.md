@@ -1,3 +1,10 @@
+## [14.4.56](https://github.com/ExaDev/documents.js/compare/documents.js%4014.4.55...documents.js%4014.4.56) (2026-09-26)
+
+
+### Dependencies
+
+- Updated pdf-codec to 5.3.0
+
 ## [14.4.55](https://github.com/ExaDev/documents.js/compare/documents.js%4014.4.54...documents.js%4014.4.55) (2026-09-26)
 
 

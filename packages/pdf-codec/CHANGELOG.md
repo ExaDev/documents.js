@@ -1,3 +1,34 @@
+## [5.3.0](https://github.com/ExaDev/documents.js/compare/pdf-codec%405.2.30...pdf-codec%405.3.0) (2026-09-26)
+
+### Features
+
+* **pdf-codec:** enforce the 800-line maxLines limit ([1b92be3](https://github.com/ExaDev/documents.js/commit/1b92be3d5c913492da8f15a5d2dd300a8560c913))
+
+### Code Refactoring
+
+* **pdf-codec:** extract the string and info-dict helpers from write.ts ([9da2689](https://github.com/ExaDev/documents.js/commit/9da2689f7c79aa390f8edbaa381218df3792cc14))
+* **pdf-codec:** finish the last over-limit files ([2809e01](https://github.com/ExaDev/documents.js/commit/2809e016190e9bf901fd372d991df3803f462682))
+* **pdf-codec:** split builtin-encoding-pua.test.ts further by family ([03a42dc](https://github.com/ExaDev/documents.js/commit/03a42dca31797ffb2d7b7e71431f3e66bde9bde7))
+* **pdf-codec:** split cff-bounds.test.ts and images-read.test.ts by family ([9d96133](https://github.com/ExaDev/documents.js/commit/9d9613380105c819edde6d453d5d4a0f00191650))
+* **pdf-codec:** split gsub-table.test.ts by suite family ([a5947be](https://github.com/ExaDev/documents.js/commit/a5947be4249abc5e2b27408cee96925f9617222d))
+* **pdf-codec:** split interpret.test.ts by suite family ([b84be0c](https://github.com/ExaDev/documents.js/commit/b84be0c814be818ebacfaef686498337e161f62f))
+* **pdf-codec:** split raster.test.ts by suite family ([d078069](https://github.com/ExaDev/documents.js/commit/d078069f4ad0f73d86648206e060e12d648fb01e))
+* **pdf-codec:** split the AcroForm emission walk out of writePdf ([a1d067b](https://github.com/ExaDev/documents.js/commit/a1d067b7d04570075702d2fef1f23df2a3d59141))
+* **pdf-codec:** split the cmap format builders out of test-support sfnt.ts ([9af3dba](https://github.com/ExaDev/documents.js/commit/9af3dbad91511682ab59e59fb998de4e20f7312c))
+* **pdf-codec:** split the colour and shape-detection families out of interpret.ts ([dd6b2eb](https://github.com/ExaDev/documents.js/commit/dd6b2eb9a8029d5b013d3c257be41326a0b90a2a))
+* **pdf-codec:** split the contextual-substitution family out of gsub-table.ts ([41c3936](https://github.com/ExaDev/documents.js/commit/41c3936b718f9162886df46b225eaa4992e9a09e))
+* **pdf-codec:** split the document-structure fixtures out of test-support pdf.ts ([20f6e22](https://github.com/ExaDev/documents.js/commit/20f6e22cbb093acb27aeae2b56febf5aaaa3c974))
+* **pdf-codec:** split the extracted-item conversion family out of read.ts ([2e90e62](https://github.com/ExaDev/documents.js/commit/2e90e62e46c0f0b3f15517137fe5f322325d1fc5))
+* **pdf-codec:** split the glyph-name tables out of encoding.ts ([c1f794f](https://github.com/ExaDev/documents.js/commit/c1f794fb2813fd3048f97c36473c79213d821101))
+* **pdf-codec:** split the image and annotation helpers out of write.ts ([7b2d30f](https://github.com/ExaDev/documents.js/commit/7b2d30faa46ba38f1a23964a61d79b12418f40f1))
+* **pdf-codec:** split the JBIG2 regression corpus across three files ([1a26467](https://github.com/ExaDev/documents.js/commit/1a26467ebd4a287831e1f55aac51ce6e5ac55325))
+* **pdf-codec:** split the outline emission out of writePdf ([4e660e0](https://github.com/ExaDev/documents.js/commit/4e660e0a54d85103012ad8a62954ae13bb09b9bc))
+* **pdf-codec:** split the page-object emission loop out of writePdf ([2308e0e](https://github.com/ExaDev/documents.js/commit/2308e0e15bd5d08e62c0f6ef88eaec29732fe82b))
+* **pdf-codec:** split the parent-tree and font emission out of writePdf ([aaccd05](https://github.com/ExaDev/documents.js/commit/aaccd0553cf6600800cd7ab64d93763bb6fb838e))
+* **pdf-codec:** split the six remaining over-limit suites by family ([90d41ff](https://github.com/ExaDev/documents.js/commit/90d41ffdeef800c90693d5eaab3525101b5faa79))
+* **pdf-codec:** split the text-outline family out of raster.ts ([5737676](https://github.com/ExaDev/documents.js/commit/5737676fff06fd0204528a16c9abe9f3b9f85e65))
+* **pdf-codec:** split write.test.ts by suite family ([42ce6fc](https://github.com/ExaDev/documents.js/commit/42ce6fccd13e806d7be781c4631ebec0a0c9fdff))
+
 ## [5.2.30](https://github.com/ExaDev/documents.js/compare/pdf-codec%405.2.29...pdf-codec%405.2.30) (2026-09-26)
 
 
