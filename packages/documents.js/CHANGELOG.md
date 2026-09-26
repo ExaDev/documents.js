@@ -1,3 +1,33 @@
+## [14.4.57](https://github.com/ExaDev/documents.js/compare/documents.js%4014.4.56...documents.js%4014.4.57) (2026-09-26)
+
+### Code Refactoring
+
+* **documents.js:** extract mathml stretchy operators and script layout ([c80e31e](https://github.com/ExaDev/documents.js/commit/c80e31eae7de1ddca938f2898041a1676676d1d8))
+* **documents.js:** extract the conversion-plan resolver and enforce maxLines ([6f66ec4](https://github.com/ExaDev/documents.js/commit/6f66ec42321878e1f96ffd04e709c63a65f580dd))
+* **documents.js:** extract the latex term-arithmetic folding pass ([6ac7bbd](https://github.com/ExaDev/documents.js/commit/6ac7bbdb49713d6371959b24b01f211ebe1ed8db))
+* **documents.js:** extract the odt table grid and row-properties machinery ([3546b2f](https://github.com/ExaDev/documents.js/commit/3546b2f8a3fbedc215bb50cbde3c623760112c68))
+* **documents.js:** extract the shared line/paragraph vocabulary to reconstruct-lines.ts ([39783d6](https://github.com/ExaDev/documents.js/commit/39783d66b8ed4d4117a74bcf523b4b09ea583025))
+* **documents.js:** extract the spreadsheet render pass into sheets-render.ts ([ee32286](https://github.com/ExaDev/documents.js/commit/ee32286d043369ceca90b8249cec522832045f8d))
+* **documents.js:** extract the svg geometry readers ([7b01fd9](https://github.com/ExaDev/documents.js/commit/7b01fd941e62031223ec9ec8cbfee04562dae782))
+* **documents.js:** split reconstruct.ts into table-recovery and presentation/drawing modules ([0141f5e](https://github.com/ExaDev/documents.js/commit/0141f5e44223fd6eac97a639f2eb5c246ccd84c7))
+* **documents.js:** split the layout and mathml suites by family ([55b3d60](https://github.com/ExaDev/documents.js/commit/55b3d60b73125c7df7db1f94dd20a40be971a74b))
+* **documents.js:** split the sheets, svg and remaining suites ([7efd3c6](https://github.com/ExaDev/documents.js/commit/7efd3c6ad97b8822c2e4aefdab2bfe7fdb734319))
+* **documents.js:** split the SQL engine into resolution and predicate modules ([c16ce4c](https://github.com/ExaDev/documents.js/commit/c16ce4cdf01553fc414b6c4968475f3befbf2a66))
+
+### Tests
+
+* **documents.js:** split six remaining suites at family boundaries ([bb574a8](https://github.com/ExaDev/documents.js/commit/bb574a87e36fe8d3932134da9ee3757b3ad37eac))
+* **documents.js:** split the convert suite by conversion direction ([96ee6ed](https://github.com/ExaDev/documents.js/commit/96ee6edd5a3e513316df42b6aee71e23a4e173c0))
+* **documents.js:** split the docx edit content suite ([bfd5635](https://github.com/ExaDev/documents.js/commit/bfd563581a000d80125189fa2bc9d86b271b7a03))
+* **documents.js:** split the latex lower suite ([0237dec](https://github.com/ExaDev/documents.js/commit/0237decca36f33ef00b4109572cea5eb817dda84))
+* **documents.js:** split the mathml stretchy suite by construct family ([2612fbf](https://github.com/ExaDev/documents.js/commit/2612fbf6d8ab1a113a04df70f92e4dc38111057f))
+* **documents.js:** split the odt edit table and content suites ([af00f51](https://github.com/ExaDev/documents.js/commit/af00f51023dc63c59b72c0680fccd34a15713db2))
+* **documents.js:** split the odt read, formula and bridges suites ([6b04f01](https://github.com/ExaDev/documents.js/commit/6b04f0176dfe4659f989c8ae4a069db0c24214e0))
+* **documents.js:** split the pptx content suite ([ff59654](https://github.com/ExaDev/documents.js/commit/ff59654e4565d038ae752affe87052a98b6748b3))
+* **documents.js:** split the reconstruction suite by document direction ([97f9416](https://github.com/ExaDev/documents.js/commit/97f941668e11eb8eac81f9f4501658d618c3c2c7))
+* **documents.js:** split the sheets steps suite into four families ([c23e769](https://github.com/ExaDev/documents.js/commit/c23e76982ea4204918c6124c14c3099d1845fb02))
+* **documents.js:** split the SQL evaluate suite ([5e21e19](https://github.com/ExaDev/documents.js/commit/5e21e194df23635fc0e71233713f98ee50a0dd29))
+
 ## [14.4.56](https://github.com/ExaDev/documents.js/compare/documents.js%4014.4.55...documents.js%4014.4.56) (2026-09-26)
 
 
