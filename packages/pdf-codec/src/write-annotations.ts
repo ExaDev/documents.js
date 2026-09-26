@@ -19,7 +19,7 @@ import {
 } from "./objects";
 import { NOTES_ANNOTATION_AUTHOR } from "./notes-annotation-author";
 import { parseValue } from "./parse";
-import { textToPdfString } from "./write";
+import { textToPdfString } from "./write-strings";
 export function buildLinkAnnotDict(link: Readonly<LayoutLink>): PdfObject {
   return pdfDict({
     Type: pdfName("Annot"),
