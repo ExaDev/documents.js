@@ -9,12 +9,8 @@ import { parseHmtx } from "./hmtx-table";
 import type { GlyphContourPoint, GlyphOutline } from "./glyf-contours";
 import type { Matrix } from "./matrix";
 import { applyMatrix, BEZIER_KAPPA, IDENTITY_MATRIX } from "./matrix";
-import {
-  drawGlyphOutline,
-  flattenCubic,
-  glyphOutlineSubpaths,
-  renderPdfPage,
-} from "./raster";
+import { flattenCubic, renderPdfPage } from "./raster";
+import { drawGlyphOutline, glyphOutlineSubpaths } from "./raster-text";
 import type {
   PageRasteriser,
   RasterDrawOp,
