@@ -29,6 +29,7 @@ import {
   treeEmbeddedFontsOf,
   type FontSourcePackage,
 } from "../fonts/registry";
+import { resolveCompositionPlan } from "./composition-plan";
 import {
   executeBridge,
   executeFromPdf,
@@ -37,7 +38,6 @@ import {
   isTextFormatNode,
   LAYOUT_CAPABLE,
   READ_ONLY_FORMAT_NODES,
-  resolveCompositionPlan,
   runCompositionPlan,
   type SourceContentFormat,
   type UnifiedConversionOptions,

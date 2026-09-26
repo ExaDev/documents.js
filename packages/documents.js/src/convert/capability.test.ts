@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { FORMAT_CAPABILITIES } from "./capability";
-import { resolveCompositionPlan } from "./composition";
+import { resolveCompositionPlan } from "./composition-plan";
 import type { DocumentFormat } from "./port";
 
 describe("FORMAT_CAPABILITIES", () => {
