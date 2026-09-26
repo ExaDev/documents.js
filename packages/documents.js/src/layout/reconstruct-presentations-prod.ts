@@ -33,11 +33,12 @@ import { buildDrawingBlock } from "../model/embedded-drawing";
 import { stampFrame } from "./shared";
 import type { CellTypeInferenceSink } from "./cell-typing";
 import { throwIfAborted } from "../ports/abort";
-import type { ReconstructOptions, TextLine } from "./reconstruct";
+import type { ReconstructOptions } from "./reconstruct";
+import { indexStructure, ZERO_MARGINS } from "./reconstruct";
 import {
   clusterIntoLines,
+  fontSizesClose,
   gapExceeds,
-  indexStructure,
   LARGE_GAP_EM_MULTIPLIER,
   LEFT_ALIGN_TOLERANCE_PT,
   lineBox,
@@ -46,8 +47,8 @@ import {
   textBoxOfItem,
   textItemToContentRun,
   textItemVerticalExtent,
-  ZERO_MARGINS,
-} from "./reconstruct";
+} from "./reconstruct-lines";
+import type { TextLine } from "./reconstruct-lines";
 import type { StructureIndex } from "./reconstruct";
 import { recoverTables } from "./reconstruct-tables";
 import type { CellTypingContext } from "./reconstruct-tables";
@@ -177,16 +178,6 @@ export function splitLineByLargeGaps(line: TextLine): TextLine[] {
     segments.push({ items: current, baselineY: line.baselineY });
   }
   return segments;
-}
-
-const FONT_SIZE_CLOSE_TOLERANCE_PT = 1;
-const FONT_SIZE_CLOSE_TOLERANCE_RATIO = 0.15;
-
-export function fontSizesClose(a: number, b: number): boolean {
-  return (
-    Math.abs(a - b) <= FONT_SIZE_CLOSE_TOLERANCE_PT ||
-    Math.abs(a - b) / Math.max(a, b) <= FONT_SIZE_CLOSE_TOLERANCE_RATIO
-  );
 }
 
 // Consecutive lines merge into one text block when their left edges align, the baseline gap still looks like ordinary single-line spacing (not a paragraph-sized jump — reusing PARAGRAPH_GAP_MULTIPLIER, the same "still the same flow" signal the docx path uses), and their dominant font sizes are close (plan Step 10). Each merged line keeps its own ContentParagraph within the shape, rather than being joined into one paragraph the way docx lines are — pptx text boxes commonly hold several genuinely distinct short paragraphs (list items, separate sentences), and there is no reliable signal from geometry alone for whether two stacked lines were one wrapped paragraph or two.
