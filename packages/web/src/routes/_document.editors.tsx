@@ -1,6 +1,7 @@
 import {
   ActionIcon,
   Alert,
+  Badge,
   Button,
   Group,
   Paper,
@@ -25,6 +26,8 @@ import {
   useSetParagraphText,
 } from "../hooks/useEditorSession";
 import type { OpenedFile } from "../ports/fileAccess";
+import { editorRow } from "../ui/EditorPanel.css";
+import { iconFlexShrink, minWidthZero } from "../ui/layout.css";
 import { notifyError, notifySuccess } from "../ui/notify";
 import { ToolPage } from "../ui/ToolPage";
 
@@ -42,6 +45,23 @@ export function editorFormat(
   format: DocumentFormat | undefined,
 ): EditorFormat | undefined {
   return EDITOR_FORMATS.find((candidate) => candidate === format);
+}
+
+// Exported for the same reason: the singular/plural boundary is a literal a mutant can flip, so it gets its own pinning test rather than only being observed through a rendered count.
+export function paragraphCountLabel(count: number): string {
+  return count === 1 ? "1 paragraph" : `${count} paragraphs`;
+}
+
+// Whether the working snapshot has moved away from the last one the worker confirmed (the open, or the most recent save). Compares paragraph-by-paragraph rather than by reference, because every optimistic edit produces a brand-new snapshot object: reference equality would call an edited document clean.
+export function snapshotDiffers(
+  working: EditorSnapshot,
+  saved: EditorSnapshot,
+): boolean {
+  return (
+    working.id !== saved.id ||
+    working.paragraphs.length !== saved.paragraphs.length ||
+    working.paragraphs.some((text, index) => text !== saved.paragraphs[index])
+  );
 }
 
 // The Editors tool: an in-browser editing surface over documents.js's live-view editors, which run in the worker and hold the document itself. Every edit below is applied to the live document through the rpc session (nothing is buffered client-side), and Save re-serialises the whole document through the format's own writer. The v1 surface is the paragraph list every format family shares: edit a paragraph's text in place, append, remove, save. Formats beyond these four (and deeper per-run styling) stay out until they have the same genuine cross-format surface.
@@ -79,6 +99,10 @@ function EditorPanel({
   const [snapshot, setSnapshot] = useState<EditorSnapshot | undefined>(
     undefined,
   );
+  // The last snapshot the worker confirmed: the open itself, then each successful save. The working snapshot above moves ahead of it on every optimistic edit, and the gap between the two is exactly what the unsaved-changes indicator reports.
+  const [savedSnapshot, setSavedSnapshot] = useState<
+    EditorSnapshot | undefined
+  >(undefined);
   const [newParagraph, setNewParagraph] = useState("");
 
   const openEditor = useOpenEditor();
@@ -99,6 +123,7 @@ function EditorPanel({
       {
         onSuccess: (opened) => {
           setSnapshot(opened);
+          setSavedSnapshot(opened);
         },
         onError: (error) => {
           notifyError("Could not open document", error);
@@ -156,6 +181,8 @@ function EditorPanel({
       { id: current.id },
       {
         onSuccess: (result) => {
+          // The save's own success is what closes the unsaved-changes gap: the working snapshot becomes the saved one the moment the worker has serialised it, so the indicator clears even though the bytes are on their way to disk asynchronously.
+          setSavedSnapshot(current);
           notifySuccess("Document saved");
           void fileAccess.saveFile(result.bytes, {
             suggestedName: file.name,
@@ -179,58 +206,109 @@ function EditorPanel({
   if (snapshot === undefined)
     return <Text c="dimmed">Opening the document for editing…</Text>;
 
+  const hasUnsavedChanges =
+    savedSnapshot !== undefined && snapshotDiffers(snapshot, savedSnapshot);
+
   return (
     <Paper withBorder p="md">
-      <Group justify="space-between" mb="md">
-        <Text fw={500}>
-          {format.toUpperCase()} · {snapshot.paragraphs.length}{" "}
-          {snapshot.paragraphs.length === 1 ? "paragraph" : "paragraphs"}
-        </Text>
-        <Button
-          size="xs"
-          onClick={() => {
-            applySave(snapshot);
-          }}
-          loading={saveEditor.isPending}
-        >
-          Save
-        </Button>
-      </Group>
-      <Stack gap="sm">
-        {snapshot.paragraphs.map((text, index) => (
-          <Group key={index} align="flex-start" gap="xs" wrap="nowrap">
-            <Textarea
-              value={text}
-              autosize
-              minRows={1}
-              style={{ flex: 1 }}
-              aria-label={`Paragraph ${index + 1}`}
-              onChange={(event) => {
-                // Optimistic local edit: the input is driven by local state per keystroke, and the worker session is updated on blur, so there is one rpc round-trip per finished edit rather than per keystroke.
-                setSnapshot({
-                  id: snapshot.id,
-                  paragraphs: snapshot.paragraphs.map((value, i) =>
-                    i === index ? event.currentTarget.value : value,
-                  ),
-                });
-              }}
-              onBlur={(event) => {
-                applySet(index, event.currentTarget.value, snapshot);
-              }}
-            />
-            <ActionIcon
-              color="red"
-              variant="subtle"
-              aria-label={`Remove paragraph ${index + 1}`}
-              onClick={() => {
-                applyRemove(index, snapshot);
-              }}
-              loading={removeParagraph.isPending}
-            >
-              <IconTrash size={16} />
-            </ActionIcon>
+      <Group
+        justify="space-between"
+        align="flex-start"
+        mb="md"
+        className={minWidthZero}
+        wrap="nowrap"
+      >
+        <Stack gap={2} className={minWidthZero}>
+          <Text fw={500} truncate title={file.name}>
+            {file.name}
+          </Text>
+          <Group gap={6} wrap="nowrap">
+            <Badge size="sm" variant="light">
+              {format.toUpperCase()}
+            </Badge>
+            <Text size="sm" c="dimmed">
+              {paragraphCountLabel(snapshot.paragraphs.length)}
+            </Text>
           </Group>
-        ))}
+        </Stack>
+        <Group gap="sm" wrap="nowrap">
+          {hasUnsavedChanges && (
+            <Text size="sm" c="orange" span>
+              Unsaved changes
+            </Text>
+          )}
+          <Button
+            size="xs"
+            onClick={() => {
+              applySave(snapshot);
+            }}
+            loading={saveEditor.isPending}
+          >
+            Save
+          </Button>
+        </Group>
+      </Group>
+      <Stack gap="xs">
+        {snapshot.paragraphs.length === 0 ? (
+          <Text c="dimmed" size="sm" py="xs">
+            This document has no paragraphs yet. Write the first one below and
+            choose add.
+          </Text>
+        ) : (
+          snapshot.paragraphs.map((text, index) => (
+            <Group
+              key={index}
+              align="flex-start"
+              gap="xs"
+              wrap="nowrap"
+              className={editorRow}
+              px="xs"
+              py={4}
+            >
+              <Text
+                size="xs"
+                c="dimmed"
+                ta="right"
+                w={24}
+                className={iconFlexShrink}
+                pt={7}
+                data-paragraph-number={index + 1}
+              >
+                {index + 1}
+              </Text>
+              <Textarea
+                value={text}
+                autosize
+                minRows={1}
+                style={{ flex: 1 }}
+                aria-label={`Paragraph ${index + 1}`}
+                onChange={(event) => {
+                  // Optimistic local edit: the input is driven by local state per keystroke, and the worker session is updated on blur, so there is one rpc round-trip per finished edit rather than per keystroke.
+                  setSnapshot({
+                    id: snapshot.id,
+                    paragraphs: snapshot.paragraphs.map((value, i) =>
+                      i === index ? event.currentTarget.value : value,
+                    ),
+                  });
+                }}
+                onBlur={(event) => {
+                  applySet(index, event.currentTarget.value, snapshot);
+                }}
+              />
+              <ActionIcon
+                color="red"
+                variant="subtle"
+                aria-label={`Remove paragraph ${index + 1}`}
+                onClick={() => {
+                  applyRemove(index, snapshot);
+                }}
+                loading={removeParagraph.isPending}
+              >
+                <IconTrash size={16} />
+              </ActionIcon>
+            </Group>
+          ))
+        )}
       </Stack>
       <Group mt="md" align="flex-start" gap="xs" wrap="nowrap">
         <Textarea

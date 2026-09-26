@@ -7,6 +7,7 @@ import { useOpenDocument } from "../document/OpenDocumentContext";
 import { removeRecentFile, useRecentFiles } from "../hooks/useRecentFiles";
 import { relativeTime } from "../shared/relativeTime";
 import { notifyError } from "./notify";
+import { recentRow } from "./RecentFilesPanel.css";
 import { iconFlexShrink, minWidthZero } from "./layout.css";
 
 // Binary multiples, matching the KB/MB the surrounding labels claim, which is what a file manager on this platform shows for the same file.
@@ -62,7 +63,13 @@ export function RecentFilesPanel() {
     void removeRecentFile(id);
   };
 
-  if (files === undefined) return null;
+  // The query's own loading state: dexie has answered neither yes nor no yet. Rendered as its own line rather than nothing, so a slow first open of the page reads as "on its way" rather than as an empty list flashing in.
+  if (files === undefined)
+    return (
+      <Text c="dimmed" size="sm" py="sm">
+        Loading recent files…
+      </Text>
+    );
 
   if (files.length === 0) {
     return (
@@ -85,6 +92,7 @@ export function RecentFilesPanel() {
             role="listitem"
             justify="space-between"
             wrap="nowrap"
+            className={recentRow}
             py={6}
             px="xs"
           >

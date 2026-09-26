@@ -21,3 +21,15 @@ describe("RecentPage", () => {
     mounted.unmount();
   });
 });
+
+describe("RecentPage description", () => {
+  it("carries a one-sentence description of what the list is", () => {
+    const RecentPage = Route.options.component;
+    if (RecentPage === undefined) throw new Error("route has no component");
+    const mounted = mountWithMantine(<RecentPage />);
+    expect(mounted.container.textContent).toContain(
+      "Documents you have opened in this browser, newest first.",
+    );
+    mounted.unmount();
+  });
+});
