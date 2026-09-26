@@ -31,7 +31,7 @@ const { formatBytes, reopenTooltipLabel, RecentFilesPanel } =
   await import("./RecentFilesPanel");
 
 // handleReopen chains several real awaits (queryPermission, maybe requestPermission, getFile, arrayBuffer) before it calls openDocument/navigate, so a fixed count of Promise.resolve() ticks is fragile against a chain this long — flushing on a real macrotask boundary (setTimeout) guarantees every already-queued microtask has drained first, regardless of how many awaits the chain happens to have.
-function flushPromises(): Promise<void> {
+async function flushPromises(): Promise<void> {
   return new Promise((resolve) => {
     setTimeout(resolve, 0);
   });
@@ -80,12 +80,12 @@ function fakeHandle(
 ): FileSystemFileHandle {
   return {
     queryPermission:
-      overrides.queryPermission ?? (() => Promise.resolve("granted")),
+      overrides.queryPermission ?? (async () => Promise.resolve("granted")),
     requestPermission:
-      overrides.requestPermission ?? (() => Promise.resolve("granted")),
+      overrides.requestPermission ?? (async () => Promise.resolve("granted")),
     getFile:
       overrides.getFile ??
-      (() =>
+      (async () =>
         Promise.resolve(new File([new Uint8Array([1, 2])], "report.docx"))),
   } as unknown as FileSystemFileHandle;
 }
@@ -219,10 +219,10 @@ describe("RecentFilesPanel", () => {
   });
 
   it("requests permission when the initial query is not granted, and proceeds once the request itself is granted", async () => {
-    const queryPermission = vi.fn(() =>
+    const queryPermission = vi.fn(async () =>
       Promise.resolve("prompt" as PermissionState),
     );
-    const requestPermission = vi.fn(() =>
+    const requestPermission = vi.fn(async () =>
       Promise.resolve("granted" as PermissionState),
     );
     const handle = fakeHandle({ queryPermission, requestPermission });
@@ -236,8 +236,8 @@ describe("RecentFilesPanel", () => {
 
   it("notifies and does not navigate when permission is ultimately denied", async () => {
     const handle = fakeHandle({
-      queryPermission: () => Promise.resolve("prompt"),
-      requestPermission: () => Promise.resolve("denied"),
+      queryPermission: async () => Promise.resolve("prompt"),
+      requestPermission: async () => Promise.resolve("denied"),
     });
     useRecentFiles.mockReturnValue([
       record({ id: 7, name: "secret.docx", handle }),
@@ -255,7 +255,7 @@ describe("RecentFilesPanel", () => {
 
   it("notifies with the reopen failure when reading the handle throws", async () => {
     const handle = fakeHandle({
-      getFile: () => Promise.reject(new Error("disk error")),
+      getFile: async () => Promise.reject(new Error("disk error")),
     });
     useRecentFiles.mockReturnValue([record({ name: "broken.docx", handle })]);
     const { container } = renderPanel();
@@ -284,10 +284,10 @@ describe("RecentFilesPanel", () => {
   });
 
   it("queries permission in read mode, and skips requesting it again once already granted", async () => {
-    const queryPermission = vi.fn(() =>
+    const queryPermission = vi.fn(async () =>
       Promise.resolve("granted" as PermissionState),
     );
-    const requestPermission = vi.fn(() =>
+    const requestPermission = vi.fn(async () =>
       Promise.resolve("denied" as PermissionState),
     );
     const handle = fakeHandle({ queryPermission, requestPermission });
@@ -301,10 +301,10 @@ describe("RecentFilesPanel", () => {
   });
 
   it("requests permission in read mode when the initial query is not granted", async () => {
-    const queryPermission = vi.fn(() =>
+    const queryPermission = vi.fn(async () =>
       Promise.resolve("prompt" as PermissionState),
     );
-    const requestPermission = vi.fn(() =>
+    const requestPermission = vi.fn(async () =>
       Promise.resolve("granted" as PermissionState),
     );
     const handle = fakeHandle({ queryPermission, requestPermission });
@@ -317,8 +317,8 @@ describe("RecentFilesPanel", () => {
 
   it("names the record in the permission-denied error message", async () => {
     const handle = fakeHandle({
-      queryPermission: () => Promise.resolve("prompt"),
-      requestPermission: () => Promise.resolve("denied"),
+      queryPermission: async () => Promise.resolve("prompt"),
+      requestPermission: async () => Promise.resolve("denied"),
     });
     useRecentFiles.mockReturnValue([
       record({ id: 7, name: "secret.docx", handle }),
