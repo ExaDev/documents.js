@@ -28,7 +28,7 @@ import {
 } from "./styles";
 import {} from "./units";
 import { writeXmlBool } from "./util";
-import { DxfTable } from "./conditional-format";
+import { DxfTable } from "./conditional-format-write";
 import { buildThreadedCommentsRoot, sheetHasComments } from "./comments-write";
 import {
   buildNameDefinedNameElements,

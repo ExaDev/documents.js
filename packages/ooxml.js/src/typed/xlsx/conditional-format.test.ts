@@ -2,11 +2,11 @@ import { describe, expect, it } from "vitest";
 import type { ContentSheetConditionalFormat } from "document-schema.js";
 import { el, txt } from "../../xml/fragment";
 import { childrenWithTag } from "../util";
+import { readConditionalFormats } from "./conditional-format";
 import {
-  DxfTable,
   buildConditionalFormattingElements,
-  readConditionalFormats,
-} from "./conditional-format";
+  DxfTable,
+} from "./conditional-format-write";
 
 function hasOwn(obj: object, key: string): boolean {
   return Object.hasOwn(obj, key);

@@ -22,9 +22,9 @@ import type {
 } from "document-schema.js";
 import { DEFAULT_HEADER_FOOTER_MARGIN_PT } from "./print-settings";
 import {
-  type DxfTable,
   buildConditionalFormattingElements,
-} from "./conditional-format";
+  type DxfTable,
+} from "./conditional-format-write";
 import {
   MAX_COLUMN_INDEX,
   MAX_ROW_INDEX,
