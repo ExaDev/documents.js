@@ -1,3 +1,26 @@
+## [12.2.30](https://github.com/ExaDev/documents.js/compare/ooxml.js%4012.2.29...ooxml.js%4012.2.30) (2026-09-26)
+
+### Code Refactoring
+
+* **ooxml.js:** extract the pptx table reader ([f62f2b0](https://github.com/ExaDev/documents.js/commit/f62f2b0f9738a0a0985d62f9a22e59199ddaf71b))
+* **ooxml.js:** extract the xlsx worksheet writer ([605cd69](https://github.com/ExaDev/documents.js/commit/605cd6997f9b38c4d07cf99ff1b96e3a401270de))
+* **ooxml.js:** split the docx reader into four modules ([216b7ab](https://github.com/ExaDev/documents.js/commit/216b7abb55834bbaa2e961dd8d423245fad91616))
+* **ooxml.js:** split the docx writer into seven modules ([192712e](https://github.com/ExaDev/documents.js/commit/192712e35fad2a5ba5d725520455ebed859da4b1))
+* **ooxml.js:** split the xlsx conditional-format writer ([310cdfc](https://github.com/ExaDev/documents.js/commit/310cdfc97c770ebc770bd1d44b3953e8f4a8b96a))
+
+### Tests
+
+* **ooxml.js:** split the docx read suite by construct family ([2359e23](https://github.com/ExaDev/documents.js/commit/2359e23b05676b32b6710051dc81672d44759209))
+* **ooxml.js:** split the docx write suite by construct family ([e3bdedc](https://github.com/ExaDev/documents.js/commit/e3bdedc2525a8ab85e496c43f3e586d5c2306c74))
+* **ooxml.js:** split the pptx read suite by family ([83cfd7e](https://github.com/ExaDev/documents.js/commit/83cfd7e7a7e8d76a5ce41dd93cfd1609f2034774))
+* **ooxml.js:** split the styles, conditional-format and constructs suites ([8c3d380](https://github.com/ExaDev/documents.js/commit/8c3d3806500b3c1b021487fdcbd02bd34ab9e4ef))
+* **ooxml.js:** split the xlsx build suite by part family ([f31cbda](https://github.com/ExaDev/documents.js/commit/f31cbda0787fa08da9dfab900bdb6049bc76580b))
+* **ooxml.js:** split the xlsx content suite by family ([835981f](https://github.com/ExaDev/documents.js/commit/835981f5294905355f21b69abcbe7c9e4dc03b08))
+
+### Miscellaneous Chores
+
+* **ooxml.js:** enforce maxLines package-wide ([8964a54](https://github.com/ExaDev/documents.js/commit/8964a54b6660fbd4c8e3d71948b306f0e9d5081c))
+
 ## [12.2.29](https://github.com/ExaDev/documents.js/compare/ooxml.js%4012.2.28...ooxml.js%4012.2.29) (2026-09-26)
 
 
