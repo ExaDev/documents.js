@@ -17,7 +17,7 @@ import {
 
 import { resolveStandardFont } from "./fonts";
 import { styleFromBaseFontName } from "./font-style";
-import type { FontMetricsPort, PdfObjectResolver } from "./interpret";
+import type { FontMetricsPort, PdfObjectResolver } from "./interpret-types";
 import type { PdfDict, PdfObject } from "./objects";
 import { asArray, asName, asNumber, dictGet, isName } from "./objects";
 

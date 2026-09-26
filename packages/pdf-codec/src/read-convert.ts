@@ -26,7 +26,6 @@ import type {
   PdfObjectResolver,
   ExtractedEllipse,
   ExtractedImage,
-  ExtractedItem,
   ExtractedInlineImage,
   ExtractedLine,
   ExtractedPaint,
@@ -34,7 +33,8 @@ import type {
   ExtractedRect,
   ExtractedSubpath,
   ExtractedTextRun,
-} from "./interpret";
+} from "./interpret-types";
+import type { ExtractedItem } from "./interpret-types";
 import type { PdfDict } from "./objects";
 import { asArray, asName, asNumber } from "./objects";
 import { dictGet } from "./objects";

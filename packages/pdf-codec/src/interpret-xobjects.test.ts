@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { PdfDiagnostic, PdfDiagnosticSink } from "./diagnostics";
-import type { FontMetricsPort, PdfObjectResolver } from "./interpret";
+import type { FontMetricsPort, PdfObjectResolver } from "./interpret-types";
 import { interpretContentStream } from "./interpret";
 import type { PdfDict, PdfObject } from "./objects";
 import {
