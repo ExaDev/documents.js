@@ -24,6 +24,7 @@ import {
   restoreResidueRow,
   xrefEntry,
 } from "./write-annotations";
+import { emitFormObjects } from "./write-form";
 import type { LayoutFont, PositionedFormula } from "document-schema.js";
 import type {
   LayoutDocument,
@@ -678,161 +679,16 @@ export function writePdf(
 
   // #967: the AcroForm field tree. A terminal field's FIRST widget merges into the field dict itself (/Subtype /Widget /Rect /P alongside /FT and friends) when it is the field's only one; a multi-widget field keeps every widget as a separate widget-kid object under /Kids, each also referenced from its page's /Annots. A group is a bare /T + /Kids node. Fully-qualified names decompose back into the /T chain: a root field carries its whole name, a nested field carries the segment beyond its parent's, exactly the join the reader re-applies (ISO 32000-1 12.7.3.2). Each widget's page /Annots entry, gathered during emission in field order: the merged field dict itself for a single-widget field (it IS the annotation), the widget kid object for the others. A viewer that renders only page-level /Annots — and the spec's own presentation model points it there (ISO 32000-1 12.5.1) — sees every widget without knowing the AcroForm tree at all.
   const widgetAnnotsByPage = new Map<number, PdfObject[]>();
-  const noteWidgetAnnot = (
-    widget: LayoutFormField["widgets"][number],
-    ref: PdfObject,
-  ): void => {
-    const existing = widgetAnnotsByPage.get(widget.pageIndex);
-    if (existing === undefined) {
-      widgetAnnotsByPage.set(widget.pageIndex, [ref]);
-    } else {
-      existing.push(ref);
-    }
-  };
-  const widgetRectArray = (
-    widget: LayoutFormField["widgets"][number],
-  ): PdfObject =>
-    pdfArray(
-      [
-        widget.xPt,
-        widget.yPt,
-        widget.xPt + widget.widthPt,
-        widget.yPt + widget.heightPt,
-      ].map((n) => pdfNum(n)),
-    );
-  const widgetDict = (widget: LayoutFormField["widgets"][number]): PdfDict =>
-    pdfDict({
-      Subtype: pdfName("Widget"),
-      Rect: widgetRectArray(widget),
-      P: pdfRef(pageAllocs[widget.pageIndex]!.pageNum, 0),
-    });
-  const FIELD_TYPE_PDF_NAME: Record<
-    Exclude<LayoutFormField["fieldType"], "group">,
-    string
-  > = {
-    text: "Tx",
-    checkbox: "Btn",
-    radio: "Btn",
-    button: "Btn",
-    listbox: "Ch",
-    combobox: "Ch",
-    signature: "Sig",
-  };
-  const emitFormFieldObjects = (
-    fields: readonly LayoutFormField[],
-    parentName: string | undefined,
-  ): void => {
-    for (const field of fields) {
-      // A root-level field carries its whole name (parentName undefined, no decomposition attempted at all); a nested field carries the segment beyond its parent's — or its whole name when the fully-qualified name does not extend the parent's, which is the model's own escape hatch for a child named independently of its parent.
-      const ownName =
-        parentName === undefined
-          ? field.name
-          : field.name.startsWith(`${parentName}.`)
-            ? field.name.slice(parentName.length + 1)
-            : field.name;
-      const entries: [string, PdfObject][] = [];
-      if (ownName.length > 0) {
-        entries.push([
-          "T",
-          pdfLiteralString(new TextEncoder().encode(ownName)),
-        ]);
-      }
-      if (field.alias !== undefined) {
-        entries.push([
-          "TU",
-          pdfLiteralString(new TextEncoder().encode(field.alias)),
-        ]);
-      }
-      if (field.fieldType === "group") {
-        entries.push([
-          "Kids",
-          pdfArray(field.children.map((child) => pdfRef(formNumOf(child), 0))),
-        ]);
-      } else {
-        entries.push(["FT", pdfName(FIELD_TYPE_PDF_NAME[field.fieldType])]);
-        const FLAG_READ_ONLY = 1;
-        const FLAG_PUSHBUTTON = 4;
-        const FLAG_RADIO = 32768;
-        const FLAG_COMBO = 131072;
-        let flags = 0;
-        if (field.readOnly === true) flags |= FLAG_READ_ONLY;
-        if (field.fieldType === "button") flags |= FLAG_PUSHBUTTON;
-        if (field.fieldType === "radio") flags |= FLAG_RADIO;
-        if (field.fieldType === "combobox") flags |= FLAG_COMBO;
-        if (flags !== 0) {
-          entries.push(["Ff", pdfNum(flags)]);
-        }
-        if (
-          field.fieldType === "text" ||
-          field.fieldType === "listbox" ||
-          field.fieldType === "combobox"
-        ) {
-          if (field.value !== undefined) {
-            entries.push([
-              "V",
-              pdfLiteralString(new TextEncoder().encode(field.value)),
-            ]);
-          }
-        } else if (
-          field.fieldType === "checkbox" ||
-          field.fieldType === "radio"
-        ) {
-          // The button family's checked state is a NAME export value: any name other than Off reads back as checked, so a value the model did carry is exported as itself and a value-less field falls back to Yes/Off from its own checked state.
-          entries.push([
-            "V",
-            pdfName(field.value ?? (field.checked === true ? "Yes" : "Off")),
-          ]);
-        }
-        if (field.options !== undefined) {
-          entries.push([
-            "Opt",
-            pdfArray(
-              field.options.map((option) =>
-                pdfLiteralString(new TextEncoder().encode(option)),
-              ),
-            ),
-          ]);
-        }
-        const firstWidget = field.widgets[0];
-        if (field.widgets.length === 1 && firstWidget !== undefined) {
-          entries.push(["Subtype", pdfName("Widget")]);
-          entries.push(["Rect", widgetRectArray(firstWidget)]);
-          entries.push([
-            "P",
-            pdfRef(pageAllocs[firstWidget.pageIndex]!.pageNum, 0),
-          ]);
-          // The merged field dict is the annotation: its page /Annots entry references this very object, not a copy of it.
-          noteWidgetAnnot(firstWidget, pdfRef(formNumOf(field), 0));
-        } else if (formExtraWidgetNums.has(field)) {
-          // Every widget is one of the extra objects the allocation walk reserved, referenced from /Kids and from its page's /Annots alike — the same annotation object in both places, never a copy.
-          const extraNums = formExtraWidgetNums.get(field) ?? [];
-          entries.push([
-            "Kids",
-            pdfArray(extraNums.map((num) => pdfRef(num, 0))),
-          ]);
-          for (const [index, num] of extraNums.entries()) {
-            const widget = field.widgets[index];
-            if (widget !== undefined) {
-              noteWidgetAnnot(widget, pdfRef(num, 0));
-            }
-          }
-        }
-      }
-      objects.push({
-        num: formNumOf(field),
-        value: pdfDict(Object.fromEntries(entries)),
-      });
-      const extraNums = formExtraWidgetNums.get(field) ?? [];
-      for (const [index, num] of extraNums.entries()) {
-        const widget = field.widgets[index];
-        if (widget !== undefined) {
-          objects.push({ num, value: widgetDict(widget) });
-        }
-      }
-      emitFormFieldObjects(field.children, field.name);
-    }
-  };
-  emitFormFieldObjects(doc.form ?? [], undefined);
+  emitFormObjects(
+    {
+      objects,
+      widgetAnnotsByPage,
+      pageAllocs,
+      formNumOf,
+      formExtraWidgetNums,
+    },
+    doc.form ?? [],
+  );
 
   // #967: the tagged structure tree. One /StructElem per model element (/S the type, /P the parent — the root for top-level elements, /K the child refs), and the /StructTreeRoot pointing at both the element roots and the /ParentTree number tree built after the page walk below (it depends on the per-page MCID assignments).
   if (structRootNum !== undefined) {
