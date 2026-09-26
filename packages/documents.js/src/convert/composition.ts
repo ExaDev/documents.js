@@ -83,6 +83,12 @@ import {
 } from "./variant-bridges";
 import { type ContentVariant, UnsupportedConversionError } from "./capability";
 import { type DocumentFormat } from "./port";
+import type { ConversionPlan } from "./composition-plan";
+import {
+  isSourceContentFormat,
+  isContentFormat,
+  resolveCompositionPlan,
+} from "./composition-plan";
 
 // Latin-1's own ceiling as a character code; hex, for formatting a code point the way Unicode itself writes it.
 const LATIN1_MAX_CODE = 0xff;
@@ -90,8 +96,8 @@ const HEX_RADIX = 16;
 const UNICODE_HEX_DIGITS = 4;
 
 // The graph's own edge costs: a conversion routed through pdf costs three edges-worth, and a resolved path may span at most four nodes (three hops).
-const THROUGH_PDF_EDGE_COST = 3;
-const MAX_CONVERSION_PATH_NODES = 4;
+export const THROUGH_PDF_EDGE_COST = 3;
+export const MAX_CONVERSION_PATH_NODES = 4;
 
 // The single source of truth for "which primitives does each format use". read/build closures thread their own per-format option subset internally: docx and pptx read/build both pull onMathDiagnostic (mirroring readDocxContent's/readPptxContent's own `{ onMathDiagnostic }` and buildDocxPackage's/buildPptxPackage's own option — ExaDev/documents.js#563 gave pptx the identical OMML degrade-diagnostic channel docx already had), markdown read pulls signal/images (mirroring readMarkdownContent's ReadMarkdownOptions), csv read pulls delimiter/onCellTypeInference and csv build pulls delimiter/sheet (mirroring readCsvContent's ReadCsvContentOptions and buildCsvText's BuildCsvTextOptions), svg read pulls onSvgDiagnostic and svg build pulls page/onSvgDiagnostic (mirroring readSvgContent's ReadSvgContentOptions and buildSvgText's BuildSvgTextOptions), and every other format's read/build accept and ignore the thread. docxToPdf's openDocx(bytes).toPackage() and decodeOoxmlPackage(bytes) produce the identical Package (openDocx wraps decodeOoxmlPackage and toPackage returns it unmutated), so decode uses the package codec directly for uniformity — byte-identical to docxToPdf at every downstream call site.
 export const FORMAT_NODES: Readonly<Record<ContentFormat, FormatNode>> = {
@@ -333,7 +339,7 @@ export type ContentFormat =
   | "epub";
 
 // The explicit, typed list of content formats, kept in sync with FORMAT_NODES' own keys. Used for iteration in the graph builder in place of `Object.keys(FORMAT_NODES)` (which returns `string[]` and would need a cast back to ContentFormat), so the registry stays cast-free end to end.
-const CONTENT_FORMATS: readonly ContentFormat[] = [
+export const CONTENT_FORMATS: readonly ContentFormat[] = [
   "docx",
   "pptx",
   "xlsx",
@@ -408,7 +414,9 @@ export function isTextFormatNode(node: FormatNode): node is TextFormatNode {
 export type ReadOnlyContentFormat = "wpd";
 
 // The explicit, typed list, kept in sync with READ_ONLY_FORMAT_NODES' own keys for the same reason CONTENT_FORMATS is: iterating `Object.keys` would return `string[]` and need a cast back.
-const READ_ONLY_CONTENT_FORMATS: readonly ReadOnlyContentFormat[] = ["wpd"];
+export const READ_ONLY_CONTENT_FORMATS: readonly ReadOnlyContentFormat[] = [
+  "wpd",
+];
 
 // A source-only node. Deliberately not a third member of the FormatNode union: it has no build/encode half at all, so widening that union would make every executor's target-side call site branch on a case that can never occur there, and the "no decode step" shape below would have to be faked with an identity decode. `read` takes bytes directly because a read-only codec has no round trip to keep symmetrical — there is no encode to be the inverse of a decode, so the intermediate representation that split exists for (a Package, a text string) has nothing to hold.
 export interface ReadOnlyFormatNode {
@@ -503,7 +511,7 @@ export const LAYOUT_CAPABLE: ReadonlySet<SourceContentFormat> =
   ]);
 
 // Cross-variant transforms keyed by `${fromVariant}->${toVariant}`. Each wrapper narrows its input with a runtime kind guard so the underlying transform receives its exact concrete variant type — the same "no cast, narrow at the boundary" discipline every read/build closure above follows. The pathfinder derives its cross-variant edges from this object's keys, so adding a transform here is the single change needed to teach both the pathfinder and the bridge executor a new variant crossing. A key need not have a reverse entry — buildCompositionGraph adds a DIRECTED edge per key, so a one-way transform like spreadsheet->wordprocessing below reaches every format of the target variant without implying a reverse crossing this object never registered.
-const TRANSFORMS: Readonly<
+export const TRANSFORMS: Readonly<
   Record<string, (doc: ContentDocument) => ContentDocument>
 > = {
   "wordprocessing->presentation": (doc) => {
@@ -550,7 +558,7 @@ const TRANSFORMS: Readonly<
 };
 
 // Reconstructors keyed by variant — the declarative registry executeFromPdf dispatches through, mapping a LayoutVariant to the concrete reconstruct* function the corresponding convert.ts PDF-to-X path already calls. The layout-engine counterpart (LAYOUT_ENGINES) lives in composition-to-pdf.ts with the toPdf executor it serves.
-const RECONSTRUCTORS: Readonly<
+export const RECONSTRUCTORS: Readonly<
   Record<
     LayoutVariant,
     (doc: LayoutDocument, options?: ReconstructOptions) => ContentDocument
@@ -646,203 +654,6 @@ export function executeFromPdf(
   stampPdfPackageTables(reported, layout);
   options?.onDocument?.(reported);
   return out;
-}
-
-// --- Pathfinder: minimum-cost route over the composition graph ---------------------------------
-
-export type HopExecutor = "bridge" | "toPdf" | "fromPdf";
-
-export interface CompositionHop {
-  readonly executor: HopExecutor;
-  readonly from: DocumentFormat;
-  readonly to: DocumentFormat;
-}
-
-export interface ConversionPlan {
-  readonly hops: readonly CompositionHop[];
-}
-
-interface GraphEdge {
-  readonly to: DocumentFormat;
-  readonly cost: number;
-}
-
-// Builds the composition graph's adjacency list from the registry, with fidelity-ordered edge costs: a same-variant bridge (cost 1, lossless) always beats a cross-variant transform (cost 2, approximate), which always beats a toPdf/fromPdf edge (cost 3, geometry-based render or reconstruction). Same-variant bridges and toPdf/fromPdf edges are genuinely bidirectional with symmetric costs; cross-variant transform edges are DIRECTED per TRANSFORMS key instead, since a variant pair is bidirectional only when both directions are registered as separate keys — a one-way transform (spreadsheet->wordprocessing) must not open a same-cost edge back the other way with no transform to execute it. The toPdf/fromPdf edges cover exactly LAYOUT_CAPABLE (xlsx and csv absent — each routes through ods), and cross-variant transform edges are derived from TRANSFORMS' own keys so the graph cannot drift from the registered transforms.
-function buildCompositionGraph(): ReadonlyMap<
-  DocumentFormat,
-  readonly GraphEdge[]
-> {
-  const adj = new Map<DocumentFormat, GraphEdge[]>();
-  const addDirected = (
-    from: DocumentFormat,
-    to: DocumentFormat,
-    cost: number,
-  ): void => {
-    const list = adj.get(from);
-    if (list === undefined) {
-      adj.set(from, [{ to, cost }]);
-    } else {
-      list.push({ to, cost });
-    }
-  };
-  const addEdge = (
-    from: DocumentFormat,
-    to: DocumentFormat,
-    cost: number,
-  ): void => {
-    addDirected(from, to, cost);
-    addDirected(to, from, cost);
-  };
-
-  // Same-variant bridges (cost 1): every pair of content formats sharing a variant.
-  for (const a of CONTENT_FORMATS) {
-    for (const b of CONTENT_FORMATS) {
-      if (a === b) {
-        continue;
-      }
-      if (FORMAT_NODES[a].variant === FORMAT_NODES[b].variant) {
-        addEdge(a, b, 1);
-      }
-    }
-  }
-
-  // Cross-variant transforms (cost 2): every format of the source variant -> every format of the target variant, for each direction registered in TRANSFORMS. DIRECTED, not addEdge's bidirectional pair: a TRANSFORMS key states one direction, and a pair like wordprocessing<->presentation is bidirectional only because both directions are registered as separate keys above — registering just one direction (spreadsheet->wordprocessing, with no reverse) must NOT silently open a same-cost edge back the other way, since executeBridge would then look up a TRANSFORMS entry that was never registered and throw at runtime for a route the pathfinder itself proposed.
-  for (const key of Object.keys(TRANSFORMS)) {
-    const parts = key.split("->");
-    const fromVariant = parts[0];
-    const toVariant = parts[1];
-    if (fromVariant === undefined || toVariant === undefined) {
-      continue;
-    }
-    for (const a of CONTENT_FORMATS) {
-      if (FORMAT_NODES[a].variant !== fromVariant) {
-        continue;
-      }
-      for (const b of CONTENT_FORMATS) {
-        if (FORMAT_NODES[b].variant !== toVariant) {
-          continue;
-        }
-        addDirected(a, b, 2);
-      }
-    }
-  }
-
-  // toPdf/fromPdf edges (cost 3) for every layout-capable format. xlsx and csv are absent, so each reaches pdf only through its ods bridge.
-  for (const format of CONTENT_FORMATS) {
-    if (LAYOUT_CAPABLE.has(format)) {
-      addEdge(format, "pdf", THROUGH_PDF_EDGE_COST);
-    }
-  }
-
-  // Read-only formats (see ReadOnlyContentFormat above) get the same three edge kinds at the same three costs, but DIRECTED — out of the read-only node only. That single asymmetry is the whole mechanism: with nothing pointing at one, Dijkstra can never reach a read-only format as a target, so "a source that can never be a target" is a property of the graph's shape rather than a rule some resolver has to remember to apply.
-  for (const source of READ_ONLY_CONTENT_FORMATS) {
-    const variant = READ_ONLY_FORMAT_NODES[source].variant;
-    for (const target of CONTENT_FORMATS) {
-      const targetVariant = FORMAT_NODES[target].variant;
-      if (targetVariant === variant) {
-        addDirected(source, target, 1);
-      } else if (TRANSFORMS[`${variant}->${targetVariant}`] !== undefined) {
-        addDirected(source, target, 2);
-      }
-    }
-    if (LAYOUT_CAPABLE.has(source)) {
-      addDirected(source, "pdf", THROUGH_PDF_EDGE_COST);
-    }
-  }
-
-  return adj;
-}
-
-const COMPOSITION_GRAPH: ReadonlyMap<DocumentFormat, readonly GraphEdge[]> =
-  buildCompositionGraph();
-
-// Standard Dijkstra over the small (<= 16-node) composition graph. Returns the ordered node path from source to target, or undefined if source === target or target is unreachable.
-function shortestPath(
-  source: DocumentFormat,
-  target: DocumentFormat,
-): readonly DocumentFormat[] | undefined {
-  if (source === target) {
-    return undefined;
-  }
-  const distances = new Map<DocumentFormat, number>([[source, 0]]);
-  const previous = new Map<DocumentFormat, DocumentFormat | undefined>();
-  const visited = new Set<DocumentFormat>();
-  while (true) {
-    let current: DocumentFormat | undefined = undefined;
-    let currentDist = Infinity;
-    for (const [node, dist] of distances) {
-      if (!visited.has(node) && dist < currentDist) {
-        current = node;
-        currentDist = dist;
-      }
-    }
-    if (current === undefined || current === target) {
-      break;
-    }
-    visited.add(current);
-    for (const edge of COMPOSITION_GRAPH.get(current) ?? []) {
-      if (visited.has(edge.to)) {
-        continue;
-      }
-      const alt = currentDist + edge.cost;
-      const known = distances.get(edge.to);
-      if (known === undefined || alt < known) {
-        distances.set(edge.to, alt);
-        previous.set(edge.to, current);
-      }
-    }
-  }
-  if (distances.get(target) === undefined) {
-    return undefined;
-  }
-  const path: DocumentFormat[] = [];
-  let cursor: DocumentFormat | undefined = target;
-  while (cursor !== undefined) {
-    path.unshift(cursor);
-    cursor = previous.get(cursor);
-  }
-  return path;
-}
-
-// Resolves the minimum-cost path between two DocumentFormats as an ordered hop list, or undefined if no route exists. Each hop is tagged with the executor that runs it (derivable from which endpoint is pdf: target pdf -> toPdf, source pdf -> fromPdf, otherwise bridge). Capped at 3 hops — the most any real route needs (markdown -> xlsx = markdown -> ods bridge, ods -> pdf toPdf, pdf -> xlsx fromPdf, three hops; the reverse xlsx -> markdown is a single bridge hop instead, since ExaDev/documents.js#1043's one-way spreadsheet->wordprocessing transform has no reverse entry to route markdown -> xlsx through), and the bound beyond which a composed route would stack more lossy layers than any existing conversion in this package does today. Reproduces every route convert.ts's own functions handle: docx -> pdf is a direct toPdf hop; odt -> docx is a same-variant bridge; docx -> pptx is a cross-variant transform bridge; xlsx -> pdf is [xlsx -> ods bridge, ods -> pdf toPdf]; markdown -> xlsx is [markdown -> ods, ods -> pdf, pdf -> xlsx].
-export function resolveCompositionPlan(
-  source: DocumentFormat,
-  target: DocumentFormat,
-): ConversionPlan | undefined {
-  const path = shortestPath(source, target);
-  if (path === undefined) {
-    return undefined;
-  }
-  // path.length includes both endpoints: 2 nodes = 1 hop, 4 nodes = 3 hops (the cap).
-  if (path.length > MAX_CONVERSION_PATH_NODES) {
-    return undefined;
-  }
-  const hops: CompositionHop[] = [];
-  for (let i = 0; i + 1 < path.length; i++) {
-    const from = path[i];
-    const to = path[i + 1];
-    if (from === undefined || to === undefined) {
-      return undefined;
-    }
-    const executor: HopExecutor =
-      to === "pdf" ? "toPdf" : from === "pdf" ? "fromPdf" : "bridge";
-    hops.push({ executor, from, to });
-  }
-  return { hops };
-}
-
-// Narrows a DocumentFormat to the ContentFormat union (the fourteen formats with a FORMAT_NODES entry) — the type every hop's TARGET must be, since a target is built and encoded. pdf, odf, and every read-only format are excluded: pdf is the layout pivot reached only via toPdf/fromPdf edges, odf is the special-case format this engine does not route at all, and a read-only format has no build half to be a target with.
-function isContentFormat(format: DocumentFormat): format is ContentFormat {
-  return (
-    format !== "pdf" && format !== "odf" && !isReadOnlyContentFormat(format)
-  );
-}
-
-// The same narrowing for a hop's SOURCE, which may additionally be a read-only format. Used by runCompositionPlan for the `from` endpoint of a bridge or toPdf hop, where isContentFormat covers the `to`.
-function isSourceContentFormat(
-  format: DocumentFormat,
-): format is SourceContentFormat {
-  return isContentFormat(format) || isReadOnlyContentFormat(format);
 }
 
 // The executor binding a plan runner dispatches through. bridge and fromPdf are always present (both live in this module); toPdf is bound only by composition-to-pdf.ts's full convertDocument, because the executor that renders a PDF is exactly the half of the engine a read-only caller must not reach. A plan needing a toPdf hop against a binding that carries none fails loudly below — for the read-only entry that state is unreachable by construction (pdf as a source never routes back through pdf; Dijkstra never revisits a node), so the throw is an internal-invariant guard, not a caller-facing branch.
