@@ -661,3 +661,106 @@ describe("colorFromElement/readColorRgb: hex length boundary and validation", ()
 
   // The regex's own "^"/"$" anchors are a genuinely irreducible equivalent mutation opportunity here, not merely an untested one: `hex` is constructed immediately above as either exactly 6 characters (raw.slice(-6), whenever raw.length >= 6) or fewer than 6 (raw itself, otherwise) — never more. A {6}-quantified pattern can only ever match a 6-character string across its ENTIRE length regardless of anchors (there is no room for a partial match either before or after), and can never match a shorter one at all, so no input this function can ever construct `hex` from can tell an anchored and an unanchored match apart. The same reasoning makes the raw.length ">= 6" vs "> 6" boundary equivalent too: at raw.length exactly 6, slice(-6) returns the whole (unchanged) string, identical to what the ">" branch's bare `raw` would have returned directly.
 });
+
+describe("contentFontOf: omits fontFamily/sizePt/color entirely (not merely as undefined) when they match the baseline", () => {
+  it("omits fontFamily when the entry's own name equals the baseline's, but still states bold", () => {
+    const pkg = stylesPackage(
+      el("styleSheet", {}, [
+        el("fonts", {}, [
+          el("font", {}, [
+            el("sz", { val: "11" }),
+            el("name", { val: "Calibri" }),
+          ]),
+          el("font", {}, [
+            el("b"),
+            el("sz", { val: "11" }),
+            el("name", { val: "Calibri" }),
+          ]),
+        ]),
+        el("cellXfs", {}, [el("xf", { numFmtId: "0", fontId: "1" })]),
+      ]),
+    );
+    const font = readCellStyles(pkg)[0]?.font ?? {};
+    expect(font).toMatchObject({ bold: true });
+    expect(hasOwn(font, "fontFamily")).toBe(false);
+    expect(hasOwn(font, "sizePt")).toBe(false);
+  });
+
+  it("states a colour equal to the baseline's own resolved colour as absent, not restated", () => {
+    const pkg = stylesPackage(
+      el("styleSheet", {}, [
+        el("fonts", {}, [
+          el("font", {}, [
+            el("color", { rgb: "FFFF0000" }),
+            el("name", { val: "Calibri" }),
+          ]),
+          el("font", {}, [
+            el("b"),
+            el("color", { rgb: "FFFF0000" }),
+            el("name", { val: "Calibri" }),
+          ]),
+        ]),
+        el("cellXfs", {}, [el("xf", { numFmtId: "0", fontId: "1" })]),
+      ]),
+    );
+    const font = readCellStyles(pkg)[0]?.font ?? {};
+    expect(font).toEqual({ bold: true });
+    expect(hasOwn(font, "color")).toBe(false);
+  });
+
+  it("omits fontFamily entirely when the entry states no <name> at all, even though the baseline has one", () => {
+    const pkg = stylesPackage(
+      el("styleSheet", {}, [
+        el("fonts", {}, [
+          el("font", {}, [el("name", { val: "Calibri" })]),
+          el("font", {}, [el("b")]),
+        ]),
+        el("cellXfs", {}, [el("xf", { numFmtId: "0", fontId: "1" })]),
+      ]),
+    );
+    const font = readCellStyles(pkg)[0]?.font ?? {};
+    expect(font).toEqual({ bold: true });
+    expect(hasOwn(font, "fontFamily")).toBe(false);
+  });
+
+  it("omits sizePt entirely when the entry states no <sz> at all, even though the baseline has one", () => {
+    const pkg = stylesPackage(
+      el("styleSheet", {}, [
+        el("fonts", {}, [
+          el("font", {}, [
+            el("sz", { val: "11" }),
+            el("name", { val: "Calibri" }),
+          ]),
+          el("font", {}, [el("b"), el("name", { val: "Calibri" })]),
+        ]),
+        el("cellXfs", {}, [el("xf", { numFmtId: "0", fontId: "1" })]),
+      ]),
+    );
+    const font = readCellStyles(pkg)[0]?.font ?? {};
+    expect(font).toEqual({ bold: true });
+    expect(hasOwn(font, "sizePt")).toBe(false);
+  });
+
+  it("states an entry's colour when it genuinely differs from the baseline's own resolved colour", () => {
+    const pkg = stylesPackage(
+      el("styleSheet", {}, [
+        el("fonts", {}, [
+          el("font", {}, [
+            el("color", { rgb: "FFFF0000" }),
+            el("name", { val: "Calibri" }),
+          ]),
+          el("font", {}, [
+            el("color", { rgb: "FF0000FF" }),
+            el("name", { val: "Calibri" }),
+          ]),
+        ]),
+        el("cellXfs", {}, [el("xf", { numFmtId: "0", fontId: "1" })]),
+      ]),
+    );
+    expect(readCellStyles(pkg)[0]?.font?.color).toEqual({
+      r: 0,
+      g: 0,
+      b: 1,
+    });
+  });
+});
