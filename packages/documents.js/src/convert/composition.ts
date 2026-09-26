@@ -62,12 +62,14 @@ import { readWpdContent } from "wpd-codec";
 import { requireArrayBufferBytes } from "../model/bytes";
 import type { CellTypeInferenceSink } from "../layout/cell-typing";
 import {
-  reconstructDrawing,
-  reconstructPresentation,
   reconstructSpreadsheet,
   reconstructWordprocessing,
   type ReconstructOptions,
 } from "../layout/reconstruct";
+import {
+  reconstructDrawing,
+  reconstructPresentation,
+} from "../layout/reconstruct-presentations-prod";
 import { stampPdfPackageTables } from "./pdf-package-tables";
 import { type OmmlDiagnostic } from "../omml/shared";
 import { throwIfAborted } from "../ports/abort";

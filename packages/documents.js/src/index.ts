@@ -656,6 +656,8 @@ export type { ReconstructOptions } from "./layout/reconstruct";
 export {
   reconstructDrawing,
   reconstructPresentation,
+} from "./layout/reconstruct-presentations-prod";
+export {
   reconstructSpreadsheet,
   reconstructWordprocessing,
 } from "./layout/reconstruct";
