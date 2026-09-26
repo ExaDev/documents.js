@@ -1,3 +1,14 @@
+## [5.12.69](https://github.com/ExaDev/documents.js/compare/document-cli%405.12.68...document-cli%405.12.69) (2026-09-26)
+
+### Code Refactoring
+
+* **document-cli:** extract the pdf item-detail row builders ([09fef5e](https://github.com/ExaDev/documents.js/commit/09fef5ef884099465a9189c9e511e6305cc0ec14))
+* **document-cli:** split the reducer by action family ([f41a7ad](https://github.com/ExaDev/documents.js/commit/f41a7ad98f0a7a5c013a3a5a74de1f829e94b973))
+
+### Tests
+
+* **document-cli:** split the reducer and item-detail suites; enforce maxLines ([3d782a4](https://github.com/ExaDev/documents.js/commit/3d782a4d0ab57af39e6139c518fff2d2bc63d302))
+
 ## [5.12.68](https://github.com/ExaDev/documents.js/compare/document-cli%405.12.67...document-cli%405.12.68) (2026-09-26)
 
 
