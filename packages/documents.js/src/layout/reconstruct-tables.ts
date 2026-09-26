@@ -11,23 +11,26 @@ import type {
   PositionedTableRow,
 } from "document-schema.js";
 import {
+  DEFAULT_COLUMN_WIDTH_FALLBACK_PT,
+  nearestOfType,
+  NO_ITEMS,
+} from "./reconstruct";
+import {
   bucketCounts,
   clusterIntoLines,
-  DEFAULT_COLUMN_WIDTH_FALLBACK_PT,
   estimateModalLineSpacing,
   gapExceeds,
   MIN_WORD_GAP_PT,
-  nearestOfType,
-  NO_ITEMS,
   textItemVerticalExtent,
-} from "./reconstruct";
+} from "./reconstruct-lines";
 import { CELL_TYPES, ROW_TYPES, TABLE_TYPES } from "./reconstruct";
 import {
   type CellTypeInference,
   type CellTypeInferenceSink,
 } from "./cell-typing";
 import { denseTableRows } from "document-schema.js";
-import type { StructureIndex, StructureNode, TextLine } from "./reconstruct";
+import type { StructureIndex, StructureNode } from "./reconstruct";
+import type { TextLine } from "./reconstruct-lines";
 import {
   lineToParagraph,
   splitLineByLargeGaps,
