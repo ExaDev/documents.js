@@ -1,3 +1,15 @@
+## [7.16.0](https://github.com/ExaDev/documents.js/compare/document-schema.js%407.15.3...document-schema.js%407.16.0) (2026-09-26)
+
+### Features
+
+* **document-schema.js:** enforce the 800-line maxLines limit ([41ea09f](https://github.com/ExaDev/documents.js/commit/41ea09f3cdbc33ee86ef167b42ffa30a7bbabd97))
+
+### Code Refactoring
+
+* **document-schema.js:** split every over-limit suite by family ([48e9604](https://github.com/ExaDev/documents.js/commit/48e960443aac3f438551c51ced2ad798e51919d4))
+* **document-schema.js:** split the content model into vocabulary, sheet and drawing modules ([b823ee3](https://github.com/ExaDev/documents.js/commit/b823ee3fcacc4642acf674ca95a5ff94a0f72039))
+* **document-schema.js:** split the JSON Schema defs map into ordered parts ([6d93fe0](https://github.com/ExaDev/documents.js/commit/6d93fe0d01b58975ea074f3d3ebc547a871e47bc))
+
 ## [7.15.3](https://github.com/ExaDev/documents.js/compare/document-schema.js%407.15.2...document-schema.js%407.15.3) (2026-09-24)
 
 ### Bug Fixes

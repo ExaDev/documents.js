@@ -1,3 +1,10 @@
+## [5.1.15](https://github.com/ExaDev/documents.js/compare/epub-codec%405.1.14...epub-codec%405.1.15) (2026-09-26)
+
+
+### Dependencies
+
+- Updated document-schema.js to 7.16.0
+
 ## [5.1.14](https://github.com/ExaDev/documents.js/compare/epub-codec%405.1.13...epub-codec%405.1.14) (2026-09-25)
 
 ### Code Refactoring

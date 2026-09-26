@@ -1,3 +1,11 @@
+## [5.1.21](https://github.com/ExaDev/documents.js/compare/wpd-codec%405.1.20...wpd-codec%405.1.21) (2026-09-26)
+
+
+### Dependencies
+
+- Updated document-schema.js to 7.16.0
+- Updated archive-codec to 1.11.25
+
 ## [5.1.20](https://github.com/ExaDev/documents.js/compare/wpd-codec%405.1.19...wpd-codec%405.1.20) (2026-09-25)
 
 
