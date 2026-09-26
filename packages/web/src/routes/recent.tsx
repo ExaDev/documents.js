@@ -1,4 +1,3 @@
-import { Paper } from "@mantine/core";
 import { createFileRoute } from "@tanstack/react-router";
 
 import { RecentFilesPanel } from "../ui/RecentFilesPanel";
@@ -10,10 +9,11 @@ export const Route = createFileRoute("/recent")({
 
 function RecentPage() {
   return (
-    <ToolPage title="Recent files">
-      <Paper withBorder p="md">
-        <RecentFilesPanel />
-      </Paper>
+    <ToolPage
+      title="Recent files"
+      description="Documents you have opened in this browser, newest first. Reopen one to pick up where you left off."
+    >
+      <RecentFilesPanel />
     </ToolPage>
   );
 }

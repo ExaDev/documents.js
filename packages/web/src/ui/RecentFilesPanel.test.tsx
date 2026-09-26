@@ -356,3 +356,12 @@ describe("reopenTooltipLabel", () => {
     );
   });
 });
+
+describe("RecentFilesPanel loading state", () => {
+  it("says it is loading while the recent-files query has answered neither yes nor no", () => {
+    useRecentFiles.mockReturnValue(undefined);
+    const { container } = renderPanel();
+    expect(container.textContent).toContain("Loading recent files…");
+    unmount?.();
+  });
+});

@@ -46,7 +46,8 @@ vi.mock("../ui/notify", () => ({
   },
 }));
 
-const { editorFormat, Route } = await import("./_document.editors");
+const { editorFormat, paragraphCountLabel, snapshotDiffers, Route } =
+  await import("./_document.editors");
 const EditorsPage = Route.options.component!;
 
 function openedFile(name: string) {
@@ -201,7 +202,10 @@ describe("EditorsPage", () => {
       openDocument(openedFile("report.docx"));
     });
     settleOpen(["First paragraph", "Second paragraph"]);
-    expect(mounted.container.textContent).toContain("DOCX · 2 paragraphs");
+    // The header now separates the format (a badge) from the count (its own line under the file name), so each is asserted on its own rather than as one run of text.
+    expect(mounted.container.textContent).toContain("DOCX");
+    expect(mounted.container.textContent).toContain("2 paragraphs");
+    expect(mounted.container.textContent).toContain("report.docx");
     expect(paragraphTextarea(mounted.container, 1)?.value).toBe(
       "First paragraph",
     );
@@ -529,6 +533,152 @@ describe("EditorsPage", () => {
       "Could not save document",
       expect.any(Error),
     );
+    mounted.unmount();
+  });
+});
+
+describe("paragraphCountLabel", () => {
+  it("counts one paragraph in the singular and every other count in the plural, including zero", () => {
+    expect(paragraphCountLabel(1)).toBe("1 paragraph");
+    expect(paragraphCountLabel(2)).toBe("2 paragraphs");
+    expect(paragraphCountLabel(0)).toBe("0 paragraphs");
+  });
+});
+
+describe("snapshotDiffers", () => {
+  it("reports no difference between two snapshots with the same id and paragraphs", () => {
+    expect(
+      snapshotDiffers(
+        { id: 1, paragraphs: ["a", "b"] },
+        { id: 1, paragraphs: ["a", "b"] },
+      ),
+    ).toBe(false);
+  });
+
+  it("reports a difference when a paragraph's text has changed, without a length change to lean on", () => {
+    expect(
+      snapshotDiffers(
+        { id: 1, paragraphs: ["a", "b"] },
+        { id: 1, paragraphs: ["a", "c"] },
+      ),
+    ).toBe(true);
+  });
+
+  it("reports a difference when a paragraph was added or removed", () => {
+    expect(
+      snapshotDiffers({ id: 1, paragraphs: ["a"] }, { id: 1, paragraphs: [] }),
+    ).toBe(true);
+    expect(
+      snapshotDiffers({ id: 1, paragraphs: [] }, { id: 1, paragraphs: ["a"] }),
+    ).toBe(true);
+  });
+
+  it("reports a difference when the snapshots belong to different editor sessions", () => {
+    expect(
+      snapshotDiffers({ id: 1, paragraphs: [] }, { id: 2, paragraphs: [] }),
+    ).toBe(true);
+  });
+});
+
+describe("EditorsPage unsaved-changes indicator", () => {
+  it("shows nothing unsaved immediately after the session opens", () => {
+    const mounted = mountPage();
+    act(() => {
+      openDocument(openedFile("report.docx"));
+    });
+    settleOpen(["First"]);
+    expect(mounted.container.textContent).not.toContain("Unsaved changes");
+    mounted.unmount();
+  });
+
+  it("flags unsaved changes the moment an optimistic edit moves the working snapshot ahead", () => {
+    const mounted = mountPage();
+    act(() => {
+      openDocument(openedFile("report.docx"));
+    });
+    settleOpen(["First"]);
+    typeInto(paragraphTextarea(mounted.container, 1)!, "First, edited");
+    expect(mounted.container.textContent).toContain("Unsaved changes");
+    mounted.unmount();
+  });
+
+  it("clears the flag again once a save resolves", () => {
+    const mounted = mountPage();
+    act(() => {
+      openDocument(openedFile("report.docx"));
+    });
+    settleOpen(["First"]);
+    typeInto(paragraphTextarea(mounted.container, 1)!, "First, edited");
+    act(() => {
+      saveButton(mounted.container)?.click();
+    });
+    const { onSuccess } = latestCallbacks(saveEditor);
+    act(() => {
+      onSuccess({ bytes: new Uint8Array([1]) });
+    });
+    expect(mounted.container.textContent).not.toContain("Unsaved changes");
+    mounted.unmount();
+  });
+
+  it("keeps the flag when a save rejects", () => {
+    const mounted = mountPage();
+    act(() => {
+      openDocument(openedFile("report.docx"));
+    });
+    settleOpen(["First"]);
+    typeInto(paragraphTextarea(mounted.container, 1)!, "First, edited");
+    act(() => {
+      saveButton(mounted.container)?.click();
+    });
+    const { onError } = latestCallbacks(saveEditor);
+    act(() => {
+      onError(new Error("save failed"));
+    });
+    expect(mounted.container.textContent).toContain("Unsaved changes");
+    mounted.unmount();
+  });
+});
+
+describe("EditorsPage empty document", () => {
+  it("states that a document with no paragraphs is empty, and still offers the new-paragraph field", () => {
+    const mounted = mountPage();
+    act(() => {
+      openDocument(openedFile("empty.docx"));
+    });
+    settleOpen([]);
+    expect(mounted.container.textContent).toContain(
+      "This document has no paragraphs yet",
+    );
+    expect(newParagraphTextarea(mounted.container)).not.toBeNull();
+    mounted.unmount();
+  });
+});
+
+describe("EditorsPage paragraph numbering", () => {
+  it("numbers each rendered paragraph row from one", () => {
+    const mounted = mountPage();
+    act(() => {
+      openDocument(openedFile("report.docx"));
+    });
+    settleOpen(["First", "Second", "Third"]);
+    const numbers = [
+      ...mounted.container.querySelectorAll<HTMLElement>(
+        "[data-paragraph-number]",
+      ),
+    ].map((element) => element.dataset.paragraphNumber);
+    expect(numbers).toEqual(["1", "2", "3"]);
+    mounted.unmount();
+  });
+
+  it("renders no number column when the document has no paragraphs", () => {
+    const mounted = mountPage();
+    act(() => {
+      openDocument(openedFile("empty.docx"));
+    });
+    settleOpen([]);
+    expect(
+      mounted.container.querySelectorAll("[data-paragraph-number]"),
+    ).toHaveLength(0);
     mounted.unmount();
   });
 });
