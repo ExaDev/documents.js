@@ -298,21 +298,21 @@ export {
 } from "./typed/document-tree";
 
 // --- docx: a WordprocessingML reader resolving the full style cascade (docDefaults -> named-style basedOn chains -> paragraph-mark run properties -> character styles -> direct formatting) and DrawingML theme references (including w:themeColor run colours) into ordered sections of paragraphs/tables/page-breaks, with every block-scoped fidelity construct (structured document tags, fields, bookmarks, tracked changes) bracketed by construct-boundary markers — paired with buildDocxPackageFromContent, its write-side inverse over those same sections. This is the flat pair readDocx/buildDocxPackage above wrap, exported in its own right: DocxDocument's comments, footnotes, header/footer parts, and numbering definitions have no ContentDocument spelling and therefore no tree spelling, so readDocxContent is the only reader in this package that returns them at all. ---
+export { readDocxContent } from "./typed/docx/read";
 export {
-  readDocxContent,
   CommentSchema,
   DocxDocumentSchema,
   FootnoteSchema,
   HeaderFooterPartSchema,
   SectionHeaderFooterReferencesSchema,
-} from "./typed/docx/read";
+} from "./typed/docx/read-schemas";
 export type {
   Comment,
   DocxDocument,
   Footnote,
   HeaderFooterPart,
   SectionHeaderFooterReferences,
-} from "./typed/docx/read";
+} from "./typed/docx/read-schemas";
 export { buildDocxPackageFromContent } from "./typed/docx/write";
 export type {
   BuildDocxContentOptions,

@@ -5,7 +5,7 @@ import type {
   Footnote,
   HeaderFooterPart,
   SectionHeaderFooterReferences,
-} from "./read";
+} from "./read-schemas";
 import type { ContentBlock, ContentSection } from "document-schema.js";
 import {
   DRAWINGML_NS,
