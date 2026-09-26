@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { LayoutText } from "./layout";
 import { readPdf } from "./read";
-import { compositeFontWritingModePdf } from "./test-support/pdf";
+import { compositeFontWritingModePdf } from "./test-support/pdf-structures";
 
 // Vertical writing mode (ExaDev/documents.js#1358). A composite font whose /Encoding CMap selects writing mode 1 advances its glyphs DOWN the page, not across it, using the descendant CIDFont's own vertical metrics (/DW2 and /W2) rather than its horizontal widths, and paints each glyph offset from the vertical origin by that glyph's position vector. Reading it as horizontal stacks a whole column of text on top of itself at one point.
 //

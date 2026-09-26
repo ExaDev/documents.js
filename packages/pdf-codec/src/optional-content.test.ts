@@ -6,7 +6,7 @@ import { readOptionalContent } from "./optional-content";
 import type { PdfDict, PdfObject } from "./objects";
 import { asDict, pdfArray, pdfDict, pdfLiteralString, pdfRef } from "./objects";
 import { readPdf } from "./read";
-import { ocgPdf } from "./test-support/pdf";
+import { ocgPdf } from "./test-support/pdf-structures";
 
 // A resolver over a plain ref-number -> object table, matching interpret.test.ts's/navigation.test.ts's own makeResolver.
 function makeResolver(

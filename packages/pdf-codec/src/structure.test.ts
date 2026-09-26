@@ -2,13 +2,13 @@ import { describe, expect, it } from "vitest";
 import type { PdfDiagnostic } from "./diagnostics";
 import type { LayoutText } from "./layout";
 import { readPdf } from "./read";
+import { minimalClassicXrefPdf } from "./test-support/pdf";
 import {
-  minimalClassicXrefPdf,
   parentTreeMissingEntryPdf,
   taggedFormPdf,
   taggedStructureInvertedParentsPdf,
   taggedStructurePdf,
-} from "./test-support/pdf";
+} from "./test-support/pdf-structures";
 
 // Tagged structure (#760): the /StructTreeRoot element tree (the /K walk, /RoleMap resolution, /ClassMap attribute resolution, per-element /T //Lang //Alt //ActualText) and the (page, MCID) association through /ParentTree that stamps an owning element id onto extracted items — each page keyed by its OWN /StructParents value, whose entry is an array of owning elements indexed by MCID (14.7.4.4). This is the one place PDF carries real semantics natively; everything downstream (documents.js's heading levels, division constructs, and lattice-free table recovery) is a consumer of these two facts.
 

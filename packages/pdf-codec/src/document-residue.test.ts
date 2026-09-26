@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { readPdf } from "./read";
-import { metadataResiduePdf, minimalClassicXrefPdf } from "./test-support/pdf";
+import { minimalClassicXrefPdf } from "./test-support/pdf";
+import { metadataResiduePdf } from "./test-support/pdf-structures";
 
 // A separately-typed copy of metadataResiduePdf's own XMP packet, not imported from the fixture: comparing the raw residue against the fixture's own source string would make the assertion trivially true under any change to that shared string, since both sides would mutate together. Independent duplication here is what lets the check actually verify byte-for-byte preservation rather than tautologically agreeing with itself.
 const EXPECTED_METADATA_RESIDUE_XMP = [

@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { NOTES_ANNOTATION_AUTHOR } from "./notes-annotation-author";
 import { readPdf } from "./read";
-import { annotationsPdf, FixtureBuilder } from "./test-support/pdf";
+import { FixtureBuilder } from "./test-support/pdf";
+import { annotationsPdf } from "./test-support/pdf-structures";
 
 const HELVETICA_FONT_DICT_FOR_ANNOT_FIXTURES =
   "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>";

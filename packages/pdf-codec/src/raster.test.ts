@@ -23,12 +23,11 @@ import { STIX_TWO_MATH_FONT_BASE64 } from "./assets/stix-two-math-font";
 import { base64ToBytes } from "byte-codec";
 import { carlitoRegularBytes } from "./test-support/fonts";
 import {
-  cropBoxPdf,
   inlineImagePdf,
   minimalClassicXrefPdf,
-  rotatedCropBoxPdf,
   twoPagesFirstWithoutResourcesPdf,
 } from "./test-support/pdf";
+import { cropBoxPdf, rotatedCropBoxPdf } from "./test-support/pdf-structures";
 
 // renderPdfPage's tests drive it through a recording rasteriser (the port's cheapest consumer) so every assertion is on the op stream itself — the exact positioned geometry a real backend would receive — rather than on any one backend's pixels. The end-to-end pixel tests (renderPdfPage plus the pdf-raster-cpu reference backend) live in that backend package's own suite; here the port contract, the coordinate transforms, and the refusal diagnostics are what is pinned.
 //

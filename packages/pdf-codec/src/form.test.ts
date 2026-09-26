@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import type { LayoutFormField } from "./layout";
 import { readPdf } from "./read";
-import { acroFormPdf, minimalClassicXrefPdf } from "./test-support/pdf";
+import { minimalClassicXrefPdf } from "./test-support/pdf";
+import { acroFormPdf } from "./test-support/pdf-structures";
 
 // AcroForm (#721 phase 5): the /Fields recursion with fully-qualified names (/T chains joined with '.'), /FT per type, /V values, /Ff flags (ReadOnly, the combo and radio bits), choice /Opt, and the merged-field/widget split — a terminal field's /Kids are widget annotations placed by their /P page, while a field carrying its own /Rect is its own single merged widget. Signature fields read as facts only; certification binds to bytes a semantic pivot never reproduces, so the residue-side treatment lives with the consumer.
 
