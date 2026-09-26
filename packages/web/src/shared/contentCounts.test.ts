@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import type { ContentDocument } from "documents.js";
 
-import { contentSummary } from "./contentCounts";
+import { assertNeverContentKind, contentSummary } from "./contentCounts";
 
 const MARGINS = { topPt: 0, rightPt: 0, bottomPt: 0, leftPt: 0 };
 const PAGE_SIZE = { widthPt: 595, heightPt: 842 };
@@ -77,7 +77,7 @@ function spreadsheet(sheets: number, cellsPerSheet: number): ContentDocument {
     metadata: {},
     sheets: Array.from({ length: sheets }, (_, i) => ({
       name: `Sheet${i}`,
-      cells: Array.from({ length: cellsPerSheet }, (_, j) => ({
+      cells: Array.from({ length: cellsPerSheet }, (_cellIndex, j) => ({
         row: j,
         column: 0,
         value: { kind: "string", value: "x" },
@@ -226,5 +226,20 @@ describe("contentSummary", () => {
       formula: { mathml: [] },
     };
     expect(contentSummary(doc)).toEqual(["formula"]);
+  });
+});
+
+describe("assertNeverContentKind", () => {
+  it("throws naming the unhandled kind, proving contentSummary's own exhaustiveness guard actually fires at runtime", () => {
+    let caught: unknown;
+    try {
+      assertNeverContentKind({ kind: "bogus" } as never);
+    } catch (error) {
+      caught = error;
+    }
+    expect(caught).toBeInstanceOf(Error);
+    expect((caught as Error).message).toBe(
+      "contentSummary: unhandled kind [object Object]",
+    );
   });
 });

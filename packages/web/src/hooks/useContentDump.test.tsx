@@ -31,7 +31,7 @@ describe("useReadContent", () => {
       useReadContent(),
     );
     const input = { format: "docx" as const, bytes: new Uint8Array([1]) };
-    const resolved = await act(() => result.current.mutateAsync(input));
+    const resolved = await act(async () => result.current.mutateAsync(input));
 
     expect(client.content.read).toHaveBeenCalledWith(input);
     expect(resolved).toEqual(output);
@@ -50,7 +50,7 @@ describe("useRestoreContent", () => {
       useRestoreContent(),
     );
     const input = { format: "docx" as const, package: {} };
-    const resolved = await act(() => result.current.mutateAsync(input));
+    const resolved = await act(async () => result.current.mutateAsync(input));
 
     expect(client.content.restore).toHaveBeenCalledWith(input);
     expect(resolved).toEqual(output);

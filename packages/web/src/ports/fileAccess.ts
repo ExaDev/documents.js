@@ -9,12 +9,12 @@ export interface SaveResult {
 }
 
 export interface FileAccessPort {
-  supportsNativePicker(): boolean;
-  openFile(options: {
+  supportsNativePicker: () => boolean;
+  openFile: (options: {
     accept?: FilePickerAcceptType["accept"];
-  }): Promise<OpenedFile | undefined>;
-  saveFile(
+  }) => Promise<OpenedFile | undefined>;
+  saveFile: (
     bytes: Uint8Array<ArrayBuffer>,
     options: Readonly<{ suggestedName: string; mimeType: MIMEType }>,
-  ): Promise<SaveResult>;
+  ) => Promise<SaveResult>;
 }

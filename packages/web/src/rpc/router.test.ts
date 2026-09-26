@@ -17,11 +17,13 @@ import {
 } from "documents.js";
 import {
   appendParagraphOf,
+  assertNeverEditorFormat,
+  assertNeverReadFormat,
   normalizeContentForSource,
-  sanitizeImageAsset,
   openEditorSession,
-  paragraphsOf,
   paragraphTexts,
+  paragraphsOf,
+  sanitizeImageAsset,
   setParagraphTextAt,
 } from "./router";
 
@@ -679,5 +681,33 @@ describe("sanitizeImageAsset", () => {
       heightPx: 4,
       byteLength: 6,
     });
+  });
+});
+
+describe("exhaustiveness guards", () => {
+  it("assertNeverReadFormat throws naming the unhandled format", () => {
+    let caught: unknown;
+    try {
+      assertNeverReadFormat("bogus" as never);
+    } catch (error) {
+      caught = error;
+    }
+    expect(caught).toBeInstanceOf(Error);
+    expect((caught as Error).message).toBe(
+      "readContentForFormat: unhandled format bogus",
+    );
+  });
+
+  it("assertNeverEditorFormat throws naming the unhandled format", () => {
+    let caught: unknown;
+    try {
+      assertNeverEditorFormat("bogus" as never);
+    } catch (error) {
+      caught = error;
+    }
+    expect(caught).toBeInstanceOf(Error);
+    expect((caught as Error).message).toBe(
+      "openEditorSession: unhandled format bogus",
+    );
   });
 });

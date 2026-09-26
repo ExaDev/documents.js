@@ -21,7 +21,7 @@ describe("useOdmRender", () => {
       master: new Uint8Array([1]),
       chapters: [{ href: "ch1.odt", bytes: new Uint8Array([2]) }],
     };
-    const resolved = await act(() => result.current.mutateAsync(input));
+    const resolved = await act(async () => result.current.mutateAsync(input));
 
     expect(client.odm.render).toHaveBeenCalledWith(input);
     expect(resolved).toEqual(output);

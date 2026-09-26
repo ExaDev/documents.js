@@ -74,8 +74,10 @@ function fileAccessStub(
 ): FileAccessPort {
   return {
     supportsNativePicker: () => false,
-    openFile: () => Promise.resolve(undefined),
-    saveFile: () => Promise.resolve({}),
+    openFile: async () => {
+      await Promise.resolve(undefined);
+    },
+    saveFile: async () => await Promise.resolve({}),
     ...overrides,
   };
 }
@@ -129,7 +131,7 @@ function droppedFile(overrides: DroppedFileOverrides = {}): FileWithPath {
     path: { value: name, enumerable: true },
     // Overridden rather than left to jsdom's own Blob/File implementation: this test asserts on the exact bytes toOpenedFile reads back, and a real arrayBuffer() round trip through jsdom's Blob internals is an unnecessary source of timing/behaviour variance for what is otherwise a synchronous, known input.
     arrayBuffer: {
-      value: () => Promise.resolve(bytes.buffer),
+      value: async () => await Promise.resolve(bytes.buffer),
       enumerable: true,
     },
     handle: { value: overrides.handle, enumerable: true },
@@ -185,7 +187,9 @@ describe("FileUpload", () => {
   });
 
   it("names the close button after the currently open file, and calls onClose without also opening a replacement", () => {
-    const openFile = vi.fn(() => Promise.resolve(undefined));
+    const openFile = vi.fn<() => Promise<OpenedFile | undefined>>(async () => {
+      await Promise.resolve(undefined);
+    });
     createFileAccess.mockReturnValue(
       fileAccessStub({ supportsNativePicker: () => true, openFile }),
     );
@@ -208,8 +212,12 @@ describe("FileUpload", () => {
   });
 
   it("still lets a click on the bar itself (outside the close button) open a replacement, native picker supported", async () => {
-    const openFile = vi.fn(() =>
-      Promise.resolve({ bytes: new Uint8Array([2]), name: "replaced.pdf" }),
+    const openFile = vi.fn(
+      async () =>
+        await Promise.resolve({
+          bytes: new Uint8Array([2]),
+          name: "replaced.pdf",
+        }),
     );
     createFileAccess.mockReturnValue(
       fileAccessStub({ supportsNativePicker: () => true, openFile }),
@@ -335,8 +343,12 @@ describe("FileUpload", () => {
   });
 
   it("opens the native picker on click, records the opened file, and hands it to onFile", async () => {
-    const openFile = vi.fn(() =>
-      Promise.resolve({ bytes: new Uint8Array([9, 9]), name: "picked.docx" }),
+    const openFile = vi.fn(
+      async () =>
+        await Promise.resolve({
+          bytes: new Uint8Array([9, 9]),
+          name: "picked.docx",
+        }),
     );
     createFileAccess.mockReturnValue(
       fileAccessStub({ supportsNativePicker: () => true, openFile }),
@@ -361,7 +373,9 @@ describe("FileUpload", () => {
   });
 
   it("does nothing when the native picker resolves with no file (the user cancelled)", async () => {
-    const openFile = vi.fn(() => Promise.resolve(undefined));
+    const openFile = vi.fn<() => Promise<OpenedFile | undefined>>(async () => {
+      await Promise.resolve(undefined);
+    });
     createFileAccess.mockReturnValue(
       fileAccessStub({ supportsNativePicker: () => true, openFile }),
     );
@@ -383,6 +397,8 @@ describe("FileUpload", () => {
 
     drop([droppedFile({ name: "dropped.docx", bytes: [1, 2, 3, 4] })]);
     await Promise.resolve();
+    await Promise.resolve();
+    // One more hop than the two above: the arrayBuffer stub is now an async function awaiting its own Promise.resolve, which adds a microtask boundary the fixed tick count above predates.
     await Promise.resolve();
 
     expect(onFile).toHaveBeenCalledTimes(1);
@@ -414,6 +430,8 @@ describe("FileUpload", () => {
 
     drop([droppedFile({ name: "notes.txt" })]);
     await Promise.resolve();
+    await Promise.resolve();
+    // Same extra hop as the dropped.docx test above: the async arrayBuffer stub adds a microtask boundary.
     await Promise.resolve();
 
     expect(onFile).toHaveBeenCalledTimes(1);

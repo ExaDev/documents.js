@@ -10,7 +10,7 @@ export type EditorSnapshot = Awaited<
 // The Editors tool's five mutations, one per rpc procedure. All four snapshot-returning mutations answer the whole fresh paragraph list (the worker re-reads its live accessors per call), so the page state is nothing but the latest snapshot — there is no client-side per-paragraph state to keep coherent.
 export function useOpenEditor() {
   return useMutation({
-    mutationFn: (
+    mutationFn: async (
       input: Parameters<ReturnType<typeof getRpcClient>["editor"]["open"]>[0],
     ) => getRpcClient().editor.open(input),
   });
@@ -18,7 +18,7 @@ export function useOpenEditor() {
 
 export function useSetParagraphText() {
   return useMutation({
-    mutationFn: (
+    mutationFn: async (
       input: Parameters<
         ReturnType<typeof getRpcClient>["editor"]["setParagraphText"]
       >[0],
@@ -28,7 +28,7 @@ export function useSetParagraphText() {
 
 export function useAddParagraph() {
   return useMutation({
-    mutationFn: (
+    mutationFn: async (
       input: Parameters<
         ReturnType<typeof getRpcClient>["editor"]["addParagraph"]
       >[0],
@@ -38,7 +38,7 @@ export function useAddParagraph() {
 
 export function useRemoveParagraph() {
   return useMutation({
-    mutationFn: (
+    mutationFn: async (
       input: Parameters<
         ReturnType<typeof getRpcClient>["editor"]["removeParagraph"]
       >[0],
@@ -48,7 +48,7 @@ export function useRemoveParagraph() {
 
 export function useSaveEditor() {
   return useMutation({
-    mutationFn: (
+    mutationFn: async (
       input: Parameters<ReturnType<typeof getRpcClient>["editor"]["save"]>[0],
     ) => getRpcClient().editor.save(input),
   });

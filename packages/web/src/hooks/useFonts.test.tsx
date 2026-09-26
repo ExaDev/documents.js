@@ -20,7 +20,7 @@ describe("useExtractSourceFonts", () => {
       useExtractSourceFonts(),
     );
     const input = { format: "docx" as const, bytes: new Uint8Array([1]) };
-    const resolved = await act(() => result.current.mutateAsync(input));
+    const resolved = await act(async () => result.current.mutateAsync(input));
 
     expect(client.fonts.extractSourceFonts).toHaveBeenCalledWith(input);
     expect(resolved).toEqual(fonts);
