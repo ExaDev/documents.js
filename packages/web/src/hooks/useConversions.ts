@@ -6,7 +6,7 @@ import { getRpcClient } from "../rpc/client";
 export function useConversions() {
   return useQuery({
     queryKey: ["formats", "listConversions"],
-    queryFn: () => getRpcClient().formats.listConversions(),
+    queryFn: async () => getRpcClient().formats.listConversions(),
     staleTime: Infinity,
   });
 }
@@ -14,7 +14,7 @@ export function useConversions() {
 export function useDocumentFormats() {
   return useQuery({
     queryKey: ["formats", "list"],
-    queryFn: () => getRpcClient().formats.list(),
+    queryFn: async () => getRpcClient().formats.list(),
     staleTime: Infinity,
   });
 }

@@ -9,7 +9,7 @@ export function usePdfObjectUrl(
   useEffect(() => {
     if (bytes === undefined) {
       setUrl(undefined);
-      return;
+      return () => undefined;
     }
     const objectUrl = URL.createObjectURL(
       new Blob([bytes], { type: "application/pdf" }),

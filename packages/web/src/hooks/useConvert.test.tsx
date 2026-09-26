@@ -26,7 +26,7 @@ describe("useConvert", () => {
       targetFormat: "pdf" as const,
       bytes: new Uint8Array([1]),
     };
-    const resolved = await act(() => result.current.mutateAsync(input));
+    const resolved = await act(async () => result.current.mutateAsync(input));
 
     expect(client.convert).toHaveBeenCalledWith(
       { source: "docx", targetFormat: "pdf", bytes: input.bytes },

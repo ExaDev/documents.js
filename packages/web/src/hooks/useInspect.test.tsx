@@ -57,7 +57,7 @@ describe("useReadContent", () => {
       useReadContent(),
     );
     const input = { format: "docx" as const, bytes: new Uint8Array([1]) };
-    const resolved = await act(() => result.current.mutateAsync(input));
+    const resolved = await act(async () => result.current.mutateAsync(input));
 
     expect(client.content.read).toHaveBeenCalledWith(input);
     expect(resolved).toEqual(output);
@@ -82,7 +82,7 @@ describe("useInspectPdfBytes", () => {
       useInspectPdfBytes(),
     );
     const bytes = new Uint8Array([1, 2]);
-    const resolved = await act(() => result.current.mutateAsync(bytes));
+    const resolved = await act(async () => result.current.mutateAsync(bytes));
 
     expect(client.pdf.inspect).toHaveBeenCalledWith({ bytes });
     expect(resolved).toEqual({
@@ -104,7 +104,7 @@ describe("useInspectDocument", () => {
       useInspectDocument(),
     );
     const bytes = new Uint8Array([1]);
-    const resolved = await act(() =>
+    const resolved = await act(async () =>
       result.current.mutateAsync({ format: "pdf", bytes }),
     );
 
@@ -140,7 +140,7 @@ describe("useInspectDocument", () => {
       useInspectDocument(),
     );
     const sourceBytes = new Uint8Array([1]);
-    const resolved = await act(() =>
+    const resolved = await act(async () =>
       result.current.mutateAsync({ format: "docx", bytes: sourceBytes }),
     );
 

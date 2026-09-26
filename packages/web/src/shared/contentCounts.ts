@@ -67,4 +67,10 @@ export function contentSummary(content: ContentDocument): readonly string[] {
     case "formula":
       return ["formula"];
   }
+  return assertNeverContentKind(content);
+}
+
+// Exported never-typed exhaustiveness guard: returning the switch through it keeps the switch total (a new ContentDocument kind that forgets its case fails to compile here) without a default clause that would silence exactly that. Pinned by a test calling it with a forced-invalid cast, so the guard's own error path is covered rather than assumed.
+export function assertNeverContentKind(kind: never): readonly string[] {
+  throw new Error(`contentSummary: unhandled kind ${String(kind)}`);
 }

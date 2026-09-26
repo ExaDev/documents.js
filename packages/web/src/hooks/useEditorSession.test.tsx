@@ -27,7 +27,7 @@ describe("useOpenEditor", () => {
       useOpenEditor(),
     );
     const input = { format: "markdown" as const, bytes: new Uint8Array([1]) };
-    const resolved = await act(() => result.current.mutateAsync(input));
+    const resolved = await act(async () => result.current.mutateAsync(input));
 
     expect(client.editor.open).toHaveBeenCalledWith(input);
     expect(resolved).toEqual(snapshot);
@@ -45,7 +45,7 @@ describe("useSetParagraphText", () => {
       useSetParagraphText(),
     );
     const input = { id: 1, index: 0, text: "edited" };
-    const resolved = await act(() => result.current.mutateAsync(input));
+    const resolved = await act(async () => result.current.mutateAsync(input));
 
     expect(client.editor.setParagraphText).toHaveBeenCalledWith(input);
     expect(resolved).toEqual(snapshot);
@@ -63,7 +63,7 @@ describe("useAddParagraph", () => {
       useAddParagraph(),
     );
     const input = { id: 1, text: "new" };
-    const resolved = await act(() => result.current.mutateAsync(input));
+    const resolved = await act(async () => result.current.mutateAsync(input));
 
     expect(client.editor.addParagraph).toHaveBeenCalledWith(input);
     expect(resolved).toEqual(snapshot);
@@ -81,7 +81,7 @@ describe("useRemoveParagraph", () => {
       useRemoveParagraph(),
     );
     const input = { id: 1, index: 0 };
-    const resolved = await act(() => result.current.mutateAsync(input));
+    const resolved = await act(async () => result.current.mutateAsync(input));
 
     expect(client.editor.removeParagraph).toHaveBeenCalledWith(input);
     expect(resolved).toEqual(snapshot);
@@ -100,7 +100,7 @@ describe("useSaveEditor", () => {
       useSaveEditor(),
     );
     const input = { id: 1 };
-    const resolved = await act(() => result.current.mutateAsync(input));
+    const resolved = await act(async () => result.current.mutateAsync(input));
 
     expect(client.editor.save).toHaveBeenCalledWith(input);
     expect(resolved).toEqual(output);

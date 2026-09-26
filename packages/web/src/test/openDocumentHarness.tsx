@@ -12,9 +12,9 @@ import { mountWithProviders } from "./mountComponent";
 let latestOpenDocument: ((file: OpenedFile) => void) | undefined;
 
 function OpenDocumentCapture() {
-  const { openDocument } = useOpenDocument();
+  const { openDocument: openDocumentFromContext } = useOpenDocument();
   useEffect(() => {
-    latestOpenDocument = openDocument;
+    latestOpenDocument = openDocumentFromContext;
   });
   return null;
 }

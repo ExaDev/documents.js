@@ -10,7 +10,7 @@ afterEach(() => {
 
 describe("createFileAccess", () => {
   it("returns the native adapter when the browser exposes showOpenFilePicker", () => {
-    window.showOpenFilePicker = (): Promise<[FileSystemFileHandle]> =>
+    window.showOpenFilePicker = async (): Promise<[FileSystemFileHandle]> =>
       Promise.reject(new Error("not used by this test"));
     const access = createFileAccess();
     expect(access.supportsNativePicker()).toBe(true);

@@ -114,7 +114,7 @@ const pwa = VitePWA({
 
 export default defineConfig(({ command, mode }) => ({
   // Only the production build serves from GitHub Pages' project-site subpath. Base was previously computed from CI alone, at module scope, and applied unconditionally to `vite` (dev) too — every CI run of the e2e suite starts the dev server under the same CI=true env var the real Pages build reads, so the dev server silently served every asset from /<repo>/ while the browser requested them from /, and the app never rendered at all. Gating on `command` (vite's own build/serve discriminator) instead of the env var alone is the actual fix, not a workaround: dev must always stay at '/' regardless of which environment it runs in.
-  base: command === "build" && process.env.CI ? pagesBase() : "/",
+  base: command === "build" && process.env.CI !== undefined ? pagesBase() : "/",
   define: {
     __APP_COMMIT_SHA__: JSON.stringify(commitSha),
     __APP_RELEASE_TAG__: JSON.stringify(releaseTag),
