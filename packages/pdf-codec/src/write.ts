@@ -7,12 +7,7 @@ import {
   createStandardEncryptor,
   encryptIndirectObject,
 } from "./encrypt-write";
-import {
-  BITS_PER_BYTE,
-  BYTE_MASK,
-  prepareImage,
-  type PreparedImage,
-} from "./write-images";
+import { prepareImage, type PreparedImage } from "./write-images";
 import {
   type AllocatedObject,
   restoreResidueRow,
@@ -22,6 +17,7 @@ import { emitFormObjects } from "./write-form";
 import { emitFontObjects } from "./write-font-objects";
 import { emitPageObjects } from "./write-page-emit";
 import { emitOutlineObjects } from "./write-outline";
+import { buildInfoDict } from "./write-strings";
 import type { PositionedFormula } from "document-schema.js";
 import type {
   LayoutDocument,
@@ -97,66 +93,6 @@ export interface WritePdfOptions {
 const FILE_ID_BYTES = 16;
 
 // Shared byte-packing facts, used by the UTF-16BE string encoder, the PNG image writer, and the bilevel-to-CCITT bit packer below.
-
-// PDF's UTF-16BE-with-BOM convention for text strings outside PDFDocEncoding's range (ISO 32000-1 7.9.2.2) — JS strings are already UTF-16 internally, so this is a direct byte-pair re-encoding of each existing code unit (surrogate pairs included), not a decode/re-encode round trip.
-export function textToPdfString(text: string): PdfObject {
-  const bytes = new Uint8Array(2 + text.length * 2);
-  bytes[0] = 0xfe;
-  bytes[1] = 0xff;
-  // split("") yields one single-code-unit string per element — the UTF-16 code units themselves, surrogate halves included, which is what the pair-at-a-time re-encoding below consumes. The write position is driven by its own running offset rather than by an index bounded on text.length because the target array is sized to exactly that length: an off-by-one past its end writes into the void, where no assertion could ever see it.
-  let offset = 2;
-  for (const unit of text.split("")) {
-    const code = unit.charCodeAt(0);
-    bytes[offset] = (code >> BITS_PER_BYTE) & BYTE_MASK;
-    bytes[offset + 1] = code & BYTE_MASK;
-    offset += 2;
-  }
-  return pdfHexString(bytes);
-}
-
-function pad2(n: number): string {
-  return n.toString().padStart(2, "0");
-}
-
-// PDF's date string convention (ISO 32000-1 7.9.4): "D:YYYYMMDDHHmmSS" plus a timezone suffix. Always formatted in UTC ("Z") regardless of host timezone, so output is deterministic and independent of where this code runs.
-function formatPdfDate(iso: string): string {
-  const date = new Date(iso);
-  return `D:${date.getUTCFullYear()}${pad2(date.getUTCMonth() + 1)}${pad2(date.getUTCDate())}${pad2(date.getUTCHours())}${pad2(date.getUTCMinutes())}${pad2(date.getUTCSeconds())}Z`;
-}
-
-function buildInfoDict(doc: LayoutDocument): PdfDict {
-  const entries = new Map<string, PdfObject>();
-  // Always this package's own identity, regardless of doc.metadata.producer (which describes whatever produced the *source* document this LayoutDocument came from, not this PDF) — deliberately no version string, so byte-golden tests never need updating on a version bump.
-  entries.set("Producer", textToPdfString("documents.js"));
-  if (doc.metadata.title !== undefined) {
-    entries.set("Title", textToPdfString(doc.metadata.title));
-  }
-  if (doc.metadata.author !== undefined) {
-    entries.set("Author", textToPdfString(doc.metadata.author));
-  }
-  if (doc.metadata.subject !== undefined) {
-    entries.set("Subject", textToPdfString(doc.metadata.subject));
-  }
-  if (doc.metadata.keywords !== undefined) {
-    entries.set("Keywords", textToPdfString(doc.metadata.keywords.join(", ")));
-  }
-  if (doc.metadata.creator !== undefined) {
-    entries.set("Creator", textToPdfString(doc.metadata.creator));
-  }
-  if (doc.metadata.createdIso !== undefined) {
-    entries.set(
-      "CreationDate",
-      textToPdfString(formatPdfDate(doc.metadata.createdIso)),
-    );
-  }
-  if (doc.metadata.modifiedIso !== undefined) {
-    entries.set(
-      "ModDate",
-      textToPdfString(formatPdfDate(doc.metadata.modifiedIso)),
-    );
-  }
-  return pdfDict(entries);
-}
 
 function computeFontFlags(
   standardName: StandardFontName,
