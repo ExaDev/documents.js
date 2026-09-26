@@ -364,6 +364,12 @@ function readContentForFormat(
     case "odf":
       return readOdfFormulaContent(pkg);
   }
+  return assertNeverReadFormat(format);
+}
+
+// Exported never-typed exhaustiveness guard (same rationale as contentCounts.ts's assertNeverContentKind): keeps the if-chain total without a default, and is pinned by its own test with a forced-invalid cast.
+export function assertNeverReadFormat(format: never): ContentDocument {
+  throw new Error(`readContentForFormat: unhandled format ${String(format)}`);
 }
 
 // Exported purely so router.test.ts can pin the exact byteLength arithmetic against a base64 string of a controlled length, rather than needing a real embedded image round-tripped through a full docx-to-PDF conversion just to exercise one estimate formula. No Math.ceil around the division: asset.base64 is always produced by documents.js's own bytesToBase64 encoder (readPdf's own image extraction is the only producer of a LayoutImageAsset), which pads every output to a multiple of 4 characters — a real base64 encoding's own length invariant, not an assumption about this one caller — so `length * 3 / 4` is already exactly integral for every value this ever actually receives, and rounding it up could only ever be a no-op.
@@ -410,19 +416,25 @@ export function openEditorSession(
     case "markdown":
       return { format, editor: openMarkdown(decodeMarkdownText(bytes)) };
   }
+  return assertNeverEditorFormat(format);
+}
+
+// Exported never-typed exhaustiveness guard (same rationale as contentCounts.ts's assertNeverContentKind).
+export function assertNeverEditorFormat(format: never): EditorSession {
+  throw new Error(`openEditorSession: unhandled format ${String(format)}`);
 }
 
 // The structural slice of the paragraph-family handles the mutations drive. Each editor's own paragraph/run classes carry private state, which makes them mutually unassignable AS CLASS TYPES — but assignability to this interface only checks its own members, and every one of the four exposes exactly these: run text get/set (DocxRun/OdtRun/MarkdownRun/DocRun all carry both), run remove, paragraph appendRun, paragraph remove, and the text getter.
 interface EditorRunHandle {
   text: string;
-  remove(): void;
+  remove: () => void;
 }
 
 interface EditorParagraphHandle {
   readonly text: string;
-  runs(): EditorRunHandle[];
-  appendRun(init?: { text?: string }): EditorRunHandle;
-  remove(): void;
+  runs: () => EditorRunHandle[];
+  appendRun: (init?: { text?: string }) => EditorRunHandle;
+  remove: () => void;
 }
 
 // The two access directions of the paragraph-family surface. Every editor class forwards paragraphs() itself with an identical zero-argument call, so there is no format-specific behaviour left to switch on: each of the four paragraph types satisfies EditorParagraphHandle structurally (this module's own top comment), which is what lets a single call return the union directly rather than needing one branch per format to narrow the session first. appendParagraph is no different, despite DocEditor also exposing a second, top-level appendParagraph of its own (a plain forward to `this.body.appendParagraph`, per doc/editor.ts's own definition): every one of the four editor classes carries a `body` with an identical `appendParagraph` call, so going through `body` uniformly reaches the correct target for every format, doc included, with no branch needed.

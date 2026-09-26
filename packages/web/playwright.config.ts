@@ -5,8 +5,8 @@ export default defineConfig({
   testDir: "./e2e",
   globalSetup: "./e2e/global-setup.ts",
   fullyParallel: true,
-  forbidOnly: !!process.env.CI,
-  retries: process.env.CI ? 2 : 0,
+  forbidOnly: process.env.CI !== undefined,
+  retries: process.env.CI !== undefined ? 2 : 0,
   reporter: "html",
   // A dev server compiles each route's module graph on demand rather than serving a pre-built bundle, so the first navigation to a route pays a real transform cost a production preview wouldn't — the default 5s assertion timeout is tuned for the latter. Generous rather than tight, since retrying a slow-but-correct assertion is free and a too-tight timeout here reads as a flaky test rather than what it actually is: dev-server cold-start latency.
   expect: { timeout: 10_000 },
@@ -18,6 +18,6 @@ export default defineConfig({
   webServer: {
     command: "pnpm dev",
     url: "http://localhost:5173",
-    reuseExistingServer: !process.env.CI,
+    reuseExistingServer: process.env.CI === undefined,
   },
 });

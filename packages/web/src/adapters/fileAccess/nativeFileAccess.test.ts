@@ -21,29 +21,29 @@ function stubHandle(
     name,
     isFile: true,
     isDirectory: false,
-    isSameEntry: () => Promise.resolve(false),
-    queryPermission: () => Promise.resolve("granted"),
-    requestPermission: () => Promise.resolve("granted"),
-    getFile: () => Promise.resolve(file),
-    createWritable: () =>
+    isSameEntry: async () => Promise.resolve(false),
+    queryPermission: async () => Promise.resolve("granted"),
+    requestPermission: async () => Promise.resolve("granted"),
+    getFile: async () => Promise.resolve(file),
+    createWritable: async () =>
       Promise.reject(new Error("createWritable not stubbed on this handle")),
   };
 }
 
 // Likewise a fully-typed FileSystemWritableFileStream double (write/close are spies the save tests assert on; the rest of WritableStream's own required surface is inert filler this adapter never touches).
 function stubWritable() {
-  const write = vi.fn(() => Promise.resolve());
-  const close = vi.fn(() => Promise.resolve());
+  const write = vi.fn(async () => Promise.resolve());
+  const close = vi.fn(async () => Promise.resolve());
   const stream: FileSystemWritableFileStream = {
     locked: false,
     write,
     close,
-    abort: () => Promise.resolve(),
+    abort: async () => Promise.resolve(),
     getWriter: () => {
       throw new Error("getWriter is not implemented in this test double");
     },
-    seek: () => Promise.resolve(),
-    truncate: () => Promise.resolve(),
+    seek: async () => Promise.resolve(),
+    truncate: async () => Promise.resolve(),
   };
   return { stream, write, close };
 }
@@ -138,7 +138,7 @@ describe("createNativeFileAccess", () => {
     it("writes bytes through a writable stream and resolves the handle", async () => {
       const { stream, write, close } = stubWritable();
       const handle = stubHandle(new Uint8Array([1]), "out.pdf");
-      handle.createWritable = () => Promise.resolve(stream);
+      handle.createWritable = async () => Promise.resolve(stream);
       const showSaveFilePicker = vi.fn().mockResolvedValue(handle);
       window.showSaveFilePicker = showSaveFilePicker;
 
@@ -165,7 +165,7 @@ describe("createNativeFileAccess", () => {
     it("derives the accept extension from the suggested name's own extension", async () => {
       const { stream } = stubWritable();
       const handle = stubHandle(new Uint8Array([1]), "archive.tar.docx");
-      handle.createWritable = () => Promise.resolve(stream);
+      handle.createWritable = async () => Promise.resolve(stream);
       const showSaveFilePicker = vi.fn().mockResolvedValue(handle);
       window.showSaveFilePicker = showSaveFilePicker;
 
@@ -188,7 +188,7 @@ describe("createNativeFileAccess", () => {
     it("uses the whole suggested name as the accept extension when it carries no dot at all", async () => {
       const { stream } = stubWritable();
       const handle = stubHandle(new Uint8Array([1]), "noextension");
-      handle.createWritable = () => Promise.resolve(stream);
+      handle.createWritable = async () => Promise.resolve(stream);
       const showSaveFilePicker = vi.fn().mockResolvedValue(handle);
       window.showSaveFilePicker = showSaveFilePicker;
 

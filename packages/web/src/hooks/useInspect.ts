@@ -24,7 +24,8 @@ export interface ContentReadResult {
 
 export function useReadContent() {
   return useMutation({
-    mutationFn: (input: ReadContentInput) => getRpcClient().content.read(input),
+    mutationFn: async (input: ReadContentInput) =>
+      getRpcClient().content.read(input),
   });
 }
 
@@ -94,7 +95,8 @@ async function inspectPdfBytes(
 // Structural inspection (page count, item-kind breakdown, metadata) only ever runs on PDF bytes — this is the shared entry point for that, used directly by the Convert page, which already has PDF bytes on hand from its own preview conversion and would otherwise pay for a redundant conversion via useInspectDocument below.
 export function useInspectPdfBytes() {
   return useMutation({
-    mutationFn: (bytes: Uint8Array<ArrayBuffer>) => inspectPdfBytes(bytes),
+    mutationFn: async (bytes: Uint8Array<ArrayBuffer>) =>
+      inspectPdfBytes(bytes),
   });
 }
 

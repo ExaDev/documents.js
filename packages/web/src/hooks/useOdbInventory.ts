@@ -4,7 +4,7 @@ import { getRpcClient } from "../rpc/client";
 
 export function useReadOdb() {
   return useMutation({
-    mutationFn: (
+    mutationFn: async (
       input: Parameters<ReturnType<typeof getRpcClient>["odb"]["read"]>[0],
     ) => getRpcClient().odb.read(input),
   });

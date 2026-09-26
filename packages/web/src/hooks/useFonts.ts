@@ -4,7 +4,7 @@ import { getRpcClient } from "../rpc/client";
 
 export function useExtractSourceFonts() {
   return useMutation({
-    mutationFn: (
+    mutationFn: async (
       input: Parameters<
         ReturnType<typeof getRpcClient>["fonts"]["extractSourceFonts"]
       >[0],

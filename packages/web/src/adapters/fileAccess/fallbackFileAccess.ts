@@ -9,7 +9,7 @@ export function createFallbackFileAccess(): FileAccessPort {
   return {
     supportsNativePicker: () => false,
 
-    openFile(options): Promise<OpenedFile | undefined> {
+    async openFile(options): Promise<OpenedFile | undefined> {
       return new Promise((resolve) => {
         const input = document.createElement("input");
         input.type = "file";
@@ -34,7 +34,7 @@ export function createFallbackFileAccess(): FileAccessPort {
       });
     },
 
-    saveFile(bytes, options): Promise<SaveResult> {
+    async saveFile(bytes, options): Promise<SaveResult> {
       const blob = new Blob([bytes], { type: options.mimeType });
       const url = URL.createObjectURL(blob);
       const anchor = document.createElement("a");

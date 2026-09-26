@@ -4,7 +4,7 @@ import { getRpcClient } from "../rpc/client";
 
 export function useReadMetadata() {
   return useMutation({
-    mutationFn: (
+    mutationFn: async (
       input: Parameters<ReturnType<typeof getRpcClient>["metadata"]["read"]>[0],
     ) => getRpcClient().metadata.read(input),
   });
@@ -12,7 +12,7 @@ export function useReadMetadata() {
 
 export function useWriteMetadata() {
   return useMutation({
-    mutationFn: (
+    mutationFn: async (
       input: Parameters<
         ReturnType<typeof getRpcClient>["metadata"]["write"]
       >[0],

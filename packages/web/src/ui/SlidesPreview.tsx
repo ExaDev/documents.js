@@ -149,7 +149,7 @@ function renderSlideOrPage(slide: SlideOrPage): ReactNode {
         className={styles.slideSvg}
         preserveAspectRatio="xMidYMid meet"
       >
-        {items.map((item, index) =>
+        {items.map((item: (typeof items)[number], index: number): ReactNode =>
           item.kind === "shape"
             ? renderShape(item.data, index)
             : renderVector(item.data, index),

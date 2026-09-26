@@ -41,7 +41,7 @@ function OdmPanel({ master }: { master: OpenedFile }) {
   const [chapters, setChapters] = useState<OpenedFile[]>([]);
   const renderOdm = useOdmRender();
   const pdfUrl = usePdfObjectUrl(
-    renderOdm.data?.ok ? renderOdm.data.pdf : undefined,
+    renderOdm.data?.ok === true ? renderOdm.data.pdf : undefined,
   );
 
   const unresolved =

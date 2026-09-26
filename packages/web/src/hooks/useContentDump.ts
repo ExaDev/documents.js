@@ -4,7 +4,7 @@ import { getRpcClient } from "../rpc/client";
 
 export function useReadContent() {
   return useMutation({
-    mutationFn: (
+    mutationFn: async (
       input: Parameters<ReturnType<typeof getRpcClient>["content"]["read"]>[0],
     ) => getRpcClient().content.read(input),
   });
@@ -12,7 +12,7 @@ export function useReadContent() {
 
 export function useRestoreContent() {
   return useMutation({
-    mutationFn: (
+    mutationFn: async (
       input: Parameters<
         ReturnType<typeof getRpcClient>["content"]["restore"]
       >[0],

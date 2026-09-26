@@ -11,7 +11,7 @@ const NO_DEPS: never[] = [];
 // useLiveQuery re-runs (and every consumer re-renders) the instant any write lands in db.recentFiles — no manual invalidation needed after recordRecentFile/removeRecentFile.
 export function useRecentFiles() {
   return useLiveQuery(
-    () =>
+    async () =>
       db.recentFiles
         .orderBy("lastOpenedAt")
         .reverse()

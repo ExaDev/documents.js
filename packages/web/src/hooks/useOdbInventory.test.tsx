@@ -36,7 +36,7 @@ describe("useReadOdb", () => {
 
     const { result, unmount } = renderHookWithQueryClient(() => useReadOdb());
     const input = { bytes: new Uint8Array([1]) };
-    const resolved = await act(() => result.current.mutateAsync(input));
+    const resolved = await act(async () => result.current.mutateAsync(input));
 
     expect(client.odb.read).toHaveBeenCalledWith(input);
     expect(resolved).toEqual(output);
