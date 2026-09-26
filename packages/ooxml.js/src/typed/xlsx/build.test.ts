@@ -18,10 +18,8 @@ import {
   rootElement,
   textContent,
 } from "../util";
-import {
-  assertNeverContentCellValueKind,
-  buildXlsxPackageFromContent,
-} from "./build";
+import { buildXlsxPackageFromContent } from "./build";
+import { assertNeverContentCellValueKind } from "./build-worksheet";
 import { readXlsxContent } from "./content";
 import { readWorkbookDefinitions } from "./definitions";
 import { columnWidthCharsToPt } from "./units";
