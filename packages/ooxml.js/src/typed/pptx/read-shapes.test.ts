@@ -1,0 +1,789 @@
+import type { Package } from "../../model/package";
+import type { XmlElement } from "../../model/node";
+import { describe, expect, it } from "vitest";
+import type {
+  ContentBlock,
+  ContentParagraph,
+  ContentTable,
+} from "document-schema.js";
+import { el, txt } from "../../xml/fragment";
+import { bytesToBase64 } from "byte-codec";
+import { PNG_SIGNATURE } from "../../image/sniff";
+import { readPptxContent } from "./read";
+function asParagraph(block: ContentBlock | undefined): ContentParagraph {
+  if (block?.kind !== "paragraph") {
+    throw new Error("expected a paragraph block");
+  }
+  return block;
+}
+
+function asTable(block: ContentBlock | undefined): ContentTable {
+  if (block?.kind !== "table") {
+    throw new Error("expected a table block");
+  }
+  return block;
+}
+
+const SLIDE_REL =
+  "http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide";
+const SLIDE_LAYOUT_REL =
+  "http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideLayout";
+const SLIDE_MASTER_REL =
+  "http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideMaster";
+const THEME_REL =
+  "http://schemas.openxmlformats.org/officeDocument/2006/relationships/theme";
+const IMAGE_REL =
+  "http://schemas.openxmlformats.org/officeDocument/2006/relationships/image";
+const HYPERLINK_REL =
+  "http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink";
+const NOTES_SLIDE_REL =
+  "http://schemas.openxmlformats.org/officeDocument/2006/relationships/notesSlide";
+function rels(
+  entries: readonly {
+    id: string;
+    type: string;
+    target: string;
+    external?: boolean;
+  }[],
+): XmlElement {
+  return el(
+    "Relationships",
+    {},
+    entries.map((e) =>
+      el(
+        "Relationship",
+        e.external === true
+          ? { Id: e.id, Type: e.type, Target: e.target, TargetMode: "External" }
+          : { Id: e.id, Type: e.type, Target: e.target },
+      ),
+    ),
+  );
+}
+
+// Only the PNG magic-byte signature matters to sniffImageFormat — the rest is arbitrary filler, not a real encoded image.
+function tinyPngBase64(): string {
+  const bytes = new Uint8Array([...PNG_SIGNATURE, 0, 0, 0, 0]);
+  return bytesToBase64(bytes);
+}
+
+function buildFixturePackage(): Package {
+  // --- slide1: title placeholder (inherited geometry + run cascade), hyperlink, underline/strike, image, table, group.
+  const titleRun1 = el("a:r", {}, [el("a:t", {}, [txt("Hello")])]); // no own rPr: fully inherits from master titleStyle
+  const titleRun2 = el("a:r", {}, [
+    el("a:rPr", { sz: "2000", i: "1" }),
+    el("a:t", {}, [txt(" World")]),
+  ]); // explicit size+italic override, rest inherited
+  const titlePara = el("a:p", {}, [titleRun1, titleRun2]);
+  const titleShape = el("p:sp", {}, [
+    el("p:nvSpPr", {}, [
+      el("p:cNvPr", { id: "2", name: "Title 1" }),
+      el("p:cNvSpPr"),
+      el("p:nvPr", {}, [el("p:ph", { type: "title" })]),
+    ]),
+    el("p:spPr"), // no own xfrm — must inherit from layout
+    el("p:txBody", {}, [titlePara]),
+  ]);
+
+  const hyperlinkRun = el("a:r", {}, [
+    el("a:rPr", {}, [el("a:hlinkClick", { "r:id": "rIdHlink" })]),
+    el("a:t", {}, [txt("link text")]),
+  ]);
+  const styledRun = el("a:r", {}, [
+    el("a:rPr", { u: "sng", strike: "sngStrike" }),
+    el("a:t", {}, [txt("styled")]),
+  ]);
+  const bodyPara = el("a:p", {}, [
+    el("a:pPr", { algn: "ctr", marL: "457200", indent: "-457200" }, [
+      el("a:spcBef", {}, [el("a:spcPts", { val: "600" })]),
+      el("a:lnSpc", {}, [el("a:spcPct", { val: "150000" })]),
+    ]),
+    hyperlinkRun,
+    styledRun,
+  ]);
+  const bodyShape = el("p:sp", {}, [
+    el("p:nvSpPr", {}, [
+      el("p:cNvPr", { id: "3", name: "Body 1" }),
+      el("p:cNvSpPr"),
+      el("p:nvPr"),
+    ]),
+    el("p:spPr", {}, [
+      el("a:xfrm", {}, [
+        el("a:off", { x: "914400", y: "2286000" }),
+        el("a:ext", { cx: "3657600", cy: "914400" }),
+      ]),
+    ]),
+    el("p:txBody", {}, [
+      el(
+        "a:bodyPr",
+        { lIns: "182880", tIns: "91440", rIns: "182880", bIns: "91440" },
+        [el("a:normAutofit", { fontScale: "92000", lnSpcReduction: "10000" })],
+      ),
+      bodyPara,
+    ]),
+  ]);
+
+  const picShape = el("p:pic", {}, [
+    el("p:nvPicPr", {}, [
+      el("p:cNvPr", { id: "4", name: "Picture 1", descr: "A red circle" }),
+      el("p:cNvPicPr"),
+      el("p:nvPr"),
+    ]),
+    el("p:blipFill", {}, [el("a:blip", { "r:embed": "rIdImage" })]),
+    el("p:spPr", {}, [
+      el("a:xfrm", {}, [
+        el("a:off", { x: "635000", y: "635000" }),
+        el("a:ext", { cx: "1016000", cy: "1016000" }),
+      ]),
+    ]),
+  ]);
+
+  const mergedCell = el("a:tc", { gridSpan: "2" }, [
+    el("a:txBody", {}, [
+      el("a:p", {}, [el("a:r", {}, [el("a:t", {}, [txt("Merged")])])]),
+    ]),
+  ]);
+  const continuationCell = el("a:tc", { hMerge: "1" }, [
+    el("a:txBody", {}, [el("a:p")]),
+  ]);
+  const cellA = el("a:tc", {}, [
+    el("a:tcPr", {}, [
+      el("a:solidFill", {}, [el("a:srgbClr", { val: "FF0000" })]),
+      el("a:lnL", { w: "12700" }, [
+        el("a:solidFill", {}, [el("a:srgbClr", { val: "0000FF" })]),
+      ]),
+      el("a:lnR", { w: "25400" }, [
+        el("a:solidFill", {}, [el("a:srgbClr", { val: "00FF00" })]),
+        el("a:prstDash", { val: "dash" }),
+      ]),
+      el("a:lnT", { w: "6350" }, [
+        el("a:solidFill", {}, [el("a:srgbClr", { val: "FFFF00" })]),
+        el("a:prstDash", { val: "dot" }),
+      ]),
+      el("a:lnB", { w: "19050" }, [
+        el("a:solidFill", {}, [el("a:srgbClr", { val: "000000" })]),
+        el("a:prstDash", { val: "solid" }),
+      ]),
+    ]),
+    el("a:txBody", {}, [
+      el("a:p", {}, [el("a:r", {}, [el("a:t", {}, [txt("A")])])]),
+    ]),
+  ]);
+  const cellB = el("a:tc", {}, [
+    el("a:txBody", {}, [
+      el("a:p", {}, [el("a:r", {}, [el("a:t", {}, [txt("B")])])]),
+    ]),
+  ]);
+  const cellAllEdgesUnresolvable = el("a:tc", {}, [
+    el("a:tcPr", {}, [
+      el("a:lnL", {}, [
+        el("a:solidFill", {}, [el("a:srgbClr", { val: "0000FF" })]),
+      ]), // missing @w
+      el("a:lnR", { w: "12700" }, [el("a:noFill")]), // explicit noFill, no colour
+      // a:lnT/a:lnB absent entirely
+    ]),
+    el("a:txBody", {}, [
+      el("a:p", {}, [el("a:r", {}, [el("a:t", {}, [txt("C")])])]),
+    ]),
+  ]);
+  const cellZeroWidthAndUnknownDash = el("a:tc", {}, [
+    el("a:tcPr", {}, [
+      el("a:lnL", { w: "0" }, [
+        el("a:solidFill", {}, [el("a:srgbClr", { val: "0000FF" })]),
+      ]), // resolved width is zero — not visually a border
+      el("a:lnR", { w: "12700" }, [
+        el("a:solidFill", {}, [el("a:srgbClr", { val: "0000FF" })]),
+        el("a:prstDash", { val: "notARealPrstDashValue" }),
+      ]), // unrecognised dash token defaults to 'solid' rather than being dropped
+    ]),
+    el("a:txBody", {}, [
+      el("a:p", {}, [el("a:r", {}, [el("a:t", {}, [txt("D")])])]),
+    ]),
+  ]);
+  const cellNonNumericWidth = el("a:tc", {}, [
+    el("a:tcPr", {}, [
+      el("a:lnL", { w: "abc" }, [
+        el("a:solidFill", {}, [el("a:srgbClr", { val: "0000FF" })]),
+      ]), // @w is not a number at all — not just zero
+      el("a:lnR", { w: "12700" }, [
+        el("a:solidFill", {}, [el("a:srgbClr", { val: "FF00FF" })]),
+      ]),
+    ]),
+    el("a:txBody", {}, [
+      el("a:p", {}, [el("a:r", {}, [el("a:t", {}, [txt("E")])])]),
+    ]),
+  ]);
+  const cellF = el("a:tc", {}, [
+    el("a:txBody", {}, [
+      el("a:p", {}, [el("a:r", {}, [el("a:t", {}, [txt("F")])])]),
+    ]),
+  ]);
+  const cellPatternFill = el("a:tc", {}, [
+    el("a:tcPr", {}, [
+      el("a:pattFill", { prst: "pct25" }, [
+        el("a:fgClr", {}, [el("a:srgbClr", { val: "00FF00" })]),
+        el("a:bgClr", {}, [el("a:srgbClr", { val: "0000FF" })]),
+      ]),
+    ]),
+    el("a:txBody", {}, [
+      el("a:p", {}, [el("a:r", {}, [el("a:t", {}, [txt("G")])])]),
+    ]),
+  ]);
+  const cellUnmappedPatternFill = el("a:tc", {}, [
+    el("a:tcPr", {}, [
+      // ST_PresetPatternVal has 54 members; "sphere" is one of the 42 with no ContentCellPatternTypeSchema counterpart.
+      el("a:pattFill", { prst: "sphere" }, [
+        el("a:fgClr", {}, [el("a:srgbClr", { val: "00FF00" })]),
+        el("a:bgClr", {}, [el("a:srgbClr", { val: "0000FF" })]),
+      ]),
+    ]),
+    el("a:txBody", {}, [
+      el("a:p", {}, [el("a:r", {}, [el("a:t", {}, [txt("H")])])]),
+    ]),
+  ]);
+  const tbl = el("a:tbl", {}, [
+    el("a:tblGrid", {}, [
+      el("a:gridCol", { w: "1270000" }),
+      el("a:gridCol", { w: "1905000" }),
+    ]),
+    el("a:tr", { h: "457200" }, [mergedCell, continuationCell]),
+    el("a:tr", {}, [cellA, cellB]),
+    el("a:tr", {}, [cellAllEdgesUnresolvable, cellZeroWidthAndUnknownDash]),
+    el("a:tr", {}, [cellNonNumericWidth, cellF]),
+    el("a:tr", {}, [cellPatternFill, cellUnmappedPatternFill]),
+  ]);
+  const tableFrame = el("p:graphicFrame", {}, [
+    el("p:nvGraphicFramePr", {}, [el("p:cNvPr", { id: "5", name: "Table 1" })]),
+    el("p:xfrm", {}, [
+      el("a:off", { x: "914400", y: "3657600" }),
+      el("a:ext", { cx: "3175000", cy: "914400" }),
+    ]),
+    el("a:graphic", {}, [
+      el(
+        "a:graphicData",
+        { uri: "http://schemas.openxmlformats.org/drawingml/2006/table" },
+        [tbl],
+      ),
+    ]),
+  ]);
+
+  const groupChildShape = el("p:sp", {}, [
+    el("p:nvSpPr", {}, [
+      el("p:cNvPr", { id: "7", name: "Grouped shape" }),
+      el("p:cNvSpPr"),
+      el("p:nvPr"),
+    ]),
+    el("p:spPr", {}, [
+      el("a:xfrm", {}, [
+        el("a:off", { x: "127000", y: "127000" }),
+        el("a:ext", { cx: "254000", cy: "254000" }),
+      ]),
+    ]),
+    el("p:txBody", {}, [
+      el("a:p", {}, [el("a:r", {}, [el("a:t", {}, [txt("Grouped")])])]),
+    ]),
+  ]);
+  const groupShape = el("p:grpSp", {}, [
+    el("p:nvGrpSpPr", {}, [el("p:cNvPr", { id: "6", name: "Group 1" })]),
+    el("p:grpSpPr", {}, [
+      el("a:xfrm", {}, [
+        el("a:off", { x: "1270000", y: "1270000" }),
+        el("a:ext", { cx: "2540000", cy: "2540000" }),
+        el("a:chOff", { x: "0", y: "0" }),
+        el("a:chExt", { cx: "1270000", cy: "1270000" }),
+      ]),
+    ]),
+    groupChildShape,
+  ]);
+
+  const spTree1 = el("p:spTree", {}, [
+    titleShape,
+    bodyShape,
+    picShape,
+    tableFrame,
+    groupShape,
+  ]);
+  const slide1 = el("p:sld", {}, [el("p:cSld", {}, [spTree1])]);
+
+  const slide1Rels = rels([
+    {
+      id: "rIdLayout",
+      type: SLIDE_LAYOUT_REL,
+      target: "../slideLayouts/slideLayout1.xml",
+    },
+    { id: "rIdImage", type: IMAGE_REL, target: "../media/image1.png" },
+    {
+      id: "rIdHlink",
+      type: HYPERLINK_REL,
+      target: "https://example.com",
+      external: true,
+    },
+    {
+      id: "rIdNotes",
+      type: NOTES_SLIDE_REL,
+      target: "../notesSlides/notesSlide1.xml",
+    },
+  ]);
+
+  // --- slide2: standalone, rotated shape, no layout/master.
+  const slide2Shape = el("p:sp", {}, [
+    el("p:nvSpPr", {}, [
+      el("p:cNvPr", { id: "2", name: "Rotated" }),
+      el("p:cNvSpPr"),
+      el("p:nvPr"),
+    ]),
+    el("p:spPr", {}, [
+      el("a:xfrm", { rot: "2700000" }, [
+        el("a:off", { x: "127000", y: "127000" }),
+        el("a:ext", { cx: "635000", cy: "635000" }),
+      ]),
+    ]),
+    el("p:txBody", {}, [
+      el("a:p", {}, [el("a:r", {}, [el("a:t", {}, [txt("Second Slide")])])]),
+    ]),
+  ]);
+  const slide2 = el("p:sld", {}, [
+    el("p:cSld", {}, [el("p:spTree", {}, [slide2Shape])]),
+  ]);
+
+  // --- notesSlide1: a body placeholder with the actual speaker notes.
+  const notesShape = el("p:sp", {}, [
+    el("p:nvSpPr", {}, [
+      el("p:cNvPr", { id: "2", name: "Notes Placeholder" }),
+      el("p:cNvSpPr"),
+      el("p:nvPr", {}, [el("p:ph", { type: "body", idx: "1" })]),
+    ]),
+    el("p:spPr"),
+    el("p:txBody", {}, [
+      el("a:p", {}, [
+        el("a:r", {}, [el("a:t", {}, [txt("Speaker notes here")])]),
+      ]),
+    ]),
+  ]);
+  const slideNumShape = el("p:sp", {}, [
+    el("p:nvSpPr", {}, [
+      el("p:cNvPr", { id: "3", name: "Slide Number Placeholder" }),
+      el("p:cNvSpPr"),
+      el("p:nvPr", {}, [el("p:ph", { type: "sldNum", idx: "2" })]),
+    ]),
+    el("p:spPr"),
+    el("p:txBody", {}, [
+      el("a:p", {}, [
+        el(
+          "a:fld",
+          { id: "{00000000-0000-0000-0000-000000000000}", type: "slidenum" },
+          [el("a:t", {}, [txt("1")])],
+        ),
+      ]),
+    ]),
+  ]);
+  const notesSlide1 = el("p:notes", {}, [
+    el("p:cSld", {}, [el("p:spTree", {}, [notesShape, slideNumShape])]),
+  ]);
+
+  // --- layout: title placeholder with the geometry the slide's own title inherits.
+  const layoutTitleShape = el("p:sp", {}, [
+    el("p:nvSpPr", {}, [
+      el("p:cNvPr", { id: "2", name: "Title Placeholder" }),
+      el("p:cNvSpPr"),
+      el("p:nvPr", {}, [el("p:ph", { type: "title" })]),
+    ]),
+    el("p:spPr", {}, [
+      el("a:xfrm", {}, [
+        el("a:off", { x: "914400", y: "457200" }),
+        el("a:ext", { cx: "10363200", cy: "1143000" }),
+      ]),
+    ]),
+  ]);
+  const layout1 = el("p:sldLayout", {}, [
+    el("p:cSld", {}, [el("p:spTree", {}, [layoutTitleShape])]),
+  ]);
+  const layout1Rels = rels([
+    {
+      id: "rId1",
+      type: SLIDE_MASTER_REL,
+      target: "../slideMasters/slideMaster1.xml",
+    },
+  ]);
+
+  // --- master: clrMap, txStyles (the run-property cascade the title/body text inherits).
+  const master1 = el("p:sldMaster", {}, [
+    el("p:cSld", {}, [el("p:spTree")]),
+    el("p:clrMap", {
+      bg1: "lt1",
+      tx1: "dk1",
+      bg2: "lt2",
+      tx2: "dk2",
+      accent1: "accent1",
+      accent2: "accent2",
+      accent3: "accent3",
+      accent4: "accent4",
+      accent5: "accent5",
+      accent6: "accent6",
+      hlink: "hlink",
+      folHlink: "folHlink",
+    }),
+    el("p:txStyles", {}, [
+      el("p:titleStyle", {}, [
+        el("a:lvl1pPr", {}, [
+          el("a:defRPr", { sz: "4400", b: "1" }, [
+            el("a:latin", { typeface: "+mj-lt" }),
+            el("a:solidFill", {}, [el("a:schemeClr", { val: "tx1" })]),
+          ]),
+        ]),
+      ]),
+      el("p:bodyStyle", {}, [
+        el("a:lvl1pPr", {}, [el("a:defRPr", { sz: "1800" })]),
+      ]),
+      el("p:otherStyle", {}, [
+        el("a:lvl1pPr", {}, [el("a:defRPr", { sz: "1200" })]),
+      ]),
+    ]),
+  ]);
+  const master1Rels = rels([
+    { id: "rId1", type: THEME_REL, target: "../theme/theme1.xml" },
+  ]);
+
+  const theme1 = el("a:theme", {}, [
+    el("a:themeElements", {}, [
+      el("a:clrScheme", {}, [
+        el("a:dk1", {}, [
+          el("a:sysClr", { val: "windowText", lastClr: "000000" }),
+        ]),
+        el("a:lt1", {}, [el("a:sysClr", { val: "window", lastClr: "FFFFFF" })]),
+      ]),
+      el("a:fontScheme", {}, [
+        el("a:majorFont", {}, [el("a:latin", { typeface: "Aptos Display" })]),
+        el("a:minorFont", {}, [el("a:latin", { typeface: "Aptos" })]),
+      ]),
+    ]),
+  ]);
+
+  const presentation = el("p:presentation", {}, [
+    el("p:sldIdLst", {}, [
+      el("p:sldId", { id: "257", "r:id": "rIdSlide2" }),
+      el("p:sldId", { id: "256", "r:id": "rIdSlide1" }),
+    ]),
+    el("p:sldSz", { cx: "12192000", cy: "6858000" }),
+  ]);
+  const presentationRels = rels([
+    { id: "rIdSlide2", type: SLIDE_REL, target: "slides/slide2.xml" },
+    { id: "rIdSlide1", type: SLIDE_REL, target: "slides/slide1.xml" },
+  ]);
+
+  const core = el("cp:coreProperties", {}, [
+    el("dc:title", {}, [txt("Fixture Deck")]),
+  ]);
+
+  return {
+    parts: {
+      "ppt/presentation.xml": { kind: "xml", nodes: [presentation] },
+      "ppt/_rels/presentation.xml.rels": {
+        kind: "xml",
+        nodes: [presentationRels],
+      },
+      "ppt/slides/slide1.xml": { kind: "xml", nodes: [slide1] },
+      "ppt/slides/_rels/slide1.xml.rels": { kind: "xml", nodes: [slide1Rels] },
+      "ppt/slides/slide2.xml": { kind: "xml", nodes: [slide2] },
+      "ppt/notesSlides/notesSlide1.xml": { kind: "xml", nodes: [notesSlide1] },
+      "ppt/slideLayouts/slideLayout1.xml": { kind: "xml", nodes: [layout1] },
+      "ppt/slideLayouts/_rels/slideLayout1.xml.rels": {
+        kind: "xml",
+        nodes: [layout1Rels],
+      },
+      "ppt/slideMasters/slideMaster1.xml": { kind: "xml", nodes: [master1] },
+      "ppt/slideMasters/_rels/slideMaster1.xml.rels": {
+        kind: "xml",
+        nodes: [master1Rels],
+      },
+      "ppt/theme/theme1.xml": { kind: "xml", nodes: [theme1] },
+      "ppt/media/image1.png": { kind: "binary", base64: tinyPngBase64() },
+      "docProps/core.xml": { kind: "xml", nodes: [core] },
+    },
+  };
+}
+
+function rotationCompositionFixturePackage(): Package {
+  // Group A: off=(100,100)pt ext=(200,200)pt chOff=(0,0)pt chExt=(200,200)pt (scale 1:1) rot=90deg, no flip. Child shape (unrotated) at local off=(150,50)pt ext=(20,20)pt. Group centre = (200,200); child's canonical (unrotated) box centre = (260,160), i.e. (60,-40) from the group centre. Rotating 90deg clockwise (verified: east (1,0) -> south (0,1)) sends (60,-40) = 60*east + 40*north to 60*south + 40*east = (40,60). Final centre (240,260), top-left (230,250). Rotation: shape's own rot (0) composed with the group's unmirrored composite (90) = 90.
+  const rotGroupChild = el("p:sp", {}, [
+    el("p:nvSpPr", {}, [
+      el("p:cNvPr", { id: "101", name: "InRotGroup" }),
+      el("p:cNvSpPr"),
+      el("p:nvPr"),
+    ]),
+    el("p:spPr", {}, [
+      el("a:xfrm", {}, [
+        el("a:off", { x: "1905000", y: "635000" }),
+        el("a:ext", { cx: "254000", cy: "254000" }),
+      ]),
+    ]),
+    el("p:txBody", {}, [
+      el("a:p", {}, [
+        el("a:r", {}, [el("a:t", {}, [txt("In rotated group")])]),
+      ]),
+    ]),
+  ]);
+  const rotGroup = el("p:grpSp", {}, [
+    el("p:nvGrpSpPr", {}, [el("p:cNvPr", { id: "100", name: "RotGroup" })]),
+    el("p:grpSpPr", {}, [
+      el("a:xfrm", { rot: "5400000" }, [
+        el("a:off", { x: "1270000", y: "1270000" }),
+        el("a:ext", { cx: "2540000", cy: "2540000" }),
+        el("a:chOff", { x: "0", y: "0" }),
+        el("a:chExt", { cx: "2540000", cy: "2540000" }),
+      ]),
+    ]),
+    rotGroupChild,
+  ]);
+
+  // Group B: identical geometry to Group A, but rot=90deg AND flipH=1. Child shape carries its OWN rot=30deg, to prove the flip negates the sense of that own rotation (composeShapeRotationDeg: mirrored parent -> 90 - 30 = 60, not 90 + 30 = 120). Position: the group's flip mirrors dx across the vertical axis before rotating: 60 -> -60, dy stays -40. Rotating 90deg clockwise sends (-60,-40) = 60*west + 40*north to 60*north + 40*east = (40,-60). Final centre (240,140), top-left (230,130).
+  const rotFlipGroupChild = el("p:sp", {}, [
+    el("p:nvSpPr", {}, [
+      el("p:cNvPr", { id: "111", name: "InRotFlipGroup" }),
+      el("p:cNvSpPr"),
+      el("p:nvPr"),
+    ]),
+    el("p:spPr", {}, [
+      el("a:xfrm", { rot: "1800000" }, [
+        el("a:off", { x: "1905000", y: "635000" }),
+        el("a:ext", { cx: "254000", cy: "254000" }),
+      ]),
+    ]),
+    el("p:txBody", {}, [
+      el("a:p", {}, [
+        el("a:r", {}, [el("a:t", {}, [txt("In rotated and flipped group")])]),
+      ]),
+    ]),
+  ]);
+  const rotFlipGroup = el("p:grpSp", {}, [
+    el("p:nvGrpSpPr", {}, [el("p:cNvPr", { id: "110", name: "RotFlipGroup" })]),
+    el("p:grpSpPr", {}, [
+      el("a:xfrm", { rot: "5400000", flipH: "1" }, [
+        el("a:off", { x: "1270000", y: "1270000" }),
+        el("a:ext", { cx: "2540000", cy: "2540000" }),
+        el("a:chOff", { x: "0", y: "0" }),
+        el("a:chExt", { cx: "2540000", cy: "2540000" }),
+      ]),
+    ]),
+    rotFlipGroupChild,
+  ]);
+
+  // Two-level nesting: outer group off=(0,0)pt ext=(400,400)pt chOff=(0,0)pt chExt=(400,400)pt rot=90deg, no flip; inner group nested inside it at off=(200,0)pt ext=(200,200)pt chOff=(0,0)pt chExt=(200,200)pt rot=90deg, no flip; shape inside the inner group at local off=(50,50)pt ext=(20,20)pt, unrotated. Inner group's own off/ext, mapped through the outer group's 90deg rotation about its centre (200,200): canonical box centre (300,100) -> (100,-100) from outer centre -> rotated to (100,100) -> final centre (300,300), top-left (200,200); composite rotation = 90+90 = 180 (outer unmirrored, so angles add). Shape's canonical box centre inside the inner group's own (200,200)-centred, 180deg-composite frame: local centre (60,60) -> canonical (260,260) -> (-40,-40) from inner centre (300,300) -> rotating 180deg negates both -> (40,40) -> final centre (340,340), top-left (330,330). Rotation: shape's own rot (0) composed with the (unmirrored) 180deg composite = 180.
+  const nestedInnerChild = el("p:sp", {}, [
+    el("p:nvSpPr", {}, [
+      el("p:cNvPr", { id: "122", name: "InNestedGroups" }),
+      el("p:cNvSpPr"),
+      el("p:nvPr"),
+    ]),
+    el("p:spPr", {}, [
+      el("a:xfrm", {}, [
+        el("a:off", { x: "635000", y: "635000" }),
+        el("a:ext", { cx: "254000", cy: "254000" }),
+      ]),
+    ]),
+    el("p:txBody", {}, [
+      el("a:p", {}, [
+        el("a:r", {}, [el("a:t", {}, [txt("In nested rotated groups")])]),
+      ]),
+    ]),
+  ]);
+  const nestedInnerGroup = el("p:grpSp", {}, [
+    el("p:nvGrpSpPr", {}, [
+      el("p:cNvPr", { id: "121", name: "InnerRotGroup" }),
+    ]),
+    el("p:grpSpPr", {}, [
+      el("a:xfrm", { rot: "5400000" }, [
+        el("a:off", { x: "2540000", y: "0" }),
+        el("a:ext", { cx: "2540000", cy: "2540000" }),
+        el("a:chOff", { x: "0", y: "0" }),
+        el("a:chExt", { cx: "2540000", cy: "2540000" }),
+      ]),
+    ]),
+    nestedInnerChild,
+  ]);
+  const nestedOuterGroup = el("p:grpSp", {}, [
+    el("p:nvGrpSpPr", {}, [
+      el("p:cNvPr", { id: "120", name: "OuterRotGroup" }),
+    ]),
+    el("p:grpSpPr", {}, [
+      el("a:xfrm", { rot: "5400000" }, [
+        el("a:off", { x: "0", y: "0" }),
+        el("a:ext", { cx: "5080000", cy: "5080000" }),
+        el("a:chOff", { x: "0", y: "0" }),
+        el("a:chExt", { cx: "5080000", cy: "5080000" }),
+      ]),
+    ]),
+    nestedInnerGroup,
+  ]);
+
+  const spTree = el("p:spTree", {}, [rotGroup, rotFlipGroup, nestedOuterGroup]);
+  const slide = el("p:sld", {}, [el("p:cSld", {}, [spTree])]);
+  const presentation = el("p:presentation", {}, [
+    el("p:sldIdLst", {}, [el("p:sldId", { id: "256", "r:id": "rId1" })]),
+  ]);
+  const presentationRels = rels([
+    { id: "rId1", type: SLIDE_REL, target: "slides/slide1.xml" },
+  ]);
+
+  return {
+    parts: {
+      "ppt/presentation.xml": { kind: "xml", nodes: [presentation] },
+      "ppt/_rels/presentation.xml.rels": {
+        kind: "xml",
+        nodes: [presentationRels],
+      },
+      "ppt/slides/slide1.xml": { kind: "xml", nodes: [slide] },
+    },
+  };
+}
+
+describe("readPptxContent: group shapes", () => {
+  it("flattens a group's child shape into the slide's flat shape list at its absolute (transformed) position", () => {
+    const doc = readPptxContent(buildFixturePackage());
+    const grouped = doc.slides[1]?.shapes.find(
+      (s) => s.name === "Grouped shape",
+    );
+    // group off=(100,100)pt ext=(200,200)pt, chOff=(0,0) chExt=(100,100)pt -> scale 2x; child local (10,10,20,20)pt -> absolute (120,120,40,40)pt.
+    expect(grouped?.frame).toEqual({
+      xPt: 120,
+      yPt: 120,
+      widthPt: 40,
+      heightPt: 40,
+    });
+  });
+});
+
+describe("readPptxContent: rotation", () => {
+  it("carries a shape's own rotationDeg through unchanged", () => {
+    const doc = readPptxContent(buildFixturePackage());
+    const rotated = doc.slides[0]?.shapes.find((s) => s.name === "Rotated");
+    const FIXTURE_ROTATION_DEG = 45; // the fixture's own p:xfrm@rot for the Rotated shape, in whole degrees
+    expect(rotated?.rotationDeg).toBe(FIXTURE_ROTATION_DEG);
+  });
+
+  it("leaves rotationDeg undefined for an unrotated shape", () => {
+    const doc = readPptxContent(buildFixturePackage());
+    const titleShape = doc.slides[1]?.shapes.find((s) => s.name === "Title 1");
+    expect(titleShape?.rotationDeg).toBeUndefined();
+  });
+});
+
+// Real ECMA-376 composition through rotated/flipped ancestor groups (see composeGroupTransform/applyGroupTransform/composeShapeRotationDeg in src/typed/shared/drawingml.ts for the derivation these fixtures exercise end to end, through actual XML parsing rather than calling the helpers directly).
+describe("readPptxContent: rotation composed through rotated/flipped ancestor groups", () => {
+  // toBeCloseTo precision (decimal places) for the composed-position assertions below: tight enough to catch a real composition-math bug, loose enough for ordinary floating-point noise from the rotation transform.
+  const POSITION_PRECISION_DIGITS = 9;
+
+  it("composes an unrotated shape's position and rotation through a single rotated (unflipped) group", () => {
+    const doc = readPptxContent(rotationCompositionFixturePackage());
+    const shape = doc.slides[0]?.shapes.find((s) => s.name === "InRotGroup");
+    // The fixture's own composed position and size for InRotGroup, and its rotation as inherited unchanged from the single unflipped ancestor group.
+    const COMPOSED_X_PT = 230;
+    const COMPOSED_Y_PT = 250;
+    const COMPOSED_SIZE_PT = 20;
+    const INHERITED_ROTATION_DEG = 90;
+    expect(shape?.frame.xPt).toBeCloseTo(
+      COMPOSED_X_PT,
+      POSITION_PRECISION_DIGITS,
+    );
+    expect(shape?.frame.yPt).toBeCloseTo(
+      COMPOSED_Y_PT,
+      POSITION_PRECISION_DIGITS,
+    );
+    expect(shape?.frame.widthPt).toBe(COMPOSED_SIZE_PT);
+    expect(shape?.frame.heightPt).toBe(COMPOSED_SIZE_PT);
+    expect(shape?.rotationDeg).toBe(INHERITED_ROTATION_DEG);
+  });
+
+  it("composes a shape's own rotation through a rotated AND flipped group, negating the sense of the shape's own rotation", () => {
+    const doc = readPptxContent(rotationCompositionFixturePackage());
+    const shape = doc.slides[0]?.shapes.find(
+      (s) => s.name === "InRotFlipGroup",
+    );
+    const COMPOSED_X_PT = 230;
+    const COMPOSED_Y_PT = 130;
+    // 90 (group) - 30 (own) = 60, not 90 + 30 = 120: the group's flipH negates the sign of the shape's own rotation.
+    const NEGATED_ROTATION_DEG = 60;
+    expect(shape?.frame.xPt).toBeCloseTo(
+      COMPOSED_X_PT,
+      POSITION_PRECISION_DIGITS,
+    );
+    expect(shape?.frame.yPt).toBeCloseTo(
+      COMPOSED_Y_PT,
+      POSITION_PRECISION_DIGITS,
+    );
+    expect(shape?.rotationDeg).toBe(NEGATED_ROTATION_DEG);
+  });
+
+  it("composes position and rotation through two levels of nested rotated groups", () => {
+    const doc = readPptxContent(rotationCompositionFixturePackage());
+    const shape = doc.slides[0]?.shapes.find(
+      (s) => s.name === "InNestedGroups",
+    );
+    const COMPOSED_POSITION_PT = 330;
+    // 90 (outer) + 90 (inner) + 0 (own) = 180.
+    const SUMMED_ROTATION_DEG = 180;
+    expect(shape?.frame.xPt).toBeCloseTo(
+      COMPOSED_POSITION_PT,
+      POSITION_PRECISION_DIGITS,
+    );
+    expect(shape?.frame.yPt).toBeCloseTo(
+      COMPOSED_POSITION_PT,
+      POSITION_PRECISION_DIGITS,
+    );
+    expect(shape?.rotationDeg).toBe(SUMMED_ROTATION_DEG);
+  });
+});
+
+describe("readPptxContent: sourcePath", () => {
+  it("assigns slides[N].shapes[N] to each shape, in the flattened document order", () => {
+    const doc = readPptxContent(buildFixturePackage());
+    // sldIdLst orders slide2 before slide1, so slides[0] is slide2 (one shape) and slides[1] is slide1.
+    expect(doc.slides[0]?.shapes[0]?.sourcePath).toBe("slides[0].shapes[0]");
+    const titleShape = doc.slides[1]?.shapes.find((s) => s.name === "Title 1");
+    const bodyShape = doc.slides[1]?.shapes.find((s) => s.name === "Body 1");
+    expect(titleShape?.sourcePath).toBe("slides[1].shapes[0]");
+    expect(bodyShape?.sourcePath).toBe("slides[1].shapes[1]");
+  });
+
+  it("assigns slides[N].shapes[N].blocks[N] and .runs[N] to a shape's paragraph content", () => {
+    const doc = readPptxContent(buildFixturePackage());
+    const titleShape = doc.slides[1]?.shapes.find((s) => s.name === "Title 1");
+    const titlePara = asParagraph(titleShape?.blocks[0]);
+    expect(titlePara.sourcePath).toBe("slides[1].shapes[0].blocks[0]");
+    expect(titlePara.runs[0]?.sourcePath).toBe(
+      "slides[1].shapes[0].blocks[0].runs[0]",
+    );
+    expect(titlePara.runs[1]?.sourcePath).toBe(
+      "slides[1].shapes[0].blocks[0].runs[1]",
+    );
+  });
+
+  it("assigns a group's flattened child shape its own position in the slide's flat shape list", () => {
+    const doc = readPptxContent(buildFixturePackage());
+    const grouped = doc.slides[1]?.shapes.find(
+      (s) => s.name === "Grouped shape",
+    );
+    // spTree1 order: title(0), body(1), pic(2), table(3), grouped child(4).
+    expect(grouped?.sourcePath).toBe("slides[1].shapes[4]");
+    expect(asParagraph(grouped?.blocks[0]).sourcePath).toBe(
+      "slides[1].shapes[4].blocks[0]",
+    );
+  });
+
+  it("nests a table shape's own cell content under slides[N].shapes[N].blocks[N].rows[N].cells[N].blocks[N]", () => {
+    const doc = readPptxContent(buildFixturePackage());
+    const tableShape = doc.slides[1]?.shapes.find((s) => s.name === "Table 1");
+    const table = asTable(tableShape?.blocks[0]);
+    expect(table.sourcePath).toBe("slides[1].shapes[3].blocks[0]");
+    const mergedCellPara = asParagraph(table.rows[0]?.cells[0]?.blocks[0]);
+    expect(mergedCellPara.sourcePath).toBe(
+      "slides[1].shapes[3].blocks[0].rows[0].cells[0].blocks[0]",
+    );
+    expect(mergedCellPara.runs[0]?.sourcePath).toBe(
+      "slides[1].shapes[3].blocks[0].rows[0].cells[0].blocks[0].runs[0]",
+    );
+    const cellBPara = asParagraph(table.rows[1]?.cells[1]?.blocks[0]);
+    expect(cellBPara.sourcePath).toBe(
+      "slides[1].shapes[3].blocks[0].rows[1].cells[1].blocks[0]",
+    );
+  });
+});
