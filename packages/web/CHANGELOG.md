@@ -1,3 +1,18 @@
+## [2.17.0](https://github.com/ExaDev/documents.js/compare/web%402.16.24...web%402.17.0) (2026-09-27)
+
+### Features
+
+* **web:** give Editors and Recent their own design treatment ([5005eb3](https://github.com/ExaDev/documents.js/commit/5005eb34d734598805e927dba6af464375c4a1d3))
+
+### Tests
+
+* **web:** pin the visible paragraph digits against index arithmetic mutants ([faf1d89](https://github.com/ExaDev/documents.js/commit/faf1d8920ad9325150b6709335638281ff17667f))
+
+### Miscellaneous Chores
+
+* **web:** apply the promise-function-async fixes the panel test missed ([f240058](https://github.com/ExaDev/documents.js/commit/f24005872fed82cc30688f1ae347f998560c790d))
+* **web:** empty the newRuleDebt list, enforcing all five rules ([06223a5](https://github.com/ExaDev/documents.js/commit/06223a5bae593c95af972bd46bdffe17de87d4c5))
+
 ## [2.16.24](https://github.com/ExaDev/documents.js/compare/web%402.16.23...web%402.16.24) (2026-09-26)
 
 
