@@ -1,3 +1,9 @@
+## [2.18.0](https://github.com/ExaDev/documents.js/compare/web%402.17.0...web%402.18.0) (2026-09-27)
+
+### Features
+
+* **web:** give every tool page explicit pending and error states ([7bba222](https://github.com/ExaDev/documents.js/commit/7bba2222f8c1b16315896812cb2b8cc7515dd624))
+
 ## [2.17.0](https://github.com/ExaDev/documents.js/compare/web%402.16.24...web%402.17.0) (2026-09-27)
 
 ### Features
