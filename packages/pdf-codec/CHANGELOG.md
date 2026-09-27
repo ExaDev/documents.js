@@ -1,3 +1,9 @@
+## [5.3.3](https://github.com/ExaDev/documents.js/compare/pdf-codec%405.3.2...pdf-codec%405.3.3) (2026-09-27)
+
+### Tests
+
+* **pdf-codec:** pin the JBIG2 template tables in their T.88 orderings ([b226181](https://github.com/ExaDev/documents.js/commit/b2261819f00a30c54d886682049df14e8d605514))
+
 ## [5.3.2](https://github.com/ExaDev/documents.js/compare/pdf-codec%405.3.1...pdf-codec%405.3.2) (2026-09-27)
 
 ### Code Refactoring
