@@ -1,3 +1,9 @@
+## [5.3.5](https://github.com/ExaDev/documents.js/compare/pdf-codec%405.3.4...pdf-codec%405.3.5) (2026-09-27)
+
+### Tests
+
+* **pdf-codec:** decode every filter abbreviation alias through decodeStream ([49a84bd](https://github.com/ExaDev/documents.js/commit/49a84bdaa5796cf2dc29ea8cab3b6d248d2f0862))
+
 ## [5.3.4](https://github.com/ExaDev/documents.js/compare/pdf-codec%405.3.3...pdf-codec%405.3.4) (2026-09-27)
 
 ### Tests
