@@ -1,3 +1,9 @@
+## [5.3.1](https://github.com/ExaDev/documents.js/compare/pdf-codec%405.3.0...pdf-codec%405.3.1) (2026-09-27)
+
+### Tests
+
+* **pdf-codec:** pin the Symbol and ZapfDingbats glyph tables; raise breakThreshold to 80 ([6c8218c](https://github.com/ExaDev/documents.js/commit/6c8218c1b92db5341955e163d790d35bd790962a))
+
 ## [5.3.0](https://github.com/ExaDev/documents.js/compare/pdf-codec%405.2.30...pdf-codec%405.3.0) (2026-09-26)
 
 ### Features
