@@ -1,3 +1,9 @@
+## [5.3.6](https://github.com/ExaDev/documents.js/compare/pdf-codec%405.3.5...pdf-codec%405.3.6) (2026-09-27)
+
+### Tests
+
+* **pdf-codec:** drive the PairPos interior bounds guards with targeted malformations ([2cca954](https://github.com/ExaDev/documents.js/commit/2cca954a191396914360cdae755b960c5ab01b7a))
+
 ## [5.3.5](https://github.com/ExaDev/documents.js/compare/pdf-codec%405.3.4...pdf-codec%405.3.5) (2026-09-27)
 
 ### Tests
