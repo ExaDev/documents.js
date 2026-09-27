@@ -162,7 +162,7 @@ function unpackSamples(
   return out;
 }
 
-function scaleToByte(
+export function scaleToByte(
   value: number,
   maxValue: number,
   inverted: boolean,
@@ -173,7 +173,7 @@ function scaleToByte(
     : Math.round((v * MAX_BYTE_VALUE) / maxValue);
 }
 
-function cmykToRgbByte(
+export function cmykToRgbByte(
   c: number,
   m: number,
   y: number,
@@ -186,7 +186,7 @@ function cmykToRgbByte(
   };
 }
 
-function sampleFromPalette(
+export function sampleFromPalette(
   base: ResolvedColorSpace,
   lookup: Uint8Array<ArrayBuffer>,
   offset: number,
