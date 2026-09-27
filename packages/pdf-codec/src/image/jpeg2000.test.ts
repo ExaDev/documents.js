@@ -52,6 +52,8 @@ describe("decodeJpeg2000: real OpenJPEG-produced codestreams", () => {
       for (let c = 0; c < fixture.componentCount; c++) {
         const decoded = image.components[c] ?? new Int32Array(0);
         const reference = expected[c] ?? [];
+        // The bound below iterates the reference only, so nothing in it would notice a decoder that emits one sample too many: the length is asserted outright, separate from the per-sample bound.
+        expect(decoded.length).toBe(reference.length);
         for (let i = 0; i < reference.length; i++) {
           const difference = Math.abs((decoded[i] ?? 0) - (reference[i] ?? 0));
           total++;
