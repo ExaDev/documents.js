@@ -327,3 +327,53 @@ describe("OdmPage", () => {
     mounted.unmount();
   });
 });
+
+describe("OdmPage render states", () => {
+  it("shows the pending message while the first render is in flight, and clears it once the result lands", async () => {
+    const client = createMockRpcClient();
+    let resolveRender!: (
+      value: Awaited<ReturnType<typeof client.odm.render>>,
+    ) => void;
+    vi.mocked(client.odm.render).mockReturnValue(
+      new Promise((resolve) => {
+        resolveRender = resolve;
+      }),
+    );
+    vi.mocked(getRpcClient).mockReturnValue(client);
+    const mounted = mountOdmPage();
+
+    act(() => {
+      openDocument(openedFile("master.odm"));
+    });
+    await vi.waitFor(() => {
+      expect(mounted.container.textContent).toContain(
+        "Rendering master document…",
+      );
+    });
+
+    resolveRender({ ok: true, pdf: new Uint8Array([1]) });
+    await vi.waitFor(() => {
+      expect(mounted.container.textContent).not.toContain(
+        "Rendering master document…",
+      );
+    });
+    mounted.unmount();
+  });
+
+  it("reports a failed render in place, not only as a toast", async () => {
+    const client = createMockRpcClient();
+    vi.mocked(client.odm.render).mockRejectedValue(new Error("bad master"));
+    vi.mocked(getRpcClient).mockReturnValue(client);
+    const mounted = mountOdmPage();
+
+    act(() => {
+      openDocument(openedFile("master.odm"));
+    });
+    await vi.waitFor(() => {
+      expect(mounted.container.textContent).toContain(
+        "The master document could not be rendered: Error: bad master",
+      );
+    });
+    mounted.unmount();
+  });
+});

@@ -394,3 +394,58 @@ describe("InspectPage", () => {
     mounted.unmount();
   });
 });
+
+describe("InspectPage read states", () => {
+  it("shows the pending message while an inspection is in flight, and clears it once the result lands", async () => {
+    const client = createMockRpcClient();
+    let resolveInspect!: (
+      value: Awaited<ReturnType<typeof client.pdf.inspect>>,
+    ) => void;
+    vi.mocked(client.pdf.inspect).mockReturnValue(
+      new Promise((resolve) => {
+        resolveInspect = resolve;
+      }),
+    );
+    vi.mocked(getRpcClient).mockReturnValue(client);
+    const mounted = mountInspectPage();
+
+    act(() => {
+      openDocument(openedFile("report.pdf"));
+    });
+    await vi.waitFor(() => {
+      expect(mounted.container.textContent).toContain("Inspecting document…");
+    });
+
+    resolveInspect({
+      pageCount: 1,
+      itemKindCounts: {},
+      metadata: {},
+      layout: { formatVersion: 1, metadata: {}, pages: [], images: {} },
+    });
+    await vi.waitFor(() => {
+      expect(mounted.container.textContent).not.toContain(
+        "Inspecting document…",
+      );
+    });
+    mounted.unmount();
+  });
+
+  it("reports a failed inspection in place, not only as a toast", async () => {
+    const client = createMockRpcClient();
+    vi.mocked(client.pdf.inspect).mockRejectedValue(
+      new Error("bad xref table"),
+    );
+    vi.mocked(getRpcClient).mockReturnValue(client);
+    const mounted = mountInspectPage();
+
+    act(() => {
+      openDocument(openedFile("report.pdf"));
+    });
+    await vi.waitFor(() => {
+      expect(mounted.container.textContent).toContain(
+        "The document could not be inspected: Error: bad xref table",
+      );
+    });
+    mounted.unmount();
+  });
+});

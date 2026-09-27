@@ -1,4 +1,4 @@
-import { Alert, Paper, Select, Stack } from "@mantine/core";
+import { Alert, Paper, Select, Stack, Text } from "@mantine/core";
 import { createFileRoute } from "@tanstack/react-router";
 import { DocumentFormatSchema } from "documents.js";
 import type { DocumentFormat } from "documents.js";
@@ -108,6 +108,12 @@ function InspectionPanel({
         </Stack>
       </Paper>
 
+      {inspect.isPending && <Text>Inspecting document…</Text>}
+      {inspect.isError && (
+        <Alert color="red">
+          The document could not be inspected: {String(inspect.error)}
+        </Alert>
+      )}
       {inspect.data && (
         <Paper withBorder p="md">
           <Stack gap="sm">

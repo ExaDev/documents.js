@@ -101,6 +101,11 @@ function PackagePanel({
   return (
     <>
       {readContent.isPending && <Text>Loading document structure…</Text>}
+      {readContent.isError && (
+        <Alert color="red">
+          The document structure could not be read: {String(readContent.error)}
+        </Alert>
+      )}
       {json !== "" && (
         <Paper withBorder p="md">
           <Stack gap="md">
