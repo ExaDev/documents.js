@@ -1,3 +1,9 @@
+## [5.3.2](https://github.com/ExaDev/documents.js/compare/pdf-codec%405.3.1...pdf-codec%405.3.2) (2026-09-27)
+
+### Code Refactoring
+
+* **pdf-codec:** walk the colour transforms by entries; pin decoded length ([15d9c57](https://github.com/ExaDev/documents.js/commit/15d9c57a6e955cb16829357dd053f1eae4112cb6))
+
 ## [5.3.1](https://github.com/ExaDev/documents.js/compare/pdf-codec%405.3.0...pdf-codec%405.3.1) (2026-09-27)
 
 ### Tests
