@@ -1,3 +1,9 @@
+## [5.3.4](https://github.com/ExaDev/documents.js/compare/pdf-codec%405.3.3...pdf-codec%405.3.4) (2026-09-27)
+
+### Tests
+
+* **pdf-codec:** pin the byte-level colour conversion helpers ([ccd5f02](https://github.com/ExaDev/documents.js/commit/ccd5f02a76f569454894934e780c5c03119fd592))
+
 ## [5.3.3](https://github.com/ExaDev/documents.js/compare/pdf-codec%405.3.2...pdf-codec%405.3.3) (2026-09-27)
 
 ### Tests
