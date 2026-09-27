@@ -1,3 +1,13 @@
+## [5.3.7](https://github.com/ExaDev/documents.js/compare/pdf-codec%405.3.6...pdf-codec%405.3.7) (2026-09-27)
+
+### Bug Fixes
+
+* **pdf-codec:** parenthesise the long-form count's shifted literal ([499ad57](https://github.com/ExaDev/documents.js/commit/499ad57502e506fa12a1a041feea884336e99d5d))
+
+### Tests
+
+* **pdf-codec:** drive the segment header's referred-to machinery ([dd40617](https://github.com/ExaDev/documents.js/commit/dd406173a35f4b14e62d04b03eec2e32e53dd47f))
+
 ## [5.3.6](https://github.com/ExaDev/documents.js/compare/pdf-codec%405.3.5...pdf-codec%405.3.6) (2026-09-27)
 
 ### Tests
