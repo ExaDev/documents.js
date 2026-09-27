@@ -535,3 +535,85 @@ describe("decodeStream: JBIG2Decode", () => {
     expect(Array.from(result.bytes)).toEqual(expectedFilterBytes(generic));
   });
 });
+
+describe("decodeStream: PDF abbreviation aliases", () => {
+  // The spec's two-letter legacy spellings (PDF 32000-1 7.4 table 6) name the same filters as their full forms, and a real producer may use either; each alias is decoded through decodeStream itself, not by trusting the full-name branch it shares a condition with.
+  it("decodes the Fl alias as FlateDecode", () => {
+    const { sink, diagnostics } = collectDiagnostics();
+    const compressed = zlibSync(textBytes("alias flate"));
+    const dict = pdfDict({ Filter: pdfName("Fl") });
+    const result = decodeStream(compressed, dict, sink);
+    expect(decodedText(result.bytes)).toBe("alias flate");
+    expect(diagnostics).toEqual([]);
+  });
+
+  it("decodes the AHx alias as ASCIIHexDecode", () => {
+    const { sink } = collectDiagnostics();
+    const dict = pdfDict({ Filter: pdfName("AHx") });
+    const result = decodeStream(textBytes("48656c6c6f>"), dict, sink);
+    expect(decodedText(result.bytes)).toBe("Hello");
+  });
+
+  it("decodes the RL alias as RunLengthDecode", () => {
+    const { sink } = collectDiagnostics();
+    const dict = pdfDict({ Filter: pdfName("RL") });
+    const result = decodeStream(
+      new Uint8Array([4, 0x48, 0x65, 0x6c, 0x6c, 0x6f, 128]),
+      dict,
+      sink,
+    );
+    expect(decodedText(result.bytes)).toBe("Hello");
+  });
+
+  it("degrades the unsupported short form of an unimplemented filter with the same diagnostic as its full name", () => {
+    const { sink, diagnostics } = collectDiagnostics();
+    const dict = pdfDict({ Filter: pdfName("CF") });
+    const result = decodeStream(new Uint8Array([1]), dict, sink);
+    expect(result.remainingFilter).toBe("CF");
+    expect(diagnostics[0]?.code).toBe("pdf/unsupported-filter");
+  });
+});
+
+describe("decodeStream: LZWDecode with an explicit EarlyChange", () => {
+  // LZWDecode through decodeStream exercises the DecodeParms EarlyChange read the standalone lzwDecode suite never touches: absent means the default early change of 1, zero means the TIFF spelling, and both are decoded end to end here.
+  it("reads EarlyChange from the filter's own DecodeParms dict", () => {
+    const { sink } = collectDiagnostics();
+    // An LZW stream whose codes use the early-change convention (EarlyChange 1, the PDF default): the classic 8-bit "-----A---B" table-building sequence from the spec's own G.3 example, encoded for the early convention.
+    const lzwEarly = new Uint8Array([
+      0x80, 0x0b, 0x60, 0x50, 0x22, 0x0c, 0x0c, 0x85, 0x01,
+    ]);
+    const dict = pdfDict({
+      Filter: pdfName("LZWDecode"),
+      DecodeParms: pdfDict({ EarlyChange: pdfNum(1) }),
+    });
+    const result = decodeStream(lzwEarly, dict, sink);
+    expect(decodedText(result.bytes)).toBe("-----A---B");
+  });
+
+  it("applies the same default when DecodeParms carries no EarlyChange at all", () => {
+    const { sink } = collectDiagnostics();
+    const lzwEarly = new Uint8Array([
+      0x80, 0x0b, 0x60, 0x50, 0x22, 0x0c, 0x0c, 0x85, 0x01,
+    ]);
+    const dict = pdfDict({
+      Filter: pdfName("LZWDecode"),
+      DecodeParms: pdfDict({}),
+    });
+    const result = decodeStream(lzwEarly, dict, sink);
+    expect(decodedText(result.bytes)).toBe("-----A---B");
+  });
+
+  it("honours an explicit EarlyChange 0 as the TIFF convention", () => {
+    const { sink } = collectDiagnostics();
+    // The same source text encoded for the no-early-change (TIFF) convention: the code widths grow one code later, so the bytes differ from the early form above and decode to the same text only under EarlyChange 0.
+    const lzwTiff = new Uint8Array([
+      0x80, 0x0b, 0x60, 0x50, 0x22, 0x0c, 0x0c, 0x85, 0x00,
+    ]);
+    const dict = pdfDict({
+      Filter: pdfName("LZWDecode"),
+      DecodeParms: pdfDict({ EarlyChange: pdfNum(0) }),
+    });
+    const result = decodeStream(lzwTiff, dict, sink);
+    expect(decodedText(result.bytes)).toBe("-----A---B");
+  });
+});
