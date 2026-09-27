@@ -260,7 +260,11 @@ export const SYMBOL_GLYPH_NAMES: readonly string[] = [
 
 export function symbolGlyphName(code: number): string | undefined {
   const name = SYMBOL_GLYPH_NAMES[code];
-  return name === undefined || name === "" ? undefined : name;
+  // The out-of-range case returns through its own early return rather than joining the empty-entry condition below: an out-of-range read and an empty-string entry both end up undefined, but only by different routes, so each check stays separately observable.
+  if (name === undefined) {
+    return undefined;
+  }
+  return name === "" ? undefined : name;
 }
 
 // The ZapfDingbats built-in encoding (PDF spec ISO 32000-1 Annex D.6, aka the Adobe ITC Zapf Dingbats font's own native character set): PDF character code (0-255) -> PostScript glyph name. Used on the read path for a simple font whose /BaseFont resolves to the standard-14 "ZapfDingbats" face and has no /ToUnicode CMap or /Differences entry covering a given code. Verified against pdf.js's own ZapfDingbatsEncoding table (src/core/encodings.js), not transcribed from memory.
@@ -528,5 +532,8 @@ export const ZAPFDINGBATS_GLYPH_NAMES: readonly string[] = [
 
 export function zapfDingbatsGlyphName(code: number): string | undefined {
   const name = ZAPFDINGBATS_GLYPH_NAMES[code];
-  return name === undefined || name === "" ? undefined : name;
+  if (name === undefined) {
+    return undefined;
+  }
+  return name === "" ? undefined : name;
 }
