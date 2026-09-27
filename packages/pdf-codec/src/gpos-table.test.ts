@@ -450,3 +450,65 @@ describe("buildGposKernLookup degrades rather than throwing on a malformed GPOS"
     ).toBeUndefined();
   });
 });
+
+describe("buildGposKernLookup degrades on deep PairPos malformations, not only top-level truncation", () => {
+  // Each case drives one of the interior guards the top-level truncation cases cannot reach: the per-glyph lookup closures hold bounds checks of their own, and a mutant that drops one must read past the table rather than degrade, so every guard needs a table malformed at exactly its own depth.
+  const base = pairPosFormat1({
+    firstGlyphId: 10,
+    secondGlyphId: 20,
+    valueFormat1: VALUE_FORMAT_X_ADVANCE,
+    valueFormat2: 0,
+    value1: [-75],
+    value2: [],
+  });
+
+  // Walks the built GPOS to the PairPos subtable's own offset through the lookup list's own fields, never a hardcoded position.
+  function pairPosOffsetIn(gpos: Uint8Array<ArrayBuffer>): number {
+    const view = new DataView(gpos.buffer);
+    const lookupListOffset = view.getUint16(8);
+    const lookupOffset =
+      lookupListOffset + view.getUint16(lookupListOffset + 2);
+    return lookupOffset + view.getUint16(lookupOffset + 4);
+  }
+
+  it("yields no kerning for a glyph covered beyond the PairSet array (coverageIndex >= pairSetCount)", () => {
+    const gpos = buildGpos(2, base);
+    const view = new DataView(gpos.buffer);
+    const subtableOffset = pairPosOffsetIn(gpos);
+    const coverageOffset = subtableOffset + view.getUint16(subtableOffset + 2);
+    view.setUint16(coverageOffset + 2, 2); // glyphCount 1 -> 2
+    view.setUint16(coverageOffset + 4, 11); // the phantom second covered glyph
+    const kern = buildGposKernLookup(fontWithGpos(gpos));
+    // Glyph 11 is covered but has no PairSet: the guard must degrade that one lookup to no kerning, never read a phantom pair-set offset. Glyph 10 keeps its real pair.
+    expect(kern?.(11, 20) === undefined).toBe(true);
+    if (kern !== undefined) {
+      expect(kern(10, 20)).toBe(-75);
+    }
+  });
+
+  it("yields no kerning when the PairSet offset points outside the GPOS table", () => {
+    const gpos = buildGpos(2, base);
+    const view = new DataView(gpos.buffer);
+    const subtableOffset = pairPosOffsetIn(gpos);
+    view.setUint16(subtableOffset + 10, 0xfff0); // pairSetOffsets[0], far past the end
+    const kern = buildGposKernLookup(fontWithGpos(gpos));
+    expect(kern?.(10, 20) === undefined).toBe(true);
+  });
+
+  it("yields no kerning when a PairSet declares more pair-value records than the table holds", () => {
+    const gpos = buildGpos(2, base);
+    const view = new DataView(gpos.buffer);
+    const subtableOffset = pairPosOffsetIn(gpos);
+    // pairPosFormat1 writes pairSetOffsets[0] = its own HEADER_SIZE of 12, so the PairSet always sits at subtable + 12.
+    const pairSetOffset = subtableOffset + 12;
+    view.setUint16(pairSetOffset, 500); // pairValueCount: 500 records demand 2000 bytes the table cannot hold
+    const kern = buildGposKernLookup(fontWithGpos(gpos));
+    expect(kern?.(10, 20) === undefined).toBe(true);
+  });
+
+  it("reads through to the pair when every interior bound holds, proving the guards admit well-formed interiors", () => {
+    const kern = buildGposKernLookup(fontWithGpos(buildGpos(2, base)));
+    expect(kern).toBeDefined();
+    expect(kern!(10, 20)).toBe(-75);
+  });
+});
