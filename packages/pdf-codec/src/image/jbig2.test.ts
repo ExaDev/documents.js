@@ -277,7 +277,7 @@ describe("decodeJbig2Embedded: segment header referred-to machinery", () => {
     header.push(...uint32Bytes(1));
     header.push(0x30);
     // The reader rewinds one byte and reads the 29-bit count as a uint32 STARTING AT the countByte itself, so the sentinel and the count share that first byte: 0xE0000002 = top three bits 7, low 29 bits 2.
-    header.push(...(uint32Bytes(7 << 29) | 2));
+    header.push(...uint32Bytes((7 << 29) | 2));
     header.push(0); // retain-flag bit array: ceil((2+1)/8) = 1 byte
     header.push(0, 0); // two 1-byte referred numbers
     header.push(1);
