@@ -20,7 +20,7 @@ type TemplatePosition =
   | { readonly kind: "at"; readonly index: number };
 
 // T.88 Figures 4-7. Listed most-significant context bit first.
-const GENERIC_TEMPLATES: readonly (readonly TemplatePosition[])[] = [
+export const GENERIC_TEMPLATES: readonly (readonly TemplatePosition[])[] = [
   // GBTEMPLATE 0 (Figure 4): 16 pixels, four of them adaptive. Nominal AT offsets are A1 (+3,-1), A2 (-3,-1), A3 (+2,-2), A4 (-2,-2).
   [
     { kind: "at", index: 3 },
@@ -218,35 +218,36 @@ function reference(dx: number, dy: number): RefinementPosition {
 }
 
 // T.88 Figures 12 (GRTEMPLATE 0, 13 pixels, two of them adaptive) and 13 (GRTEMPLATE 1, 10 pixels, none adaptive). Listed most-significant context bit first: the pixels read from the bitmap being decoded come first, then those read from the reference. Only the position set is load-bearing here, per the note at the top of this file — with TPGRON refused below, no fixed pseudo-context constant ties these two lists to a particular numbering at all.
-const REFINEMENT_TEMPLATES: readonly (readonly RefinementPosition[])[] = [
+export const REFINEMENT_TEMPLATES: readonly (readonly RefinementPosition[])[] =
   [
-    destination(0, -1),
-    destination(1, -1),
-    destination(-1, 0),
-    { source: "destination-at", index: 0 },
-    reference(0, -1),
-    reference(1, -1),
-    reference(-1, 0),
-    reference(0, 0),
-    reference(1, 0),
-    reference(-1, 1),
-    reference(0, 1),
-    reference(1, 1),
-    { source: "reference-at", index: 1 },
-  ],
-  [
-    destination(-1, -1),
-    destination(0, -1),
-    destination(1, -1),
-    destination(-1, 0),
-    reference(0, -1),
-    reference(-1, 0),
-    reference(0, 0),
-    reference(1, 0),
-    reference(0, 1),
-    reference(1, 1),
-  ],
-];
+    [
+      destination(0, -1),
+      destination(1, -1),
+      destination(-1, 0),
+      { source: "destination-at", index: 0 },
+      reference(0, -1),
+      reference(1, -1),
+      reference(-1, 0),
+      reference(0, 0),
+      reference(1, 0),
+      reference(-1, 1),
+      reference(0, 1),
+      reference(1, 1),
+      { source: "reference-at", index: 1 },
+    ],
+    [
+      destination(-1, -1),
+      destination(0, -1),
+      destination(1, -1),
+      destination(-1, 0),
+      reference(0, -1),
+      reference(-1, 0),
+      reference(0, 0),
+      reference(1, 0),
+      reference(0, 1),
+      reference(1, 1),
+    ],
+  ];
 
 // Typical prediction in a refinement region (TPGRON, T.88 6.3.5.6) is deliberately NOT implemented, and a region that sets it fails loudly instead of guessing.
 //
