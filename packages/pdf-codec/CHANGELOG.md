@@ -1,3 +1,9 @@
+## [5.3.8](https://github.com/ExaDev/documents.js/compare/pdf-codec%405.3.7...pdf-codec%405.3.8) (2026-09-27)
+
+### Tests
+
+* **pdf-codec:** shape into the substitution closures' own guards ([089e1df](https://github.com/ExaDev/documents.js/commit/089e1dfa6351fe20f1c3321595993b47f5de5f03))
+
 ## [5.3.7](https://github.com/ExaDev/documents.js/compare/pdf-codec%405.3.6...pdf-codec%405.3.7) (2026-09-27)
 
 ### Bug Fixes
