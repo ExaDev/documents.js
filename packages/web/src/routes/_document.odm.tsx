@@ -96,6 +96,12 @@ function OdmPanel({ master }: { master: OpenedFile }) {
             : "the linked chapter .odt files"
         }
       />
+      {renderOdm.isPending && <Text>Rendering master document…</Text>}
+      {renderOdm.isError && (
+        <Alert color="red">
+          The master document could not be rendered: {String(renderOdm.error)}
+        </Alert>
+      )}
       {unresolved !== undefined && unresolved.length > 0 && (
         <Alert color="yellow" title="Chapters still missing">
           <Text>

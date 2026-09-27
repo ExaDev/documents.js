@@ -402,3 +402,51 @@ describe("MetadataPage", () => {
     mounted.unmount();
   });
 });
+
+describe("MetadataPage read states", () => {
+  it("shows the pending message while the read is in flight, and clears it once metadata lands", async () => {
+    const client = createMockRpcClient();
+    let resolveRead!: (
+      value: Awaited<ReturnType<typeof client.metadata.read>>,
+    ) => void;
+    vi.mocked(client.metadata.read).mockReturnValue(
+      new Promise((resolve) => {
+        resolveRead = resolve;
+      }),
+    );
+    vi.mocked(getRpcClient).mockReturnValue(client);
+    const mounted = mountMetadataPage();
+
+    act(() => {
+      openDocument(openedFile("report.docx"));
+    });
+    await vi.waitFor(() => {
+      expect(mounted.container.textContent).toContain("Reading metadata…");
+    });
+
+    resolveRead({ title: "A title" });
+    await vi.waitFor(() => {
+      expect(mounted.container.textContent).not.toContain("Reading metadata…");
+    });
+    mounted.unmount();
+  });
+
+  it("reports a failed read in place, not only as a toast", async () => {
+    const client = createMockRpcClient();
+    vi.mocked(client.metadata.read).mockRejectedValue(
+      new Error("not a package"),
+    );
+    vi.mocked(getRpcClient).mockReturnValue(client);
+    const mounted = mountMetadataPage();
+
+    act(() => {
+      openDocument(openedFile("report.docx"));
+    });
+    await vi.waitFor(() => {
+      expect(mounted.container.textContent).toContain(
+        "The metadata could not be read: Error: not a package",
+      );
+    });
+    mounted.unmount();
+  });
+});

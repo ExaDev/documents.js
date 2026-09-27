@@ -1,4 +1,12 @@
-import { Button, Paper, Stack, Table, TextInput } from "@mantine/core";
+import {
+  Alert,
+  Button,
+  Paper,
+  Stack,
+  Table,
+  Text,
+  TextInput,
+} from "@mantine/core";
 import { createFileRoute } from "@tanstack/react-router";
 import type { DocumentFormat } from "documents.js";
 import { useEffect, useRef, useState } from "react";
@@ -100,60 +108,68 @@ function MetadataPanel({
   };
 
   return (
-    readMetadata.data && (
-      <Paper withBorder p="md">
-        <Stack gap="sm">
-          <TextInput
-            label="Title"
-            value={title}
-            onChange={(event) => {
-              setTitleOverride(event.currentTarget.value);
-            }}
-          />
-          <TextInput
-            label="Author"
-            value={author}
-            onChange={(event) => {
-              setAuthorOverride(event.currentTarget.value);
-            }}
-          />
-          <Table>
-            <Table.Tbody>
-              {readMetadata.data.creator !== undefined && (
-                <Table.Tr>
-                  <Table.Td>Creator</Table.Td>
-                  <Table.Td>{readMetadata.data.creator}</Table.Td>
-                </Table.Tr>
-              )}
-              {readMetadata.data.createdIso !== undefined && (
-                <Table.Tr>
-                  <Table.Td>Created</Table.Td>
-                  <Table.Td>{readMetadata.data.createdIso}</Table.Td>
-                </Table.Tr>
-              )}
-              {readMetadata.data.modifiedIso !== undefined && (
-                <Table.Tr>
-                  <Table.Td>Modified</Table.Td>
-                  <Table.Td>{readMetadata.data.modifiedIso}</Table.Td>
-                </Table.Tr>
-              )}
-              {readMetadata.data.producer !== undefined && (
-                <Table.Tr>
-                  <Table.Td>Producer</Table.Td>
-                  <Table.Td>{readMetadata.data.producer}</Table.Td>
-                </Table.Tr>
-              )}
-            </Table.Tbody>
-          </Table>
-          <Button
-            onClick={handleSave}
-            loading={writeMetadata.isPending}
-            w="fit-content"
-          >
-            Save and download
-          </Button>
-        </Stack>
-      </Paper>
-    )
+    <>
+      {readMetadata.isPending && <Text>Reading metadata…</Text>}
+      {readMetadata.isError && (
+        <Alert color="red">
+          The metadata could not be read: {String(readMetadata.error)}
+        </Alert>
+      )}
+      {readMetadata.data && (
+        <Paper withBorder p="md">
+          <Stack gap="sm">
+            <TextInput
+              label="Title"
+              value={title}
+              onChange={(event) => {
+                setTitleOverride(event.currentTarget.value);
+              }}
+            />
+            <TextInput
+              label="Author"
+              value={author}
+              onChange={(event) => {
+                setAuthorOverride(event.currentTarget.value);
+              }}
+            />
+            <Table>
+              <Table.Tbody>
+                {readMetadata.data.creator !== undefined && (
+                  <Table.Tr>
+                    <Table.Td>Creator</Table.Td>
+                    <Table.Td>{readMetadata.data.creator}</Table.Td>
+                  </Table.Tr>
+                )}
+                {readMetadata.data.createdIso !== undefined && (
+                  <Table.Tr>
+                    <Table.Td>Created</Table.Td>
+                    <Table.Td>{readMetadata.data.createdIso}</Table.Td>
+                  </Table.Tr>
+                )}
+                {readMetadata.data.modifiedIso !== undefined && (
+                  <Table.Tr>
+                    <Table.Td>Modified</Table.Td>
+                    <Table.Td>{readMetadata.data.modifiedIso}</Table.Td>
+                  </Table.Tr>
+                )}
+                {readMetadata.data.producer !== undefined && (
+                  <Table.Tr>
+                    <Table.Td>Producer</Table.Td>
+                    <Table.Td>{readMetadata.data.producer}</Table.Td>
+                  </Table.Tr>
+                )}
+              </Table.Tbody>
+            </Table>
+            <Button
+              onClick={handleSave}
+              loading={writeMetadata.isPending}
+              w="fit-content"
+            >
+              Save and download
+            </Button>
+          </Stack>
+        </Paper>
+      )}
+    </>
   );
 }

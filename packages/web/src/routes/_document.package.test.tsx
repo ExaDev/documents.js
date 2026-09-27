@@ -409,3 +409,24 @@ describe("PackagePage", () => {
     mounted.unmount();
   });
 });
+
+describe("PackagePage read error", () => {
+  it("reports a failed structure read in place, not only as a toast", async () => {
+    const client = createMockRpcClient();
+    vi.mocked(client.content.read).mockRejectedValue(
+      new Error("encrypted part"),
+    );
+    vi.mocked(getRpcClient).mockReturnValue(client);
+    const mounted = mountPackagePage();
+
+    act(() => {
+      openDocument(openedFile("locked.docx"));
+    });
+    await vi.waitFor(() => {
+      expect(mounted.container.textContent).toContain(
+        "The document structure could not be read: Error: encrypted part",
+      );
+    });
+    mounted.unmount();
+  });
+});
