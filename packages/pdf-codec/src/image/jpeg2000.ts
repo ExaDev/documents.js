@@ -526,9 +526,10 @@ function inverseReversibleComponentTransform(
   if (y === undefined || u === undefined || v === undefined) {
     return;
   }
-  for (let i = 0; i < y.length; i++) {
+  // Walked by entries() rather than an index bound: an `i <= length` bound mutant is unobservable here, because writing a typed array past its end is a silent no-op, so the loop's own bound must not exist as a mutable comparison at all.
+  for (const [i, luma] of y.entries()) {
     const green =
-      (y[i] ?? 0) -
+      luma -
       Math.floor(((u[i] ?? 0) + (v[i] ?? 0)) / RCT_GREEN_RECOVERY_DIVISOR);
     const red = (v[i] ?? 0) + green;
     const blue = (u[i] ?? 0) + green;
@@ -553,8 +554,8 @@ function inverseIrreversibleComponentTransform(
   if (y === undefined || cb === undefined || cr === undefined) {
     return;
   }
-  for (let i = 0; i < y.length; i++) {
-    const luma = y[i] ?? 0;
+  // Same entries() walk as the reversible transform above, for the same reason: a bound mutant is unobservable against typed arrays.
+  for (const [i, luma] of y.entries()) {
     const blueDiff = cb[i] ?? 0;
     const redDiff = cr[i] ?? 0;
     y[i] = luma + ICT_RED_FROM_CR * redDiff;
