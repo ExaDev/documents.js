@@ -1,5 +1,9 @@
-// The Symbol and ZapfDingbats glyph-name tables, split from encoding.ts, each with its code-to-name accessor. The Unicode resolution machinery stays in encoding.ts and imports these back.
-export const SYMBOL_GLYPH_NAMES: readonly string[] = [
+import { describe, expect, it, vi } from "vitest";
+
+// The two built-in glyph-name tables pinned entry for entry, at every one of their 256 code positions each, including the empty ones. These tables are the Adobe Symbol and ZapfDingbats encodings as published (PDF spec Annex D, verified against pdf.js's own encodings table when first transcribed): a wrong, shifted, or blanked entry misnames a glyph for every standard-14 Symbol or ZapfDingbats font with no /Differences, so every position is asserted rather than spot-checked. The literals below are an independent copy of the published data, not a re-import of the module under test.
+//
+// The module is loaded by dynamic import INSIDE each test, after vi.resetModules(). That is not ceremony: a table entry is code that executes when the array is constructed, i.e. at module load. Under Stryker's per-test coverage that execution is attributed to whichever test is active at load time, and a top-level import loads the module while no test is active, which records the entries as static coverage this suite can never be selected for. Loading inside the test puts every entry's execution on this test's record, so the pin below is the one Stryker runs against each entry mutant.
+const EXPECTED_SYMBOL_NAMES: readonly string[] = [
   "",
   "",
   "",
@@ -258,18 +262,7 @@ export const SYMBOL_GLYPH_NAMES: readonly string[] = [
   "",
 ];
 
-export function symbolGlyphName(code: number): string | undefined {
-  const name = SYMBOL_GLYPH_NAMES[code];
-  // The out-of-range case returns through its own early return rather than joining the empty-entry condition below: an out-of-range read and an empty-string entry both end up undefined, but only by different routes, so each check stays separately observable.
-  if (name === undefined) {
-    return undefined;
-  }
-  return name === "" ? undefined : name;
-}
-
-// The ZapfDingbats built-in encoding (PDF spec ISO 32000-1 Annex D.6, aka the Adobe ITC Zapf Dingbats font's own native character set): PDF character code (0-255) -> PostScript glyph name. Used on the read path for a simple font whose /BaseFont resolves to the standard-14 "ZapfDingbats" face and has no /ToUnicode CMap or /Differences entry covering a given code. Verified against pdf.js's own ZapfDingbatsEncoding table (src/core/encodings.js), not transcribed from memory.
-
-export const ZAPFDINGBATS_GLYPH_NAMES: readonly string[] = [
+const EXPECTED_ZAPFDINGBATS_NAMES: readonly string[] = [
   "",
   "",
   "",
@@ -528,12 +521,60 @@ export const ZAPFDINGBATS_GLYPH_NAMES: readonly string[] = [
   "",
 ];
 
-// The Adobe StandardEncoding (ISO 32000-1 Annex D.2, and what a Type 1 or CFF font program means by its own predefined encoding 0): PDF character code (0-255) -> PostScript glyph name. Generated from fontTools' own `fontTools.encodings.StandardEncoding` table rather than transcribed, so it agrees with the table every mainstream font tool writes and reads against. It parts company with WinAnsi across most of the upper half — 0xA9 is quotesingle here and the trademark sign there — which is why approximating one as the other silently produced wrong characters.
+describe("the Symbol glyph-name table", () => {
+  it("answers with the Adobe Symbol glyph name at every one of its 256 code positions", async () => {
+    vi.resetModules();
+    const { symbolGlyphName } = await import("./encoding-symbol-tables");
+    for (let code = 0; code < 256; code += 1) {
+      const expected = EXPECTED_SYMBOL_NAMES[code];
+      expect(symbolGlyphName(code)).toBe(
+        expected === "" ? undefined : expected,
+      );
+    }
+  });
+});
 
-export function zapfDingbatsGlyphName(code: number): string | undefined {
-  const name = ZAPFDINGBATS_GLYPH_NAMES[code];
-  if (name === undefined) {
-    return undefined;
-  }
-  return name === "" ? undefined : name;
-}
+describe("the ZapfDingbats glyph-name table", () => {
+  it("answers with the Adobe ZapfDingbats glyph name at every one of its 256 code positions", async () => {
+    vi.resetModules();
+    const { zapfDingbatsGlyphName } = await import("./encoding-symbol-tables");
+    for (let code = 0; code < 256; code += 1) {
+      const expected = EXPECTED_ZAPFDINGBATS_NAMES[code];
+      expect(zapfDingbatsGlyphName(code)).toBe(
+        expected === "" ? undefined : expected,
+      );
+    }
+  });
+});
+
+describe("symbolGlyphName", () => {
+  it("returns the entry's own name for a populated code", async () => {
+    vi.resetModules();
+    const { symbolGlyphName } = await import("./encoding-symbol-tables");
+    expect(symbolGlyphName(32)).toBe("space");
+    expect(symbolGlyphName(33)).toBe("exclam");
+  });
+
+  it("returns undefined outside the table on either side", async () => {
+    vi.resetModules();
+    const { symbolGlyphName } = await import("./encoding-symbol-tables");
+    expect(symbolGlyphName(-1)).toBeUndefined();
+    expect(symbolGlyphName(256)).toBeUndefined();
+  });
+});
+
+describe("zapfDingbatsGlyphName", () => {
+  it("returns the entry's own name for a populated code", async () => {
+    vi.resetModules();
+    const { zapfDingbatsGlyphName } = await import("./encoding-symbol-tables");
+    expect(zapfDingbatsGlyphName(33)).toBe("a1");
+    expect(zapfDingbatsGlyphName(34)).toBe("a2");
+  });
+
+  it("returns undefined outside the table on either side", async () => {
+    vi.resetModules();
+    const { zapfDingbatsGlyphName } = await import("./encoding-symbol-tables");
+    expect(zapfDingbatsGlyphName(-1)).toBeUndefined();
+    expect(zapfDingbatsGlyphName(256)).toBeUndefined();
+  });
+});
