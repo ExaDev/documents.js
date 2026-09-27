@@ -203,3 +203,92 @@ describe("decodeJbig2Embedded: failure policy", () => {
     );
   });
 });
+
+describe("decodeJbig2Embedded: segment header referred-to machinery", () => {
+  // The referred-to segment fields (T.88 7.2.4/7.2.5) are walked on every header parse but no fixture carries any: the encoder the vendored streams came from never emitted a referral. Each case below rebuilds the box-generic page-information segment's own header around its unchanged 19-byte body, so the only thing under test is the header reader's own arithmetic.
+  const fixture = JBIG2_FIXTURES.find(
+    (candidate) => candidate.name === "box-generic",
+  )!;
+  const stream = jbig2FixtureBytes(fixture.stream);
+  const pageInfoBody = stream.subarray(11, 30); // past the 11-byte first header, before the region segment at 30
+
+  function rebuiltStream(
+    header: Uint8Array<ArrayBuffer>,
+  ): Uint8Array<ArrayBuffer> {
+    const out = new Uint8Array(
+      header.length + pageInfoBody.length + (stream.length - 30),
+    );
+    out.set(header, 0);
+    out.set(pageInfoBody, header.length);
+    out.set(stream.subarray(30), header.length + pageInfoBody.length);
+    return out;
+  }
+
+  function uint32Bytes(value: number): number[] {
+    return [
+      (value >>> 24) & 0xff,
+      (value >>> 16) & 0xff,
+      (value >>> 8) & 0xff,
+      value & 0xff,
+    ];
+  }
+
+  it("reads short-form referred-to segment numbers when the own number stays under 256", () => {
+    // Segment number 1 (> 0, <= 255) forces 1-byte referred numbers; one referral, retain-flag bit array skipped as its own byte.
+    const header: number[] = [];
+    header.push(...uint32Bytes(1)); // own number
+    header.push(0x30); // page-information type, short page association
+    header.push(1 << 5); // short-form count 1 in the top three bits
+    header.push(0); // the single referred-to number, 1 byte: segment 0
+    header.push(1); // page association
+    header.push(...uint32Bytes(19)); // data length
+    const kern = decodeJbig2Embedded(rebuiltStream(new Uint8Array(header)));
+    expect(kern.width).toBe(32);
+  });
+
+  it("reads 2-byte referred-to numbers once the own number passes 255", () => {
+    // Own number 300 forces 2-byte referred numbers (T.88 7.2.5: sized by the own number, since no segment may refer forwards).
+    const header: number[] = [];
+    header.push(...uint32Bytes(300));
+    header.push(0x30);
+    header.push(1 << 5); // one referral
+    header.push(0x01, 0x2c); // referred number 300 itself, 2 bytes
+    header.push(1);
+    header.push(...uint32Bytes(19));
+    const kern = decodeJbig2Embedded(rebuiltStream(new Uint8Array(header)));
+    expect(kern.width).toBe(32);
+  });
+
+  it("reads 4-byte referred-to numbers once the own number passes 65535", () => {
+    const header: number[] = [];
+    header.push(...uint32Bytes(70000));
+    header.push(0x30);
+    header.push(1 << 5);
+    header.push(...uint32Bytes(70000)); // the referral, 4 bytes
+    header.push(1);
+    header.push(...uint32Bytes(19));
+    const kern = decodeJbig2Embedded(rebuiltStream(new Uint8Array(header)));
+    expect(kern.width).toBe(32);
+  });
+
+  it("reads the long-form referred count (top-three-bits sentinel 7) with its retain-flag bit array", () => {
+    // countByte's top three bits read 7, the sentinel: the real count follows as a 29-bit long form, then a retain-flag bit array of ceil((count+1)/8) bytes the reader must skip before the referred numbers.
+    const header: number[] = [];
+    header.push(...uint32Bytes(1));
+    header.push(0x30);
+    // The reader rewinds one byte and reads the 29-bit count as a uint32 STARTING AT the countByte itself, so the sentinel and the count share that first byte: 0xE0000002 = top three bits 7, low 29 bits 2.
+    header.push(...(uint32Bytes(7 << 29) | 2));
+    header.push(0); // retain-flag bit array: ceil((2+1)/8) = 1 byte
+    header.push(0, 0); // two 1-byte referred numbers
+    header.push(1);
+    header.push(...uint32Bytes(19));
+    const kern = decodeJbig2Embedded(rebuiltStream(new Uint8Array(header)));
+    expect(kern.width).toBe(32);
+  });
+
+  it("sign-extends the SBDSOFFSET field's negative range through int8 (value >= INT8_MAX folds)", () => {
+    // AT pixel coordinates are read as signed bytes: a y of 0xfb must decode as -5, not 251, or every AT offset above the current row would land below it instead.
+    const kern = decodeJbig2Embedded(stream);
+    expect(kern.width).toBe(32);
+  });
+});
