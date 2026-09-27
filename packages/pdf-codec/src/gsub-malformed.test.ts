@@ -683,3 +683,64 @@ describe("buildGsubShaper: malformed ScriptList, LangSys and FeatureList tables"
     expect(gsubOf(gsub)).toBeUndefined();
   });
 });
+
+describe("buildGsubShaper: closure guards the earlier malformed cases reach only at build time", () => {
+  // The closures a shaper carries run per shaped slot, so a mutant inside them can only die when a test SHAPES the exact glyph the guard rejects. Each case below shapes into one surviving guard on purpose.
+  it("substitutes through a flagged lookup when the font carries no GDEF at all (the class-0 catch-all)", () => {
+    // lookupFlag is set but there is no GDEF: glyphSkipper's own early return must treat every glyph as visible, so the substitution applies. A mutant flipping that early return keeps the flag machinery reading a GDEF that does not exist.
+    const bytes = new Uint8Array(6 + buildCoverageFormat1([10]).length);
+    const view = new DataView(bytes.buffer);
+    view.setUint16(0, 1);
+    view.setUint16(2, 6);
+    view.setInt16(4, 5);
+    bytes.set(buildCoverageFormat1([10]), 6);
+    const shaper = shaperOf(gsubOfOneLookup(1, bytes, 0x0002));
+    expect(shaper([10])).toEqual({ glyphIds: [15], spans: [1] });
+  });
+
+  it("substitutes a non-covered glyph's neighbour but not the non-covered glyph itself, through the same format 1 closure", () => {
+    // Coverage lists only glyph 10; glyph 11 shaped through the SAME closure must pass through untouched, proving the closure's own coverage re-check runs per slot rather than trusting the set that admitted the subtable.
+    const bytes = new Uint8Array(6 + buildCoverageFormat1([10]).length);
+    const view = new DataView(bytes.buffer);
+    view.setUint16(0, 1);
+    view.setUint16(2, 6);
+    view.setInt16(4, 5);
+    bytes.set(buildCoverageFormat1([10]), 6);
+    const shaper = shaperOf(gsubOfOneLookup(1, bytes));
+    expect(shaper([11, 10])).toEqual({ glyphIds: [11, 15], spans: [1, 1] });
+  });
+
+  it("substitutes the LAST substitute in a format 2 table, proving the loop runs to its own final index", () => {
+    // A `<=`/`<` bound mutant on the substitute loop only shows on the final entry: the last listed mapping must still apply.
+    const sub = buildSingleSubstFormat2([
+      [10, 15],
+      [11, 16],
+    ]);
+    const shaper = shaperOf(gsubOfOneLookup(1, sub));
+    expect(shaper([11])).toEqual({ glyphIds: [16], spans: [1] });
+  });
+
+  it("matches a ligature sitting LAST in its set, proving the ligature-record loop runs to its own final index", () => {
+    // Same `<=`/`<` shape as the substitute loop, on the ligature-record walk: the second and last record in the set must still form.
+    const sub = buildLigatureSubstFormat1([
+      {
+        firstGlyph: 10,
+        ligatures: [
+          { ligatureGlyph: 20, components: [11] },
+          { ligatureGlyph: 21, components: [12] },
+        ],
+      },
+    ]);
+    const shaper = shaperOf(gsubOfOneLookup(4, sub));
+    expect(shaper([10, 12])).toEqual({ glyphIds: [21], spans: [2] });
+  });
+
+  it("reports the full consumed span of a matched two-component ligature, not an empty component set", () => {
+    // The matched-slot array a ligature match reports drives both the consumed count and the span; a mutant replacing it with an empty array would still return the ligature glyph but consume nothing.
+    const sub = buildLigatureSubstFormat1([
+      { firstGlyph: 10, ligatures: [{ ligatureGlyph: 20, components: [12] }] },
+    ]);
+    const shaper = shaperOf(gsubOfOneLookup(4, sub));
+    expect(shaper([10, 12])).toEqual({ glyphIds: [20], spans: [2] });
+  });
+});
