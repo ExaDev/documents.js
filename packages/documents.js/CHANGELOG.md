@@ -1,3 +1,9 @@
+## [14.4.89](https://github.com/ExaDev/documents.js/compare/documents.js%4014.4.88...documents.js%4014.4.89) (2026-09-28)
+
+### Tests
+
+* **documents.js:** pin the lowering registries with a dynamic import ([c6f6405](https://github.com/ExaDev/documents.js/commit/c6f6405e090dad93f54793af8caa6dc155b8ffd2))
+
 ## [14.4.88](https://github.com/ExaDev/documents.js/compare/documents.js%4014.4.87...documents.js%4014.4.88) (2026-09-28)
 
 ### Documentation
