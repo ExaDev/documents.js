@@ -1,3 +1,9 @@
+## [5.3.17](https://github.com/ExaDev/documents.js/compare/pdf-codec%405.3.16...pdf-codec%405.3.17) (2026-09-28)
+
+### Tests
+
+* **pdf-codec:** cover the A85 abbreviation, the full LZWDecode spelling, and the fax Rows fallback ([ac630ea](https://github.com/ExaDev/documents.js/commit/ac630ea0243b28084fda2999386880330d3945e7))
+
 ## [5.3.16](https://github.com/ExaDev/documents.js/compare/pdf-codec%405.3.15...pdf-codec%405.3.16) (2026-09-28)
 
 ### Tests
