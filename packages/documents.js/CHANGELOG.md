@@ -1,3 +1,9 @@
+## [14.4.92](https://github.com/ExaDev/documents.js/compare/documents.js%4014.4.91...documents.js%4014.4.92) (2026-09-28)
+
+### Tests
+
+* **documents.js:** pin the OMML reader's property defaults and slot edges ([73c2efc](https://github.com/ExaDev/documents.js/commit/73c2efc1695b136a33d78a088bee3a38bf53a4be))
+
 ## [14.4.91](https://github.com/ExaDev/documents.js/compare/documents.js%4014.4.90...documents.js%4014.4.91) (2026-09-28)
 
 ### Tests
