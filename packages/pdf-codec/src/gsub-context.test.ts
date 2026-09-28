@@ -595,3 +595,98 @@ describe("buildGsubShaper: glyphSkipper ignores base and ligature glyph classes,
     });
   });
 });
+
+describe("buildGsubShaper: contextual closures driven at their own surviving edges", () => {
+  it("tries a lookup's second subtable when its first does not match at the position", () => {
+    // applyLookupAtSlot returns the first subtable's application and stops; the only way to see the order is a lookup whose first subtable matches nothing at the position and whose second does. Lookup 1 carries two single-substitution subtables with disjoint coverage; the contextual record routes through it.
+    const shaper = shaperOf(
+      buildGsubTable(
+        [{ tag: "calt", lookupIndices: [0] }],
+        [
+          {
+            type: 6,
+            subtables: [
+              buildFormat3Subtable(true, {
+                backtrack: [],
+                input: [[10]],
+                lookahead: [],
+                records: [{ sequenceIndex: 0, lookupIndex: 1 }],
+              }),
+            ],
+          },
+          {
+            type: 1,
+            subtables: [
+              buildSingleSubstFormat2([[12, 16]]),
+              buildSingleSubstFormat2([[10, 15]]),
+            ],
+          },
+        ],
+      ),
+    );
+    // Glyph 10 is not in the first subtable's coverage (12 only), so the walk must reach the second for anything to happen.
+    expect(shaper([10])).toEqual({ glyphIds: [15], spans: [1] });
+  });
+
+  it("steps a mark inside the matched input to reach the next input position, substituting past it", () => {
+    // The input walk counts visible slots only: a mark between two input glyphs is stepped over and retained. Without the skip inside visibleInputSlot the walk treats the mark as the next input position, the coverage test fails on it, and the whole rule is withdrawn.
+    const gdef = buildGdefTable({
+      glyphClassDef: buildClassDefFormat2([[14, 14, 3]]), // 14 is a mark
+    });
+    const shaper = shaperOf(
+      buildGsubTable(
+        [{ tag: "calt", lookupIndices: [0] }],
+        [
+          {
+            type: 6,
+            flag: 0x0008,
+            subtables: [
+              buildFormat3Subtable(true, {
+                backtrack: [],
+                input: [[10], [12]],
+                lookahead: [],
+                records: [{ sequenceIndex: 1, lookupIndex: 1 }],
+              }),
+            ],
+          },
+          { type: 1, subtables: [buildSingleSubstFormat2([[12, 16]])] },
+        ],
+      ),
+      gdef,
+    );
+    // The mark 14 sits between the two input glyphs; the record substitutes the SECOND matched position (12), which is only reachable by skipping the mark.
+    expect(shaper([10, 14, 12])).toEqual({
+      glyphIds: [10, 14, 16],
+      spans: [1, 1, 1],
+    });
+  });
+
+  it("refuses a format 3 rule whose entry slot the lookup's own flag skips", () => {
+    // The closure's first-slot skip guard runs before any coverage test: an entry glyph the flag hides must leave the whole run untouched even though the coverage would match.
+    const gdef = buildGdefTable({
+      glyphClassDef: buildClassDefFormat2([[10, 10, 3]]), // 10 is a mark
+    });
+    const shaper = shaperOf(
+      buildGsubTable(
+        [{ tag: "calt", lookupIndices: [0] }],
+        [
+          {
+            type: 6,
+            flag: 0x0008,
+            subtables: [
+              buildFormat3Subtable(true, {
+                backtrack: [],
+                input: [[10]],
+                lookahead: [],
+                records: [{ sequenceIndex: 0, lookupIndex: 1 }],
+              }),
+            ],
+          },
+          { type: 1, subtables: [buildSingleSubstFormat2([[10, 15]])] },
+        ],
+      ),
+      gdef,
+    );
+    expect(shaper([10])).toEqual({ glyphIds: [10], spans: [1] });
+  });
+});
