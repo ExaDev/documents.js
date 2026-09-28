@@ -9,6 +9,6 @@ export default packageStrykerConfig({
   // Derived by PackageStrykerOptions.breakThreshold's own rule, never picked: floor the score from a complete run over this package's whole mutate scope, then subtract that run's own Timeout-classified share, rounded up, with a floor of one point. The margin is what makes the number safe to gate on rather than merely descriptive, since Timeout is the one classification that flaps with runner load alone, so a run that times out more mutants than the one this was derived from still clears it.
   //
   // Issue #1306 holds the measurement this value came from, the per-file breakdown of what is still alive, and the method for raising it as files land. The rule prefers a score measured on CI, so re-derive from a completed shard whenever one is available; issue #1294 covers why one may not be.
-  // Raised 80 -> 84 by the full-package measurement over main at #1608: score 87.76 over 16619 valid mutants, timeout share 448/16619 = 2.70%, so floor(87.76) - ceil(2.70) = 87 - 3 = 84. The twelve file-by-file grind PRs since the 80-era measurement (#1596-#1608) cleared roughly a thousand survivors, which is what moved the score.
-  breakThreshold: 84,
+  // Raised 84 -> 85 by the full-package measurement over main at #1623: score 88.08 over 16621 valid mutants, timeout share 440/16621 = 2.65%, so floor(88.08) - ceil(2.65) = 88 - 3 = 85. The fourteen grind PRs since the 84-era measurement (#1610-#1623) cleared another fifty-plus survivors.
+  breakThreshold: 85,
 });
