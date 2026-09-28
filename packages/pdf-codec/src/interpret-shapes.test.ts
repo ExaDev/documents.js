@@ -504,3 +504,66 @@ describe("interpretContentStream: save/restore", () => {
     expect(items[1]).toMatchObject({ fill: { r: 1, g: 0, b: 0 } });
   });
 });
+
+describe("interpretContentStream: the ellipse detector's own refusals", () => {
+  // Each refusal guard at its own malformed construction: the detector must fall back to a general path, never mis-report an ellipse. The harness spells every construction as literal operators, pinned against the pattern the way the positive case above is.
+  function itemsOf(operators: string) {
+    const { sink } = collectDiagnostics();
+    return interpretContentStream(
+      textBytes(`1 0 0 rg ${operators} f`),
+      EMPTY_RESOURCES,
+      {
+        fontMetrics: fixedWidthFontMetrics(),
+        resolver: makeResolver(new Map()),
+        sink,
+      },
+    );
+  }
+
+  it("refuses a five-segment construction, whose extra arc breaks the quadrant count", () => {
+    // The four-quadrant construction with one extra arc appended before close: five cubics, not four.
+    const items = itemsOf(
+      [
+        "70 40 m",
+        "70 51.0457 56.5685 60 40 60 c",
+        "23.4315 60 10 51.0457 10 40 c",
+        "10 28.9543 23.4315 20 40 20 c",
+        "56.5685 20 70 28.9543 70 40 c",
+        "70 45 60 45 60 40 c",
+        "h",
+      ].join(" "),
+    );
+    expect(items.some((item) => item.kind === "ellipse")).toBe(false);
+    expect(items.some((item) => item.kind === "path")).toBe(true);
+  });
+
+  it("refuses a construction whose fourth arc lands elsewhere than the start", () => {
+    // The last arc's endpoint moved off the start point: the subpath still closes by an implicit straight edge, which is a five-sided shape.
+    const items = itemsOf(
+      [
+        "70 40 m",
+        "70 51.0457 56.5685 60 40 60 c",
+        "23.4315 60 10 51.0457 10 40 c",
+        "10 28.9543 23.4315 20 40 20 c",
+        "56.5685 20 70 28.9543 65 45 c",
+        "h",
+      ].join(" "),
+    );
+    expect(items.some((item) => item.kind === "ellipse")).toBe(false);
+  });
+
+  it("refuses a construction whose arcs visit only two distinct quadrants", () => {
+    // All four on-curve points pushed into the right half: the cardinal-extreme set cannot cover four distinct quadrants.
+    const items = itemsOf(
+      [
+        "70 40 m",
+        "70 51 66 60 60 60 c",
+        "60 60 56 51 56 40 c",
+        "56 29 60 20 60 20 c",
+        "60 20 66 29 70 40 c",
+        "h",
+      ].join(" "),
+    );
+    expect(items.every((item) => item.kind !== "ellipse")).toBe(true);
+  });
+});
