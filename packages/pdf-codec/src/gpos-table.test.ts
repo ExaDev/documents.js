@@ -512,3 +512,95 @@ describe("buildGposKernLookup degrades on deep PairPos malformations, not only t
     expect(kern!(10, 20)).toBe(-75);
   });
 });
+
+describe("buildGposKernLookup: PairPos format 2 hand-built class matrices", () => {
+  // PairPos format 2 kerns by class pair rather than glyph pair: a ClassDef maps each glyph to a class, and a matrix indexed [class1][class2] holds one ValueRecord per pair. The format-1 fixtures cannot reach any of the class-matrix guards, so this family builds a minimal two-class-by-two-class matrix by hand and drives each guard at its own boundary.
+  function pairPosFormat2(options: {
+    firstClass1: number;
+    firstClass2: number;
+    secondClass1: number;
+    secondClass2: number;
+    matrix: readonly (readonly number[])[];
+  }): Uint8Array<ArrayBuffer> {
+    // PairPos format 2: coverage over the first glyphs, two ClassDefs, one XAdvance-only ValueRecord per [class1][class2] matrix cell.
+    const HEADER = 16;
+    const RECORD = 2;
+    const coverage = new Uint8Array(10);
+    {
+      const v = new DataView(coverage.buffer);
+      v.setUint16(0, 1); // coverage format 1
+      v.setUint16(2, 3); // glyphCount: 10, 11, 12
+      v.setUint16(4, 10);
+      v.setUint16(6, 11);
+      v.setUint16(8, 12);
+    }
+    const classDef = (
+      startGlyph: number,
+      c1: number,
+      c2: number,
+    ): Uint8Array<ArrayBuffer> => {
+      // ClassDef format 1 over two consecutive glyphs from startGlyph.
+      const b = new Uint8Array(10);
+      const v = new DataView(b.buffer);
+      v.setUint16(0, 1);
+      v.setUint16(2, startGlyph);
+      v.setUint16(4, 2);
+      v.setUint16(6, c1);
+      v.setUint16(8, c2);
+      return b;
+    };
+    // The first ClassDef classes the coverage's own glyphs (10 and 11); the second classes the pair's second glyphs (20 and 21).
+    const class1 = classDef(10, options.firstClass1, options.firstClass2);
+    const class2 = classDef(20, options.secondClass1, options.secondClass2);
+    // The matrix follows the header DIRECTLY (the spec's own layout); the coverage table and both ClassDefs sit after it, located by their offsets.
+
+    const cells = options.matrix.length * options.matrix[0]!.length;
+    const coverageAt = HEADER + cells * RECORD;
+    const class1At = coverageAt + coverage.length;
+    const class2At = class1At + class1.length;
+    const bytes = new Uint8Array(class2At + class2.length);
+    const view = new DataView(bytes.buffer);
+    view.setUint16(0, 2); // posFormat
+    view.setUint16(2, coverageAt);
+    view.setUint16(4, VALUE_FORMAT_X_ADVANCE);
+    view.setUint16(6, 0);
+    view.setUint16(8, class1At);
+    view.setUint16(10, class2At);
+    view.setUint16(12, options.matrix.length);
+    view.setUint16(14, options.matrix[0]!.length);
+    bytes.set(coverage, coverageAt);
+    bytes.set(class1, class1At);
+    bytes.set(class2, class2At);
+    options.matrix.forEach((row, i) => {
+      row.forEach((value, j) => {
+        view.setInt16(
+          HEADER + (i * options.matrix[0]!.length + j) * RECORD,
+          value,
+        );
+      });
+    });
+    return bytes;
+  }
+
+  it("kerns a glyph pair through its own class pair's matrix cell", () => {
+    // Class 0 pairs carry no adjustment; class1-1 carries -40. Glyph 10 sits in first-class 1, glyph 20 in second-class 1.
+    const font = fontWithGpos(
+      buildGpos(
+        2,
+        pairPosFormat2({
+          firstClass1: 1,
+          firstClass2: 1,
+          secondClass1: 1,
+          secondClass2: 1,
+          matrix: [
+            [0, 0],
+            [0, -40],
+          ],
+        }),
+      ),
+    );
+    const kern = buildGposKernLookup(font);
+    expect(kern!(10, 20)).toBe(-40);
+    expect(kern!(12, 20)).toBe(0);
+  });
+});
