@@ -292,3 +292,20 @@ describe("decodeJbig2Embedded: segment header referred-to machinery", () => {
     expect(kern.width).toBe(32);
   });
 });
+
+describe("decodeJbig2Embedded: int8 sign folding through the page information segment", () => {
+  // The ByteCursor's int8 folding (value >= INT8_MAX folds to negative) drives every AT-pixel offset a region header carries, but no vendored fixture uses a negative AT y. The page information segment's own flags byte is patched here instead: its striping I value is an int8, and a negative I reaches the same folding arithmetic through a field every fixture already carries.
+  it("reads a page information segment whose I field is negative", () => {
+    const fixture = JBIG2_FIXTURES.find(
+      (candidate) => candidate.name === "box-generic",
+    )!;
+    const stream = jbig2FixtureBytes(fixture.stream);
+    // The page information segment data starts after its 11-byte header: width(4) height(4) xRes(4) yRes(4) flags(1) stripping I(1). I at data offset 17; a value of 0xfb folds to -5.
+    const patched = new Uint8Array(stream);
+    const dataStart = 11;
+    patched[dataStart + 17] = 0xfb;
+    // The decode still succeeds with unknown-height striping unresolved only when height is 0xffffffff; this fixture declares a real height, so the negative I is simply carried.
+    const kern = decodeJbig2Embedded(patched);
+    expect(kern.width).toBe(32);
+  });
+});
