@@ -1,3 +1,9 @@
+## [14.4.88](https://github.com/ExaDev/documents.js/compare/documents.js%4014.4.87...documents.js%4014.4.88) (2026-09-28)
+
+### Documentation
+
+* **documents.js:** describe the package's full conversion and editing scope ([8b64a9a](https://github.com/ExaDev/documents.js/commit/8b64a9a3c1171d8d8e2b8a8f1d3f6b22b7b1ca4f))
+
 ## [14.4.87](https://github.com/ExaDev/documents.js/compare/documents.js%4014.4.86...documents.js%4014.4.87) (2026-09-28)
 
 
