@@ -1,3 +1,9 @@
+## [5.3.23](https://github.com/ExaDev/documents.js/compare/pdf-codec%405.3.22...pdf-codec%405.3.23) (2026-09-28)
+
+### Tests
+
+* **pdf-codec:** pin the value keywords and the stray-delimiter spellings ([f120346](https://github.com/ExaDev/documents.js/commit/f120346635e4ed24802923ad302badf45b312e71))
+
 ## [5.3.22](https://github.com/ExaDev/documents.js/compare/pdf-codec%405.3.21...pdf-codec%405.3.22) (2026-09-28)
 
 ### Tests
