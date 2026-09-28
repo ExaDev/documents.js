@@ -1,3 +1,9 @@
+## [5.3.13](https://github.com/ExaDev/documents.js/compare/pdf-codec%405.3.12...pdf-codec%405.3.13) (2026-09-28)
+
+### Tests
+
+* **pdf-codec:** pin the RTCORNER table and symbol-code width; raise breakThreshold to 84 ([51b10aa](https://github.com/ExaDev/documents.js/commit/51b10aa5909cfcbc07d5723ef9f602222acd3ffb))
+
 ## [5.3.12](https://github.com/ExaDev/documents.js/compare/pdf-codec%405.3.11...pdf-codec%405.3.12) (2026-09-28)
 
 ### Tests
