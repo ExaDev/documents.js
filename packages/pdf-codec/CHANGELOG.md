@@ -1,3 +1,9 @@
+## [5.3.19](https://github.com/ExaDev/documents.js/compare/pdf-codec%405.3.18...pdf-codec%405.3.19) (2026-09-28)
+
+### Tests
+
+* **pdf-codec:** pin the substitution-record reader's bounds and stride ([959472d](https://github.com/ExaDev/documents.js/commit/959472d0eb231b6f2130d580c441cd3f50c8c86c))
+
 ## [5.3.18](https://github.com/ExaDev/documents.js/compare/pdf-codec%405.3.17...pdf-codec%405.3.18) (2026-09-28)
 
 ### Tests
