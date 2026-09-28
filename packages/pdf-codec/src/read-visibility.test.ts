@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
 import type { LayoutDocument, LayoutItem, LayoutPage } from "./layout";
+import {
+  CONTENT_OBJ,
+  EMPTY_DICT,
+  FixtureBuilder,
+  PDF_1_4,
+  catalogPagesPageFontObjects,
+} from "./test-support/pdf";
 import { readPdf } from "./read";
 import { writePdf } from "./write";
 
@@ -169,5 +176,28 @@ describe("readPdf: the %PDF- header search itself", () => {
       ...new TextEncoder().encode("%PDF-1.7\n"),
     ]);
     expect(headerDiagnostic(stream)).toMatch(/no "%PDF-" header/);
+  });
+});
+
+describe("readPdf: tagged-content channels the writer cannot emit", () => {
+  // writePdf emits no /ActualText or /Alt spans, so these reader channels are unreachable through this package's own round trip; the fixture below builds the PDF by hand instead, wrapping the text-showing operators in a /Span BDC exactly the way a producer with a real structure tree does.
+  it("keeps a BDC span's /ActualText and /Alt on the recovered text item", () => {
+    const b = new FixtureBuilder().header(PDF_1_4);
+    catalogPagesPageFontObjects(b, CONTENT_OBJ);
+    b.stream(
+      CONTENT_OBJ,
+      EMPTY_DICT,
+      new TextEncoder().encode(
+        "/Span << /ActualText (replaced reading) /Alt (the alt rendering) >> BDC BT /F1 12 Tf 10 50 Td (ffi) Tj ET EMC",
+      ),
+    );
+    b.classicXrefAndTrailer(CONTENT_OBJ, "/Root 1 0 R");
+    const doc = readPdf(b.bytes());
+    const item = doc.pages[0]!.items[0];
+    expect(item).toMatchObject({
+      kind: "text",
+      actualText: "replaced reading",
+      alt: "the alt rendering",
+    });
   });
 });
