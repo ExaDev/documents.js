@@ -775,3 +775,116 @@ describe("writePdf -> readPdf: structural round trip", () => {
     expect(text).toContain("/Border [0 0 0]");
   });
 });
+
+describe("writePdf -> readPdf: optional fields present and absent exactly", () => {
+  // The reader's spread-field guards (`...(item.layerName !== undefined ? ...)`) only die under a strict equality that notices a key present-with-undefined: toEqual ignores those, toStrictEqual does not. Each case pins one optional channel both ways.
+  it("recovers a layer-marked text item with its layer, and a bare one with no layer key at all", () => {
+    const doc = docWithPages([
+      {
+        widthPt: 300,
+        heightPt: 200,
+        items: [
+          {
+            kind: "text",
+            text: "marked",
+            xPt: 20,
+            yPt: 150,
+            font: HELVETICA,
+            sizePt: 14,
+            color: BLACK,
+            layer: "watermark",
+          },
+          {
+            kind: "text",
+            text: "bare",
+            xPt: 20,
+            yPt: 100,
+            font: HELVETICA,
+            sizePt: 14,
+            color: BLACK,
+          },
+        ],
+      },
+    ]);
+    doc.layers = [{ name: "watermark", visible: true }];
+    const result = readPdf(writePdf(doc, { compress: false }));
+    const items = result.pages[0]!.items;
+    const marked = items.find(
+      (item) => item.kind === "text" && item.text === "marked",
+    );
+    const bare = items.find(
+      (item) => item.kind === "text" && item.text === "bare",
+    );
+    expect(marked).toMatchObject({ layer: "watermark" });
+    expect(bare).toBeDefined();
+    // toStrictEqual (not toEqual) so a spread that always emits the key, as `layer: undefined`, fails here.
+    expect("layer" in (bare as Record<string, unknown>)).toBe(false);
+  });
+
+  it("recovers a line's own dash style hint when written and omits it when not", () => {
+    const doc = docWithItems([
+      {
+        kind: "line",
+        x1Pt: 10,
+        y1Pt: 10,
+        x2Pt: 100,
+        y2Pt: 10,
+        color: BLACK,
+        widthPt: 1,
+        style: "dashed",
+      },
+      {
+        kind: "line",
+        x1Pt: 10,
+        y1Pt: 30,
+        x2Pt: 100,
+        y2Pt: 30,
+        color: BLACK,
+        widthPt: 1,
+      },
+    ]);
+    const result = readPdf(writePdf(doc, { compress: false }));
+    const lines = result.pages[0]!.items.flatMap((item) =>
+      item.kind === "line" ? [item] : [],
+    );
+    const dashed = lines.find((item) => item.y1Pt < 20);
+    const solid = lines.find((item) => item.y1Pt > 20);
+    expect(dashed).toMatchObject({ style: "dashed" });
+    expect(solid).toBeDefined();
+    expect("style" in (solid as Record<string, unknown>)).toBe(false);
+  });
+
+  it("recovers an ellipse's fill and stroke paint channels independently", () => {
+    const doc = docWithItems([
+      {
+        kind: "ellipse",
+        xPt: 50,
+        yPt: 50,
+        widthPt: 80,
+        heightPt: 40,
+        fill: RED,
+        stroke: { color: BLUE, widthPt: 2 },
+      },
+      {
+        kind: "ellipse",
+        xPt: 50,
+        yPt: 120,
+        widthPt: 80,
+        heightPt: 40,
+        stroke: { color: BLUE, widthPt: 2 },
+      },
+    ]);
+    const result = readPdf(writePdf(doc, { compress: false }));
+    const ellipses = result.pages[0]!.items.flatMap((item) =>
+      item.kind === "ellipse" ? [item] : [],
+    );
+    const painted = ellipses.find((item) => item.yPt < 100);
+    const bare = ellipses.find((item) => item.yPt > 100);
+    expect(painted).toMatchObject({
+      fill: RED,
+      stroke: { color: BLUE, widthPt: 2 },
+    });
+    expect(bare).toBeDefined();
+    expect("fill" in (bare as Record<string, unknown>)).toBe(false);
+  });
+});
