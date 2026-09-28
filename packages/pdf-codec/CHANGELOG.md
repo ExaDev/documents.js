@@ -1,3 +1,9 @@
+## [5.3.21](https://github.com/ExaDev/documents.js/compare/pdf-codec%405.3.20...pdf-codec%405.3.21) (2026-09-28)
+
+### Tests
+
+* **pdf-codec:** fold the page information segment's striping I negative ([770c74c](https://github.com/ExaDev/documents.js/commit/770c74c345ac915bb6bdf4d667fcbd0e89b4830c))
+
 ## [5.3.20](https://github.com/ExaDev/documents.js/compare/pdf-codec%405.3.19...pdf-codec%405.3.20) (2026-09-28)
 
 ### Tests
