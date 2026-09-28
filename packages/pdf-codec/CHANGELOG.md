@@ -1,3 +1,9 @@
+## [5.3.29](https://github.com/ExaDev/documents.js/compare/pdf-codec%405.3.28...pdf-codec%405.3.29) (2026-09-28)
+
+### Tests
+
+* **pdf-codec:** pin the optional-content channels absent outside their spans ([630ce76](https://github.com/ExaDev/documents.js/commit/630ce767c8297d65d70fe49b26f00b0c5e64ecb2))
+
 ## [5.3.28](https://github.com/ExaDev/documents.js/compare/pdf-codec%405.3.27...pdf-codec%405.3.28) (2026-09-28)
 
 ### Tests
