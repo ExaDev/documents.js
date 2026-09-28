@@ -1,3 +1,9 @@
+## [5.3.18](https://github.com/ExaDev/documents.js/compare/pdf-codec%405.3.17...pdf-codec%405.3.18) (2026-09-28)
+
+### Tests
+
+* **pdf-codec:** pin glyphSkipper's class-flag decision tree ([10ffe10](https://github.com/ExaDev/documents.js/commit/10ffe10b6e48b28333c03830acef35bb082ab444))
+
 ## [5.3.17](https://github.com/ExaDev/documents.js/compare/pdf-codec%405.3.16...pdf-codec%405.3.17) (2026-09-28)
 
 ### Tests
