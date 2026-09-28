@@ -617,3 +617,42 @@ describe("decodeStream: LZWDecode with an explicit EarlyChange", () => {
     expect(decodedText(result.bytes)).toBe("-----A---B");
   });
 });
+
+describe("decodeStream: remaining filter-name spellings", () => {
+  it("decodes the Fl alias already covered; here the A85 abbreviation routes through its own equality arm", () => {
+    const { sink, diagnostics } = collectDiagnostics();
+    // The canonical "Hello world" ASCII85 payload from the spec's own 7.4.2 example, decoded through the abbreviation.
+    const payload = new TextEncoder().encode("<~87cURD]j7BEbo80~>");
+    const dict = pdfDict({ Filter: pdfName("A85") });
+    const result = decodeStream(payload, dict, sink);
+    expect(decodedText(result.bytes)).toBe("Hello world!");
+    expect(diagnostics).toEqual([]);
+  });
+
+  it("reads LZWDecode's EarlyChange from the parms dict spelled in full, not only the abbreviation's path", () => {
+    const { sink } = collectDiagnostics();
+    // The spec's own G.3 example stream for the early convention, decoded through the full spelling with an explicit EarlyChange 1.
+    const lzwEarly = new Uint8Array([
+      0x80, 0x0b, 0x60, 0x50, 0x22, 0x0c, 0x0c, 0x85, 0x01,
+    ]);
+    const dict = pdfDict({
+      Filter: pdfName("LZWDecode"),
+      DecodeParms: pdfDict({ EarlyChange: pdfNum(1) }),
+    });
+    const result = decodeStream(lzwEarly, dict, sink);
+    expect(decodedText(result.bytes)).toBe("-----A---B");
+  });
+
+  it("reads CCITTFaxDecode's Rows fallback from the stream dict's own Height", () => {
+    const { sink } = collectDiagnostics();
+    // A one-row CCITT Group 4 image of eight BLACK pixels (EOFB only): Rows is absent from DecodeParms, so the row count falls back to the stream dictionary's /Height, and absent rows decode as all-black per Group 4's own convention.
+    const ccitt = new Uint8Array([0x00, 0x10]); // EOFB
+    const dict = pdfDict({
+      Filter: pdfName("CCITTFaxDecode"),
+      DecodeParms: pdfDict({ K: pdfNum(-1), Columns: pdfNum(8) }),
+      Height: pdfNum(1),
+    });
+    const result = decodeStream(ccitt, dict, sink);
+    expect(Array.from(result.bytes)).toEqual([0xff]);
+  });
+});
