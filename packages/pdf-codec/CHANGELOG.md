@@ -1,3 +1,9 @@
+## [5.3.27](https://github.com/ExaDev/documents.js/compare/pdf-codec%405.3.26...pdf-codec%405.3.27) (2026-09-28)
+
+### Miscellaneous Chores
+
+* **pdf-codec:** raise breakThreshold to 85 ([45e98ab](https://github.com/ExaDev/documents.js/commit/45e98ab8d00fc636b6999b44bf8e0d8e4ab4a5a5))
+
 ## [5.3.26](https://github.com/ExaDev/documents.js/compare/pdf-codec%405.3.25...pdf-codec%405.3.26) (2026-09-28)
 
 ### Tests
