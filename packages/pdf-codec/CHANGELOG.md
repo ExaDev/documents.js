@@ -1,3 +1,9 @@
+## [5.3.16](https://github.com/ExaDev/documents.js/compare/pdf-codec%405.3.15...pdf-codec%405.3.16) (2026-09-28)
+
+### Tests
+
+* **pdf-codec:** kern through a hand-built PairPos format 2 class matrix ([c88133e](https://github.com/ExaDev/documents.js/commit/c88133e9f7a8b6f9a6b4de9b48e1ac8e3bf62524))
+
 ## [5.3.15](https://github.com/ExaDev/documents.js/compare/pdf-codec%405.3.14...pdf-codec%405.3.15) (2026-09-28)
 
 ### Tests
