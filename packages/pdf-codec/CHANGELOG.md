@@ -1,3 +1,9 @@
+## [5.3.12](https://github.com/ExaDev/documents.js/compare/pdf-codec%405.3.11...pdf-codec%405.3.12) (2026-09-28)
+
+### Tests
+
+* **pdf-codec:** pin the shape-detection helpers on their own boundaries ([d398efb](https://github.com/ExaDev/documents.js/commit/d398efb018826147a4dee5974cc1f6c5acd5d324))
+
 ## [5.3.11](https://github.com/ExaDev/documents.js/compare/pdf-codec%405.3.10...pdf-codec%405.3.11) (2026-09-28)
 
 ### Tests
