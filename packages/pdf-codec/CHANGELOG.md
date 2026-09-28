@@ -1,3 +1,9 @@
+## [5.3.10](https://github.com/ExaDev/documents.js/compare/pdf-codec%405.3.9...pdf-codec%405.3.10) (2026-09-28)
+
+### Tests
+
+* **pdf-codec:** drive the contextual closures at their surviving edges ([4a42a0b](https://github.com/ExaDev/documents.js/commit/4a42a0b9fb1fb7d09903f8ef47e59ed69b84d7a5))
+
 ## [5.3.9](https://github.com/ExaDev/documents.js/compare/pdf-codec%405.3.8...pdf-codec%405.3.9) (2026-09-28)
 
 ### Tests
