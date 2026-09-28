@@ -1,3 +1,9 @@
+## [14.4.94](https://github.com/ExaDev/documents.js/compare/documents.js%4014.4.93...documents.js%4014.4.94) (2026-09-28)
+
+### Tests
+
+* **documents.js:** pin structure heading agreement and the division common prefix ([5f004a2](https://github.com/ExaDev/documents.js/commit/5f004a274e2dfafa141242fbe3dd8e1ebf906bf1))
+
 ## [14.4.93](https://github.com/ExaDev/documents.js/compare/documents.js%4014.4.92...documents.js%4014.4.93) (2026-09-28)
 
 ### Tests
