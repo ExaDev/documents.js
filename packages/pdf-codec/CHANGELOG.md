@@ -1,3 +1,9 @@
+## [5.3.22](https://github.com/ExaDev/documents.js/compare/pdf-codec%405.3.21...pdf-codec%405.3.22) (2026-09-28)
+
+### Tests
+
+* **pdf-codec:** pin the hmtx reader's shared-advance boundary ([c4dc1f7](https://github.com/ExaDev/documents.js/commit/c4dc1f74187178b07b3eda385794676fb8584ea4))
+
 ## [5.3.21](https://github.com/ExaDev/documents.js/compare/pdf-codec%405.3.20...pdf-codec%405.3.21) (2026-09-28)
 
 ### Tests
