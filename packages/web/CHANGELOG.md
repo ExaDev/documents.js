@@ -1,3 +1,10 @@
+## [2.18.18](https://github.com/ExaDev/documents.js/compare/web%402.18.17...web%402.18.18) (2026-09-28)
+
+
+### Dependencies
+
+- Updated documents.js to 14.4.76
+
 ## [2.18.17](https://github.com/ExaDev/documents.js/compare/web%402.18.16...web%402.18.17) (2026-09-28)
 
 
