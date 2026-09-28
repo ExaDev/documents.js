@@ -306,6 +306,16 @@ describe("reconstructWordprocessing: optional content visibility (#721)", () => 
   });
 });
 
+type ConstructStartBlock = Extract<ContentBlock, { kind: "constructStart" }>;
+
+function isConstructStart(block: ContentBlock): block is ConstructStartBlock {
+  return block.kind === "constructStart";
+}
+
+function startBlocks(list: readonly ContentBlock[]): ConstructStartBlock[] {
+  return list.filter(isConstructStart);
+}
+
 describe("reconstructWordprocessing: annotation and form constructs (#721)", () => {
   it("emits a point anchor(comment) construct for a sticky note, naming its definitions entry deterministically", () => {
     const doc = reconstructWordprocessing(
@@ -399,6 +409,345 @@ describe("reconstructWordprocessing: annotation and form constructs (#721)", () 
               fieldType: "signature",
               widgets: [
                 { pageIndex: 0, xPt: 40, yPt: 688, widthPt: 80, heightPt: 20 },
+              ],
+              children: [],
+            },
+          ],
+        },
+      ),
+    );
+    expect(blocks(doc).every((b) => b.kind !== "constructStart")).toBe(true);
+  });
+  it("carries a link item's own title onto the link construct, external and internal alike", () => {
+    const doc = reconstructWordprocessing(
+      docFrom([
+        page(612, 792, [
+          // An image, so the external link finds no run to adopt and takes the block-scoped path where the item's own title travels.
+          {
+            kind: "image",
+            imageId: "img1",
+            xPt: 40,
+            yPt: 600,
+            widthPt: 100,
+            heightPt: 60,
+          },
+          {
+            kind: "link",
+            uri: "https://example.com/",
+            title: "Example",
+            xPt: 40,
+            yPt: 600,
+            widthPt: 100,
+            heightPt: 60,
+          },
+          text({ text: "Jump", xPt: 50, yPt: 740, widthPt: 40 }),
+          {
+            kind: "internalLink",
+            destination: "section-two",
+            title: "Section Two",
+            xPt: 50,
+            yPt: 728,
+            widthPt: 40,
+            heightPt: 14,
+          },
+        ]),
+      ]),
+    );
+    const descriptors = startBlocks(blocks(doc)).map((b) => b.descriptor);
+    expect(descriptors).toEqual([
+      {
+        kind: "link",
+        target: { kind: "internal", anchor: "section-two" },
+        title: "Section Two",
+      },
+      {
+        kind: "link",
+        target: { kind: "external", uri: "https://example.com/" },
+        title: "Example",
+      },
+    ]);
+    // A link with no title carries no title key at all, not an empty one.
+    const plain = reconstructWordprocessing(
+      docFrom([
+        page(612, 792, [
+          {
+            kind: "image",
+            imageId: "img1",
+            xPt: 40,
+            yPt: 600,
+            widthPt: 100,
+            heightPt: 60,
+          },
+          {
+            kind: "link",
+            uri: "https://example.com/",
+            xPt: 40,
+            yPt: 600,
+            widthPt: 100,
+            heightPt: 60,
+          },
+        ]),
+      ]),
+    );
+    const [plainStart] = startBlocks(blocks(plain));
+    expect(plainStart?.descriptor.kind).toBe("link");
+    expect(plainStart && "title" in plainStart.descriptor).toBe(false);
+  });
+
+  it("wraps the FIRST of two blocks whose overlap with the rect ties", () => {
+    // The rect covers an equal 12pt slice of both paragraphs' frames, so the strict greater-than keeps the first block the best match.
+    // Two images as the candidate blocks (no runs for the link to adopt), each fully covered for the same 24pt slice.
+    const doc = reconstructWordprocessing(
+      docFrom([
+        page(612, 792, [
+          {
+            kind: "image",
+            imageId: "img1",
+            xPt: 40,
+            yPt: 688,
+            widthPt: 100,
+            heightPt: 24,
+          },
+          {
+            kind: "image",
+            imageId: "img1",
+            xPt: 40,
+            yPt: 640,
+            widthPt: 100,
+            heightPt: 24,
+          },
+          {
+            kind: "link",
+            uri: "https://example.com/",
+            xPt: 40,
+            yPt: 640,
+            widthPt: 100,
+            heightPt: 72,
+          },
+        ]),
+      ]),
+    );
+    const list = blocks(doc);
+    const start = list.findIndex((b) => b.kind === "constructStart");
+    // The upper image is the first best match, so it is the one wrapped; the lower image follows the pair. The wrapped block's own frame names which image it is: the upper one's yPt is 688.
+    expect(list[start + 1]?.kind).toBe("image");
+    const wrapped = list[start + 1];
+    const wrappedFrame =
+      wrapped?.kind === "image" ? wrapped.frames?.[0] : undefined;
+    expect(wrappedFrame?.yPt).toBe(688);
+    expect(list[start + 2]?.kind).toBe("constructEnd");
+    expect(list[start + 3]?.kind).toBe("image");
+  });
+
+  it("appends a point pair at the end of the page's blocks when nothing matches, even with several blocks present", () => {
+    const doc = reconstructWordprocessing(
+      docFrom([
+        page(
+          612,
+          792,
+          [
+            text({ text: "Upper", xPt: 50, yPt: 700, widthPt: 60 }),
+            text({ text: "Lower", xPt: 50, yPt: 640, widthPt: 60 }),
+          ],
+          [
+            {
+              subtype: "Text",
+              xPt: 500,
+              yPt: 60,
+              widthPt: 16,
+              heightPt: 16,
+              contents: "A note",
+              author: "Reviewer",
+              source: { format: "pdf", xml: "<Sticky/>" },
+            },
+          ],
+        ),
+      ]),
+    );
+    const list = blocks(doc);
+    expect(list[list.length - 2]?.kind).toBe("constructStart");
+    expect(list[list.length - 1]?.kind).toBe("constructEnd");
+    expect(list[list.length - 3]?.kind).toBe("paragraph");
+    const anchor = list[list.length - 2];
+    const anchorStart =
+      anchor !== undefined && isConstructStart(anchor) ? anchor : undefined;
+    expect(anchorStart).toBeDefined();
+    // A note carrying source residue names that residue on the anchor descriptor.
+    expect(anchorStart?.descriptor).toMatchObject({
+      kind: "anchor",
+      anchorType: "comment",
+      source: { format: "pdf", xml: "<Sticky/>" },
+    });
+  });
+});
+
+describe("reconstructWordprocessing: form field control types (#721)", () => {
+  interface FieldCase {
+    readonly fieldType: Exclude<
+      "button" | "combobox" | "listbox" | "checkbox",
+      never
+    >;
+    readonly controlType: string;
+    readonly extra?: Record<string, unknown>;
+  }
+  const cases: readonly FieldCase[] = [
+    { fieldType: "button", controlType: "button" },
+    {
+      fieldType: "combobox",
+      controlType: "comboBox",
+      extra: { options: ["a", "b"] },
+    },
+    {
+      fieldType: "listbox",
+      controlType: "dropDown",
+      extra: { options: ["one", "two"] },
+    },
+    {
+      fieldType: "checkbox",
+      controlType: "checkbox",
+      extra: { checked: true },
+    },
+  ];
+  for (const { fieldType, controlType, extra } of cases) {
+    it(`maps a ${fieldType} field to its ${controlType} control`, () => {
+      const doc = reconstructWordprocessing(
+        docFrom(
+          [
+            page(612, 792, [
+              text({ text: "Pick", xPt: 50, yPt: 700, widthPt: 40 }),
+            ]),
+          ],
+          {
+            form: [
+              {
+                name: `f-${fieldType}`,
+                fieldType,
+                widgets: [
+                  {
+                    pageIndex: 0,
+                    xPt: 45,
+                    yPt: 688,
+                    widthPt: 50,
+                    heightPt: 16,
+                  },
+                ],
+                children: [],
+                ...(extra ?? {}),
+              },
+            ],
+          },
+        ),
+      );
+      const list = blocks(doc);
+      const start = list.findIndex((b) => b.kind === "constructStart");
+      expect(list[start]).toMatchObject({
+        kind: "constructStart",
+        descriptor: {
+          kind: "contentControl",
+          controlType,
+          tag: `f-${fieldType}`,
+          ...(extra ?? {}),
+        },
+      });
+      expect(list[start + 1]?.kind).toBe("paragraph");
+      expect(list[start + 2]?.kind).toBe("constructEnd");
+    });
+  }
+
+  it("a minimal checkbox field carries only the control type and tag, with no value, checked, or options keys", () => {
+    const doc = reconstructWordprocessing(
+      docFrom(
+        [
+          page(612, 792, [
+            text({ text: "Agree", xPt: 50, yPt: 700, widthPt: 50 }),
+          ]),
+        ],
+        {
+          form: [
+            {
+              name: "agree",
+              fieldType: "checkbox",
+              widgets: [
+                { pageIndex: 0, xPt: 45, yPt: 688, widthPt: 60, heightPt: 16 },
+              ],
+              children: [],
+            },
+          ],
+        },
+      ),
+    );
+    const list = blocks(doc);
+    const [start] = startBlocks(list);
+    expect(start?.descriptor).toEqual({
+      kind: "contentControl",
+      controlType: "checkbox",
+      tag: "agree",
+    });
+  });
+
+  it("visits a group's children while emitting nothing for the group itself", () => {
+    const doc = reconstructWordprocessing(
+      docFrom(
+        [
+          page(612, 792, [
+            text({ text: "Agree", xPt: 50, yPt: 700, widthPt: 50 }),
+          ]),
+        ],
+        {
+          form: [
+            {
+              name: "group",
+              fieldType: "group",
+              widgets: [],
+              children: [
+                {
+                  name: "inner",
+                  fieldType: "checkbox",
+                  checked: false,
+                  widgets: [
+                    {
+                      pageIndex: 0,
+                      xPt: 45,
+                      yPt: 688,
+                      widthPt: 60,
+                      heightPt: 16,
+                    },
+                  ],
+                  children: [],
+                },
+              ],
+            },
+          ],
+        },
+      ),
+    );
+    const list = blocks(doc);
+    const start = list.findIndex((b) => b.kind === "constructStart");
+    expect(list[start]).toMatchObject({
+      descriptor: {
+        kind: "contentControl",
+        controlType: "checkbox",
+        tag: "inner",
+        checked: false,
+      },
+    });
+  });
+
+  it("emits nothing for a widget whose page is not the page being built", () => {
+    const doc = reconstructWordprocessing(
+      docFrom(
+        [
+          page(612, 792, [
+            text({ text: "Body", xPt: 50, yPt: 700, widthPt: 40 }),
+          ]),
+        ],
+        {
+          form: [
+            {
+              name: "elsewhere",
+              fieldType: "text",
+              widgets: [
+                { pageIndex: 1, xPt: 45, yPt: 688, widthPt: 50, heightPt: 16 },
               ],
               children: [],
             },
