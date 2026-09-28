@@ -131,3 +131,43 @@ describe("readPdf: per-item visibility", () => {
     expect(kinds).toContain("link");
   });
 });
+
+describe("readPdf: the %PDF- header search itself", () => {
+  // hasPdfHeader's window arithmetic only shows at its own edges, and readPdf's header check runs before ANY parsing, so the cases below assert only on the header diagnostic itself: a real PDF body is unnecessary (and a stub one would fail later parsing for unrelated reasons). Each case is caught by the exact error message the no-header path throws.
+  function headerDiagnostic(
+    stream: Uint8Array<ArrayBuffer>,
+  ): string | undefined {
+    try {
+      readPdf(stream);
+      return undefined;
+    } catch (error) {
+      const message = (error as Error).message;
+      return message.includes("header") ? message : `other: ${message}`;
+    }
+  }
+
+  it("accepts a header preceded by a UTF-8 BOM, rejecting only for downstream reasons", () => {
+    const bom = new TextEncoder().encode("\u{feff}");
+    const stream = new Uint8Array([
+      ...bom,
+      ...new TextEncoder().encode("%PDF-1.7\n"),
+    ]);
+    // The header WAS found: whatever failure follows is a parsing matter, never the no-header diagnostic.
+    expect(headerDiagnostic(stream)).not.toMatch(/no "%PDF-" header/);
+  });
+
+  it("accepts a header preceded by blank lines, as the spec itself permits", () => {
+    const stream = new TextEncoder().encode("\n\n\n%PDF-1.7\n");
+    expect(headerDiagnostic(stream)).not.toMatch(/no "%PDF-" header/);
+  });
+
+  it("rejects a document whose only %PDF- sits past the search window", () => {
+    // 1030 junk bytes push the header past the 1024-byte window: no header found within it.
+    const junk = new Uint8Array(1030).fill(0x20);
+    const stream = new Uint8Array([
+      ...junk,
+      ...new TextEncoder().encode("%PDF-1.7\n"),
+    ]);
+    expect(headerDiagnostic(stream)).toMatch(/no "%PDF-" header/);
+  });
+});
