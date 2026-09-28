@@ -1,3 +1,9 @@
+## [5.3.11](https://github.com/ExaDev/documents.js/compare/pdf-codec%405.3.10...pdf-codec%405.3.11) (2026-09-28)
+
+### Tests
+
+* **pdf-codec:** pin optional recovered fields present and absent exactly ([3155aa5](https://github.com/ExaDev/documents.js/commit/3155aa58abb6de733577cda26d28b8f71150685d))
+
 ## [5.3.10](https://github.com/ExaDev/documents.js/compare/pdf-codec%405.3.9...pdf-codec%405.3.10) (2026-09-28)
 
 ### Tests
