@@ -1,3 +1,11 @@
+## [5.12.91](https://github.com/ExaDev/documents.js/compare/document-cli%405.12.90...document-cli%405.12.91) (2026-09-28)
+
+
+### Dependencies
+
+- Updated document-outline.js to 3.10.49
+- Updated documents.js to 14.4.80
+
 ## [5.12.90](https://github.com/ExaDev/documents.js/compare/document-cli%405.12.89...document-cli%405.12.90) (2026-09-28)
 
 
