@@ -435,3 +435,101 @@ describe("readImageXObject: degradation", () => {
     );
   });
 });
+
+describe("readImageXObject: colour space spellings the abbreviations and families carry", () => {
+  // The direct-name branches accept the spec's own abbreviations alongside the full device names, and the array families accept CalGray/CalRGB; each spelling resolves through its own equality arm, which a shared catch-all would silently mis-answer.
+  function onePixelGray(cs: PdfObject): number {
+    const { sink } = collectDiagnostics();
+    const dict = pdfDict({
+      Width: pdfNum(1),
+      Height: pdfNum(1),
+      BitsPerComponent: pdfNum(8),
+      ColorSpace: cs,
+    });
+    const result = readImageXObject(
+      dict,
+      new Uint8Array([77]),
+      EMPTY_RESOLVER,
+      sink,
+    );
+    const decoded = decodePng(result!.bytes);
+    return decoded.channels;
+  }
+
+  it("reads the one-letter G abbreviation as gray", () => {
+    expect(onePixelGray(pdfName("G"))).toBe(1);
+  });
+
+  it("reads a CalGray array as gray", () => {
+    expect(onePixelGray(pdfArray([pdfName("CalGray"), pdfDict({})]))).toBe(1);
+  });
+
+  it("reads the three-letter RGB abbreviation as rgb", () => {
+    expect(onePixelGray(pdfName("RGB"))).toBe(3);
+  });
+
+  it("reads a CalRGB array as rgb", () => {
+    expect(onePixelGray(pdfArray([pdfName("CalRGB"), pdfDict({})]))).toBe(3);
+  });
+
+  it("reads the four-letter CMYK abbreviation as cmyk", () => {
+    const { sink } = collectDiagnostics();
+    const dict = pdfDict({
+      Width: pdfNum(1),
+      Height: pdfNum(1),
+      BitsPerComponent: pdfNum(8),
+      ColorSpace: pdfName("CMYK"),
+    });
+    // Full cyan ink, no other plate: cyan paper, which in RGB is green and blue at full with red absorbed.
+    const result = readImageXObject(
+      dict,
+      new Uint8Array([255, 0, 0, 0]),
+      EMPTY_RESOLVER,
+      sink,
+    );
+    const decoded = decodePng(result!.bytes);
+    expect(Array.from(decoded.data)).toEqual([0, 255, 255]);
+  });
+
+  it("treats a 1-component ICCBased stream as gray", () => {
+    const { sink } = collectDiagnostics();
+    const objects = new Map<number, PdfObject>([
+      [7, pdfStream(pdfDict({ N: pdfNum(1) }), new Uint8Array(0))],
+    ]);
+    const dict = pdfDict({
+      Width: pdfNum(1),
+      Height: pdfNum(1),
+      BitsPerComponent: pdfNum(8),
+      ColorSpace: pdfArray([pdfName("ICCBased"), pdfRef(7, 0)]),
+    });
+    const result = readImageXObject(
+      dict,
+      new Uint8Array([77]),
+      makeResolver(objects),
+      sink,
+    );
+    expect(decodePng(result!.bytes).channels).toBe(1);
+  });
+
+  it("treats a 4-component ICCBased stream as cmyk", () => {
+    const { sink } = collectDiagnostics();
+    const objects = new Map<number, PdfObject>([
+      [7, pdfStream(pdfDict({ N: pdfNum(4) }), new Uint8Array(0))],
+    ]);
+    const dict = pdfDict({
+      Width: pdfNum(1),
+      Height: pdfNum(1),
+      BitsPerComponent: pdfNum(8),
+      ColorSpace: pdfArray([pdfName("ICCBased"), pdfRef(7, 0)]),
+    });
+    const result = readImageXObject(
+      dict,
+      new Uint8Array([255, 0, 0, 0]),
+      makeResolver(objects),
+      sink,
+    );
+    const decoded = decodePng(result!.bytes);
+    expect(decoded.channels).toBe(3);
+    expect(Array.from(decoded.data)).toEqual([0, 255, 255]);
+  });
+});
