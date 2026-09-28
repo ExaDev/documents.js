@@ -1,3 +1,9 @@
+## [14.4.93](https://github.com/ExaDev/documents.js/compare/documents.js%4014.4.92...documents.js%4014.4.93) (2026-09-28)
+
+### Tests
+
+* **documents.js:** pin reconstruct's link targets, form controls, and heading census ([7480d88](https://github.com/ExaDev/documents.js/commit/7480d88a2c7b62759ee03369b0c42a226a2320f3))
+
 ## [14.4.92](https://github.com/ExaDev/documents.js/compare/documents.js%4014.4.91...documents.js%4014.4.92) (2026-09-28)
 
 ### Tests
