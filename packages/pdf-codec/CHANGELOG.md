@@ -1,3 +1,9 @@
+## [5.3.28](https://github.com/ExaDev/documents.js/compare/pdf-codec%405.3.27...pdf-codec%405.3.28) (2026-09-28)
+
+### Tests
+
+* **pdf-codec:** recover a BDC span's ActualText and Alt end to end ([fc31b72](https://github.com/ExaDev/documents.js/commit/fc31b72818369c4ab198079c12a398a0a20abc75))
+
 ## [5.3.27](https://github.com/ExaDev/documents.js/compare/pdf-codec%405.3.26...pdf-codec%405.3.27) (2026-09-28)
 
 ### Miscellaneous Chores
