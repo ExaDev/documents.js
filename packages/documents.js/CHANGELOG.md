@@ -1,3 +1,9 @@
+## [14.4.90](https://github.com/ExaDev/documents.js/compare/documents.js%4014.4.89...documents.js%4014.4.90) (2026-09-28)
+
+### Tests
+
+* **documents.js:** pin the latex lowering's skip sets and degradation spans ([a3e05d8](https://github.com/ExaDev/documents.js/commit/a3e05d8faa24f78cd703b11baa9c5f7c57522447))
+
 ## [14.4.89](https://github.com/ExaDev/documents.js/compare/documents.js%4014.4.88...documents.js%4014.4.89) (2026-09-28)
 
 ### Tests
