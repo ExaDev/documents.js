@@ -421,3 +421,36 @@ describe("assertNeverToken", () => {
     }).toThrow('parseValue: unhandled token {"kind":"bogus"}');
   });
 });
+
+describe("parseValue: value keywords and stray delimiters named exactly", () => {
+  it("reads the true keyword as boolean true", () => {
+    expect(parseAllValues("true").values).toEqual([
+      { kind: "bool", value: true },
+    ]);
+  });
+
+  it("reads the false keyword as boolean false", () => {
+    expect(parseAllValues("false").values).toEqual([
+      { kind: "bool", value: false },
+    ]);
+  });
+
+  it("reads the null keyword as null", () => {
+    expect(parseAllValues("null").values).toEqual([{ kind: "null" }]);
+  });
+
+  it("names a stray >> in its own diagnostic, distinct from the ] spelling", () => {
+    const { diagnostics } = parseAllValues(">>");
+    expect(diagnostics[0]?.code).toBe("pdf/unexpected-delimiter");
+    expect(diagnostics[0]?.message).toContain(">>");
+  });
+
+  it("reads a negative generation-number-looking pair as two numbers, never a reference", () => {
+    // -1 is negative, so the reference lookahead never runs even though "0 R" follows.
+    expect(parseAllValues("-1 0 R").values).toEqual([
+      { kind: "number", value: -1 },
+      { kind: "number", value: 0 },
+      { kind: "null" },
+    ]);
+  });
+});
