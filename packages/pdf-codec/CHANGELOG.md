@@ -1,3 +1,9 @@
+## [5.3.25](https://github.com/ExaDev/documents.js/compare/pdf-codec%405.3.24...pdf-codec%405.3.25) (2026-09-28)
+
+### Tests
+
+* **pdf-codec:** verify rc4-40 against Algorithm 2, 3 and 5 un-iterated ([24ee387](https://github.com/ExaDev/documents.js/commit/24ee387586d9659c93a128d41defabffb426258c))
+
 ## [5.3.24](https://github.com/ExaDev/documents.js/compare/pdf-codec%405.3.23...pdf-codec%405.3.24) (2026-09-28)
 
 ### Tests
