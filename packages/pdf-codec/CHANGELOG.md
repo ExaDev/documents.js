@@ -1,3 +1,9 @@
+## [5.3.24](https://github.com/ExaDev/documents.js/compare/pdf-codec%405.3.23...pdf-codec%405.3.24) (2026-09-28)
+
+### Tests
+
+* **pdf-codec:** pin the EI boundary scan's glued-pair discrimination ([3d3d2ae](https://github.com/ExaDev/documents.js/commit/3d3d2aec466eb71540f2cf4bbccba39234726d33))
+
 ## [5.3.23](https://github.com/ExaDev/documents.js/compare/pdf-codec%405.3.22...pdf-codec%405.3.23) (2026-09-28)
 
 ### Tests
