@@ -1,3 +1,9 @@
+## [5.3.26](https://github.com/ExaDev/documents.js/compare/pdf-codec%405.3.25...pdf-codec%405.3.26) (2026-09-28)
+
+### Tests
+
+* **pdf-codec:** drive the ellipse detector's refusals at their own shapes ([8b46acf](https://github.com/ExaDev/documents.js/commit/8b46acf93123ae28cd8b784e678102d8c5fdcbfd))
+
 ## [5.3.25](https://github.com/ExaDev/documents.js/compare/pdf-codec%405.3.24...pdf-codec%405.3.25) (2026-09-28)
 
 ### Tests
