@@ -127,3 +127,28 @@ describe("readOptionalContent, driven directly against a synthetic catalog", () 
     expect(context.layers.map((l) => l.name)).toEqual(["layer1", "layer2"]);
   });
 });
+
+describe("readPdf: optional-content channels absent exactly where no span carries them", () => {
+  // The spread guards that emit layer/actualText/alt survive as always-firing mutants because every existing assertion maps items through objects that strip undefined: an always-emitted `layer: undefined` is invisible to them. Strict key-absence on items OUTSIDE any span closes that hole.
+  it("carries no layer, actualText or alt key at all on text outside every span", () => {
+    const doc = readPdf(ocgPdf());
+    const outside = doc.pages[0]!.items.find(
+      (i) => i.kind === "text" && i.text === "Visible text",
+    ) as Record<string, unknown>;
+    expect(outside).toBeDefined();
+    expect("layer" in outside).toBe(false);
+    expect("actualText" in outside).toBe(false);
+    expect("alt" in outside).toBe(false);
+  });
+
+  it("carries no actualText or alt key on layer text inside a bare /OC span", () => {
+    const doc = readPdf(ocgPdf());
+    const layered = doc.pages[0]!.items.find(
+      (i) => i.kind === "text" && i.text === "Hidden layer text",
+    ) as Record<string, unknown>;
+    expect(layered).toBeDefined();
+    expect("layer" in layered).toBe(true);
+    expect("actualText" in layered).toBe(false);
+    expect("alt" in layered).toBe(false);
+  });
+});
