@@ -1,3 +1,9 @@
+## [5.3.14](https://github.com/ExaDev/documents.js/compare/pdf-codec%405.3.13...pdf-codec%405.3.14) (2026-09-28)
+
+### Tests
+
+* **pdf-codec:** patch the code-block style byte into each refused feature ([c3a357d](https://github.com/ExaDev/documents.js/commit/c3a357d1ace3eca9f7223f96b7d41fc850e4ad04))
+
 ## [5.3.13](https://github.com/ExaDev/documents.js/compare/pdf-codec%405.3.12...pdf-codec%405.3.13) (2026-09-28)
 
 ### Tests
