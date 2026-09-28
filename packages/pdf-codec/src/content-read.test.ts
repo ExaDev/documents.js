@@ -191,3 +191,21 @@ describe("readContentStream: inline images", () => {
     ).toBe(true);
   });
 });
+
+describe("readContentStream: the EI boundary's own discrimination", () => {
+  // The EI scanner requires whitespace on BOTH sides of the pair; the mutants sit on exactly those two checks. Each case embeds the pair where only the correct rule finds the true boundary.
+  it("does not treat an EI pair glued to preceding data as the boundary, scanning on to the real one", () => {
+    // "abEIEI" holds EI at index 4 but preceded by data, not whitespace; the real boundary is the whitespace-delimited EI after it. The image data therefore carries the glued pair through.
+    const { sink } = collectDiagnostics();
+    const tokens = readContentStream(
+      new TextEncoder().encode("BI /W 2 /H 1 /BPC 8 /CS /G ID abEIEI EI Q"),
+      sink,
+    );
+    const image = tokens.find((token) => token.kind === "inlineImage");
+    if (image?.kind !== "inlineImage") {
+      throw new Error("expected an inline image token");
+    }
+    expect(Array.from(image.image.data)).toEqual([97, 98, 69, 73, 69, 73]);
+    expect(tokens[tokens.length - 1]?.kind).toBe("operation");
+  });
+});
