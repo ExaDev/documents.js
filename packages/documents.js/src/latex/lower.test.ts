@@ -1,5 +1,5 @@
 import type { MathExpression, MathSymbolEntry } from "document-schema.js";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { lowerLatex } from "./lower";
 
 describe("lowerLatex mechanical rules", () => {
@@ -617,3 +617,67 @@ describe("lowerLatex mechanical rules", () => {
 });
 
 // The degradation table: context-starved and out-of-scope constructs stay visible data — an `unparsed` node carrying the verbatim source plus a named diagnostic — never a throw, never a silent guess.
+
+describe("lowerLatex operator registries, entry for entry", () => {
+  // The registry tables execute at module load, so under per-test coverage a top-level import attributes their execution to whichever worker loads the module first (a markdown test, empirically), leaving the lowering suite itself never selected against a table mutant. The module is loaded by dynamic import inside each test so the table construction lands on THIS test's own coverage record; the assertions then run against a freshly built table, and the alias rows (\ne and \neq, \le and \leq, \ge and \geq, \cdot and \times) are pinned as firmly as the canonical spellings.
+  async function operatorOf(latex: string): Promise<string | undefined> {
+    vi.resetModules();
+    const { lowerLatex: lower } = await import("./lower");
+    const { expression } = lower(latex);
+    return expression.kind === "app" ? expression.operator : undefined;
+  }
+
+  it("maps every binary arithmetic spelling", async () => {
+    expect(await operatorOf("a + b")).toBe("math:add");
+    expect(await operatorOf("a - b")).toBe("math:subtract");
+    expect(await operatorOf("a \\cdot b")).toBe("math:multiply");
+    expect(await operatorOf("a \\times b")).toBe("math:multiply");
+    expect(await operatorOf("a \\div b")).toBe("math:divide");
+  });
+
+  it("maps every relation spelling, including both aliases of the three that have them", async () => {
+    expect(await operatorOf("a = b")).toBe("math:eq");
+    expect(await operatorOf("a \\neq b")).toBe("math:neq");
+    expect(await operatorOf("a \\ne b")).toBe("math:neq");
+    expect(await operatorOf("a < b")).toBe("math:lt");
+    expect(await operatorOf("a \\leq b")).toBe("math:leq");
+    expect(await operatorOf("a \\le b")).toBe("math:leq");
+    expect(await operatorOf("a > b")).toBe("math:gt");
+    expect(await operatorOf("a \\geq b")).toBe("math:geq");
+    expect(await operatorOf("a \\ge b")).toBe("math:geq");
+  });
+
+  it("maps every named single-argument function", async () => {
+    const named = [
+      ["\\sin", "math:sin"],
+      ["\\cos", "math:cos"],
+      ["\\tan", "math:tan"],
+      ["\\cot", "math:cot"],
+      ["\\sec", "math:sec"],
+      ["\\csc", "math:csc"],
+      ["\\arcsin", "math:arcsin"],
+      ["\\arccos", "math:arccos"],
+      ["\\arctan", "math:arctan"],
+      ["\\sinh", "math:sinh"],
+      ["\\cosh", "math:cosh"],
+      ["\\tanh", "math:tanh"],
+      ["\\exp", "math:exp"],
+      ["\\log", "math:log"],
+      ["\\ln", "math:ln"],
+    ] as const;
+    for (const [latex, operator] of named) {
+      expect(await operatorOf(`${latex}(x)`)).toBe(operator);
+    }
+  });
+
+  it("folds a leading minus into the negate operator, not subtract", async () => {
+    vi.resetModules();
+    const { lowerLatex: lower } = await import("./lower");
+    const { expression } = lower("-x");
+    expect(expression).toEqual({
+      kind: "app",
+      operator: "math:negate",
+      args: [{ kind: "sym", id: "symbols:x" }],
+    });
+  });
+});
