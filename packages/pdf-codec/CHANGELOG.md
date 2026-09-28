@@ -1,3 +1,9 @@
+## [5.3.20](https://github.com/ExaDev/documents.js/compare/pdf-codec%405.3.19...pdf-codec%405.3.20) (2026-09-28)
+
+### Tests
+
+* **pdf-codec:** drive the header search at its window's own edges ([39f9706](https://github.com/ExaDev/documents.js/commit/39f9706fcede7d2b85a82703fa372fbfe90989d7))
+
 ## [5.3.19](https://github.com/ExaDev/documents.js/compare/pdf-codec%405.3.18...pdf-codec%405.3.19) (2026-09-28)
 
 ### Tests
