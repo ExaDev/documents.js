@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { aesCbcDecrypt } from "./crypto/aes";
+import { md5 as md5Bytes } from "./crypto/md5";
 import { rc4 } from "./crypto/rc4";
 import {
   computeLegacyFileKeyFromPaddedPassword,
@@ -275,5 +276,48 @@ describe("createStandardEncryptor: the /Encrypt dictionary's own O/U/OE/UE", () 
         );
       }
     }
+  });
+});
+
+describe("createStandardEncryptor: rc4-40 (revision 2) skips the iteration machinery", () => {
+  it("Algorithm 2 + Algorithm 5 authenticate the real password with NO key iteration, and Algorithm 3 stores the owner value with NO obfuscation rounds", () => {
+    // Revision 2 is the one scheme whose owner value is a single RC4 pass (no 50-round MD5 iteration, no 20-round obfuscation) and whose user value is one RC4 pass over the padded null string: verifying both against the encryptor's own dictionary drives the revision-guarded loops at their skipped branches.
+    const fileId = new Uint8Array(16).fill(0x42);
+    const encryptor = createStandardEncryptor(
+      { userPassword: "forty bit secret", scheme: "rc4-40" },
+      fileId,
+    );
+    const owner = requireStringBytes(encryptor.encryptDict, "O");
+    const user = requireStringBytes(encryptor.encryptDict, "U");
+    const p = asNumber(dictGet(encryptor.encryptDict, "P"))!;
+    const revision = asNumber(dictGet(encryptor.encryptDict, "R"))!;
+    expect(revision).toBe(2);
+    const keyBytes = 5;
+
+    const asciiPasswordBytes = Uint8Array.from("forty bit secret", (ch) =>
+      ch.charCodeAt(0),
+    );
+    const fileKey = computeLegacyFileKeyFromPaddedPassword(
+      padOrTruncatePassword(asciiPasswordBytes),
+      owner,
+      p,
+      fileId,
+      revision,
+      keyBytes,
+      true,
+    );
+    // Algorithm 5 at revision 2: RC4(fileKey, PADDED_NULLS) is the whole /U value (32 bytes, no truncation, no trailing file ID).
+    const recomputedUser = rc4(
+      fileKey,
+      padOrTruncatePassword(new Uint8Array(0)),
+    );
+    expect(recomputedUser).toEqual(user);
+
+    // Algorithm 3 at revision 2 is a single RC4 pass: RC4(md5(paddedOwner)[:5], paddedUser), no 50-round digest iteration and no 20-round obfuscation. The encryptor was created without an explicit ownerPassword, so it defaults to the user password: the digest input is the USER password.
+    const ownerFromUser = rc4(
+      md5Bytes(padOrTruncatePassword(asciiPasswordBytes)).subarray(0, keyBytes),
+      padOrTruncatePassword(asciiPasswordBytes),
+    );
+    expect(ownerFromUser).toEqual(owner);
   });
 });
