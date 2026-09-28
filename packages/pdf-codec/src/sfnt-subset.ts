@@ -128,7 +128,7 @@ interface SourceHmtx {
 }
 
 // One glyph's advance width and left side bearing, both as their raw 16-bit patterns so the bearing round-trips without a signed/unsigned conversion in either direction. Beyond `numberOfHMetrics` a font stores only bearings, every such glyph sharing the last explicit advance (clause 5.2.4) — the subset re-expands that into a full record per glyph, so its own numberOfHMetrics can simply equal its glyph count.
-function readHorizontalMetrics(
+export function readHorizontalMetrics(
   source: SourceHmtx,
   glyphId: number,
 ): { advanceWidth: number; leftSideBearing: number } | undefined {

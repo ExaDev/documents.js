@@ -13,7 +13,7 @@ import { parseGlyf, parseLoca } from "./glyf";
 import { parseHmtx } from "./hmtx-table";
 import type { SfntFont } from "./sfnt";
 import { parseSfnt } from "./sfnt";
-import { subsetSfnt } from "./sfnt-subset";
+import { readHorizontalMetrics, subsetSfnt } from "./sfnt-subset";
 import { caladeaRegularBytes, carlitoRegularBytes } from "./test-support/fonts";
 import { base64ToBytes } from "byte-codec";
 
@@ -527,5 +527,48 @@ describe("fonts subsetSfnt declines to subset", () => {
     const font = parseSfnt(patched);
     expect(font?.tables.has("glyf")).toBe(false);
     expect(subsetSfnt(font!, codePointsOf(TEXT))).toBeUndefined();
+  });
+});
+
+describe("readHorizontalMetrics at the numberOfHMetrics boundary", () => {
+  // The shared-advance region beyond numberOfHMetrics is the part of 'hmtx' no vendored face steers: the subset round trip reads only glyphs the faces actually use. The reader is pinned directly on a hand-built table with two explicit metrics and two shared-bearing-only glyphs.
+  const hmtx = new Uint8Array(12);
+  {
+    const view = new DataView(hmtx.buffer);
+    // Two longHorMetric records: (advance 500, bearing 10) and (advance 700, bearing 20).
+    view.setUint16(0, 500);
+    view.setInt16(2, 10);
+    view.setUint16(4, 700);
+    view.setInt16(6, 20);
+    // Two leftSideBearing-only entries for glyphs 2 and 3, sharing glyph 1's advance.
+    view.setInt16(8, 30);
+    view.setInt16(10, 40);
+  }
+  const source = { bytes: hmtx, numberOfHMetrics: 2 };
+
+  it("reads a glyph inside the explicit region its own advance and bearing", () => {
+    expect(readHorizontalMetrics(source, 0)).toEqual({
+      advanceWidth: 500,
+      leftSideBearing: 10,
+    });
+    expect(readHorizontalMetrics(source, 1)).toEqual({
+      advanceWidth: 700,
+      leftSideBearing: 20,
+    });
+  });
+
+  it("reads a glyph at exactly numberOfHMetrics from the shared region, with the LAST explicit advance", () => {
+    expect(readHorizontalMetrics(source, 2)).toEqual({
+      advanceWidth: 700,
+      leftSideBearing: 30,
+    });
+    expect(readHorizontalMetrics(source, 3)).toEqual({
+      advanceWidth: 700,
+      leftSideBearing: 40,
+    });
+  });
+
+  it("refuses a shared-region glyph whose bearing entry runs past the table", () => {
+    expect(readHorizontalMetrics(source, 4)).toBeUndefined();
   });
 });
