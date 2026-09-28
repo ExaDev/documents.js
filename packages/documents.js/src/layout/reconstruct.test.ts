@@ -258,6 +258,45 @@ describe("reconstructWordprocessing: heading inference from font size", () => {
     expect(title?.headingLevel).toBe(1);
   });
 
+  it("counts a size exactly two points above the body as a heading: the minimum delta is inclusive", () => {
+    const pg = page(612, 792, [
+      text({
+        text: "Small heading",
+        xPt: 50,
+        yPt: 740,
+        widthPt: 90,
+        sizePt: 14,
+      }),
+      text({ text: "body line one", xPt: 50, yPt: 700, widthPt: 80 }),
+      text({ text: "body line two", xPt: 50, yPt: 688, widthPt: 80 }),
+      text({ text: "body line three", xPt: 50, yPt: 676, widthPt: 80 }),
+    ]);
+    const doc = reconstructWordprocessing(docFrom([pg]));
+    const paras = paragraphs(doc);
+    expect(paras.map((p) => p.styleId)).toEqual(["Heading1", undefined]);
+  });
+
+  it("ranks heading sizes largest-first regardless of document order: a smaller heading appearing first is still Heading2", () => {
+    // The smaller heading (16pt) appears ABOVE the larger (28pt), so any order-preserving accident would invert the ranks; ranking is by size, not by position.
+    const pg = page(612, 792, [
+      text({ text: "Minor", xPt: 50, yPt: 740, widthPt: 60, sizePt: 16 }),
+      text({ text: "body one", xPt: 50, yPt: 700, widthPt: 60 }),
+      text({ text: "body two", xPt: 50, yPt: 688, widthPt: 60 }),
+      text({ text: "body three", xPt: 50, yPt: 676, widthPt: 60 }),
+      text({ text: "Major", xPt: 50, yPt: 640, widthPt: 60, sizePt: 28 }),
+      text({ text: "body four", xPt: 50, yPt: 600, widthPt: 60 }),
+      text({ text: "body five", xPt: 50, yPt: 588, widthPt: 60 }),
+    ]);
+    const doc = reconstructWordprocessing(docFrom([pg]));
+    const paras = paragraphs(doc);
+    expect(paras.map((p) => p.styleId)).toEqual([
+      "Heading2",
+      undefined,
+      "Heading1",
+      undefined,
+    ]);
+  });
+
   it("leaves body text at the modal size as an ordinary paragraph, however bold", () => {
     const pg = page(612, 792, [
       text({
