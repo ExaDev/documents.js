@@ -1,3 +1,9 @@
+## [5.3.9](https://github.com/ExaDev/documents.js/compare/pdf-codec%405.3.8...pdf-codec%405.3.9) (2026-09-28)
+
+### Tests
+
+* **pdf-codec:** drive the visibility filter through item geometry ([c20bfff](https://github.com/ExaDev/documents.js/commit/c20bfffcca6e79c0f8152d13facb2abf6823eea2))
+
 ## [5.3.8](https://github.com/ExaDev/documents.js/compare/pdf-codec%405.3.7...pdf-codec%405.3.8) (2026-09-27)
 
 ### Tests
