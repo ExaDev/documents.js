@@ -1,3 +1,9 @@
+## [5.3.15](https://github.com/ExaDev/documents.js/compare/pdf-codec%405.3.14...pdf-codec%405.3.15) (2026-09-28)
+
+### Tests
+
+* **pdf-codec:** read every colour space spelling the abbreviations carry ([25a221c](https://github.com/ExaDev/documents.js/commit/25a221cd7d2bc1caab988257e17f07289af82217))
+
 ## [5.3.14](https://github.com/ExaDev/documents.js/compare/pdf-codec%405.3.13...pdf-codec%405.3.14) (2026-09-28)
 
 ### Tests
