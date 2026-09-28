@@ -1,3 +1,9 @@
+## [14.4.91](https://github.com/ExaDev/documents.js/compare/documents.js%4014.4.90...documents.js%4014.4.91) (2026-09-28)
+
+### Tests
+
+* **documents.js:** pin the flow engine's exact coordinate geometry ([d17b57b](https://github.com/ExaDev/documents.js/commit/d17b57bb1336fe3008f5b7f42de702292d149ad1))
+
 ## [14.4.90](https://github.com/ExaDev/documents.js/compare/documents.js%4014.4.89...documents.js%4014.4.90) (2026-09-28)
 
 ### Tests
