@@ -198,6 +198,141 @@ describe("reconstructWordprocessing: heading levels from tagged structure (#760)
     expect(paragraphs[0]).toMatchObject({ headingLevel: 2 });
     expect(paragraphs[1]).not.toHaveProperty("headingLevel");
   });
+  it("agrees on one level across a multi-item paragraph whose items share their H element", () => {
+    const doc = reconstructWordprocessing(
+      docFrom(
+        [
+          page([
+            text({
+              text: "Shared",
+              xPt: 50,
+              yPt: 700,
+              widthPt: 46,
+              structure: "s1",
+            }),
+            text({
+              text: " level",
+              xPt: 96,
+              yPt: 700,
+              widthPt: 40,
+              structure: "s1",
+            }),
+            text({
+              text: "body line",
+              xPt: 50,
+              yPt: 680,
+              widthPt: 70,
+              structure: "sp",
+            }),
+          ]),
+        ],
+        [
+          { id: "s1", type: "H2", children: [] },
+          { id: "sp", type: "P", children: [] },
+        ],
+      ),
+    );
+    const paragraphs = blocks(doc).filter(
+      (b): b is Extract<ContentBlock, { kind: "paragraph" }> =>
+        b.kind === "paragraph",
+    );
+    expect(paragraphs[0]).toMatchObject({
+      headingLevel: 2,
+      styleId: "Heading2",
+    });
+  });
+
+  it("vetoes the heading reading for a merged paragraph where only one half is heading-owned", () => {
+    // A 24pt line halves: the first half owned by a plain P element, the second by an H2. The structure claim is all-or-nothing per paragraph, so the non-heading half drags the whole merged line back to the census, which sees no distinct heading size here.
+    const doc = reconstructWordprocessing(
+      docFrom(
+        [
+          page([
+            text({
+              text: "Plain half ",
+              xPt: 50,
+              yPt: 700,
+              widthPt: 70,
+              structure: "sp",
+            }),
+            text({
+              text: "owned half",
+              xPt: 120,
+              yPt: 700,
+              widthPt: 80,
+              structure: "s2",
+            }),
+            text({
+              text: "body line",
+              xPt: 50,
+              yPt: 680,
+              widthPt: 70,
+              structure: "sp",
+            }),
+          ]),
+        ],
+        [
+          { id: "sp", type: "P", children: [] },
+          { id: "s2", type: "H2", children: [] },
+        ],
+      ),
+    );
+    const paragraphs = blocks(doc).filter(
+      (b): b is Extract<ContentBlock, { kind: "paragraph" }> =>
+        b.kind === "paragraph",
+    );
+    expect(paragraphs[0]).not.toHaveProperty("headingLevel");
+  });
+
+  it("makes no structure claim for a paragraph whose items carry disagreeing levels, so the geometric census decides", () => {
+    const doc = reconstructWordprocessing(
+      docFrom(
+        [
+          page([
+            text({
+              text: "Mixed",
+              xPt: 50,
+              yPt: 700,
+              widthPt: 40,
+              structure: "s1",
+            }),
+            text({
+              text: " levels",
+              xPt: 90,
+              yPt: 700,
+              widthPt: 44,
+              structure: "s2",
+            }),
+            text({
+              text: "body line one",
+              xPt: 50,
+              yPt: 680,
+              widthPt: 80,
+              structure: "sp",
+            }),
+            text({
+              text: "body line two",
+              xPt: 50,
+              yPt: 668,
+              widthPt: 80,
+              structure: "sp",
+            }),
+          ]),
+        ],
+        [
+          { id: "s1", type: "H1", children: [] },
+          { id: "s2", type: "H2", children: [] },
+          { id: "sp", type: "P", children: [] },
+        ],
+      ),
+    );
+    const paragraphs = blocks(doc).filter(
+      (b): b is Extract<ContentBlock, { kind: "paragraph" }> =>
+        b.kind === "paragraph",
+    );
+    // Both mixed items are body-sized, so the paragraph stays a paragraph: no structure claim, and the census sees no heading size.
+    expect(paragraphs[0]).not.toHaveProperty("headingLevel");
+  });
 });
 
 describe("reconstructWordprocessing: tagged table recovery (#760)", () => {
@@ -504,5 +639,106 @@ describe("reconstructWordprocessing: division constructs from tagged structure (
       "constructEnd",
       "constructEnd",
     ]);
+  });
+});
+
+describe("reconstructWordprocessing: division chains are common-prefixed across a merged paragraph (#760)", () => {
+  it("claims only the divisions both halves of a paragraph share, dropping each half's own", () => {
+    const doc = reconstructWordprocessing(
+      docFrom(
+        [
+          page([
+            text({
+              text: "Alpha",
+              xPt: 50,
+              yPt: 700,
+              widthPt: 40,
+              structure: "pa",
+            }),
+            text({
+              text: "Beta",
+              xPt: 90,
+              yPt: 700,
+              widthPt: 34,
+              structure: "pb",
+            }),
+          ]),
+        ],
+        [
+          {
+            id: "part1",
+            type: "Part",
+            children: [
+              {
+                id: "da",
+                type: "Div",
+                children: [{ id: "pa", type: "P", children: [] }],
+              },
+              {
+                id: "db",
+                type: "Div",
+                children: [{ id: "pb", type: "P", children: [] }],
+              },
+            ],
+          },
+        ],
+      ),
+    );
+    const list = blocks(doc);
+    const divisions = list.filter(
+      (b) => b.kind === "constructStart" && b.descriptor.kind === "division",
+    );
+    // The halves share only Part1, so exactly one division pair wraps the merged paragraph, not one per half's own division.
+    expect(divisions).toHaveLength(1);
+    const start = list.findIndex(
+      (b) => b.kind === "constructStart" && b.descriptor.kind === "division",
+    );
+    expect(list[start + 1]).toMatchObject({ kind: "paragraph" });
+    expect(list[start + 2]?.kind).toBe("constructEnd");
+  });
+
+  it("truncates to the shorter chain when one half sits directly in the outer division", () => {
+    const doc = reconstructWordprocessing(
+      docFrom(
+        [
+          page([
+            text({
+              text: "Outer",
+              xPt: 50,
+              yPt: 700,
+              widthPt: 40,
+              structure: "pc",
+            }),
+            text({
+              text: "Inner",
+              xPt: 90,
+              yPt: 700,
+              widthPt: 38,
+              structure: "pd",
+            }),
+          ]),
+        ],
+        [
+          {
+            id: "part1",
+            type: "Part",
+            children: [
+              { id: "pc", type: "P", children: [] },
+              {
+                id: "da",
+                type: "Div",
+                children: [{ id: "pd", type: "P", children: [] }],
+              },
+            ],
+          },
+        ],
+      ),
+    );
+    const list = blocks(doc);
+    const divisions = list.filter(
+      (b) => b.kind === "constructStart" && b.descriptor.kind === "division",
+    );
+    // One half's chain is [part1] and the other's is [part1, da]: the shared prefix stops at part1, so one pair, not a nested two.
+    expect(divisions).toHaveLength(1);
   });
 });
