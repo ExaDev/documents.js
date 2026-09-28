@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { buildGsubShaper } from "./gsub-table";
+import { readSubstLookupRecords } from "./gsub-context";
 import type { GsubShaper } from "./gsub-table";
 import { parseSfnt } from "./sfnt";
 import {
@@ -688,5 +689,33 @@ describe("buildGsubShaper: contextual closures driven at their own surviving edg
       gdef,
     );
     expect(shaper([10])).toEqual({ glyphIds: [10], spans: [1] });
+  });
+});
+
+describe("readSubstLookupRecords bounds and stride", () => {
+  it("refuses an array whose declared record count runs past the table", () => {
+    // Two records declared, one record's bytes present: the second read would run past the buffer.
+    const bytes = new Uint8Array(4);
+    const view = new DataView(bytes.buffer);
+    view.setUint16(0, 0); // record 0: sequenceIndex 0
+    view.setUint16(2, 1); // lookupIndex 1
+    expect(readSubstLookupRecords(bytes, 0, 2)).toBeUndefined();
+  });
+
+  it("reads each record's own two uint16 fields at the four-byte stride", () => {
+    const bytes = new Uint8Array(8);
+    const view = new DataView(bytes.buffer);
+    view.setUint16(0, 2);
+    view.setUint16(2, 7);
+    view.setUint16(4, 0);
+    view.setUint16(6, 9);
+    expect(readSubstLookupRecords(bytes, 0, 2)).toEqual([
+      { sequenceIndex: 2, lookupIndex: 7 },
+      { sequenceIndex: 0, lookupIndex: 9 },
+    ]);
+  });
+
+  it("reads an empty array cleanly, costing no bytes past its header", () => {
+    expect(readSubstLookupRecords(new Uint8Array(0), 0, 0)).toEqual([]);
   });
 });
