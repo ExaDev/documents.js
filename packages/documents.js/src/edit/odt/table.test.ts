@@ -6,7 +6,7 @@ import { readOdtContent } from "../../odf/odt/read";
 import { el } from "../../xml/fragment";
 import { findDescendantElement, walkElements } from "../../xml/query";
 import { createOdt } from "./editor";
-import type { OdtTable } from "./table";
+import { type OdtTable, readCellDecoration } from "./table";
 function findRowStyleProperties(
   automaticStyles: XmlElement,
   styleName: string,
@@ -97,6 +97,84 @@ describe("OdtTable", () => {
     // cells() only surfaces table:table-cell, not table:covered-table-cell, so the covered placeholder is invisible to it — matching odf.js's own readTableRow, which reads a covered-table-cell as a distinct, contentless entry.
     expect(table.rows()[0]!.cells()).toHaveLength(1);
     expect(table.rows()[0]!.cells()[0]!.text).toBe("A1");
+  });
+
+  it("reads the border shorthand's own rejection rules from a hand-built style", () => {
+    function pkgWithBorderTop(spelling: string): unknown {
+      return {
+        parts: {
+          "content.xml": {
+            kind: "xml" as const,
+            nodes: [
+              {
+                type: "element" as const,
+                tag: "office:document-content",
+                attributes: [],
+                children: [
+                  {
+                    type: "element" as const,
+                    tag: "office:automatic-styles",
+                    attributes: [],
+                    children: [
+                      {
+                        type: "element" as const,
+                        tag: "style:style",
+                        attributes: [
+                          { name: "style:name", value: "cell-style" },
+                          { name: "style:family", value: "table-cell" },
+                        ],
+                        children: [
+                          {
+                            type: "element" as const,
+                            tag: "style:table-cell-properties",
+                            attributes: [
+                              { name: "fo:border-top", value: spelling },
+                            ],
+                            children: [],
+                          },
+                        ],
+                      },
+                    ],
+                  },
+                ],
+              },
+            ],
+          },
+        },
+      };
+    }
+    const cell: XmlElement = {
+      type: "element",
+      tag: "table:table-cell",
+      attributes: [{ name: "table:style-name", value: "cell-style" }],
+      children: [],
+    };
+    // A well-formed border reads back.
+    expect(
+      readCellDecoration(
+        pkgWithBorderTop("0.5pt solid #0000ff") as never,
+        cell,
+      ),
+    ).toEqual({
+      borders: {
+        // The reader preserves the shorthand's own solid token as the style field.
+        top: { color: { r: 0, g: 0, b: 1 }, widthPt: 0.5, style: "solid" },
+      },
+    });
+    // Each rejection rule: the none and hidden spellings, a zero width, a missing token, an unparseable width, and an unparseable colour.
+    for (const spelling of [
+      "none",
+      "hidden",
+      "0pt solid #0000ff",
+      "0.5pt solid",
+      "boguspt solid #0000ff",
+      "0.5pt solid notacolour",
+    ]) {
+      expect(
+        readCellDecoration(pkgWithBorderTop(spelling) as never, cell),
+        spelling,
+      ).toEqual({});
+    }
   });
 
   it("round-trips every stroke style, and writes none at all for a styleless border", () => {
