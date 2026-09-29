@@ -1,3 +1,9 @@
+## [14.4.107](https://github.com/ExaDev/documents.js/compare/documents.js%4014.4.106...documents.js%4014.4.107) (2026-09-29)
+
+### Tests
+
+* **documents.js:** pin the border shorthand's rejection rules ([9aa0c5c](https://github.com/ExaDev/documents.js/commit/9aa0c5c21e079af69693e0a441d73a794102f1aa))
+
 ## [14.4.106](https://github.com/ExaDev/documents.js/compare/documents.js%4014.4.105...documents.js%4014.4.106) (2026-09-29)
 
 ### Bug Fixes
