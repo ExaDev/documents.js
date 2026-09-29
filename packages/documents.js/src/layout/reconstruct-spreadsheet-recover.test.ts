@@ -217,6 +217,51 @@ describe("reconstructSpreadsheet: text-position column clustering (no gridlines)
     expect(sheet!.cells[0]!.displayText).toBe("Hello World");
   });
 
+  it("assigns two same-line segments with no recurring anchor of their own to the one recurring column, joining them into that one cell", () => {
+    // The second segment's own start position appears once, so it never becomes an anchor; both segments' nearest anchor is the recurring one, and the later item joins the earlier item's group rather than minting a second cell.
+    const items: LayoutItem[] = [
+      text({ text: "A", xPt: 30, yPt: 200, widthPt: 6 }),
+      text({ text: "B", xPt: 64, yPt: 200, widthPt: 6 }),
+      text({ text: "C", xPt: 30, yPt: 180, widthPt: 6 }),
+    ];
+    const doc = reconstructSpreadsheet(docFrom([page(300, 300, items)]));
+    const [sheet] = sheets(doc);
+    expect(sheet!.columns).toHaveLength(1);
+    expect(grid(sheet!)).toEqual([["A B"], ["C"]]);
+  });
+
+  it("measures each column's width to the next anchor and the last column's from its own items' extents", () => {
+    const items: LayoutItem[] = [
+      // Anchor positions are multiples of the 3pt bucket tolerance, so each buckets to itself and the measurements read exactly.
+      text({ text: "L", xPt: 48, yPt: 200, widthPt: 10 }),
+      text({ text: "L2", xPt: 48, yPt: 180, widthPt: 10 }),
+      text({ text: "R", xPt: 150, yPt: 200, widthPt: 10 }),
+      text({ text: "R2", xPt: 150, yPt: 180, widthPt: 30 }),
+    ];
+    const doc = reconstructSpreadsheet(docFrom([page(300, 300, items)]));
+    const [sheet] = sheets(doc);
+    // Column zero spans anchor-to-anchor (150 - 48); the last column has no following anchor, so its width is the widest measured extent from the anchor itself (150 + 30 - 150).
+    expect(sheet!.columns).toEqual([
+      { index: 0, widthPt: 102 },
+      { index: 1, widthPt: 30 },
+    ]);
+  });
+
+  it("breaks a nearest-column distance tie toward the earlier column", () => {
+    const items: LayoutItem[] = [
+      text({ text: "L", xPt: 50, yPt: 200, widthPt: 10 }),
+      text({ text: "L2", xPt: 50, yPt: 180, widthPt: 10 }),
+      text({ text: "R", xPt: 150, yPt: 200, widthPt: 10 }),
+      text({ text: "R2", xPt: 150, yPt: 180, widthPt: 10 }),
+      text({ text: "T", xPt: 100, yPt: 160, widthPt: 10 }),
+    ];
+    const doc = reconstructSpreadsheet(docFrom([page(300, 300, items)]));
+    const [sheet] = sheets(doc);
+    // The tie item sits exactly between the two anchors; the strict less-than keeps the first anchor the best match.
+    const tie = sheet!.cells.find((c) => c.displayText === "T");
+    expect(tie?.column).toBe(0);
+  });
+
   it("re-types an unambiguously numeric cell while keeping its own rendered text verbatim", () => {
     const items: LayoutItem[] = [
       text({ text: "42.5", xPt: 50, yPt: 200, widthPt: 30 }),
