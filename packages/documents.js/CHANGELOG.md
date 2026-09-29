@@ -1,3 +1,9 @@
+## [14.4.110](https://github.com/ExaDev/documents.js/compare/documents.js%4014.4.109...documents.js%4014.4.110) (2026-09-29)
+
+### Tests
+
+* **documents.js:** pin the tagged table's order, extent, and fallback edges ([bace85b](https://github.com/ExaDev/documents.js/commit/bace85bc5c9ded6902a90c746137de8d03efc4ed))
+
 ## [14.4.109](https://github.com/ExaDev/documents.js/compare/documents.js%4014.4.108...documents.js%4014.4.109) (2026-09-29)
 
 ### Tests
