@@ -1,3 +1,9 @@
+## [14.4.105](https://github.com/ExaDev/documents.js/compare/documents.js%4014.4.104...documents.js%4014.4.105) (2026-09-29)
+
+### Tests
+
+* **documents.js:** pin the XDR reader's per-type edges and guards ([02369ec](https://github.com/ExaDev/documents.js/commit/02369ecad796cd98687019fe4c9a98f3ef1bf81d))
+
 ## [14.4.104](https://github.com/ExaDev/documents.js/compare/documents.js%4014.4.103...documents.js%4014.4.104) (2026-09-29)
 
 ### Tests
