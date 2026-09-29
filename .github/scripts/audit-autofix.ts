@@ -7,7 +7,8 @@ import { appendFileSync, readFileSync, writeFileSync } from "node:fs";
 export interface AuditAdvisory {
   module_name: string;
   vulnerable_versions: string;
-  patched_versions: string;
+  // null is npm's own spelling of "no patched version exists" (observed on the registry's fast-uri advisory): the classifier below already defers such advisories rather than overriding, so the guard accepts it here instead of rejecting the whole report.
+  patched_versions: string | null;
   severity: string;
   github_advisory_id: string;
   title: string;
@@ -75,7 +76,8 @@ export function isAuditAdvisory(value: unknown): value is AuditAdvisory {
   return (
     typeof value.module_name === "string" &&
     typeof value.vulnerable_versions === "string" &&
-    typeof value.patched_versions === "string" &&
+    (typeof value.patched_versions === "string" ||
+      value.patched_versions === null) &&
     typeof value.severity === "string" &&
     typeof value.github_advisory_id === "string" &&
     typeof value.title === "string" &&
