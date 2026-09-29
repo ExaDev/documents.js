@@ -17,6 +17,7 @@ import { requireArrayBufferBytes } from "../model/bytes";
 import { readPdf } from "pdf-codec";
 import { decodeMarkdownText, encodeMarkdownText } from "../markdown/text";
 import { richMarkdownText } from "../test-support/markdown";
+import { tjAdjustedWordSpacesPdf } from "../test-support/pdf";
 import { minimalOdpBytes } from "../test-support/odp";
 import { gridOdsBytes } from "../test-support/ods";
 import { minimalOdtBytes } from "../test-support/odt";
@@ -145,6 +146,15 @@ describe("pdfToDocx", () => {
         .flatMap((section) => section.blocks)
         .some((block) => block.kind === "table"),
     ).toBe(false);
+  });
+});
+
+describe("pdfToMarkdown word spacing", () => {
+  it("keeps a word space a TJ adjustment states, and folds a kerning adjustment inside a word", () => {
+    const markdown = new TextDecoder().decode(
+      pdfToMarkdown(tjAdjustedWordSpacesPdf()),
+    );
+    expect(markdown.trim()).toBe("It should be noted");
   });
 });
 

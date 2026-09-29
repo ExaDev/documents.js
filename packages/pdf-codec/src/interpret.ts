@@ -14,6 +14,7 @@ import {
 import type { PdfDict, PdfObject } from "./objects";
 import { asArray, asName, asNumber, dictGet } from "./objects";
 import { readContentStream } from "./content-read";
+import { DEFAULT_WORD_GAP_EM } from "./text-group";
 import {
   grayColor,
   rgbColor,
@@ -405,10 +406,46 @@ function runContentStream(
       fontResourceName,
       resources,
     );
-    const startMatrix = computeTrm(gs, text);
-    const chunks: Uint8Array<ArrayBuffer>[] = [];
+    // One item per stretch of the array with no word-wide adjustment inside it. The item's own text carries no trace of a numeric adjustment, so the only way a word space that a producer expressed as one (a font with no space glyph, or a typesetter that positions words rather than spacing them) can reach a consumer is as the gap between two items.
+    let startMatrix = computeTrm(gs, text);
+    let chunks: Uint8Array<ArrayBuffer>[] = [];
     let totalLength = 0;
     let firstGlyphPosition: { x: number; y: number } | undefined;
+    const flushRun = (): void => {
+      if (totalLength === 0) {
+        return;
+      }
+      const combined = new Uint8Array(totalLength);
+      let at = 0;
+      for (const chunk of chunks) {
+        combined.set(chunk, at);
+        at += chunk.length;
+      }
+      const endMatrix = computeTrm(gs, text);
+      // A vertically set run paints its glyphs offset from the text position by the position vector, so the run is reported where its ink actually is rather than where its column's spine runs. Both matrices take the FIRST glyph's vector, which keeps their difference (and so the run's reported advance) exactly the total displacement: the vector's y is one figure for the whole font in every real file, and its x only shifts the run sideways, across the axis the advance is measured along.
+      const shift =
+        firstGlyphPosition === undefined
+          ? undefined
+          : translationMatrix(-firstGlyphPosition.x, -firstGlyphPosition.y);
+      pushItem({
+        kind: "text",
+        codes: combined,
+        fontResourceName,
+        resources,
+        startMatrix:
+          shift === undefined
+            ? startMatrix
+            : multiplyMatrices(shift, startMatrix),
+        endMatrix:
+          shift === undefined ? endMatrix : multiplyMatrices(shift, endMatrix),
+        sizePt: gs.fontSizePt,
+        color: gs.fillColor,
+        ...(vertical ? { vertical: true } : {}),
+      });
+      chunks = [];
+      totalLength = 0;
+      firstGlyphPosition = undefined;
+    };
     for (const el of elements) {
       if (el.kind === "string") {
         firstGlyphPosition ??= vertical
@@ -421,44 +458,26 @@ function runContentStream(
         // ISO 32000-1 9.4.3: the adjustment is subtracted from whichever coordinate the writing mode advances along, and Tz scales the horizontal one only.
         const adjustment =
           -(el.value / GLYPH_SPACE_PER_TEXT_SPACE_UNIT) * gs.fontSizePt;
+        // A horizontally set adjustment that opens a gap of at least a word space ends the run before it. Vertical setting is left alone: the scripts set vertically do not separate words with spaces at all, so an adjustment there is never one.
+        const endsRun =
+          !vertical &&
+          totalLength > 0 &&
+          adjustment >= DEFAULT_WORD_GAP_EM * gs.fontSizePt;
+        if (endsRun) {
+          flushRun();
+        }
         text.tm = multiplyMatrices(
           vertical
             ? translationMatrix(0, adjustment)
             : translationMatrix(adjustment * gs.horizScale, 0),
           text.tm,
         );
+        if (endsRun) {
+          startMatrix = computeTrm(gs, text);
+        }
       }
     }
-    if (totalLength === 0) {
-      return;
-    }
-    const combined = new Uint8Array(totalLength);
-    let at = 0;
-    for (const chunk of chunks) {
-      combined.set(chunk, at);
-      at += chunk.length;
-    }
-    const endMatrix = computeTrm(gs, text);
-    // A vertically set run paints its glyphs offset from the text position by the position vector, so the run is reported where its ink actually is rather than where its column's spine runs. Both matrices take the FIRST glyph's vector, which keeps their difference (and so the run's reported advance) exactly the total displacement: the vector's y is one figure for the whole font in every real file, and its x only shifts the run sideways, across the axis the advance is measured along.
-    const shift =
-      firstGlyphPosition === undefined
-        ? undefined
-        : translationMatrix(-firstGlyphPosition.x, -firstGlyphPosition.y);
-    pushItem({
-      kind: "text",
-      codes: combined,
-      fontResourceName,
-      resources,
-      startMatrix:
-        shift === undefined
-          ? startMatrix
-          : multiplyMatrices(shift, startMatrix),
-      endMatrix:
-        shift === undefined ? endMatrix : multiplyMatrices(shift, endMatrix),
-      sizePt: gs.fontSizePt,
-      color: gs.fillColor,
-      ...(vertical ? { vertical: true } : {}),
-    });
+    flushRun();
   };
 
   const showText = (textBytes: Uint8Array<ArrayBuffer>): void => {
