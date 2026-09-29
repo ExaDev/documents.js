@@ -208,3 +208,77 @@ describe("parseRptFormula grammar failures", () => {
     expect(thrown.offset).toBe("field:[CUSTOMER".length);
   });
 });
+
+describe("parseRptFormula scanner boundaries and failure positions", () => {
+  function parseErrorOf(formula: string): RptFormulaParseError {
+    try {
+      parseRptFormula(formula);
+    } catch (error) {
+      if (error instanceof RptFormulaParseError) {
+        return error;
+      }
+    }
+    throw new Error(`expected a parse error for: ${formula}`);
+  }
+
+  it("accepts trailing whitespace after a well-formed formula, keeping the text verbatim", () => {
+    expect(parseRptFormula("rpt:SUM([AMOUNT])   ")).toEqual({
+      kind: "aggregate",
+      aggregate: "SUM",
+      reference: { name: "AMOUNT", spelling: "bracket" },
+      text: "rpt:SUM([AMOUNT])   ",
+    });
+  });
+
+  it("reads a length of nine and a length of zero, the digit-run boundaries", () => {
+    expect(parseRptFormula("rpt:LEFT([QUARTER];9)")).toMatchObject({
+      length: 9,
+    });
+    expect(parseRptFormula("rpt:LEFT([QUARTER];0)")).toMatchObject({
+      length: 0,
+    });
+  });
+
+  it("reports each grammar failure with its message and its exact source offset", () => {
+    // A field binding whose reference never opens: the failure points just past the prefix.
+    expect(parseErrorOf("field:").offset).toBe(6);
+    expect(parseErrorOf("field:").message).toContain(
+      "expected the opening bracket of a column reference",
+    );
+    // A bare name where a bracketed reference belongs, naming the offending character.
+    expect(parseErrorOf("field:Zz_09Aq").offset).toBe(6);
+    expect(parseErrorOf("field:Zz_09Aq").message).toContain('but found "Z"');
+    // An unterminated bracket reference points at the end of the text.
+    expect(parseErrorOf("field:[ABC").offset).toBe(10);
+    expect(parseErrorOf("field:[ABC").message).toContain(
+      "unterminated column reference",
+    );
+    // An unterminated quoted reference likewise.
+    expect(parseErrorOf('rpt:HASCHANGED("ABC').offset).toBe(19);
+    expect(parseErrorOf('rpt:HASCHANGED("ABC').message).toContain(
+      "unterminated name reference",
+    );
+    // A missing argument points at the end of the formula.
+    expect(parseErrorOf("rpt:LEFT(").offset).toBe(9);
+    expect(parseErrorOf("rpt:LEFT(").message).toContain(
+      "expected an argument but found the end of the formula",
+    );
+    // A non-number where a number belongs rewinds to the argument's own start.
+    expect(parseErrorOf("rpt:LEFT([X];x)").offset).toBe(13);
+    expect(parseErrorOf("rpt:LEFT([X];x)").message).toContain(
+      "expected a number",
+    );
+    // A number where a reference belongs names the function and the ordinal.
+    expect(parseErrorOf("rpt:LEFT(5;2)").offset).toBe(13);
+    expect(parseErrorOf("rpt:LEFT(5;2)").message).toContain(
+      "rpt:LEFT's first argument must be a column or function reference",
+    );
+    // Fractional and negative lengths parse as numbers and are rejected by the argument rule, not the scanner.
+    expect(parseErrorOf("rpt:LEFT([QUARTER];1.5)").message).toContain(
+      "must be a non-negative whole number",
+    );
+    expect(parseErrorOf("rpt:LEFT([QUARTER];-2)").message).toContain(
+      "must be a non-negative whole number",
+    );
+  });
+});
