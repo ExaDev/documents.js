@@ -1,3 +1,9 @@
+## [14.4.103](https://github.com/ExaDev/documents.js/compare/documents.js%4014.4.102...documents.js%4014.4.103) (2026-09-29)
+
+### Tests
+
+* **documents.js:** give the docx equation helpers their first dedicated suite ([e10dd5f](https://github.com/ExaDev/documents.js/commit/e10dd5f7cc5bf0e739e15a3445de2f31d77271e3))
+
 ## [14.4.102](https://github.com/ExaDev/documents.js/compare/documents.js%4014.4.101...documents.js%4014.4.102) (2026-09-29)
 
 ### Tests
