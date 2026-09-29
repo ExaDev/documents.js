@@ -1,3 +1,9 @@
+## [14.4.112](https://github.com/ExaDev/documents.js/compare/documents.js%4014.4.111...documents.js%4014.4.112) (2026-09-29)
+
+### Tests
+
+* **documents.js:** pin the lower construct edges the mechanical suites do not reach ([28124ed](https://github.com/ExaDev/documents.js/commit/28124edc1c933fad2df2587fe4db946e6ca79b62))
+
 ## [14.4.111](https://github.com/ExaDev/documents.js/compare/documents.js%4014.4.110...documents.js%4014.4.111) (2026-09-29)
 
 ### Tests
