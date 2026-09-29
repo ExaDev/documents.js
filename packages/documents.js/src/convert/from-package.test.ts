@@ -285,6 +285,166 @@ describe("layoutDocumentFromPackage: cell background rects", () => {
   });
 });
 
+describe("layoutDocumentFromPackage: decorated table cells", () => {
+  function decoratedCellPackage(): DocumentTree {
+    const table: ContentTable = {
+      kind: "table",
+      columns: [{ widthPt: 50 }],
+      rows: [
+        {
+          cells: [
+            {
+              blocks: [
+                {
+                  kind: "paragraph",
+                  runs: [
+                    {
+                      text: "in-cell",
+                      frames: [
+                        {
+                          pageIndex: 0,
+                          xPt: 12,
+                          yPt: 115,
+                          widthPt: 20,
+                          heightPt: 5,
+                        },
+                      ],
+                    },
+                  ],
+                },
+              ],
+              background: { kind: "solid", color: { r: 1, g: 0, b: 0 } },
+              borders: {
+                top: { color: { r: 0, g: 0, b: 0 }, widthPt: 1 },
+                bottom: { color: { r: 0, g: 0, b: 0 }, widthPt: 1 },
+              },
+              frames: [
+                { pageIndex: 0, xPt: 10, yPt: 110, widthPt: 50, heightPt: 20 },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+    const content: Extract<ContentDocument, { kind: "wordprocessing" }> = {
+      kind: "wordprocessing",
+      metadata: {},
+      sections: [
+        {
+          pageSize: { widthPt: 200, heightPt: 200 },
+          margins: { topPt: 0, rightPt: 0, bottomPt: 0, leftPt: 0 },
+          blocks: [table],
+        },
+      ],
+    };
+    return assembleTree(content, [{ widthPt: 200, heightPt: 200 }]);
+  }
+
+  it("emits the cell's resolved fill as a rect at the cell's own frame", () => {
+    const layout = layoutDocumentFromPackage(decoratedCellPackage());
+    const rects = layout.pages[0]!.items.filter(
+      (i): i is LayoutRect => i.kind === "rect",
+    );
+    expect(rects).toHaveLength(1);
+    expect(rects[0]).toMatchObject({
+      xPt: 10,
+      yPt: 110,
+      widthPt: 50,
+      heightPt: 20,
+      fill: { r: 1, g: 0, b: 0 },
+    });
+  });
+
+  it("emits one line per declared border edge, at the cell frame's own edges", () => {
+    const layout = layoutDocumentFromPackage(decoratedCellPackage());
+    const lines = layout.pages[0]!.items.filter(
+      (i): i is Extract<LayoutItem, { kind: "line" }> => i.kind === "line",
+    );
+    expect(lines).toHaveLength(2);
+    expect(lines[0]).toMatchObject({
+      x1Pt: 10,
+      y1Pt: 130,
+      x2Pt: 60,
+      y2Pt: 130,
+    });
+    expect(lines[1]).toMatchObject({
+      x1Pt: 10,
+      y1Pt: 110,
+      x2Pt: 60,
+      y2Pt: 110,
+    });
+  });
+
+  it("emits a cell's own paragraph content at the run's recorded frame", () => {
+    const layout = layoutDocumentFromPackage(decoratedCellPackage());
+    const texts = layout.pages[0]!.items.filter(
+      (i): i is LayoutText => i.kind === "text",
+    );
+    expect(texts).toHaveLength(1);
+    expect(texts[0]).toMatchObject({ text: "in-cell", xPt: 12, yPt: 115 });
+  });
+
+  it("emits a nested table inside a cell through the same frame walk", () => {
+    const inner: ContentTable = {
+      kind: "table",
+      columns: [{ widthPt: 10 }],
+      rows: [
+        {
+          cells: [
+            {
+              blocks: [],
+              background: { kind: "solid", color: { r: 0, g: 1, b: 0 } },
+              frames: [
+                { pageIndex: 0, xPt: 15, yPt: 112, widthPt: 10, heightPt: 6 },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+    const outer: ContentTable = {
+      kind: "table",
+      columns: [{ widthPt: 50 }],
+      rows: [
+        {
+          cells: [
+            {
+              blocks: [inner],
+              frames: [
+                { pageIndex: 0, xPt: 10, yPt: 110, widthPt: 50, heightPt: 20 },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+    const content: Extract<ContentDocument, { kind: "wordprocessing" }> = {
+      kind: "wordprocessing",
+      metadata: {},
+      sections: [
+        {
+          pageSize: { widthPt: 200, heightPt: 200 },
+          margins: { topPt: 0, rightPt: 0, bottomPt: 0, leftPt: 0 },
+          blocks: [outer],
+        },
+      ],
+    };
+    const pkg = assembleTree(content, [{ widthPt: 200, heightPt: 200 }]);
+    const layout = layoutDocumentFromPackage(pkg);
+    const rects = layout.pages[0]!.items.filter(
+      (i): i is LayoutRect => i.kind === "rect",
+    );
+    expect(rects).toHaveLength(1);
+    expect(rects[0]).toMatchObject({
+      xPt: 15,
+      yPt: 112,
+      widthPt: 10,
+      heightPt: 6,
+      fill: { r: 0, g: 1, b: 0 },
+    });
+  });
+});
+
 describe("layoutDocumentFromPackage: wrap re-derivation (#964)", () => {
   it("re-renders a multi-frame run as one item per frame, each at that frame's recorded position", () => {
     let captured: DocumentTree | undefined;
