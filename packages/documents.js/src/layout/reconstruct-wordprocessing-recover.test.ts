@@ -255,6 +255,30 @@ describe("reconstructWordprocessing: gridline-gated table recovery", () => {
     ]);
   });
 
+  it("accumulates several same-line items inside one lattice region into that one cell, not one cell per item", () => {
+    const items: LayoutItem[] = [
+      ...latticeItems(),
+      text({ text: "Hello", xPt: 10, yPt: 180, widthPt: 24 }),
+      text({ text: "World", xPt: 36, yPt: 180, widthPt: 24 }),
+      text({ text: "10", xPt: 130, yPt: 130, widthPt: 15 }),
+    ];
+    const blocks = blocksOf(
+      reconstructWordprocessing(docFrom([page(300, 300, items)])),
+    );
+    const table = blocks.find((b) => b.kind === "table");
+    if (table?.kind !== "table") {
+      throw new Error("expected a recovered table block");
+    }
+    expect(
+      table.rows[0]?.cells[0]?.blocks
+        .flatMap((b) =>
+          b.kind === "paragraph" ? b.runs.map((run) => run.text) : [],
+        )
+        .join(""),
+    ).toBe("Hello World");
+    expect(table.rows).toHaveLength(2);
+  });
+
   it("does not also emit the table's own text as loose paragraphs, nor its own gridlines as loose vectors", () => {
     const items: LayoutItem[] = [
       ...latticeItems(),
