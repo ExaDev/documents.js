@@ -1,3 +1,11 @@
+## [14.4.98](https://github.com/ExaDev/documents.js/compare/documents.js%4014.4.97...documents.js%4014.4.98) (2026-09-29)
+
+### Tests
+
+* **documents.js:** pin the print-settings scale spellings and repeated header extents ([84e268b](https://github.com/ExaDev/documents.js/commit/84e268b5f0b81e975fe794af134909f4e50633a5))
+* **documents.js:** pin the run builder's full property surface and insertion edges ([a966eae](https://github.com/ExaDev/documents.js/commit/a966eae0aa83467ea6a5b3b00e46b1f962d44bff))
+* **documents.js:** round-trip every cell border stroke style ([13a1d5e](https://github.com/ExaDev/documents.js/commit/13a1d5ed9592747fd1b8d333a4f5700debb25e7d))
+
 ## [14.4.97](https://github.com/ExaDev/documents.js/compare/documents.js%4014.4.96...documents.js%4014.4.97) (2026-09-29)
 
 ### Tests
