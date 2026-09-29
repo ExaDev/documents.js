@@ -1,3 +1,9 @@
+## [14.4.109](https://github.com/ExaDev/documents.js/compare/documents.js%4014.4.108...documents.js%4014.4.109) (2026-09-29)
+
+### Tests
+
+* **documents.js:** pin the reconstruct pagination and construct-selection boundaries ([180f655](https://github.com/ExaDev/documents.js/commit/180f6557da8f2874027207368a776a555b3ccd7e))
+
 ## [14.4.108](https://github.com/ExaDev/documents.js/compare/documents.js%4014.4.107...documents.js%4014.4.108) (2026-09-29)
 
 ### Miscellaneous Chores
