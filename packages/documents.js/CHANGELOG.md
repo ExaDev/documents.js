@@ -1,3 +1,9 @@
+## [14.4.108](https://github.com/ExaDev/documents.js/compare/documents.js%4014.4.107...documents.js%4014.4.108) (2026-09-29)
+
+### Miscellaneous Chores
+
+* **documents.js:** raise the mutation break threshold to 83 after the feature-suite run ([6e4fc8b](https://github.com/ExaDev/documents.js/commit/6e4fc8b9c859d2f0087886633931a7a1c1f4062f))
+
 ## [14.4.107](https://github.com/ExaDev/documents.js/compare/documents.js%4014.4.106...documents.js%4014.4.107) (2026-09-29)
 
 ### Tests
