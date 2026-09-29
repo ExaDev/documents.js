@@ -1,3 +1,9 @@
+## [14.4.111](https://github.com/ExaDev/documents.js/compare/documents.js%4014.4.110...documents.js%4014.4.111) (2026-09-29)
+
+### Tests
+
+* **documents.js:** pin the pdf fixture builders' exact bytes ([0c0f190](https://github.com/ExaDev/documents.js/commit/0c0f190a7acfa810581752deb14c931fede7463c))
+
 ## [14.4.110](https://github.com/ExaDev/documents.js/compare/documents.js%4014.4.109...documents.js%4014.4.110) (2026-09-29)
 
 ### Tests
