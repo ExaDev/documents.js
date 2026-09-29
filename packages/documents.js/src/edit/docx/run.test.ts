@@ -1,4 +1,4 @@
-import type { XmlNode } from "ooxml.js";
+import type { XmlElement, XmlNode } from "ooxml.js";
 import { describe, expect, it } from "vitest";
 import { el } from "../../xml/fragment";
 import { buildRun, DocxRun } from "./run";
@@ -125,6 +125,98 @@ describe("DocxRun value properties", () => {
       .filter((c) => c.type === "element")
       .map((c) => c.tag);
     expect(tags).toEqual(["w:rFonts", "w:b", "w:color", "w:sz", "w:szCs"]);
+  });
+});
+
+function isElement(node: XmlNode | undefined): node is XmlElement {
+  return node?.type === "element";
+}
+
+function rPrOf(runElement: XmlNode): XmlElement {
+  if (!isElement(runElement)) {
+    throw new Error("expected an element");
+  }
+  const rPr = runElement.children.find(
+    (c): c is XmlElement => c.type === "element" && c.tag === "w:rPr",
+  );
+  if (rPr === undefined) {
+    throw new Error("expected w:rPr");
+  }
+  return rPr;
+}
+
+function rPrTags(runElement: XmlNode): string[] {
+  return rPrOf(runElement)
+    .children.filter(isElement)
+    .map((c) => c.tag);
+}
+
+describe("buildRun full property surface", () => {
+  it("applies strike and underline, the two initial-formatting branches no builder test reached", () => {
+    const struck = buildRun({ text: "x", strike: true });
+    expect(rPrTags(struck)).toContain("w:strike");
+    const underlined = buildRun({ text: "x", underline: true });
+    expect(rPrTags(underlined)).toEqual(["w:u"]);
+    const u = rPrOf(underlined).children.find(
+      (c): c is XmlElement => c.type === "element" && c.tag === "w:u",
+    );
+    expect(u?.attributes.find((a) => a.name === "w:val")?.value).toBe("single");
+  });
+
+  it("emits every run property in schema order with underline last, from one build", () => {
+    const run = buildRun({
+      text: "x",
+      bold: true,
+      italic: true,
+      strike: true,
+      underline: true,
+      fontFamily: "Arial",
+      sizePt: 12,
+      color: { r: 255, g: 0, b: 0 },
+    });
+    expect(rPrTags(run)).toEqual([
+      "w:rFonts",
+      "w:b",
+      "w:i",
+      "w:strike",
+      "w:color",
+      "w:sz",
+      "w:szCs",
+      "w:u",
+    ]);
+  });
+
+  it("rounds a half-point size to whole half-points", () => {
+    const run = buildRun({ text: "x", sizePt: 12.5 });
+    expect(rPrTags(run)).toEqual(["w:sz", "w:szCs"]);
+    const sz = rPrOf(run).children.find(
+      (c): c is XmlElement => c.type === "element" && c.tag === "w:sz",
+    );
+    expect(sz?.attributes.find((a) => a.name === "w:val")?.value).toBe("25");
+  });
+});
+
+describe("DocxRun underline reading", () => {
+  it("a w:u element with no w:val at all reads as underlined", () => {
+    const runElement = el("w:r", {}, [
+      el("w:rPr", {}, [el("w:u")]),
+      el("w:t", {}, [{ type: "text", value: "x" }]),
+    ]);
+    const container: XmlNode[] = [runElement];
+    expect(new DocxRun(container, runElement).underline).toBe(true);
+  });
+});
+
+describe("DocxRun property insertion beside foreign siblings", () => {
+  it("appends an ordered property after an unordered sibling it does not recognise", () => {
+    const runElement = el("w:r", {}, [
+      el("w:rPr", {}, [el("w:lang", { "w:val": "en-GB" })]),
+      el("w:t", {}, [{ type: "text", value: "x" }]),
+    ]);
+    const container: XmlNode[] = [runElement];
+    const run = new DocxRun(container, runElement);
+    run.bold = true;
+    expect(rPrTags(runElement)).toEqual(["w:lang", "w:b"]);
   });
 });
 
