@@ -1,3 +1,9 @@
+## [5.3.30](https://github.com/ExaDev/documents.js/compare/pdf-codec%405.3.29...pdf-codec%405.3.30) (2026-09-29)
+
+### Bug Fixes
+
+* **pdf-codec:** end a text run at a TJ adjustment wide enough to be a word space ([3e7f540](https://github.com/ExaDev/documents.js/commit/3e7f540bbb2dd878f58e6bc1e477bc051053bbb6))
+
 ## [5.3.29](https://github.com/ExaDev/documents.js/compare/pdf-codec%405.3.28...pdf-codec%405.3.29) (2026-09-28)
 
 ### Tests
