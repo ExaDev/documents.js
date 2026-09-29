@@ -1,3 +1,9 @@
+## [14.4.99](https://github.com/ExaDev/documents.js/compare/documents.js%4014.4.98...documents.js%4014.4.99) (2026-09-29)
+
+### Tests
+
+* **documents.js:** pin the SQL parser's failure diagnostics ([d97420f](https://github.com/ExaDev/documents.js/commit/d97420f936128157d36ee20cc36fd4239e7931b7))
+
 ## [14.4.98](https://github.com/ExaDev/documents.js/compare/documents.js%4014.4.97...documents.js%4014.4.98) (2026-09-29)
 
 ### Tests
