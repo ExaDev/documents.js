@@ -20,18 +20,31 @@ export interface AuditReport {
 
 // npm's own error envelope: what `pnpm audit --json` prints verbatim when the registry's bulk advisory endpoint itself fails (a timeout, a 5xx, a rate limit) rather than pnpm failing to talk to it at all — confirmed directly against a real timeout ("The operation was aborted due to timeout", code 23) from registry.npmjs.org/-/npm/v1/security/advisories/bulk. This is not the same failure as a genuinely unexpected JSON shape: it is valid, well-formed JSON from npm's own API describing a real upstream outage, and treating it identically to a parsing bug in this script produces a misleading "did not match the expected shape" error on every advisory-service hiccup, org-wide, across every open PR.
 export interface AuditServiceError {
-  error: { code: number; message: string };
+  error: { code?: number; message: string } | string;
 }
 
+// npm's registry answers 4xx/5xx with more than one envelope: the {code, message} object a timeout produces, and bare strings such as "Forbidden" from rate limiting. Both are upstream statements about the advisory service, not malformed audit reports, so both take the retry path rather than failing every open PR with a parse error. A present-but-non-number code still rejects, so a foreign shape cannot smuggle itself through as an outage.
 export function isAuditServiceError(
   value: unknown,
 ): value is AuditServiceError {
-  if (!isRecord(value)) return false;
-  if (!("error" in value) || !isRecord(value.error)) return false;
-  return (
-    typeof value.error.code === "number" &&
-    typeof value.error.message === "string"
-  );
+  if (!isRecord(value) || !("error" in value)) return false;
+  const error: unknown = value.error;
+  if (typeof error === "string") {
+    return error.length > 0;
+  }
+  if (!isRecord(error)) return false;
+  if (typeof error.message !== "string") return false;
+  return error.code === undefined || typeof error.code === "number";
+}
+
+export function auditServiceErrorMessage(value: AuditServiceError): string {
+  return typeof value.error === "string" ? value.error : value.error.message;
+}
+
+export function auditServiceErrorCode(
+  value: AuditServiceError,
+): number | undefined {
+  return typeof value.error === "string" ? undefined : value.error.code;
 }
 
 interface Candidate {
@@ -91,7 +104,7 @@ export function minimumReleaseAgeMinutes(workspaceYamlText: string): number {
 const AUDIT_SERVICE_ERROR_ATTEMPTS = 3;
 const AUDIT_SERVICE_ERROR_RETRY_DELAY_SECONDS = 60;
 
-function runAuditOnce(): unknown {
+function runAuditOnce(): { stdout: string; parsed: unknown } {
   const result = spawnSync(
     "pnpm",
     ["audit", "--audit-level", auditLevel, "--json"],
@@ -104,7 +117,19 @@ function runAuditOnce(): unknown {
       `pnpm audit produced no stdout (spawn error: ${String(result.error)}, stderr: ${result.stderr})`,
     );
   }
-  return JSON.parse(result.stdout);
+  return { stdout: result.stdout, parsed: JSON.parse(result.stdout) };
+}
+
+// What a shape failure actually saw, so the next one is diagnosable from the CI log alone instead of needing local reproduction: the parsed value's own top-level shape plus a bounded tail of the raw stdout it came from.
+function summariseAuditOutput(value: unknown): string {
+  if (!isRecord(value)) {
+    return `a non-object (${typeof value})`;
+  }
+  return `an object with top-level keys [${Object.keys(value).join(", ")}]`;
+}
+
+function rawStdoutTail(stdout: string): string {
+  return ` (raw tail: ${JSON.stringify(stdout.slice(-400))})`;
 }
 
 // spawnSync's own blocking `sleep` rather than a Promise-based delay: main() and every runAudit() call site in this file are synchronous by design (see main's own comment on why), so an async retry loop would mean threading a Promise chain through the whole script for one call site.
@@ -114,24 +139,24 @@ function blockingSleepSeconds(seconds: number): void {
 
 function runAudit(): AuditReport {
   for (let attempt = 1; attempt <= AUDIT_SERVICE_ERROR_ATTEMPTS; attempt++) {
-    const parsed = runAuditOnce();
+    const { stdout, parsed } = runAuditOnce();
     if (isAuditReport(parsed)) {
       return parsed;
     }
     if (isAuditServiceError(parsed)) {
       if (attempt < AUDIT_SERVICE_ERROR_ATTEMPTS) {
         console.log(
-          `npm's audit advisory service returned an error (code ${String(parsed.error.code)}: ${parsed.error.message}) on attempt ${String(attempt)}/${String(AUDIT_SERVICE_ERROR_ATTEMPTS)}; retrying in ${String(AUDIT_SERVICE_ERROR_RETRY_DELAY_SECONDS)}s`,
+          `npm's audit advisory service returned an error (code ${String(auditServiceErrorCode(parsed) ?? "none")}: ${auditServiceErrorMessage(parsed)}) on attempt ${String(attempt)}/${String(AUDIT_SERVICE_ERROR_ATTEMPTS)}; retrying in ${String(AUDIT_SERVICE_ERROR_RETRY_DELAY_SECONDS)}s`,
         );
         blockingSleepSeconds(AUDIT_SERVICE_ERROR_RETRY_DELAY_SECONDS);
         continue;
       }
       throw new Error(
-        `npm's audit advisory service is unavailable after ${String(AUDIT_SERVICE_ERROR_ATTEMPTS)} attempts (code ${String(parsed.error.code)}: ${parsed.error.message}) -- this is an upstream outage, not a defect in this script's own expectations; re-run once the service recovers`,
+        `npm's audit advisory service is unavailable after ${String(AUDIT_SERVICE_ERROR_ATTEMPTS)} attempts (code ${String(auditServiceErrorCode(parsed) ?? "none")}: ${auditServiceErrorMessage(parsed)}) -- this is an upstream outage, not a defect in this script's own expectations; re-run once the service recovers`,
       );
     }
     throw new Error(
-      "pnpm audit --json output did not match the expected shape",
+      `pnpm audit --json output did not match the expected shape: got ${summariseAuditOutput(parsed)}${rawStdoutTail(stdout)}`,
     );
   }
   throw new Error(
