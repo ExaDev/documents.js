@@ -99,6 +99,23 @@ describe("OdtTable", () => {
     expect(table.rows()[0]!.cells()[0]!.text).toBe("A1");
   });
 
+  it("round-trips every stroke style, and writes none at all for a styleless border", () => {
+    const editor = createOdt();
+    const table = editor.body.appendTable({ rows: 0, columns: 2 });
+    const row = table.appendEmptyRow();
+    row.appendCell().colSpan = 2;
+    const covered = row.appendCoveredCell();
+    for (const style of ["dashed", "dotted", "double"] as const) {
+      covered.borders = {
+        top: { color: { r: 0, g: 0, b: 1 }, widthPt: 2, style },
+      };
+      expect(covered.borders.top).toMatchObject({ style });
+    }
+    // A border with no style of its own writes the format's default spelling, which reads back as solid: the format has no styleless border spelling.
+    covered.borders = { top: { color: { r: 0, g: 0, b: 1 }, widthPt: 2 } };
+    expect(covered.borders.top).toMatchObject({ style: "solid" });
+  });
+
   it("appendCoveredCell returns a view that states the covered position's own background and borders, read back through the same style", () => {
     const editor = createOdt();
     const table = editor.body.appendTable({ rows: 0, columns: 2 });
