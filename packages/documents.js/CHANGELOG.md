@@ -1,3 +1,10 @@
+## [14.4.102](https://github.com/ExaDev/documents.js/compare/documents.js%4014.4.101...documents.js%4014.4.102) (2026-09-29)
+
+### Tests
+
+* **documents.js:** decode every stored Firebird physical type from its wire shape ([a89e5be](https://github.com/ExaDev/documents.js/commit/a89e5beb2932d1a7ccffb2f17b043ff754f22bc8))
+* **documents.js:** drive every shape item's full property surface ([3ed1dba](https://github.com/ExaDev/documents.js/commit/3ed1dba177e7e0d9f38ed92db23a886a5254f5b4))
+
 ## [14.4.101](https://github.com/ExaDev/documents.js/compare/documents.js%4014.4.100...documents.js%4014.4.101) (2026-09-29)
 
 ### Tests
