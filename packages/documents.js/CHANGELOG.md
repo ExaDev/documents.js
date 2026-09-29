@@ -1,3 +1,14 @@
+## [14.4.95](https://github.com/ExaDev/documents.js/compare/documents.js%4014.4.94...documents.js%4014.4.95) (2026-09-29)
+
+### Tests
+
+* **documents.js:** pin the recovered grids' anchor census and multi-item cells ([81d4680](https://github.com/ExaDev/documents.js/commit/81d4680201ab5c302b65926a9ded693f2ace51db))
+* **documents.js:** pin what each pdf fixture recovers through the real reader ([36e7f07](https://github.com/ExaDev/documents.js/commit/36e7f07b7647b60ee2d3254dc4433665c797bb65))
+
+### Miscellaneous Chores
+
+* **documents.js:** raise the mutation break threshold to 80 after the pin batches ([58336be](https://github.com/ExaDev/documents.js/commit/58336bedc601f1dab494fd03ecbd1ad9a5542d84))
+
 ## [14.4.94](https://github.com/ExaDev/documents.js/compare/documents.js%4014.4.93...documents.js%4014.4.94) (2026-09-28)
 
 ### Tests
