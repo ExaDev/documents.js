@@ -87,9 +87,20 @@ describe("isAuditServiceError", () => {
     expect(isAuditServiceError({ advisories: { a: advisory() } })).toBe(false);
   });
 
-  it("rejects an error envelope missing a numeric code or string message", () => {
-    expect(isAuditServiceError({ error: { message: "no code" } })).toBe(false);
+  it("accepts an error envelope that carries a message but no code, the shape npm's rate-limit answers take", () => {
+    expect(isAuditServiceError({ error: { message: "Forbidden" } })).toBe(true);
+  });
+
+  it("accepts a bare string error, the other shape npm's 4xx answers take", () => {
+    expect(isAuditServiceError({ error: "Forbidden" })).toBe(true);
+    expect(isAuditServiceError({ error: "" })).toBe(false);
+  });
+
+  it("rejects an error envelope with no string message, or a non-number code", () => {
     expect(isAuditServiceError({ error: { code: 23 } })).toBe(false);
+    expect(isAuditServiceError({ error: { code: "23", message: "x" } })).toBe(
+      false,
+    );
   });
 });
 
