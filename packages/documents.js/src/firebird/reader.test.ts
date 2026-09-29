@@ -147,3 +147,68 @@ describe("XdrReader: per-type big-endian decoding", () => {
     expect(xdr.offset).toBe(4);
   });
 });
+
+describe("XdrReader: per-type edges and end-of-data guards", () => {
+  it("readInt16 sign-extends a negative 16-bit value out of its widened long", () => {
+    const xdr = new XdrReader(new Uint8Array([0xff, 0xff, 0xff, 0xfe]));
+    expect(xdr.readInt16()).toBe(-2);
+  });
+
+  it("readInt64 takes the high word first, per xdr_hyper's own little-endian host layout", () => {
+    // High word 0x00000001, low word 0x00000000: 2^32.
+    const xdr = new XdrReader(
+      new Uint8Array([0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00]),
+    );
+    expect(xdr.readInt64()).toBe(4294967296n);
+    // A negative high word sign-extends through the whole bigint.
+    const negative = new XdrReader(
+      new Uint8Array([0xff, 0xff, 0xff, 0xff, 0x00, 0x00, 0x00, 0x01]),
+    );
+    expect(negative.readInt64()).toBe(-4294967295n);
+  });
+
+  it("readDouble and readFloat decode big-endian IEEE-754 values", () => {
+    const doubleBytes = new Uint8Array(8);
+    new DataView(doubleBytes.buffer).setFloat64(0, 2.25, false);
+    expect(new XdrReader(doubleBytes).readDouble()).toBe(2.25);
+
+    const floatBytes = new Uint8Array(4);
+    new DataView(floatBytes.buffer).setFloat32(0, 1.5, false);
+    expect(new XdrReader(floatBytes).readFloat()).toBe(1.5);
+  });
+
+  it("atEnd flips only once the cursor reaches the end", () => {
+    const xdr = new XdrReader(new Uint8Array([0x00, 0x00, 0x00, 0x01]));
+    expect(xdr.atEnd()).toBe(false);
+    xdr.readInt32();
+    expect(xdr.atEnd()).toBe(true);
+  });
+
+  it("each reader guards its own end of data with its own message", () => {
+    expect(() => new XdrReader(new Uint8Array(3)).readInt32()).toThrow(
+      /4-byte integer/,
+    );
+    expect(() => new XdrReader(new Uint8Array(7)).readDouble()).toThrow(
+      /8-byte double/,
+    );
+    expect(() => new XdrReader(new Uint8Array(3)).readFloat()).toThrow(
+      /4-byte float/,
+    );
+    expect(() => new XdrReader(new Uint8Array(3)).readOpaque(4)).toThrow(
+      /4 opaque byte/,
+    );
+    // Exactly enough bytes does NOT throw: the guards are strict.
+    expect(new XdrReader(new Uint8Array(4)).readInt32()).toBe(0);
+  });
+
+  it("readOpaque pads to the next 4-byte boundary and reports the cursor's advance", () => {
+    const xdr = new XdrReader(new Uint8Array([0x61, 0x62, 0x00, 0x00, 0xff]));
+    const two = xdr.readOpaque(2);
+    expect(Array.from(two)).toEqual([0x61, 0x62]);
+    expect(xdr.offset).toBe(4);
+    const one = xdr.readOpaque(1);
+    expect(Array.from(one)).toEqual([0xff]);
+    // The padding advance is unconditional: a 1-byte run at the last byte still pads out to the next boundary, past the array's own end.
+    expect(xdr.offset).toBe(8);
+  });
+});
