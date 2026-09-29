@@ -1,7 +1,12 @@
-import { decodePackage } from "ooxml.js";
+import { decodePackage, type XmlElement } from "ooxml.js";
 import { describe, expect, it } from "vitest";
 import { minimalDocxBytes, minimalDocxPackage } from "../../test-support/docx";
 import { assertPartsUnchangedExcept } from "../../test-support/fidelity";
+import type {
+  ContentControlLock,
+  ContentControlType,
+  ProvenanceChange,
+} from "document-schema.js";
 import { createDocx, openDocx } from "./editor";
 
 describe("openDocx / createDocx", () => {
@@ -148,5 +153,240 @@ describe("DocxEditor.metadata", () => {
     editor.metadata = { title: "Round-tripped title" };
     const reopened = openDocx(editor.toBytes());
     expect(reopened.metadata.title).toBe("Round-tripped title");
+  });
+});
+
+describe("DocxBody region scaffolds", () => {
+  function bodyElementOf(editor: ReturnType<typeof createDocx>): XmlElement {
+    const pkg = editor.toPackage();
+    const part = pkg.parts["word/document.xml"];
+    if (part?.kind !== "xml") {
+      throw new Error("expected document.xml");
+    }
+    const root = part.nodes.find((n): n is XmlElement => n.type === "element");
+    const body = root?.children.find(
+      (n): n is XmlElement => n.type === "element" && n.tag === "w:body",
+    );
+    if (body === undefined) {
+      throw new Error("expected w:body");
+    }
+    return body;
+  }
+
+  function lastSdtPrTags(
+    editor: ReturnType<typeof createDocx>,
+  ): { tag: string; val: string | undefined }[] {
+    const body = bodyElementOf(editor);
+    const sdt = body.children.findLast(
+      (n): n is XmlElement => n.type === "element" && n.tag === "w:sdt",
+    );
+    const sdtPr = sdt?.children.find(
+      (n): n is XmlElement => n.type === "element" && n.tag === "w:sdtPr",
+    );
+    if (sdtPr === undefined) {
+      throw new Error("expected w:sdtPr");
+    }
+    // One nesting level deep covers the index control, whose gallery element sits inside w:docPartObj rather than directly under w:sdtPr.
+    return sdtPr.children
+      .filter((n): n is XmlElement => n.type === "element")
+      .flatMap((child) => [
+        {
+          tag: child.tag,
+          val: child.attributes.find((a) => a.name === "w:val")?.value,
+        },
+        ...child.children
+          .filter((n): n is XmlElement => n.type === "element")
+          .map((grandchild) => ({
+            tag: grandchild.tag,
+            val: grandchild.attributes.find((a) => a.name === "w:val")?.value,
+          })),
+      ]);
+  }
+
+  it("writes every SDT control type's own type element", () => {
+    const cases: readonly [
+      ContentControlType,
+      { tag: string; val: string | undefined },
+    ][] = [
+      ["plainText", { tag: "w:text", val: undefined }],
+      ["date", { tag: "w:date", val: undefined }],
+      ["picture", { tag: "w:picture", val: undefined }],
+      ["group", { tag: "w:group", val: undefined }],
+      ["repeatingSection", { tag: "w:repeatingSection", val: undefined }],
+      ["index", { tag: "w:docPartGallery", val: "Table of Contents" }],
+      ["richText", { tag: "w:id", val: "1" }],
+    ];
+    for (const [controlType, expected] of cases) {
+      const editor = createDocx();
+      editor.body.openContentControlRegion({
+        kind: "contentControl",
+        controlType,
+      });
+      editor.body.closeRegion();
+      const tags = lastSdtPrTags(editor);
+      expect(
+        tags.some((t) => t.tag === expected.tag && t.val === expected.val),
+        `${controlType} -> ${expected.tag}`,
+      ).toBe(true);
+    }
+  });
+
+  it("writes a comboBox's options as list items and a dropDown's as a list", () => {
+    for (const controlType of ["comboBox", "dropDown"] as const) {
+      const editor = createDocx();
+      editor.body.openContentControlRegion({
+        kind: "contentControl",
+        controlType,
+        options: ["one", "two"],
+      });
+      editor.body.closeRegion();
+      const expectedTag =
+        controlType === "comboBox" ? "w:comboBox" : "w:dropDownList";
+      const body = bodyElementOf(editor);
+      const sdt = body.children.findLast(
+        (n): n is XmlElement => n.type === "element" && n.tag === "w:sdt",
+      );
+      const list = sdt?.children
+        .find(
+          (n): n is XmlElement => n.type === "element" && n.tag === "w:sdtPr",
+        )
+        ?.children.find(
+          (n): n is XmlElement => n.type === "element" && n.tag === expectedTag,
+        );
+      expect(list?.children).toHaveLength(2);
+      expect(
+        list?.children
+          .find(
+            (n): n is XmlElement =>
+              n.type === "element" && n.tag === "w:listItem",
+          )
+          ?.attributes.find((a) => a.name === "w:displayText")?.value,
+      ).toBe("one");
+    }
+  });
+
+  it("writes each lock spelling, a date control's value, and a checkbox's state", () => {
+    const locks: readonly [ContentControlLock, string][] = [
+      ["content", "contentLocked"],
+      ["container", "sdtLocked"],
+      ["both", "sdtContentLocked"],
+    ];
+    for (const [lock, expected] of locks) {
+      const editor = createDocx();
+      editor.body.openContentControlRegion({
+        kind: "contentControl",
+        controlType: "richText",
+        lock,
+      });
+      editor.body.closeRegion();
+      expect(
+        lastSdtPrTags(editor).some(
+          (t) => t.tag === "w:lock" && t.val === expected,
+        ),
+        lock,
+      ).toBe(true);
+    }
+
+    const dated = createDocx();
+    dated.body.openContentControlRegion({
+      kind: "contentControl",
+      controlType: "date",
+      value: "2024-05-06T07:08:09Z",
+    });
+    dated.body.closeRegion();
+    const body = bodyElementOf(dated);
+    const sdt = body.children.findLast(
+      (n): n is XmlElement => n.type === "element" && n.tag === "w:sdt",
+    );
+    const dateElement = sdt?.children
+      .find((n): n is XmlElement => n.type === "element" && n.tag === "w:sdtPr")
+      ?.children.find(
+        (n): n is XmlElement => n.type === "element" && n.tag === "w:date",
+      );
+    expect(
+      dateElement?.attributes.find((a) => a.name === "w:fullDate")?.value,
+    ).toBe("2024-05-06T07:08:09Z");
+
+    const checked = createDocx();
+    checked.body.openContentControlRegion({
+      kind: "contentControl",
+      controlType: "checkbox",
+      checked: true,
+    });
+    checked.body.closeRegion();
+    expect(
+      lastSdtPrTags(checked).some(
+        (t) => t.tag === "w:checked" && t.val === "true",
+      ),
+    ).toBe(true);
+    const unchecked = createDocx();
+    unchecked.body.openContentControlRegion({
+      kind: "contentControl",
+      controlType: "checkbox",
+    });
+    unchecked.body.closeRegion();
+    expect(
+      lastSdtPrTags(unchecked).some(
+        (t) => t.tag === "w:checked" && t.val === "false",
+      ),
+    ).toBe(true);
+  });
+
+  it("writes alias and tag, and each provenance change kind with author and date", () => {
+    const editor = createDocx();
+    editor.body.openContentControlRegion({
+      kind: "contentControl",
+      controlType: "richText",
+      alias: "Label",
+      tag: "machine",
+    });
+    editor.body.closeRegion();
+    const tags = lastSdtPrTags(editor);
+    expect(tags.some((t) => t.tag === "w:alias" && t.val === "Label")).toBe(
+      true,
+    );
+    expect(tags.some((t) => t.tag === "w:tag" && t.val === "machine")).toBe(
+      true,
+    );
+
+    const changes: readonly [ProvenanceChange, string][] = [
+      ["insertion", "w:ins"],
+      ["deletion", "w:del"],
+      ["moveFrom", "w:moveFrom"],
+      ["moveTo", "w:moveTo"],
+    ];
+    for (const [change, expectedTag] of changes) {
+      const prov = createDocx();
+      expect(
+        prov.body.openProvenanceRegion({
+          kind: "provenance",
+          change,
+          author: "Jane",
+          dateIso: "2024-05-06T07:08:09Z",
+        }),
+        change,
+      ).toBe(true);
+      prov.body.closeRegion();
+      const body = bodyElementOf(prov);
+      const region = body.children.findLast(
+        (n): n is XmlElement => n.type === "element" && n.tag === expectedTag,
+      );
+      expect(region?.attributes).toContainEqual({
+        name: "w:author",
+        value: "Jane",
+      });
+      expect(region?.attributes).toContainEqual({
+        name: "w:date",
+        value: "2024-05-06T07:08:09Z",
+      });
+    }
+
+    const refused = createDocx();
+    expect(
+      refused.body.openProvenanceRegion({
+        kind: "provenance",
+        change: "formatChange",
+      }),
+    ).toBe(false);
   });
 });
