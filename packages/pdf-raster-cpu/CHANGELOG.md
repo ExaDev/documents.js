@@ -1,3 +1,10 @@
+## [1.0.89](https://github.com/ExaDev/documents.js/compare/pdf-raster-cpu%401.0.88...pdf-raster-cpu%401.0.89) (2026-09-29)
+
+
+### Dependencies
+
+- Updated pdf-codec to 5.3.30
+
 ## [1.0.88](https://github.com/ExaDev/documents.js/compare/pdf-raster-cpu%401.0.87...pdf-raster-cpu%401.0.88) (2026-09-28)
 
 

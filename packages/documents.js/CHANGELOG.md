@@ -1,3 +1,19 @@
+## [14.4.106](https://github.com/ExaDev/documents.js/compare/documents.js%4014.4.105...documents.js%4014.4.106) (2026-09-29)
+
+### Bug Fixes
+
+* **pdf-codec:** end a text run at a TJ adjustment wide enough to be a word space ([3e7f540](https://github.com/ExaDev/documents.js/commit/3e7f540bbb2dd878f58e6bc1e477bc051053bbb6))
+
+### Tests
+
+* **documents.js:** give the doc run view its first dedicated suite ([a4a292f](https://github.com/ExaDev/documents.js/commit/a4a292fbdcadcfc7e0c856f521d89776a2167861))
+* **documents.js:** pin the BLR opcode table and every type label ([1d5f783](https://github.com/ExaDev/documents.js/commit/1d5f783bb61b15db08c7b1979d9e9c42b7466a3d))
+
+
+### Dependencies
+
+- Updated pdf-codec to 5.3.30
+
 ## [14.4.105](https://github.com/ExaDev/documents.js/compare/documents.js%4014.4.104...documents.js%4014.4.105) (2026-09-29)
 
 ### Tests
