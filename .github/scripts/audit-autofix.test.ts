@@ -83,6 +83,14 @@ describe("isAuditServiceError", () => {
     ).toBe(true);
   });
 
+  it("accepts an advisory whose patched_versions is null, npm's spelling of no patch existing", () => {
+    expect(
+      isAuditReport({
+        advisories: { a: advisory({ patched_versions: null }) },
+      }),
+    ).toBe(true);
+  });
+
   it("rejects a well-formed report", () => {
     expect(isAuditServiceError({ advisories: { a: advisory() } })).toBe(false);
   });
