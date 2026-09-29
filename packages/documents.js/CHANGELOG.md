@@ -1,3 +1,9 @@
+## [14.4.100](https://github.com/ExaDev/documents.js/compare/documents.js%4014.4.99...documents.js%4014.4.100) (2026-09-29)
+
+### Miscellaneous Chores
+
+* **documents.js:** raise the mutation break threshold to 81 after the second pin run ([f0d2b47](https://github.com/ExaDev/documents.js/commit/f0d2b47405c20a69f1f56c6050405b3d8cf3c417))
+
 ## [14.4.99](https://github.com/ExaDev/documents.js/compare/documents.js%4014.4.98...documents.js%4014.4.99) (2026-09-29)
 
 ### Tests
