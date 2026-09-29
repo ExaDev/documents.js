@@ -121,6 +121,21 @@ export function minimalClassicXrefPdf(): Uint8Array<ArrayBuffer> {
   return b.bytes();
 }
 
+// A line whose words are separated only by TJ adjustments of a quarter em (250/1000), the shape a producer emits when its font has no space glyph or when it positions each word itself: no space character appears anywhere in the content stream, so a reader that ignores the adjustments returns one run-together word. The 40 (kerning inside "noted") is well under a word space and must not split anything.
+export function tjAdjustedWordSpacesPdf(): Uint8Array<ArrayBuffer> {
+  const b = new FixtureBuilder().header("1.4");
+  catalogPagesPageFontObjects(b, CONTENT_OBJ);
+  b.stream(
+    CONTENT_OBJ,
+    "<< >>",
+    enc(
+      "BT /F1 12 Tf 10 50 Td [(It) -250 (should) -250 (be) -250 (no) 40 (ted)] TJ ET",
+    ),
+  );
+  b.classicXrefAndTrailer(CONTENT_OBJ, "/Root 1 0 R");
+  return b.bytes();
+}
+
 // The single highest-value fixture in the suite: Word/PowerPoint/Chrome/LibreOffice all default to PDF 1.5+ cross-reference *streams* with object streams, not the classic table our own writer emits — a reader that only handles the classic form would fail on the overwhelming majority of real-world, non-self-produced PDFs. Catalog/Pages/Page are packed into one compressed object stream (a stream object itself is never permitted inside an object stream, per ISO 32000-1 7.5.7, so the content stream, the object stream, and the xref stream itself all remain ordinary top-level objects). The xref stream is self-referential: its own entry describes its own byte offset.
 // A classic cross-reference stream row (ISO 32000-1 Table 18) is /W [1 4 2]: a 1-byte type field, a 4-byte second field, a 2-byte third field, seven bytes total.
 const XREF_STREAM_ROW_WIDTH = 7;
