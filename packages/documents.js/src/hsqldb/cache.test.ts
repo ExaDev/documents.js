@@ -59,6 +59,44 @@ describe("parseHsqldbProperties", () => {
     ).toThrow(/1\.7\.x\/1\.8\.x/);
   });
 
+  it("ignores a comment line that would set a property if comments were parsed", () => {
+    expect(
+      parseHsqldbProperties(
+        "#hsqldb.cache_file_scale=9\nhsqldb.compatible_version=1.8.0\n",
+      ).cacheFileScale,
+    ).toBe(1);
+  });
+
+  it("trims the key and value around the equals sign, and splits on the first one only", () => {
+    expect(
+      parseHsqldbProperties(
+        "  hsqldb.cache_file_scale = 8 \nhsqldb.compatible_version=1.8.0\n",
+      ).cacheFileScale,
+    ).toBe(8);
+    expect(
+      parseHsqldbProperties("hsqldb.compatible_version=1.8.0=rc\n"),
+    ).toEqual({ cacheFileScale: 1, compatibleVersion: "1.8.0=rc" });
+  });
+
+  it("returns an undefined compatibleVersion when the property is absent, without throwing", () => {
+    expect(parseHsqldbProperties("hsqldb.cache_file_scale=1\n")).toEqual({
+      cacheFileScale: 1,
+      compatibleVersion: undefined,
+    });
+  });
+
+  it("accepts a 1.7.x spelling of the compatible version alongside the covered 1.8.x", () => {
+    expect(
+      parseHsqldbProperties("hsqldb.compatible_version=1.7.2\n"),
+    ).toMatchObject({ compatibleVersion: "1.7.2" });
+  });
+
+  it("applies the any-non-1-becomes-8 rule to a non-numeric scale value too", () => {
+    expect(
+      parseHsqldbProperties("hsqldb.cache_file_scale=abc\n").cacheFileScale,
+    ).toBe(8);
+  });
+
   it("ignores banner/timestamp comment lines and blank lines", () => {
     expect(
       parseHsqldbProperties(
@@ -218,6 +256,60 @@ describe("readHsqldbCachedTableRows: byte-level decode against the real fixture"
         [{ name: "ID", type: "INTEGER" }],
       ),
     ).toEqual([]);
+  });
+
+  // One INTEGER column, one index: 4 bytes of storage size, one 16-byte node record, then the column's own 1-byte present flag and 4-byte payload.
+  function handBuiltRow(offset: number): Uint8Array<ArrayBuffer> {
+    const storageSize = 25;
+    const bytes = new Uint8Array(offset + storageSize);
+    const view = new DataView(bytes.buffer);
+    view.setInt32(offset, storageSize);
+    bytes[offset + 20] = 1;
+    view.setInt32(offset + 21, 42);
+    return bytes;
+  }
+
+  it("parses a hand-built row that ends exactly at the end of the data bytes", () => {
+    expect(
+      readHsqldbCachedTableRows(
+        handBuiltRow(2),
+        { rootPosition: 2, indexCount: 1 },
+        1,
+        [{ name: "ID", type: "INTEGER" }],
+      ),
+    ).toEqual([[{ kind: "number", value: 42 }]]);
+  });
+
+  it("scales a row position by the cache file scale: position 1 with scale 8 reads at byte 8", () => {
+    expect(
+      readHsqldbCachedTableRows(
+        handBuiltRow(8),
+        { rootPosition: 1, indexCount: 1 },
+        8,
+        [{ name: "ID", type: "INTEGER" }],
+      ),
+    ).toEqual([[{ kind: "number", value: 42 }]]);
+  });
+
+  it("throws for a row declaring a storage size of zero", () => {
+    const bytes = new Uint8Array(2 + 24);
+    new DataView(bytes.buffer).setInt32(2, 0);
+    expect(() =>
+      readHsqldbCachedTableRows(bytes, { rootPosition: 2, indexCount: 1 }, 1, [
+        { name: "ID", type: "INTEGER" },
+      ]),
+    ).toThrow(/invalid storage size/);
+  });
+
+  it("throws for a row consuming more than its own declared storage size", () => {
+    // The row's own layout consumes 25 bytes; declaring 24 makes the overrun check fire by exactly one.
+    const bytes = handBuiltRow(2);
+    new DataView(bytes.buffer).setInt32(2, 24);
+    expect(() =>
+      readHsqldbCachedTableRows(bytes, { rootPosition: 2, indexCount: 1 }, 1, [
+        { name: "ID", type: "INTEGER" },
+      ]),
+    ).toThrow(/overran its own declared storage size/);
   });
 
   it("throws for a row position outside the data bytes", () => {
