@@ -1,3 +1,9 @@
+## [14.4.97](https://github.com/ExaDev/documents.js/compare/documents.js%4014.4.96...documents.js%4014.4.97) (2026-09-29)
+
+### Tests
+
+* **documents.js:** pin the properties parser's edges and the row walker's byte boundaries ([1766408](https://github.com/ExaDev/documents.js/commit/17664089db98aa7df849d8920a16ca9510159b91))
+
 ## [14.4.96](https://github.com/ExaDev/documents.js/compare/documents.js%4014.4.95...documents.js%4014.4.96) (2026-09-29)
 
 ### Tests
