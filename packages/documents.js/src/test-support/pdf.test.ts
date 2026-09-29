@@ -1,5 +1,6 @@
 import { unzlibSync } from "fflate";
 import { describe, expect, it } from "vitest";
+import { readPdf } from "pdf-codec";
 import {
   brokenStartxrefPdf,
   encryptedPdf,
@@ -10,6 +11,7 @@ import {
   minimalClassicXrefPdf,
   nonZeroOriginMediaBoxPdf,
   rotatedPagePdf,
+  twoPageMultiTextPdf,
   withInfoDictPdf,
   xrefStreamWithObjectStreamPdf,
 } from "./pdf";
@@ -273,5 +275,85 @@ describe("inlineImagePdf", () => {
     expect(text).toContain("BI /W 2 /H 2");
     expect(text).toContain(" ID ");
     expect(text).toContain(" EI Q");
+  });
+});
+
+describe("fixture read-back through the real reader", () => {
+  // The structural assertions above pin offsets and object presence; these pin what each fixture actually RECOVERS through pdf-codec's own public reader, so a mutated PDF-syntax string in the builder fails here rather than silently producing a differently-shaped fixture every downstream read test still tolerates.
+
+  it("rotatedPagePdf recovers its page with the rotated dimensions and its text", () => {
+    const doc = readPdf(rotatedPagePdf());
+    expect(doc.pages).toHaveLength(1);
+    expect(doc.pages[0]).toMatchObject({ widthPt: 100, heightPt: 200 });
+    expect(
+      doc.pages[0]!.items.map((item) =>
+        item.kind === "text" ? item.text : item.kind,
+      ),
+    ).toEqual(["Hello"]);
+  });
+
+  it("nonZeroOriginMediaBoxPdf recovers the page box alone", () => {
+    const doc = readPdf(nonZeroOriginMediaBoxPdf());
+    expect(doc.pages).toHaveLength(1);
+    expect(doc.pages[0]).toMatchObject({ widthPt: 200, heightPt: 100 });
+    expect(doc.pages[0]!.items).toEqual([]);
+  });
+
+  it("formXObjectPdf recovers the text drawn through the form", () => {
+    const doc = readPdf(formXObjectPdf());
+    expect(
+      doc.pages[0]!.items.map((item) =>
+        item.kind === "text" ? item.text : item.kind,
+      ),
+    ).toEqual(["In a form"]);
+  });
+
+  it("inlineImagePdf recovers the inline image as a registered asset", () => {
+    const doc = readPdf(inlineImagePdf());
+    const images = doc.pages[0]!.items.filter((item) => item.kind === "image");
+    expect(images).toHaveLength(1);
+    const [image] = images;
+    expect(image?.kind).toBe("image");
+    expect(image && doc.images[image.imageId]).toBeDefined();
+  });
+
+  it("inheritedPageAttributesPdf gives each page its own branch's inherited box", () => {
+    const doc = readPdf(inheritedPageAttributesPdf());
+    expect(doc.pages).toHaveLength(2);
+    expect(doc.pages[0]).toMatchObject({ widthPt: 300, heightPt: 200 });
+    expect(doc.pages[1]).toMatchObject({ widthPt: 200, heightPt: 300 });
+    for (const page of doc.pages) {
+      expect(
+        page.items.map((item) =>
+          item.kind === "text" ? item.text : item.kind,
+        ),
+      ).toEqual(["Hello"]);
+    }
+  });
+
+  it("withInfoDictPdf recovers the information dictionary's own fields", () => {
+    const doc = readPdf(withInfoDictPdf());
+    expect(doc.metadata).toEqual({
+      title: "Test Doc",
+      author: "Jane Smith",
+      keywords: ["alpha", "beta"],
+      createdIso: "2024-01-15T10:30:00+02:00",
+    });
+  });
+
+  it("twoPageMultiTextPdf recovers both pages with their own texts", () => {
+    const doc = readPdf(twoPageMultiTextPdf());
+    expect(doc.pages).toHaveLength(2);
+    expect(doc.pages[0]).toMatchObject({ widthPt: 300, heightPt: 200 });
+    expect(
+      doc.pages[0]!.items.map((item) =>
+        item.kind === "text" ? item.text : item.kind,
+      ),
+    ).toEqual(["PageZero"]);
+    expect(
+      doc.pages[1]!.items.map((item) =>
+        item.kind === "text" ? item.text : item.kind,
+      ),
+    ).toEqual(["First", "Second"]);
   });
 });
