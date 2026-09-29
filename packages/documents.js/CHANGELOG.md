@@ -1,3 +1,10 @@
+## [14.4.96](https://github.com/ExaDev/documents.js/compare/documents.js%4014.4.95...documents.js%4014.4.96) (2026-09-29)
+
+### Tests
+
+* **documents.js:** pin the paragraph break signals at their exact boundaries ([99fa003](https://github.com/ExaDev/documents.js/commit/99fa0039e9b781e2839d2d03bc4b958ab2423993))
+* **documents.js:** pin the report formula scanner's boundaries and failure offsets ([b851395](https://github.com/ExaDev/documents.js/commit/b851395a2164d5b4b900476e410062d973581790))
+
 ## [14.4.95](https://github.com/ExaDev/documents.js/compare/documents.js%4014.4.94...documents.js%4014.4.95) (2026-09-29)
 
 ### Tests
