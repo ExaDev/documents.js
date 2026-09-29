@@ -1,3 +1,10 @@
+## [14.4.104](https://github.com/ExaDev/documents.js/compare/documents.js%4014.4.103...documents.js%4014.4.104) (2026-09-29)
+
+### Tests
+
+* **documents.js:** decode Java's modified UTF-8 and the text column wire shape ([58a7bd0](https://github.com/ExaDev/documents.js/commit/58a7bd0454fb0defe49c0f48c2283a715da330a0))
+* **documents.js:** drive the docx region scaffolds end to end ([92118e3](https://github.com/ExaDev/documents.js/commit/92118e35d8b61d574f7512280e0f3b0f78ac43c2))
+
 ## [14.4.103](https://github.com/ExaDev/documents.js/compare/documents.js%4014.4.102...documents.js%4014.4.103) (2026-09-29)
 
 ### Tests
