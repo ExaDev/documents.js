@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { HsqldbDataCursor, readHsqldbColumnValue } from "./rowformat";
+import {
+  HsqldbDataCursor,
+  readHsqldbColumnValue,
+  readModifiedUtf8,
+} from "./rowformat";
 
 // Isolated, synthetic-byte-sequence tests for readHsqldbColumnValue's own exactValue sidecar logic (document-schema.js's ContentCellValueSchema doc comment: "a producer should only set it when String(Number(exactValue)) would not round-trip back to exactValue exactly") — hand-constructed against the exact documented byte shape (a 1-byte present-flag, then a big-endian int64 for BIGINT, or a length-prefixed two's-complement magnitude plus a big-endian scale for DECIMAL/NUMERIC), the same "isolated primitive, independent of the real-fixture end-to-end proof" convention src/firebird/reader.test.ts already uses for XdrReader. The real EMPLOYEES/DEPARTMENTS/ORDERS fixtures in src/hsqldb/cache.test.ts deliberately never carry a value beyond Number.MAX_SAFE_INTEGER (their own BIGINT column is documented as "near, but safely inside" it), so that boundary case is exercised here instead.
 
@@ -134,5 +138,66 @@ describe("readHsqldbColumnValue: DATE with no explicit timeZone", () => {
       String(reference.getDate()).padStart(2, "0"),
     ].join("-");
     expect(cell).toEqual({ kind: "date", value: expectedValue });
+  });
+});
+
+describe("readModifiedUtf8: Java's own encoding, not plain UTF-8", () => {
+  it("decodes ASCII, 2-byte, and 3-byte sequences", () => {
+    expect(readModifiedUtf8(new Uint8Array([0x41, 0x42]))).toBe("AB");
+    // U+00E9 (é) and U+20AC (€) in their standard UTF-8 shapes.
+    expect(readModifiedUtf8(new Uint8Array([0xc3, 0xa9]))).toBe("\u00e9");
+    expect(readModifiedUtf8(new Uint8Array([0xe2, 0x82, 0xac]))).toBe("\u20ac");
+  });
+
+  it("decodes NUL only through its own overlong 2-byte spelling", () => {
+    expect(readModifiedUtf8(new Uint8Array([0xc0, 0x80]))).toBe("\u0000");
+    // A bare 0x00 lead byte is malformed in this encoding, not a NUL.
+    expect(() => readModifiedUtf8(new Uint8Array([0x00]))).toThrow(
+      /lead byte 0x0/,
+    );
+  });
+
+  it("recombines a supplementary character from its own surrogate pair's two 3-byte sequences", () => {
+    // U+1D11E (MUSICAL SYMBOL G CLEF): surrogates D834 and DD1E, each as its own 3-byte sequence.
+    expect(
+      readModifiedUtf8(new Uint8Array([0xed, 0xa0, 0xb4, 0xed, 0xb4, 0x9e])),
+    ).toBe("\u{1d11e}");
+  });
+
+  it("rejects every malformed shape with its own message", () => {
+    expect(() => readModifiedUtf8(new Uint8Array([0xc3]))).toThrow(
+      /malformed modified-UTF-8 2-byte/,
+    );
+    expect(() => readModifiedUtf8(new Uint8Array([0xc3, 0x41]))).toThrow(
+      /malformed modified-UTF-8 2-byte/,
+    );
+    expect(() => readModifiedUtf8(new Uint8Array([0xe2, 0x82]))).toThrow(
+      /malformed modified-UTF-8 3-byte/,
+    );
+    expect(() => readModifiedUtf8(new Uint8Array([0xe2, 0x41, 0xac]))).toThrow(
+      /malformed modified-UTF-8 3-byte/,
+    );
+    // A bare continuation byte as a lead byte is malformed too.
+    expect(() => readModifiedUtf8(new Uint8Array([0x80]))).toThrow(
+      /lead byte 0x80/,
+    );
+  });
+});
+
+describe("readHsqldbColumnValue: text columns on the wire", () => {
+  it("decodes a VARCHAR through its length-prefixed modified UTF-8 payload", () => {
+    const text = "H\u00e9\u20ac";
+    const encoded = new TextEncoder().encode(text);
+    // The column's own shape: a 1-byte present flag, a 4-byte big-endian byte length, then the payload.
+    const bytes = new Uint8Array(1 + 4 + encoded.length);
+    bytes[0] = 1;
+    new DataView(bytes.buffer).setInt32(1, encoded.length, false);
+    bytes.set(encoded, 5);
+    const cursor = new HsqldbDataCursor(bytes);
+    expect(readHsqldbColumnValue(cursor, 12)).toEqual({
+      kind: "string",
+      value: text,
+    });
+    expect(cursor.position).toBe(bytes.length);
   });
 });
