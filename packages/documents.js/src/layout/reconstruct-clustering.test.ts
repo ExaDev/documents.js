@@ -383,3 +383,128 @@ describe("reconstructWordprocessing: images and page structure", () => {
     expect(doc.metadata).toEqual({ title: "My Doc", author: "A. Writer" });
   });
 });
+
+describe("reconstructWordprocessing: paragraph break signals at their exact boundaries", () => {
+  it("a gap exactly 1.25x the modal spacing is still ordinary line spacing, not a paragraph break", () => {
+    // Gaps 12, 12, 15: the modal spacing is 12, and 1.25 x 12 = 15 exactly. The break comparison is strict, so the 15pt gap stays inside the paragraph.
+    const pg = page(612, 792, [
+      text({ text: "one", xPt: 50, yPt: 700, widthPt: 20 }),
+      text({ text: "two", xPt: 50, yPt: 688, widthPt: 20 }),
+      text({ text: "three", xPt: 50, yPt: 676, widthPt: 30 }),
+      text({ text: "four", xPt: 50, yPt: 661, widthPt: 20 }),
+    ]);
+    const doc = reconstructWordprocessing(docFrom([pg]));
+    expect(paragraphs(doc)).toHaveLength(1);
+  });
+
+  it("a gap just past 1.25x the modal spacing breaks the paragraph", () => {
+    const pg = page(612, 792, [
+      text({ text: "one", xPt: 50, yPt: 700, widthPt: 20 }),
+      text({ text: "two", xPt: 50, yPt: 688, widthPt: 20 }),
+      text({ text: "three", xPt: 50, yPt: 676, widthPt: 30 }),
+      text({ text: "four", xPt: 50, yPt: 660.5, widthPt: 20 }),
+    ]);
+    const doc = reconstructWordprocessing(docFrom([pg]));
+    expect(paragraphs(doc)).toHaveLength(2);
+  });
+
+  it("font sizes one point apart are close: adjacent lines stay one paragraph", () => {
+    // 12 and 13 sit exactly on the absolute tolerance arm's inclusive boundary.
+    const pg = page(612, 792, [
+      text({ text: "one", xPt: 50, yPt: 700, widthPt: 20, sizePt: 12 }),
+      text({ text: "two", xPt: 50, yPt: 688, widthPt: 20, sizePt: 13 }),
+      text({ text: "three", xPt: 50, yPt: 676, widthPt: 30, sizePt: 13 }),
+      text({ text: "four", xPt: 50, yPt: 664, widthPt: 20, sizePt: 12 }),
+    ]);
+    const doc = reconstructWordprocessing(docFrom([pg]));
+    expect(paragraphs(doc)).toHaveLength(1);
+  });
+
+  it("font sizes at exactly the 0.15 ratio are close: adjacent lines stay one paragraph", () => {
+    // 12.75 and 15 differ by 2.25, which is more than the 1pt absolute tolerance, and exactly 0.15 of the larger size.
+    const pg = page(612, 792, [
+      text({ text: "one", xPt: 50, yPt: 700, widthPt: 20, sizePt: 12.75 }),
+      text({ text: "two", xPt: 50, yPt: 688, widthPt: 20, sizePt: 15 }),
+      text({ text: "three", xPt: 50, yPt: 676, widthPt: 30, sizePt: 12.75 }),
+      text({ text: "four", xPt: 50, yPt: 664, widthPt: 20, sizePt: 12.75 }),
+    ]);
+    const doc = reconstructWordprocessing(docFrom([pg]));
+    expect(paragraphs(doc)).toHaveLength(1);
+  });
+
+  it("font sizes past both tolerances break the paragraph", () => {
+    // 12 and 16 differ by 4pt and by 0.25 of the larger: neither arm says close.
+    const pg = page(612, 792, [
+      text({ text: "one", xPt: 50, yPt: 700, widthPt: 20, sizePt: 12 }),
+      text({ text: "two", xPt: 50, yPt: 688, widthPt: 20, sizePt: 16 }),
+      text({ text: "three", xPt: 50, yPt: 676, widthPt: 30, sizePt: 12 }),
+      text({ text: "four", xPt: 50, yPt: 664, widthPt: 20, sizePt: 12 }),
+    ]);
+    const doc = reconstructWordprocessing(docFrom([pg]));
+    // The size discontinuity breaks on BOTH sides of the 16pt line, so the middle line is its own paragraph.
+    expect(paragraphs(doc)).toHaveLength(3);
+  });
+
+  it("keeps the FIRST bucket when two gap buckets tie, so the tighter spacing stays the modal one", () => {
+    // Gaps 12, 12, 24, 24, 36: the 12 and 24 buckets tie at two occurrences each. The strict greater-than keeps 12, so the threshold is 15 and both 24pt gaps break; a tie-breaking later bucket would keep all six lines in one paragraph.
+    const pg = page(612, 792, [
+      text({ text: "a", xPt: 50, yPt: 700, widthPt: 8 }),
+      text({ text: "b", xPt: 50, yPt: 688, widthPt: 8 }),
+      text({ text: "c", xPt: 50, yPt: 676, widthPt: 8 }),
+      text({ text: "d", xPt: 50, yPt: 652, widthPt: 8 }),
+      text({ text: "e", xPt: 50, yPt: 628, widthPt: 8 }),
+      text({ text: "f", xPt: 50, yPt: 592, widthPt: 8 }),
+    ]);
+    const doc = reconstructWordprocessing(docFrom([pg]));
+    expect(paragraphs(doc)).toHaveLength(4);
+  });
+
+  it("an indented line following a margin line breaks the paragraph; a sub-em wobble does not", () => {
+    const indented = page(612, 792, [
+      text({ text: "one", xPt: 50, yPt: 700, widthPt: 20 }),
+      text({ text: "two", xPt: 50, yPt: 688, widthPt: 20 }),
+      text({ text: "indent", xPt: 65, yPt: 676, widthPt: 40 }),
+    ]);
+    expect(
+      paragraphs(reconstructWordprocessing(docFrom([indented]))),
+    ).toHaveLength(2);
+    const wobble = page(612, 792, [
+      text({ text: "one", xPt: 50, yPt: 700, widthPt: 20 }),
+      text({ text: "two", xPt: 50, yPt: 688, widthPt: 20 }),
+      text({ text: "wobble", xPt: 58, yPt: 676, widthPt: 40 }),
+    ]);
+    expect(
+      paragraphs(reconstructWordprocessing(docFrom([wobble]))),
+    ).toHaveLength(1);
+  });
+
+  it("carries a run's own bold and italic through, and omits both from a plain run", () => {
+    const italic: LayoutText = {
+      kind: "text",
+      text: "slanted",
+      xPt: 50,
+      yPt: 700,
+      font: { family: "Helvetica", weight: "bold", style: "italic" },
+      sizePt: 12,
+      color: { r: 0, g: 0, b: 0 },
+      widthPt: 48,
+    };
+    const pg = page(612, 792, [
+      text({ text: "plain", xPt: 50, yPt: 688, widthPt: 30 }),
+      italic,
+    ]);
+    const doc = reconstructWordprocessing(docFrom([pg]));
+    const [para] = paragraphs(doc);
+    const runs = para?.runs ?? [];
+    // The upper line comes first, so its styled run leads.
+    // The word space before the next line lands on this run (pushRunsForLine appends it to the previous run).
+    expect(runs[0]).toMatchObject({
+      text: "slanted ",
+      bold: true,
+      italic: true,
+    });
+    expect(runs[1]).toMatchObject({ text: "plain" });
+    expect(runs[1] && "bold" in runs[1]).toBe(false);
+    expect(runs[1] && "italic" in runs[1]).toBe(false);
+  });
+});
