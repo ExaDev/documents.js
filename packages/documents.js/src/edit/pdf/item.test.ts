@@ -350,6 +350,145 @@ describe("PdfLinkItem", () => {
   });
 });
 
+describe("full property surface of the shape items", () => {
+  it("rect moves, refills, restrokes, and clears its optional fields", () => {
+    const editor = createPdf();
+    const page = editor.pages()[0]!;
+    const rect = page.appendRect({
+      xPt: 1,
+      yPt: 2,
+      widthPt: 30,
+      heightPt: 40,
+      fill: BLACK,
+      stroke: { color: RED, widthPt: 2 },
+    });
+    rect.xPt = 10;
+    rect.yPt = 20;
+    rect.widthPt = 50;
+    rect.heightPt = 60;
+    rect.fill = RED;
+    rect.stroke = { color: BLACK, widthPt: 3 };
+    expect(rect.xPt).toBe(10);
+    expect(rect.yPt).toBe(20);
+    expect(rect.widthPt).toBe(50);
+    expect(rect.heightPt).toBe(60);
+    expect(rect.fill).toEqual(RED);
+    expect(rect.stroke).toEqual({ color: BLACK, widthPt: 3 });
+    // Clearing optionals removes the keys rather than leaving undefined-valued ones.
+    rect.fill = undefined;
+    rect.stroke = undefined;
+    expect(rect.fill).toBeUndefined();
+    expect(rect.stroke).toBeUndefined();
+    expect(() => {
+      rect.heightPt = -1;
+    }).toThrow(/nonnegative/);
+  });
+
+  it("ellipse moves and restyles the same way", () => {
+    const editor = createPdf();
+    const page = editor.pages()[0]!;
+    const ellipse = page.appendEllipse({
+      xPt: 1,
+      yPt: 2,
+      widthPt: 30,
+      heightPt: 40,
+    });
+    ellipse.xPt = 11;
+    ellipse.yPt = 21;
+    ellipse.widthPt = 31;
+    ellipse.heightPt = 41;
+    ellipse.fill = BLACK;
+    ellipse.stroke = { color: RED, widthPt: 1 };
+    expect(ellipse.xPt).toBe(11);
+    expect(ellipse.yPt).toBe(21);
+    expect(ellipse.widthPt).toBe(31);
+    expect(ellipse.heightPt).toBe(41);
+    expect(ellipse.fill).toEqual(BLACK);
+    expect(ellipse.stroke).toEqual({ color: RED, widthPt: 1 });
+    ellipse.fill = undefined;
+    expect(ellipse.fill).toBeUndefined();
+  });
+
+  it("line moves both endpoints and restyles", () => {
+    const editor = createPdf();
+    const page = editor.pages()[0]!;
+    const line = page.appendLine({
+      x1Pt: 0,
+      y1Pt: 0,
+      x2Pt: 10,
+      y2Pt: 10,
+      color: BLACK,
+      widthPt: 1,
+    });
+    line.x1Pt = 1;
+    line.y1Pt = 2;
+    line.x2Pt = 3;
+    line.y2Pt = 4;
+    line.color = RED;
+    line.widthPt = 5;
+    line.style = "dashed";
+    expect(line.x1Pt).toBe(1);
+    expect(line.y1Pt).toBe(2);
+    expect(line.x2Pt).toBe(3);
+    expect(line.y2Pt).toBe(4);
+    expect(line.color).toEqual(RED);
+    expect(line.widthPt).toBe(5);
+    expect(line.style).toBe("dashed");
+    line.style = undefined;
+    expect(line.style).toBeUndefined();
+  });
+
+  it("path refills, refills by rule, restrokes, and restyles", () => {
+    const editor = createPdf();
+    const page = editor.pages()[0]!;
+    const path = page.appendPath({
+      subpaths: [
+        {
+          startXPt: 0,
+          startYPt: 0,
+          closed: true,
+          segments: [{ kind: "line", xPt: 10, yPt: 0 }],
+        },
+      ],
+    });
+    path.fill = BLACK;
+    path.fillRule = "evenodd";
+    path.stroke = { color: RED, widthPt: 2 };
+    path.style = "dotted";
+    expect(path.fill).toEqual(BLACK);
+    expect(path.fillRule).toBe("evenodd");
+    expect(path.stroke).toEqual({ color: RED, widthPt: 2 });
+    expect(path.style).toBe("dotted");
+    path.fill = undefined;
+    path.fillRule = undefined;
+    path.style = undefined;
+    expect(path.fill).toBeUndefined();
+    expect(path.fillRule).toBeUndefined();
+    expect(path.style).toBeUndefined();
+  });
+
+  it("image moves and rotates, clearing the rotation again", () => {
+    const editor = createPdf();
+    const page = editor.pages()[0]!;
+    const image = page.appendImage({
+      xPt: 5,
+      yPt: 6,
+      widthPt: 30,
+      heightPt: 40,
+      bytes: tinyPngBytes(),
+      format: "png",
+    });
+    image.xPt = 15;
+    image.yPt = 16;
+    image.rotationDeg = 90;
+    expect(image.xPt).toBe(15);
+    expect(image.yPt).toBe(16);
+    expect(image.rotationDeg).toBe(90);
+    image.rotationDeg = undefined;
+    expect(image.rotationDeg).toBeUndefined();
+  });
+});
+
 describe("sourcePath", () => {
   it("is undefined for a freshly built item (only a format reader assigns one)", () => {
     const editor = createPdf();
