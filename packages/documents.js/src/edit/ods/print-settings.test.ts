@@ -247,6 +247,39 @@ describe("OdsSheet.printSettings: scalePercent/fitToPages", () => {
     expect(sheet.printSettings.scalePercent).toBeUndefined();
   });
 
+  it("parses a decimal percentage, and rejects every other spelling of the value", () => {
+    const editor = createOds();
+    const sheet = editor.sheets()[0]!;
+    sheet.printSettings = BASE;
+    const properties = currentPageLayoutProperties(editor);
+    setAttr(properties, "style:scale-to", "50.5%");
+    expect(
+      readSheetPrintSettings(editor.toPackage(), findTableElement(editor))
+        .scalePercent,
+    ).toBe(50.5);
+    for (const rejected of ["50", ".5%", "50.%", "50.5", "%50"]) {
+      setAttr(properties, "style:scale-to", rejected);
+      expect(
+        readSheetPrintSettings(editor.toPackage(), findTableElement(editor))
+          .scalePercent,
+        rejected,
+      ).toBeUndefined();
+    }
+  });
+
+  it("accepts zero as a fit count, the non-negative boundary", () => {
+    const editor = createOds();
+    const sheet = editor.sheets()[0]!;
+    sheet.printSettings = BASE;
+    const properties = currentPageLayoutProperties(editor);
+    setAttr(properties, "style:scale-to-X", "0");
+    setAttr(properties, "style:scale-to-Y", "0");
+    expect(
+      readSheetPrintSettings(editor.toPackage(), findTableElement(editor))
+        .fitToPages,
+    ).toEqual({ width: 0, height: 0 });
+  });
+
   it("an unparseable style:scale-to value yields no scalePercent", () => {
     const editor = createOds();
     const sheet = editor.sheets()[0]!;
@@ -341,6 +374,24 @@ describe("OdsSheet.printSettings: manualBreaks", () => {
     expect(
       content.sheets[0]!.rows.find((r) => r.index === 2)?.heightPt,
     ).toBeCloseTo(33, 5);
+  });
+
+  it("reads repeated header columns and rows positionally from the table's own structure", () => {
+    function oel(tag: string, children: XmlElement[] = []): XmlElement {
+      return { type: "element", tag, attributes: [], children };
+    }
+    const editor = createOds();
+    const table = oel("table:table", [
+      oel("table:table-header-columns", [
+        oel("table:table-column"),
+        oel("table:table-column"),
+      ]),
+      oel("table:table-row"),
+      oel("table:table-header-rows", [oel("table:table-row")]),
+    ]);
+    const settings = readSheetPrintSettings(editor.toPackage(), table);
+    expect(settings.repeatColumns).toEqual({ start: 0, end: 1 });
+    expect(settings.repeatRows).toEqual({ start: 1, end: 1 });
   });
 
   it("has no manualBreaks when the field is omitted", () => {
