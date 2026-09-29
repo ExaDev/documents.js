@@ -682,3 +682,66 @@ describe("assertNeverTokenKind", () => {
     }).toThrow('documents.js: unhandled token {"kind":"bogus"}');
   });
 });
+
+describe("parseSelect failure diagnostics", () => {
+  function parseErrorOf(sql: string): HsqldbSqlParseError {
+    try {
+      parseSelect(sql);
+    } catch (error) {
+      if (error instanceof HsqldbSqlParseError) {
+        return error;
+      }
+    }
+    throw new Error(`expected a parse error for: ${sql}`);
+  }
+
+  it("names the offending token by its own kind, for every kind a failure can land on", () => {
+    expect(parseErrorOf("SELECT a b").message).toContain(
+      'found identifier "b"',
+    );
+    expect(parseErrorOf("SELECT 'lit'").message).toContain(
+      "found string literal",
+    );
+    expect(parseErrorOf("SELECT 5").message).toContain("found numeric literal");
+    expect(parseErrorOf("SELECT COUNT(x FROM t").message).toContain(
+      'expected ")"',
+    );
+    expect(parseErrorOf("SELECT , a FROM t").message).toContain(
+      'expected a column name, found ","',
+    );
+  });
+
+  it("reports the offset each failure was detected at", () => {
+    expect(parseErrorOf("SELECT a b").offset).toBe(9);
+    expect(parseErrorOf("SELECT COUNT(x FROM t").offset).toBe(15);
+    expect(parseErrorOf("SELECT , a FROM t").offset).toBe(7);
+  });
+
+  it("refuses a schema-qualified table name as unsupported, not as a parse error", () => {
+    expect(() => parseSelect("SELECT a FROM PUBLIC.t")).toThrow(
+      HsqldbSqlUnsupportedError,
+    );
+    expect(() => parseSelect("SELECT a FROM PUBLIC.t")).toThrow(
+      /schema-qualified/,
+    );
+  });
+
+  it("names the alias a derived table still needs", () => {
+    expect(parseErrorOf("SELECT a FROM (SELECT b FROM u)").message).toContain(
+      "expected a derived table alias",
+    );
+  });
+
+  it("names a missing table alias after AS", () => {
+    expect(parseErrorOf("SELECT a FROM t AS").message).toContain(
+      "a table alias after AS",
+    );
+    expect(parseErrorOf("SELECT a FROM t AS").offset).toBe(18);
+  });
+
+  it("names the join keyword a dangling NATURAL needs", () => {
+    expect(
+      parseErrorOf("SELECT a FROM t NATURAL WHERE x = 1").message,
+    ).toContain("keyword JOIN, INNER, LEFT, RIGHT or FULL after NATURAL");
+  });
+});
