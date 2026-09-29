@@ -145,6 +145,93 @@ describe("interpretContentStream: text", () => {
     expect(item.endMatrix).toEqual([10, 0, 0, 10, 11, 0]);
   });
 
+  it("ends the run at a TJ adjustment wide enough to be a word space, so the gap between the two items carries it", () => {
+    const { sink } = collectDiagnostics();
+    const items = interpretContentStream(
+      textBytes("BT /F1 10 Tf 0 0 Td [(A) -250 (V)] TJ ET"),
+      EMPTY_RESOURCES,
+      {
+        fontMetrics: fixedWidthFontMetrics(500, 1),
+        resolver: makeResolver(new Map()),
+        sink,
+      },
+    );
+    const [first, second] = items;
+    if (first?.kind !== "text" || second?.kind !== "text") {
+      throw new Error("expected two text items");
+    }
+    expect(items).toHaveLength(2);
+    expect(Array.from(first.codes)).toEqual(Array.from(textBytes("A")));
+    expect(Array.from(second.codes)).toEqual(Array.from(textBytes("V")));
+    // 'A' ends at 5, the adjustment moves the pen 250/1000 * 10 = 2.5 on, so 'V' starts at 7.5 and ends at 12.5.
+    expect(first.startMatrix).toEqual([10, 0, 0, 10, 0, 0]);
+    expect(first.endMatrix).toEqual([10, 0, 0, 10, 5, 0]);
+    expect(second.startMatrix).toEqual([10, 0, 0, 10, 7.5, 0]);
+    expect(second.endMatrix).toEqual([10, 0, 0, 10, 12.5, 0]);
+  });
+
+  it("ends the run at an adjustment of exactly one eighth of an em, the narrowest word space", () => {
+    const { sink } = collectDiagnostics();
+    const items = interpretContentStream(
+      textBytes("BT /F1 10 Tf 0 0 Td [(A) -125 (V)] TJ ET"),
+      EMPTY_RESOURCES,
+      {
+        fontMetrics: fixedWidthFontMetrics(500, 1),
+        resolver: makeResolver(new Map()),
+        sink,
+      },
+    );
+    expect(items).toHaveLength(2);
+  });
+
+  it("keeps the run whole for an adjustment just under an eighth of an em", () => {
+    const { sink } = collectDiagnostics();
+    const items = interpretContentStream(
+      textBytes("BT /F1 10 Tf 0 0 Td [(A) -124 (V)] TJ ET"),
+      EMPTY_RESOURCES,
+      {
+        fontMetrics: fixedWidthFontMetrics(500, 1),
+        resolver: makeResolver(new Map()),
+        sink,
+      },
+    );
+    expect(items).toHaveLength(1);
+  });
+
+  it("keeps the run whole for a wide adjustment that pulls the next glyph back rather than opening a gap", () => {
+    const { sink } = collectDiagnostics();
+    const items = interpretContentStream(
+      textBytes("BT /F1 10 Tf 0 0 Td [(A) 250 (V)] TJ ET"),
+      EMPTY_RESOURCES,
+      {
+        fontMetrics: fixedWidthFontMetrics(500, 1),
+        resolver: makeResolver(new Map()),
+        sink,
+      },
+    );
+    expect(items).toHaveLength(1);
+  });
+
+  it("does not end a run for a wide adjustment that precedes its first string, so the run still starts before it", () => {
+    const { sink } = collectDiagnostics();
+    const items = interpretContentStream(
+      textBytes("BT /F1 10 Tf 0 0 Td [-250 (A)] TJ ET"),
+      EMPTY_RESOURCES,
+      {
+        fontMetrics: fixedWidthFontMetrics(500, 1),
+        resolver: makeResolver(new Map()),
+        sink,
+      },
+    );
+    const [item] = items;
+    if (item?.kind !== "text") {
+      throw new Error("expected a text item");
+    }
+    expect(items).toHaveLength(1);
+    expect(item.startMatrix).toEqual([10, 0, 0, 10, 0, 0]);
+    expect(item.endMatrix).toEqual([10, 0, 0, 10, 7.5, 0]);
+  });
+
   it("applies a rotated CTM to the text rendering matrix", () => {
     const { sink } = collectDiagnostics();
     const items = interpretContentStream(
