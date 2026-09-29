@@ -1,3 +1,9 @@
+## [14.4.101](https://github.com/ExaDev/documents.js/compare/documents.js%4014.4.100...documents.js%4014.4.101) (2026-09-29)
+
+### Tests
+
+* **documents.js:** pin the frame walk's decorated table cells ([a182dbe](https://github.com/ExaDev/documents.js/commit/a182dbe845bef9d62f48b8d63982248d806eba7c))
+
 ## [14.4.100](https://github.com/ExaDev/documents.js/compare/documents.js%4014.4.99...documents.js%4014.4.100) (2026-09-29)
 
 ### Miscellaneous Chores
