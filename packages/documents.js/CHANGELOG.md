@@ -1,3 +1,9 @@
+## [14.4.116](https://github.com/ExaDev/documents.js/compare/documents.js%4014.4.115...documents.js%4014.4.116) (2026-09-30)
+
+### Tests
+
+* **documents.js:** pin the line clustering measurement edges ([0a6de0e](https://github.com/ExaDev/documents.js/commit/0a6de0ec432bc4679fede94a72820b0fa5e4cf07))
+
 ## [14.4.115](https://github.com/ExaDev/documents.js/compare/documents.js%4014.4.114...documents.js%4014.4.115) (2026-09-30)
 
 ### Tests
