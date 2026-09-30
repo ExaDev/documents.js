@@ -1,3 +1,10 @@
+## [14.4.118](https://github.com/ExaDev/documents.js/compare/documents.js%4014.4.117...documents.js%4014.4.118) (2026-09-30)
+
+### Tests
+
+* **documents.js:** drive the firebird record walk over hand-built backup streams ([6485d16](https://github.com/ExaDev/documents.js/commit/6485d1695e20f85cb5e3774d25d8f0721be36c6e))
+* **documents.js:** pin the print-settings structural edges ([8285b6e](https://github.com/ExaDev/documents.js/commit/8285b6eceeaf894c62c927b526c5d86b6874ec25))
+
 ## [14.4.117](https://github.com/ExaDev/documents.js/compare/documents.js%4014.4.116...documents.js%4014.4.117) (2026-09-30)
 
 ### Tests
