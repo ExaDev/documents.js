@@ -1,3 +1,9 @@
+## [14.4.120](https://github.com/ExaDev/documents.js/compare/documents.js%4014.4.119...documents.js%4014.4.120) (2026-09-30)
+
+### Tests
+
+* **documents.js:** pin the odt bridge's merged image paragraphs and list edges ([2cad641](https://github.com/ExaDev/documents.js/commit/2cad64151b5234c3098a27fff9807d98a0987159))
+
 ## [14.4.119](https://github.com/ExaDev/documents.js/compare/documents.js%4014.4.118...documents.js%4014.4.119) (2026-09-30)
 
 ### Tests
