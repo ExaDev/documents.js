@@ -1,3 +1,10 @@
+## [14.4.119](https://github.com/ExaDev/documents.js/compare/documents.js%4014.4.118...documents.js%4014.4.119) (2026-09-30)
+
+### Tests
+
+* **documents.js:** pin the report formula scanner's names, numbers and refusals ([4ef8aa5](https://github.com/ExaDev/documents.js/commit/4ef8aa54634e1f826e30b933bc1f3bdb26bfb81e))
+* **documents.js:** pin the wordprocessing bridge's paragraph and bookmark edges ([9f77bef](https://github.com/ExaDev/documents.js/commit/9f77befd996e25dab9d8424c8c1920f7cd4f83b5))
+
 ## [14.4.118](https://github.com/ExaDev/documents.js/compare/documents.js%4014.4.117...documents.js%4014.4.118) (2026-09-30)
 
 ### Tests
