@@ -1,3 +1,9 @@
+## [14.4.114](https://github.com/ExaDev/documents.js/compare/documents.js%4014.4.113...documents.js%4014.4.114) (2026-09-30)
+
+### Tests
+
+* **documents.js:** pin the table recovery measurement and emission edges ([ce2d4be](https://github.com/ExaDev/documents.js/commit/ce2d4be1784f2e8b4497cfd3d5f3c8cb7beef092))
+
 ## [14.4.113](https://github.com/ExaDev/documents.js/compare/documents.js%4014.4.112...documents.js%4014.4.113) (2026-09-30)
 
 ### Tests
