@@ -1,3 +1,9 @@
+## [14.4.121](https://github.com/ExaDev/documents.js/compare/documents.js%4014.4.120...documents.js%4014.4.121) (2026-09-30)
+
+### Tests
+
+* **documents.js:** pin the metadata write path's format classification ([dd23a22](https://github.com/ExaDev/documents.js/commit/dd23a22e537b1d6132698acf70e21a5125213659))
+
 ## [14.4.120](https://github.com/ExaDev/documents.js/compare/documents.js%4014.4.119...documents.js%4014.4.120) (2026-09-30)
 
 ### Tests
