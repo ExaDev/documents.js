@@ -1,3 +1,9 @@
+## [14.4.117](https://github.com/ExaDev/documents.js/compare/documents.js%4014.4.116...documents.js%4014.4.117) (2026-09-30)
+
+### Tests
+
+* **documents.js:** pin the report formula engine's resolution and refusal edges ([915400d](https://github.com/ExaDev/documents.js/commit/915400d831be018c7c298c0816724e871f06b651))
+
 ## [14.4.116](https://github.com/ExaDev/documents.js/compare/documents.js%4014.4.115...documents.js%4014.4.116) (2026-09-30)
 
 ### Tests
