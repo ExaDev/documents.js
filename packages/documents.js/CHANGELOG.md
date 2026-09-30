@@ -1,3 +1,10 @@
+## [14.4.115](https://github.com/ExaDev/documents.js/compare/documents.js%4014.4.114...documents.js%4014.4.115) (2026-09-30)
+
+### Tests
+
+* **documents.js:** pin the frames-to-layout inverse's emission edges ([ea8ac71](https://github.com/ExaDev/documents.js/commit/ea8ac71f22adbcea0876598434c489f035a38607))
+* **documents.js:** pin the pdf item validation messages and removed-item guards ([e7b5a57](https://github.com/ExaDev/documents.js/commit/e7b5a573cf3758950c5c9ac5cd71e0c82aa72f56))
+
 ## [14.4.114](https://github.com/ExaDev/documents.js/compare/documents.js%4014.4.113...documents.js%4014.4.114) (2026-09-30)
 
 ### Tests
