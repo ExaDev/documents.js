@@ -1,3 +1,9 @@
+## [14.4.113](https://github.com/ExaDev/documents.js/compare/documents.js%4014.4.112...documents.js%4014.4.113) (2026-09-30)
+
+### Tests
+
+* **documents.js:** pin the reconstruct claiming edges across pages, layers and anchors ([820ef26](https://github.com/ExaDev/documents.js/commit/820ef26358bf72812bd8d82fa71ad616d4516074))
+
 ## [14.4.112](https://github.com/ExaDev/documents.js/compare/documents.js%4014.4.111...documents.js%4014.4.112) (2026-09-29)
 
 ### Tests
