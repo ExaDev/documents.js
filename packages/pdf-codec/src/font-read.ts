@@ -1,4 +1,4 @@
-import { widthOfCode } from "./afm-widths";
+import { afmWidthOfCode } from "./afm-widths";
 import type { BuiltinEncoding } from "./builtin-encoding";
 import { readFontProgramEncoding } from "./builtin-encoding";
 import { parseToUnicodeCMap } from "./cmap";
@@ -185,7 +185,23 @@ function buildSimpleFont(fontDict: PdfDict, context: FontReadContext): PdfFont {
   } else {
     // No /Widths at all is only valid for the standard 14, which a reader is expected to already know the metrics of (ISO 32000-1 9.6.2.2) — fall back to the same AFM table the write path uses.
     const standardMatch = resolveStandardFont(baseFamily, bold, italic);
-    widthOf = (code) => widthOfCode(standardMatch.standardName, code);
+    // A code the standard face's AFM has no width for (WinAnsi leaves 0x01 and the like unmapped) takes /MissingWidth exactly as the /Widths branch does for a code outside its range; one diagnostic per font, not per occurrence.
+    let reportedUnmapped = false;
+    widthOf = (code) => {
+      const width = afmWidthOfCode(standardMatch.standardName, code);
+      if (width !== undefined) {
+        return width;
+      }
+      if (!reportedUnmapped) {
+        reportedUnmapped = true;
+        context.sink({
+          code: "pdf/font-width-unmapped-code",
+          severity: "warning",
+          message: `font "${baseFont}" has no /Widths array and the standard-14 metrics define no width for character code ${code}; using /MissingWidth (${missingWidth}) for such codes`,
+        });
+      }
+      return missingWidth;
+    };
     if (!standardMatch.matched) {
       context.sink({
         code: "pdf/font-widths-missing",

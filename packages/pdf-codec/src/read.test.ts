@@ -13,6 +13,7 @@ import {
   rotatedPagePdf,
   symbolFontProgramPdf,
   twoPagesFirstWithoutResourcesPdf,
+  unmappedCodeWithoutWidthsPdf,
   unsupportedSecurityHandlerPdf,
   withInfoDictPdf,
   xrefStreamWithObjectStreamPdf,
@@ -106,6 +107,24 @@ describe("readPdf: basic structure", () => {
     expect(textLayoutItems(doc.pages[0]!.items)).toMatchObject([
       { text: "First line" },
       { text: "Second line" },
+    ]);
+  });
+});
+
+describe("readPdf: simple font without /Widths", () => {
+  // ExaDev/documents.js#1609: one code WinAnsi leaves unmapped used to abort the whole document.
+  it("reads the page and reports a diagnostic when a shown code has no standard-14 width", () => {
+    const diagnostics: PdfDiagnostic[] = [];
+    const doc = readPdf(unmappedCodeWithoutWidthsPdf(), {
+      sink: (d) => {
+        diagnostics.push(d);
+      },
+    });
+    expect(doc.pages).toHaveLength(1);
+    expect(textLayoutItems(doc.pages[0]!.items)).toHaveLength(1);
+    expect(diagnostics.map((d) => d.code)).toEqual([
+      "pdf/font-width-unmapped-code",
+      "text/unmapped-encoding",
     ]);
   });
 });

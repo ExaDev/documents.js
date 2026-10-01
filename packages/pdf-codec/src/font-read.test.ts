@@ -106,6 +106,55 @@ describe("createFontResolver: simple fonts", () => {
     );
   });
 
+  it("takes /MissingWidth for a code the standard-14 metrics cannot map when /Widths is absent, reporting once per font", () => {
+    const { sink, diagnostics } = collectDiagnostics();
+    const descriptor = pdfDict({ MissingWidth: pdfNum(250) });
+    const fontDict = pdfDict({
+      Subtype: pdfName("Type1"),
+      BaseFont: pdfName("Helvetica"),
+      FontDescriptor: descriptor,
+    });
+    const resources = pdfDict({ Font: pdfDict({ F1: fontDict }) });
+    const { resolve } = createFontResolver({
+      resolver: makeResolver(new Map()),
+      sink,
+    });
+    const font = resolve("F1", resources);
+    expect(font?.widthOf(1)).toBe(250);
+    expect(font?.widthOf(2)).toBe(250);
+    expect(font?.widthOf(0x41)).toBe(widthOfCode("Helvetica", 0x41));
+    expect(diagnostics).toMatchObject([
+      { code: "pdf/font-width-unmapped-code", severity: "warning" },
+    ]);
+  });
+
+  it("defaults an unmappable code's width to 0 when /Widths and /FontDescriptor are both absent", () => {
+    const { sink } = collectDiagnostics();
+    const fontDict = pdfDict({
+      Subtype: pdfName("Type1"),
+      BaseFont: pdfName("Courier-Bold"),
+    });
+    const resources = pdfDict({ Font: pdfDict({ F1: fontDict }) });
+    const { resolve } = createFontResolver({
+      resolver: makeResolver(new Map()),
+      sink,
+    });
+    const font = resolve("F1", resources);
+    expect(font?.widthOf(1)).toBe(600); // Courier is fixed-width: every code advances 600, mapped or not
+    const helvetica = resolve(
+      "F2",
+      pdfDict({
+        Font: pdfDict({
+          F2: pdfDict({
+            Subtype: pdfName("Type1"),
+            BaseFont: pdfName("Helvetica"),
+          }),
+        }),
+      }),
+    );
+    expect(helvetica?.widthOf(1)).toBe(0);
+  });
+
   it("defaults a simple font with no /BaseFont at all to Helvetica", () => {
     const { sink } = collectDiagnostics();
     const fontDict = pdfDict({ Subtype: pdfName("Type1") });

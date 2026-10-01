@@ -127,6 +127,19 @@ export function minimalClassicXrefPdf(): Uint8Array<ArrayBuffer> {
   return b.bytes();
 }
 
+// ExaDev/documents.js#1609: a standard-14 simple font with no /Widths array whose shown string carries a code WinAnsi leaves unmapped (0x01). The font dict is the shared Helvetica one, which names no /Widths.
+export function unmappedCodeWithoutWidthsPdf(): Uint8Array<ArrayBuffer> {
+  const b = new FixtureBuilder().header(PDF_1_4);
+  catalogPagesPageFontObjects(b, CONTENT_OBJ);
+  b.stream(
+    CONTENT_OBJ,
+    EMPTY_DICT,
+    enc("BT /F1 12 Tf 10 50 Td (A\\001B) Tj ET"),
+  );
+  b.classicXrefAndTrailer(CONTENT_OBJ, "/Root 1 0 R");
+  return b.bytes();
+}
+
 // A real-world-shaped content stream: TWO separate BT/ET blocks, the second with no Tf of its own, relying on the font the first block already selected — exactly the pattern a real Word-exported PDF produces (each visually distinct line of a paragraph gets its own BT/ET, but only the FIRST one in a run repeats /F1 Tf) and #851's own regression case. `readPdf` used to reset the whole text state (including the selected font) at every BT, silently dropping every text-showing operator in a later BT/ET block that didn't repeat Tf.
 export function bTetTextStatePersistencePdf(): Uint8Array<ArrayBuffer> {
   const content =

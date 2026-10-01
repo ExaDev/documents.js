@@ -248,21 +248,29 @@ export const STANDARD_METRICS: Readonly<Record<StandardFontName, FontMetrics>> =
     },
   };
 
-// The advance width (1000-unit em space) of a single character code under a standard-14 face. Throws for a code with no WinAnsi glyph mapping or a glyph the face's own AFM doesn't define — callers are expected to have already run text through sanitizeToWinAnsi (src/pdf/winansi.ts) before measuring, so an unmappable code here is a caller invariant violation, not a case to paper over with a silent fallback.
-export function widthOfCode(font: StandardFontName, code: number): number {
+// The advance width (1000-unit em space) of a single character code under a standard-14 face, or `undefined` when the code has no WinAnsi glyph mapping or the face's own AFM defines no width for the glyph it maps to. The non-throwing form for a reader, which meets arbitrary bytes from real-world files and must degrade rather than abort.
+export function afmWidthOfCode(
+  font: StandardFontName,
+  code: number,
+): number | undefined {
   const metrics = STANDARD_METRICS[font];
   if (metrics.fixedWidth !== undefined) {
     return metrics.fixedWidth;
   }
   const glyphName = winAnsiGlyphName(code);
-  if (glyphName === undefined) {
+  return glyphName === undefined ? undefined : metrics.widths.get(glyphName);
+}
+
+// The advance width (1000-unit em space) of a single character code under a standard-14 face. Throws for a code with no WinAnsi glyph mapping or a glyph the face's own AFM doesn't define — the write path is expected to have already run text through sanitizeToWinAnsi (src/pdf/winansi.ts) before measuring, so an unmappable code here is a caller invariant violation, not a case to paper over with a silent fallback. The read path uses afmWidthOfCode and reports a diagnostic instead.
+export function widthOfCode(font: StandardFontName, code: number): number {
+  const width = afmWidthOfCode(font, code);
+  if (width !== undefined) {
+    return width;
+  }
+  if (winAnsiGlyphName(code) === undefined) {
     throw new Error(`character code ${code} has no WinAnsi glyph mapping`);
   }
-  const width = metrics.widths.get(glyphName);
-  if (width === undefined) {
-    throw new Error(
-      `${font} has no AFM width for glyph '${glyphName}' (code ${code})`,
-    );
-  }
-  return width;
+  throw new Error(
+    `${font} has no AFM width for glyph '${winAnsiGlyphName(code)}' (code ${code})`,
+  );
 }
