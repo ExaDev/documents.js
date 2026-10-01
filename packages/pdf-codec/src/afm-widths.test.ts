@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { STANDARD_METRICS, widthOfCode } from "./afm-widths";
+import { STANDARD_METRICS, afmWidthOfCode, widthOfCode } from "./afm-widths";
 import { WINANSI_GLYPH_NAMES } from "./encoding";
 
 // Spot-check values against the published Adobe Core-14 AFM data (cross-verified during implementation against the Hopding/standard-fonts mirror — see the module's own provenance comment), not trusted from memory alone.
@@ -96,5 +96,13 @@ describe("widthOfCode", () => {
     } finally {
       widths.set("A", original!);
     }
+  });
+});
+
+describe("afmWidthOfCode", () => {
+  it("returns the AFM width for a mapped code and undefined for an unmapped one, without throwing", () => {
+    expect(afmWidthOfCode("Helvetica", 65)).toBe(667);
+    expect(afmWidthOfCode("Helvetica", 1)).toBeUndefined();
+    expect(afmWidthOfCode("Courier", 1)).toBe(600);
   });
 });
