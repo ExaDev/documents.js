@@ -2,7 +2,7 @@ import { packageLintConfig } from "../../eslint.shared.ts";
 
 export default packageLintConfig({
   tsconfigRootDir: import.meta.dirname,
-  maxLines: "off",
+  maxLines: "error",
   magicNumbers: "error",
   isomorphic: true,
   additionalRestrictedImportPatterns: [
