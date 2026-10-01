@@ -1,3 +1,10 @@
+## [4.16.4](https://github.com/ExaDev/documents.js/compare/xls-codec%404.16.3...xls-codec%404.16.4) (2026-10-01)
+
+### Miscellaneous Chores
+
+* **xls-codec:** enforce max-lines and split the conditional-format mappers ([8784d66](https://github.com/ExaDev/documents.js/commit/8784d66346e31b7df18c1f3242bd999e460876cd))
+* **xls-codec:** hold the max-lines flag until the oversized suites split ([a7d1092](https://github.com/ExaDev/documents.js/commit/a7d1092ec69e32bb5805c99c46544dfa085560ac))
+
 ## [4.16.3](https://github.com/ExaDev/documents.js/compare/xls-codec%404.16.2...xls-codec%404.16.3) (2026-09-26)
 
 
