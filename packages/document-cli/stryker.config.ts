@@ -1,12 +1,7 @@
 import { packageStrykerConfig } from "../../stryker.shared.ts";
 
 export default packageStrykerConfig({
-  mutate: [
-    "src/**/*.ts",
-    "src/**/*.tsx",
-    "!src/**/*.test.ts",
-    "!src/**/*.test.tsx",
-  ],
+  mutate: ["src/**/*.ts", "src/**/*.tsx"],
   vitestConfigFile: "vitest.mutation.config.ts",
   // Derived by the rule documented on PackageStrykerOptions.breakThreshold, from a cold run (no incremental report present, so every valid mutant gets its own result) over this package's whole mutate scope: floor the measured score, then subtract the run's own Timeout-classified share rounded up, with a floor of one point. That margin is what makes the number safe to gate on rather than merely descriptive, since Timeout is the one classification that flaps with runner load alone. Re-measured as 64.83% (a full four-slice CI run, 6241 valid mutants, 0.08% timeout share) against the whole package's mutate scope BEFORE app.tsx's own routing/overlay/key-handler coverage in this same change landed, floored to 64 and reduced by the rounded-up 1-point timeout share to 63. The package is not yet at a genuine 100, and https://github.com/ExaDev/documents.js/issues/1300 tracks closing the gap and carries the measurements behind this number, including the per-file survivor and no-coverage counts. Raise this by re-deriving it from a fresh complete run whenever a batch of those lands; never by picking a number.
   breakThreshold: 63,

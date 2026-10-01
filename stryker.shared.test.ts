@@ -33,6 +33,22 @@ describe("packageStrykerConfig", () => {
     expect(packageStrykerConfig().thresholds).not.toHaveProperty("break");
   });
 
+  it("mutates every source file under src by default", () => {
+    expect(packageStrykerConfig().mutate).toContain("src/**/*.ts");
+  });
+
+  it("excludes test files and test-support after a package's own globs", () => {
+    expect(
+      packageStrykerConfig({ mutate: ["src/**/*.ts", "src/**/*.tsx"] }).mutate,
+    ).toEqual([
+      "src/**/*.ts",
+      "src/**/*.tsx",
+      "!src/**/*.test.ts",
+      "!src/**/*.test.tsx",
+      "!src/**/test-support/**",
+    ]);
+  });
+
   it("writes the json report the merged gate reads", () => {
     expect(packageStrykerConfig().reporters).toContain("json");
   });

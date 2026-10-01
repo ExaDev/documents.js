@@ -8,6 +8,10 @@ import { join, relative, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { minimatch } from "minimatch";
 import {
+  DEFAULT_MUTATE_SOURCES,
+  TEST_CODE_MUTATE_EXCLUSIONS,
+} from "../../stryker.shared.ts";
+import {
   LOCKFILE_PATH,
   changedFilesSince,
   changedImporters,
@@ -107,11 +111,10 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-/** stryker.shared.ts's own default `mutate` array, used when a package's own config resolves no `mutate` field at all (packageStrykerConfig itself falls back to this same default, so a package that never sets `mutate` is covered identically here). */
+/** The `mutate` array packageStrykerConfig resolves for a package that passes none of its own, used when a package's own config resolves no `mutate` field at all, so a package that never sets `mutate` is covered identically here. Built from stryker.shared.ts's own constants rather than restated. */
 const DEFAULT_MUTATE_GLOBS: readonly string[] = [
-  "src/**/*.ts",
-  "!src/**/*.test.ts",
-  "!src/**/*.test.tsx",
+  ...DEFAULT_MUTATE_SOURCES,
+  ...TEST_CODE_MUTATE_EXCLUSIONS,
 ];
 
 /** The `mutate` glob array a package's own stryker.config.ts default-exports, read the same way gate-mutation-scores.ts reads that package's recordedBreak: a real dynamic import of the resolved config object, not a text parse, since the config is TypeScript that calls packageStrykerConfig rather than a plain data file. */

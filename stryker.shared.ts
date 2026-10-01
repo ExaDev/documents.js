@@ -30,9 +30,21 @@ const RUNNER_PRELOAD = fileURLToPath(
   new URL("./stryker.runner-preload.ts", import.meta.url),
 );
 
+/**
+ * Test code, which is never mutated whatever a package's own `mutate` globs include: the test files themselves, and every `test-support/` directory under `src/`, which holds the fixtures and helpers a suite split across several files lifts out of them. A mutant in test code asks whether the suite notices a change to its own scaffolding, not whether it notices a change to the code that ships, and test-support ships no more than a test file does: every package's tsdown entry list leaves it out, and eslint.shared.ts already treats it as test code. Mutating it made the score depend on whether a suite's fixtures happened to live inline in one test file or in a module beside it. Appended after a package's own globs, so a package's include pattern cannot accidentally re-admit it.
+ */
+export const TEST_CODE_MUTATE_EXCLUSIONS: readonly string[] = [
+  "!src/**/*.test.ts",
+  "!src/**/*.test.tsx",
+  "!src/**/test-support/**",
+];
+
+/** The source globs a package mutates when it passes no `mutate` of its own. */
+export const DEFAULT_MUTATE_SOURCES: readonly string[] = ["src/**/*.ts"];
+
 export interface PackageStrykerOptions {
-  // Glob(s) of source files Stryker should mutate, relative to the package root. Defaults to every TypeScript source file under src/, excluding tests — the same scope every package's own _test task already covers.
-  mutate?: string[];
+  // Glob(s) of source files Stryker should mutate, relative to the package root. Defaults to every TypeScript source file under src/. Test code is excluded on top of whatever this lists (TEST_CODE_MUTATE_EXCLUSIONS), so a package names only what it adds or removes beyond that.
+  mutate?: readonly string[];
   // The package's own root tsconfig, passed to both the sandbox rewrite step and the TypeScript checker plugin. Every package here already has a tsconfig.json at its root, so this rarely needs overriding.
   tsconfigFile?: string;
   // Path to the vitest config Stryker's vitest-runner should load. Left undefined for a package with no multi-project split (Vitest's own zero-config discovery already finds exactly the right test files, matching what its plain `vitest run` _test script does); set to "vitest.mutation.config.ts" (generated alongside this file) for a package whose real vitest.config.ts (or vite.config.ts) splits unit/smoke/workers into named projects, since Stryker's vitest-runner has no --project-equivalent selector and would otherwise also try to run the smoke suite (which imports from a dist/ Stryker's sandboxed copy never builds).
@@ -54,7 +66,7 @@ export function packageStrykerConfig(
   options: PackageStrykerOptions = {},
 ): StrykerConfig {
   const {
-    mutate = ["src/**/*.ts", "!src/**/*.test.ts", "!src/**/*.test.tsx"],
+    mutate = DEFAULT_MUTATE_SOURCES,
     tsconfigFile = "tsconfig.json",
     vitestConfigFile,
     dryRunTimeoutMinutes,
@@ -66,7 +78,7 @@ export function packageStrykerConfig(
 
   return {
     packageManager: "pnpm",
-    mutate,
+    mutate: [...mutate, ...TEST_CODE_MUTATE_EXCLUSIONS],
     testRunner: "vitest",
     plugins: [
       "@stryker-mutator/vitest-runner",

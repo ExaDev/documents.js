@@ -324,7 +324,19 @@ describe("resolveMutateGlobs", () => {
       "src/**/*.ts",
       "!src/**/*.test.ts",
       "!src/**/*.test.tsx",
+      "!src/**/test-support/**",
     ]);
+  });
+
+  it("leaves test-support out of the default scope at any depth under src", () => {
+    const globs = resolveMutateGlobs({});
+    expect(matchesMutateGlobs("src/text/decode.ts", globs)).toBe(true);
+    expect(matchesMutateGlobs("src/test-support/fixtures.ts", globs)).toBe(
+      false,
+    );
+    expect(matchesMutateGlobs("src/text/test-support/fixtures.ts", globs)).toBe(
+      false,
+    );
   });
 
   it("falls back to the shared default for a malformed mutate value", () => {
@@ -332,16 +344,19 @@ describe("resolveMutateGlobs", () => {
       "src/**/*.ts",
       "!src/**/*.test.ts",
       "!src/**/*.test.tsx",
+      "!src/**/test-support/**",
     ]);
     expect(resolveMutateGlobs({ mutate: [1, 2] })).toEqual([
       "src/**/*.ts",
       "!src/**/*.test.ts",
       "!src/**/*.test.tsx",
+      "!src/**/test-support/**",
     ]);
     expect(resolveMutateGlobs(undefined)).toEqual([
       "src/**/*.ts",
       "!src/**/*.test.ts",
       "!src/**/*.test.tsx",
+      "!src/**/test-support/**",
     ]);
   });
 });
