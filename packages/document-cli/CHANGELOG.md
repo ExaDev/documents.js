@@ -1,3 +1,15 @@
+## [5.12.135](https://github.com/ExaDev/documents.js/compare/document-cli%405.12.134...document-cli%405.12.135) (2026-10-01)
+
+### Tests
+
+* **document-cli:** assert floating sheet image altText round-trips ([7224b7f](https://github.com/ExaDev/documents.js/commit/7224b7fb628e842e83af8191745ab7e98cbfd0af))
+
+
+### Dependencies
+
+- Updated document-outline.js to 3.10.59
+- Updated documents.js to 14.4.124
+
 ## [5.12.134](https://github.com/ExaDev/documents.js/compare/document-cli%405.12.133...document-cli%405.12.134) (2026-10-01)
 
 

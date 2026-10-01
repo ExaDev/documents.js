@@ -1,3 +1,9 @@
+## [12.2.32](https://github.com/ExaDev/documents.js/compare/ooxml.js%4012.2.31...ooxml.js%4012.2.32) (2026-10-01)
+
+### Bug Fixes
+
+* **ooxml.js:** degrade out-of-domain drawing anchor indices to 0 ([3d2c9c3](https://github.com/ExaDev/documents.js/commit/3d2c9c3746f5919a8bd9d46bfe75c8dcee5b9afa))
+
 ## [12.2.31](https://github.com/ExaDev/documents.js/compare/ooxml.js%4012.2.30...ooxml.js%4012.2.31) (2026-10-01)
 
 

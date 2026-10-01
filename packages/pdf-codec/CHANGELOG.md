@@ -1,3 +1,14 @@
+## [5.3.32](https://github.com/ExaDev/documents.js/compare/pdf-codec%405.3.31...pdf-codec%405.3.32) (2026-10-01)
+
+### Code Refactoring
+
+* **pdf-codec:** walk the JBIG2 refinement reference copy over its destination ([3f19fee](https://github.com/ExaDev/documents.js/commit/3f19fee53652c9e3b0e6946ddb5bd41ef1dec8d8))
+
+### Tests
+
+* **pdf-codec:** cover JBIG2 segment framing, page information and region flags ([8b75e24](https://github.com/ExaDev/documents.js/commit/8b75e242157d73ce07da020930874bd962c85aa7))
+* **pdf-codec:** split JBIG2 segment tests into their own suite ([8070823](https://github.com/ExaDev/documents.js/commit/8070823201c1dd4f7d2c3849da31e6d3b87e6065))
+
 ## [5.3.31](https://github.com/ExaDev/documents.js/compare/pdf-codec%405.3.30...pdf-codec%405.3.31) (2026-10-01)
 
 ### Bug Fixes

@@ -1,3 +1,11 @@
+## [2.18.66](https://github.com/ExaDev/documents.js/compare/web%402.18.65...web%402.18.66) (2026-10-01)
+
+
+### Dependencies
+
+- Updated ooxml.js to 12.2.32
+- Updated documents.js to 14.4.124
+
 ## [2.18.65](https://github.com/ExaDev/documents.js/compare/web%402.18.64...web%402.18.65) (2026-10-01)
 
 ### Miscellaneous Chores

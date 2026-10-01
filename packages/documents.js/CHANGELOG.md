@@ -1,3 +1,15 @@
+## [14.4.124](https://github.com/ExaDev/documents.js/compare/documents.js%4014.4.123...documents.js%4014.4.124) (2026-10-01)
+
+### Bug Fixes
+
+* **documents.js:** write OdsSheet.addImage altText as svg:title ([1fd8de2](https://github.com/ExaDev/documents.js/commit/1fd8de2777976d3daf265c9f71a6c99fde8a8974))
+
+
+### Dependencies
+
+- Updated pdf-codec to 5.3.32
+- Updated ooxml.js to 12.2.32
+
 ## [14.4.123](https://github.com/ExaDev/documents.js/compare/documents.js%4014.4.122...documents.js%4014.4.123) (2026-10-01)
 
 
