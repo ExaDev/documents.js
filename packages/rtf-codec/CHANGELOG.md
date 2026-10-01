@@ -1,3 +1,15 @@
+## [8.1.24](https://github.com/ExaDev/documents.js/compare/rtf-codec%408.1.23...rtf-codec%408.1.24) (2026-10-01)
+
+### Miscellaneous Chores
+
+* hold mutation break thresholds at the derived baseline for packages short of 100 ([d7620e8](https://github.com/ExaDev/documents.js/commit/d7620e85665f1925da9b515233ea55dc4bb2a946))
+
+
+### Dependencies
+
+- Updated document-schema.js to 7.16.1
+- Updated archive-codec to 1.11.26
+
 ## [8.1.23](https://github.com/ExaDev/documents.js/compare/rtf-codec%408.1.22...rtf-codec%408.1.23) (2026-09-26)
 
 

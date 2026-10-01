@@ -1,3 +1,16 @@
+## [4.16.5](https://github.com/ExaDev/documents.js/compare/xls-codec%404.16.4...xls-codec%404.16.5) (2026-10-01)
+
+### Miscellaneous Chores
+
+* hold mutation break thresholds at the derived baseline for packages short of 100 ([d7620e8](https://github.com/ExaDev/documents.js/commit/d7620e85665f1925da9b515233ea55dc4bb2a946))
+* **xls-codec:** enforce max-lines ([f40f8a4](https://github.com/ExaDev/documents.js/commit/f40f8a46590685bdd035bec7dfe495d8bf752f88))
+
+
+### Dependencies
+
+- Updated document-schema.js to 7.16.1
+- Updated archive-codec to 1.11.26
+
 ## [4.16.4](https://github.com/ExaDev/documents.js/compare/xls-codec%404.16.3...xls-codec%404.16.4) (2026-10-01)
 
 ### Miscellaneous Chores

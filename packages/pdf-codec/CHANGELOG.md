@@ -1,3 +1,14 @@
+## [5.3.31](https://github.com/ExaDev/documents.js/compare/pdf-codec%405.3.30...pdf-codec%405.3.31) (2026-10-01)
+
+### Bug Fixes
+
+* **pdf-codec:** take /MissingWidth for a code a widthless standard font cannot map ([90c75b5](https://github.com/ExaDev/documents.js/commit/90c75b5696ec01bdaabb71af71ec58a3941df867))
+
+
+### Dependencies
+
+- Updated document-schema.js to 7.16.1
+
 ## [5.3.30](https://github.com/ExaDev/documents.js/compare/pdf-codec%405.3.29...pdf-codec%405.3.30) (2026-09-29)
 
 ### Bug Fixes
