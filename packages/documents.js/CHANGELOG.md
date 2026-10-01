@@ -1,3 +1,14 @@
+## [14.4.122](https://github.com/ExaDev/documents.js/compare/documents.js%4014.4.121...documents.js%4014.4.122) (2026-10-01)
+
+### Tests
+
+* **documents.js:** pin the automatic-styles helpers whole ([4cff847](https://github.com/ExaDev/documents.js/commit/4cff8475cf95b91cf7a7759e17b91dc024fe0124))
+
+
+### Dependencies
+
+- Updated xls-codec to 4.16.4
+
 ## [14.4.121](https://github.com/ExaDev/documents.js/compare/documents.js%4014.4.120...documents.js%4014.4.121) (2026-09-30)
 
 ### Tests
