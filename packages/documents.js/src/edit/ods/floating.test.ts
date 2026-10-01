@@ -14,6 +14,7 @@ import {
   encodePackage,
   readManifest,
   readOdfFormulaMathMl,
+  readOdsContent,
   rootElement,
 } from "odf.js";
 import { describe, expect, it } from "vitest";
@@ -190,6 +191,36 @@ describe("OdsSheet.addImage", () => {
     );
     const shapes = findTableShapes(pkg)!;
     expect(childrenWithTag(shapes, "draw:frame")).toHaveLength(2);
+  });
+
+  it("round-trips altText through write then readOdsContent, including characters ODF text encoding must preserve", () => {
+    const editor = createOds();
+    const altText = 'A "red" <circle> & a  double space';
+    editor.sheets()[0]!.addImage(baseImage({ altText }));
+
+    const [sheet] = readOdsContent(editor.toPackage()).sheets;
+    expect(sheet?.images.map((image) => image.altText)).toEqual([altText]);
+  });
+
+  it("writes altText as a svg:title child of the draw:frame, beside the draw:image", () => {
+    const editor = createOds();
+    editor.sheets()[0]!.addImage(baseImage({ altText: "A caption" }));
+
+    const frame = elementsWithTag(
+      [contentRoot(editor.toPackage())],
+      "draw:frame",
+    )[0]!;
+    const title = childrenWithTag(frame, "svg:title")[0];
+    expect(title?.children).toEqual([{ type: "text", value: "A caption" }]);
+  });
+
+  it("reads back no altText when none is given", () => {
+    const editor = createOds();
+    editor.sheets()[0]!.addImage(baseImage());
+
+    const [sheet] = readOdsContent(editor.toPackage()).sheets;
+    expect(sheet?.images).toHaveLength(1);
+    expect(sheet?.images[0]?.altText).toBeUndefined();
   });
 
   it("survives a real zip encode/decode round trip, not just the in-memory package", () => {

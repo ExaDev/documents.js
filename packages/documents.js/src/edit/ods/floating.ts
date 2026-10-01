@@ -16,6 +16,7 @@ import { addFormulaObject } from "../../odf-package/formula";
 import { addImageMedia } from "../../odf-package/media";
 import { directChildElement } from "../../xml/edit";
 import { el } from "../../xml/fragment";
+import { encodeOdfText } from "../../xml/odf-text";
 import { COLUMN_TAG, HEADER_COLUMNS_TAG, HEADER_ROWS_TAG } from "./address";
 import {
   COLUMN_REPEAT_ATTR,
@@ -153,7 +154,13 @@ function buildAbsoluteFrame(
   widthPt: number,
   heightPt: number,
   content: XmlElement,
+  altText?: string,
 ): XmlElement {
+  // svg:title precedes the frame's content in the ODF draw:frame content model; encodeOdfText keeps runs of spaces, tabs and newlines lossless, which odf.js's readFrameAltText decodes with the inverse.
+  const children: XmlElement[] =
+    altText === undefined
+      ? [content]
+      : [el("svg:title", {}, encodeOdfText(altText)), content];
   return el(
     "draw:frame",
     {
@@ -162,7 +169,7 @@ function buildAbsoluteFrame(
       "svg:width": formatOdfLength(widthPt),
       "svg:height": formatOdfLength(heightPt),
     },
-    [content],
+    children,
   );
 }
 
@@ -189,6 +196,7 @@ export function insertSheetImage(
     image.widthPt,
     image.heightPt,
     imageElement,
+    image.altText,
   );
   ensureTableShapes(tableElement).children.push(frame);
 }
