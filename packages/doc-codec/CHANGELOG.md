@@ -1,3 +1,15 @@
+## [6.1.23](https://github.com/ExaDev/documents.js/compare/doc-codec%406.1.22...doc-codec%406.1.23) (2026-10-01)
+
+### Miscellaneous Chores
+
+* hold mutation break thresholds at the derived baseline for packages short of 100 ([d7620e8](https://github.com/ExaDev/documents.js/commit/d7620e85665f1925da9b515233ea55dc4bb2a946))
+
+
+### Dependencies
+
+- Updated document-schema.js to 7.16.1
+- Updated archive-codec to 1.11.26
+
 ## [6.1.22](https://github.com/ExaDev/documents.js/compare/doc-codec%406.1.21...doc-codec%406.1.22) (2026-09-26)
 
 

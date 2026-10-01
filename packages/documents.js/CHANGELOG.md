@@ -1,3 +1,21 @@
+## [14.4.123](https://github.com/ExaDev/documents.js/compare/documents.js%4014.4.122...documents.js%4014.4.123) (2026-10-01)
+
+
+### Dependencies
+
+- Updated document-schema.js to 7.16.1
+- Updated archive-codec to 1.11.26
+- Updated epub-codec to 5.1.16
+- Updated markdown-codec to 11.1.16
+- Updated odf.js to 11.2.2
+- Updated pdf-codec to 5.3.31
+- Updated doc-codec to 6.1.23
+- Updated ooxml.js to 12.2.31
+- Updated ppt-codec to 2.2.23
+- Updated rtf-codec to 8.1.24
+- Updated wpd-codec to 5.1.22
+- Updated xls-codec to 4.16.5
+
 ## [14.4.122](https://github.com/ExaDev/documents.js/compare/documents.js%4014.4.121...documents.js%4014.4.122) (2026-10-01)
 
 ### Tests

@@ -1,3 +1,15 @@
+## [5.1.22](https://github.com/ExaDev/documents.js/compare/wpd-codec%405.1.21...wpd-codec%405.1.22) (2026-10-01)
+
+### Miscellaneous Chores
+
+* hold mutation break thresholds at the derived baseline for packages short of 100 ([d7620e8](https://github.com/ExaDev/documents.js/commit/d7620e85665f1925da9b515233ea55dc4bb2a946))
+
+
+### Dependencies
+
+- Updated document-schema.js to 7.16.1
+- Updated archive-codec to 1.11.26
+
 ## [5.1.21](https://github.com/ExaDev/documents.js/compare/wpd-codec%405.1.20...wpd-codec%405.1.21) (2026-09-26)
 
 
