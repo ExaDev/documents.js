@@ -227,8 +227,7 @@ describe("appReducer ADD_SHEET_IMAGE on ods", () => {
     expect(image.format).toBe("png");
     expect(image.widthPt).toBe(80);
     expect(image.heightPt).toBe(40);
-    // altText does NOT round-trip here — confirmed directly against the installed documents.js: OdsSheet.addImage's own write path (src/edit/ods/floating.ts's insertSheetImage) never writes a floating image's svg:title/svg:desc at all, even though odf.js's own reader (readDrawFrame, which every OTHER image-insertion path in this codebase already reads altText through) fully supports reading them back. A real, confirmed write-side gap in the installed documents.js dependency, not a bug in this action/reducer — ADD_SHEET_IMAGE still forwards the caller's altText through to OdsSheet.addImage unconditionally (the field is a genuine, schema-valid ContentSheetImage member), so a future documents.js release that starts writing it needs no change on this side at all.
-    expect(image.altText).toBeUndefined();
+    expect(image.altText).toBe("a logo");
   });
 
   it("warns rather than crashing for a sheet index that does not exist", () => {
