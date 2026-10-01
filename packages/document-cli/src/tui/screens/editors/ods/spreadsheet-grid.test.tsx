@@ -605,8 +605,8 @@ describe("OdsSpreadsheetGridScreen", () => {
           (candidate) => candidate.includes("imageCount:1"),
           6000,
         );
-        // A frame written through addImage is always page-anchored in the ODS output (see odf.js's typed/ods/read.ts, "ANCHORED TO THE PAGE"), so it always reads back with anchorRow/anchorColumn at 0 regardless of the cursor cell it was added at; the absolute offset it carries instead is what actually reflects the typed width/height and the offset fields left at their defaults. altText round-trips as empty regardless of what was typed here: confirmed by direct instrumentation that applyAddSheetImage dispatches the real typed "a caption" through ADD_SHEET_IMAGE, but OdsSheet.addImage's own insertSheetImage (documents.js, src/edit/ods/floating.ts) never writes ContentSheetImage.altText into the draw:frame at all, unlike the odt/odp paragraph and slide image writers, which do (see paragraph-detail.test.tsx's own passing altText assertion for odt). Tracked as ExaDev/documents.js#1520; this assertion pins the current, real (if incomplete) round trip rather than a value this write path cannot actually produce yet.
-        expect(frame).toContain('png 150x75 anchor=0,0 alt=""');
+        // A frame written through addImage is always page-anchored in the ODS output (see odf.js's typed/ods/read.ts, "ANCHORED TO THE PAGE"), so it always reads back with anchorRow/anchorColumn at 0 regardless of the cursor cell it was added at; the absolute offset it carries instead is what actually reflects the typed width/height and the offset fields left at their defaults.
+        expect(frame).toContain('png 150x75 anchor=0,0 alt="a caption"');
         expect(frame).not.toContain("Alt text");
       },
       LONG_TEST_TIMEOUT_MS,
