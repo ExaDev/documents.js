@@ -192,6 +192,12 @@ function numericAttr(element: XmlElement, name: string): number {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
+// A marker's col/row name a 0-based grid index, so a value outside the content schema's anchorRow/anchorColumn domain (a nonnegative safe integer: ContentSheetImage and ContentEmbeddedObject alike) is malformed for them exactly as unparseable text is, and degrades to 0 identically rather than emitting a document that fails its own schema. The colOff/rowOff offsets are distances, not indices, and stay as read.
+function readGridIndex(marker: XmlElement, tag: string): number {
+  const parsed = readAnchorChild(marker, tag);
+  return Number.isSafeInteger(parsed) && parsed >= 0 ? parsed : 0;
+}
+
 function readAnchorMarker(
   parent: XmlElement,
   tag: string,
@@ -201,9 +207,9 @@ function readAnchorMarker(
     return undefined;
   }
   return {
-    column: readAnchorChild(marker, "xdr:col"),
+    column: readGridIndex(marker, "xdr:col"),
     colOffEmu: readAnchorChild(marker, "xdr:colOff"),
-    row: readAnchorChild(marker, "xdr:row"),
+    row: readGridIndex(marker, "xdr:row"),
     rowOffEmu: readAnchorChild(marker, "xdr:rowOff"),
   };
 }

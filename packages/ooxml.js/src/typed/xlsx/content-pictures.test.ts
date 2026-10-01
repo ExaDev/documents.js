@@ -25,7 +25,13 @@ const THREE_ROW_HEIGHT_PT = ROW_SPAN_COUNT * DEFAULT_ROW_HEIGHT_PT;
 const TINY_PNG_BASE64 =
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=";
 
-function pictureDrawingPackage(mediaBase64: string = TINY_PNG_BASE64): Package {
+function pictureDrawingPackage(
+  mediaBase64: string = TINY_PNG_BASE64,
+  fromIndices: { readonly col: string; readonly row: string } = {
+    col: "0",
+    row: "1",
+  },
+): Package {
   const picture = el("xdr:pic", {}, [
     el("xdr:nvPicPr", {}, [el("xdr:cNvPr", { id: "2", name: "Picture 1" })]),
     el("xdr:blipFill", {}, [el("a:blip", { "r:embed": "rIdImage" })]),
@@ -40,9 +46,9 @@ function pictureDrawingPackage(mediaBase64: string = TINY_PNG_BASE64): Package {
   const drawing = el("xdr:wsDr", {}, [
     el("xdr:twoCellAnchor", {}, [
       el("xdr:from", {}, [
-        el("xdr:col", {}, [txt("0")]),
+        el("xdr:col", {}, [txt(fromIndices.col)]),
         el("xdr:colOff", {}, [txt("19050")]),
-        el("xdr:row", {}, [txt("1")]),
+        el("xdr:row", {}, [txt(fromIndices.row)]),
         el("xdr:rowOff", {}, [txt("0")]),
       ]),
       el("xdr:to", {}, [
@@ -347,6 +353,25 @@ describe("readXlsxContent: drawing pictures", () => {
     }
     expect(document.sheets[0]?.images).toEqual([]);
   });
+
+  it.each([
+    { label: "negative", col: "-1", row: "-3" },
+    { label: "fractional", col: "1.5", row: "2.5" },
+  ])(
+    "degrades a $label from-marker col/row to 0, the way unparseable text degrades, so the image stays schema-valid",
+    ({ col, row }) => {
+      const document = readXlsxContent(
+        pictureDrawingPackage(TINY_PNG_BASE64, { col, row }),
+      );
+      if (document.kind !== "spreadsheet") {
+        throw new Error("expected a spreadsheet ContentDocument");
+      }
+      expect(ContentDocumentSchema.safeParse(document).success).toBe(true);
+      expect(document.sheets[0]?.images).toHaveLength(1);
+      expect(document.sheets[0]?.images[0]?.anchorColumn).toBe(0);
+      expect(document.sheets[0]?.images[0]?.anchorRow).toBe(0);
+    },
+  );
 
   it("round-trips the whole document through ContentDocumentSchema, so the sheet image is schema-valid as read", () => {
     expect(
