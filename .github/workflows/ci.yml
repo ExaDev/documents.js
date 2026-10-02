@@ -863,8 +863,32 @@ jobs:
       - run: pnpm install --frozen-lockfile
       # This step fails intermittently on both Windows runners, on no particular package (ExaDev/documents.js#1313). Most occurrences end with a task's own process exiting 0xC0000142 (STATUS_DLL_INIT_FAILED, printed as -1073741502), a Windows process that could not finish starting, and the failure-only steps after it often fail with the same code, so the runner itself had stopped being able to start processes; the rest end with a bare exit 1 and no task error. The flags here exist to capture what the log has no way to show after the fact. --summarize writes turbo's own machine-readable record of what it planned against what it actually executed, which is the one artifact that distinguishes "turbo stopped" from "a task failed silently", and the failure-only steps below record the runner state (disk, temp directory, and on Windows the processes holding memory) at the moment it happened. None of this changes what gets built.
       - name: Build the released package's SEA bundle
+        id: bundle
+        shell: bash
+        env:
+          # The failure is a runner fault that clears on a fresh attempt (the same graph passes on the job beside it, and on the same leg the next run), so a build that fails is attempted again rather than failing the whole leg. Each attempt is independent, so a few attempts take a failure that strikes roughly one build in ten to a negligible residual rate, and the loop is bounded so a genuine build error still fails the leg after the last attempt rather than retrying forever. This is a mitigation, not the fix: #1313 stays open until the cause is known, and every retried build still uploads its turbo run summary below so the cause can be found.
+          MAX_ATTEMPTS: "3"
+          # Long enough for the processes of the failed attempt to exit and release whatever per-session resource the failure ran out of before the next one starts.
+          RETRY_PAUSE_SECONDS: "20"
         # No `--` before the flags: pnpm forwards every argument after the script name to the script already, and a `--` reaches turbo literally, after which turbo hands everything that follows to each task's own command rather than reading it as turbo's own flags.
-        run: pnpm --dir "packages/${{ matrix.name }}" build --output-logs=full --verbosity=2 --summarize
+        run: |
+          attempt=1
+          while true; do
+            if pnpm --dir "packages/${{ matrix.name }}" build --output-logs=full --verbosity=2 --summarize; then
+              echo "attempts=${attempt}" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            echo "::warning::SEA bundle build attempt ${attempt} of ${MAX_ATTEMPTS} failed (ExaDev/documents.js#1313)"
+            if [ "$RUNNER_OS" = "Windows" ]; then
+              pwsh -NoProfile -Command "Get-Process | Sort-Object -Descending WorkingSet | Select-Object -First 15 Name, Id, WorkingSet | Format-Table -AutoSize" || true
+            fi
+            if [ "$attempt" -ge "$MAX_ATTEMPTS" ]; then
+              echo "attempts=${attempt}" >> "$GITHUB_OUTPUT"
+              exit 1
+            fi
+            attempt=$((attempt + 1))
+            sleep "$RETRY_PAUSE_SECONDS"
+          done
       - name: Record the runner's disk and temp state if the build failed
         if: failure()
         shell: bash
@@ -876,7 +900,8 @@ jobs:
         shell: pwsh
         run: Get-Process | Sort-Object -Descending WorkingSet | Select-Object -First 15 Name, Id, WorkingSet | Format-Table -AutoSize
       - uses: actions/upload-artifact@v7
-        if: failure()
+        # Also after a build that only passed on a retry: that is the run whose summary shows what turbo had running when an attempt failed.
+        if: failure() || steps.bundle.outputs.attempts != '1'
         with:
           name: turbo-run-summary-${{ matrix.name }}-${{ matrix.os }}
           path: .turbo/runs/
