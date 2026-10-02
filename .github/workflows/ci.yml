@@ -873,8 +873,13 @@ jobs:
         # No `--` before the flags: pnpm forwards every argument after the script name to the script already, and a `--` reaches turbo literally, after which turbo hands everything that follows to each task's own command rather than reading it as turbo's own flags.
         run: |
           attempt=1
+          # The Windows failures are processes that cannot start while turbo has several tasks launching at once (some logs show three failing at the same instant), so on Windows turbo runs one task at a time. Concurrency changes only the order and overlap of tasks, never what is built.
+          concurrency_flag=""
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            concurrency_flag="--concurrency=1"
+          fi
           while true; do
-            if pnpm --dir "packages/${{ matrix.name }}" build --output-logs=full --verbosity=2 --summarize; then
+            if pnpm --dir "packages/${{ matrix.name }}" build --output-logs=full --verbosity=2 --summarize $concurrency_flag; then
               echo "attempts=${attempt}" >> "$GITHUB_OUTPUT"
               exit 0
             fi
