@@ -1,3 +1,9 @@
+## [5.12.136](https://github.com/ExaDev/documents.js/compare/document-cli%405.12.135...document-cli%405.12.136) (2026-10-02)
+
+### Miscellaneous Chores
+
+* **workspace:** leave test-support out of every package's mutation scope ([b026c5a](https://github.com/ExaDev/documents.js/commit/b026c5a6496d14a197a0deb828a8ee2b0c8758bb)), closes [#1562](https://github.com/ExaDev/documents.js/issues/1562)
+
 ## [5.12.135](https://github.com/ExaDev/documents.js/compare/document-cli%405.12.134...document-cli%405.12.135) (2026-10-01)
 
 ### Tests

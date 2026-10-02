@@ -1,3 +1,9 @@
+## [2.18.67](https://github.com/ExaDev/documents.js/compare/web%402.18.66...web%402.18.67) (2026-10-02)
+
+### Miscellaneous Chores
+
+* **workspace:** leave test-support out of every package's mutation scope ([b026c5a](https://github.com/ExaDev/documents.js/commit/b026c5a6496d14a197a0deb828a8ee2b0c8758bb)), closes [#1562](https://github.com/ExaDev/documents.js/issues/1562)
+
 ## [2.18.66](https://github.com/ExaDev/documents.js/compare/web%402.18.65...web%402.18.66) (2026-10-01)
 
 
