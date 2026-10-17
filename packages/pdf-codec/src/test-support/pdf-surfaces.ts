@@ -7,7 +7,7 @@ import {
   PAGE_OBJ,
 } from "./pdf";
 
-// A two-page document carrying every document-level surface ReadPdfOptions.surfaces can leave out, each with a trap: one reference to an object number the cross-reference table does not hold (DOCUMENT_SURFACE_TRAP_OBJECTS), reached only by that surface's own reader, so resolving it reports pdf/object-missing-value naming that number exactly when the surface was parsed. The traps sit in the outline's /Next chain, the old-style /Dests dictionary, the AcroForm /Fields array, the /OCGs array, the structure root's /K array and the catalog /OutputIntents (residue). Page 0 also carries what page items take from those surfaces: a structure-owned marked-content span (MCID 0), a span in the "Hidden" layer (off in the default configuration), an internal link naming a name-tree destination, an internal link stating a direct destination array, a URI link, and a /TrimBox for the page-boxes residue row. Page 1 exists so destinations resolve to a real second page.
+// A two-page document carrying every document-level surface ReadPdfOptions.surfaces can leave out, each with a trap: one reference to an object number the cross-reference table does not hold (DOCUMENT_SURFACE_TRAP_OBJECTS), reached only by that surface's own reader, so resolving it reports pdf/object-missing-value naming that number exactly when the surface was parsed. The outline's second entry states a direct destination array (to page 0), so the reader mints a `destN` name for it before any page's link is read. The traps sit in the outline's /Next chain, the old-style /Dests dictionary, the AcroForm /Fields array, the /OCGs array, the structure root's /K array and the catalog /OutputIntents (residue). Page 0 also carries what page items take from those surfaces: a structure-owned marked-content span (MCID 0), a span in the "Hidden" layer (off in the default configuration), an internal link naming a name-tree destination, an internal link stating a direct destination array, a URI link, and a /TrimBox for the page-boxes residue row. Page 1 exists so destinations resolve to a real second page.
 export const DOCUMENT_SURFACE_TRAP_OBJECTS = {
   outline: 901,
   form: 902,
@@ -34,6 +34,7 @@ export function documentSurfacesPdf(): Uint8Array<ArrayBuffer> {
   const CONTENT_PAGE_1_OBJ = 17;
   const OUTLINE_ITEM_OBJ = 18;
   const PARENT_TREE_OBJ = 19;
+  const OUTLINE_DIRECT_ITEM_OBJ = 20;
   b.object(
     1,
     `<< /Type /Catalog /Pages 2 0 R /Outlines ${OUTLINES_ROOT_OBJ} 0 R /Dests ${OLD_STYLE_DESTS_OBJ} 0 R /Names << /Dests ${NAME_TREE_OBJ} 0 R >> /AcroForm << /Fields [${FIELD_OBJ} 0 R ${DOCUMENT_SURFACE_TRAP_OBJECTS.form} 0 R] >> /OCProperties << /OCGs [${OCG_HIDDEN_OBJ} 0 R ${DOCUMENT_SURFACE_TRAP_OBJECTS.layers} 0 R] /D << /OFF [${OCG_HIDDEN_OBJ} 0 R] >> >> /StructTreeRoot ${STRUCT_TREE_ROOT_OBJ} 0 R /PageMode /UseOutlines /OutputIntents [${DOCUMENT_SURFACE_TRAP_OBJECTS.residue} 0 R] >>`,
@@ -77,7 +78,7 @@ export function documentSurfacesPdf(): Uint8Array<ArrayBuffer> {
   );
   b.object(
     OUTLINES_ROOT_OBJ,
-    `<< /Type /Outlines /First ${OUTLINE_ITEM_OBJ} 0 R /Last ${OUTLINE_ITEM_OBJ} 0 R /Count 1 >>`,
+    `<< /Type /Outlines /First ${OUTLINE_ITEM_OBJ} 0 R /Last ${OUTLINE_DIRECT_ITEM_OBJ} 0 R /Count 2 >>`,
   );
   b.object(
     OLD_STYLE_DESTS_OBJ,
@@ -107,9 +108,13 @@ export function documentSurfacesPdf(): Uint8Array<ArrayBuffer> {
   );
   b.object(
     OUTLINE_ITEM_OBJ,
-    `<< /Title (Introduction) /Parent ${OUTLINES_ROOT_OBJ} 0 R /Dest (second) /Next ${DOCUMENT_SURFACE_TRAP_OBJECTS.outline} 0 R >>`,
+    `<< /Title (Introduction) /Parent ${OUTLINES_ROOT_OBJ} 0 R /Dest (second) /Next ${OUTLINE_DIRECT_ITEM_OBJ} 0 R >>`,
+  );
+  b.object(
+    OUTLINE_DIRECT_ITEM_OBJ,
+    `<< /Title (Opening) /Parent ${OUTLINES_ROOT_OBJ} 0 R /Dest [3 0 R /XYZ 0 50 null] /Next ${DOCUMENT_SURFACE_TRAP_OBJECTS.outline} 0 R >>`,
   );
   b.object(PARENT_TREE_OBJ, `<< /Nums [0 [${STRUCT_PARA_OBJ} 0 R]] >>`);
-  b.classicXrefAndTrailer(PARENT_TREE_OBJ, "/Root 1 0 R");
+  b.classicXrefAndTrailer(OUTLINE_DIRECT_ITEM_OBJ, "/Root 1 0 R");
   return b.bytes();
 }
