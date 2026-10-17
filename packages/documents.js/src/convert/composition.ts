@@ -24,6 +24,7 @@ import {
 } from "odf.js";
 import { sourcePageIndex } from "pdf-codec/layout";
 import { readPdf } from "pdf-codec/read";
+import type { ReadPdfSurfaces } from "pdf-codec/read";
 import type {
   LayoutDocument,
   PdfDiagnosticSink,
@@ -324,6 +325,10 @@ export interface UnifiedConversionOptions {
    * The output holds only those pages. A markdown target labels each with its original one-based page number (`<!-- page 7 -->` at the start of the page, beside the usual `<!-- page break -->` between pages), so the text says which pages it holds. A page-addressing option of a later stage, such as `page` for an svg target, counts within the selection. Reconstruction infers from the selected pages alone, so a page can reconstruct differently than it would in a full conversion: the body text size heading detection compares against is the most common size across the selection, which on a cover page dominated by large title text is the title's own size, leaving the title a paragraph rather than a heading. The DocumentTree `onDocument` reports carries no `pages` envelope for a page-selected conversion: its frames name source page indices, which an envelope holding only the selected pages could not be indexed by.
    */
   readonly pages?: readonly number[];
+  /**
+   * The document-level surfaces of a pdf source to read, as pdf-codec's `ReadPdfOptions.surfaces` takes them: one boolean per surface (`outline`, `destinations`, `form`, `layers`, `structure`, `residue`), each read unless set to `false`, so omitting it reads everything as before. Independent of `pages`, and handed to the same hop: only the plan's first hop, and only when the conversion's source is pdf, so an intermediate pdf a route renders internally is always read whole. A skipped surface is never parsed and is absent from the read, so what the conversion builds from it is absent too: no outline or bookmark tables, no destinations and no internal links (a link to a URI is kept), no form fields, no layer tables, no structure, no package residue. Two skips also change reconstruction: without `structure` a tagged PDF's headings, table cells and divisions are inferred from geometry as for an untagged file, and without `layers` content the default view hides cannot be told apart and is kept as if visible. See `ReadPdfOptions.surfaces` for exactly what each covers.
+   */
+  readonly surfaces?: ReadPdfSurfaces;
 }
 
 // What the fromPdf executor knows about a conversion's pages that a text build needs and the caller's options do not carry, passed to a text node's build alongside those options: the original one-based page number of each page the read returned, set only for a page-selected read (see UnifiedConversionOptions.pages), where a page's position in the output no longer says which page it is. Internal to the executors, never caller-supplied.
@@ -651,6 +656,7 @@ export function executeFromPdf(
     signal: options?.signal,
     sink: options?.sink,
     pages: options?.pages,
+    surfaces: options?.surfaces,
   });
   const content = RECONSTRUCTORS[node.variant](layout, {
     signal: options?.signal,
@@ -720,7 +726,7 @@ export function runCompositionPlan(
     }
     // onDocument fires on the last hop only: null out onDocument for every hop before the last, then pass the caller's options through unchanged on the final hop so the callback receives the package that actually produced the output bytes. This mirrors the convention the original hand-written composed functions (xlsxToPdf/pdfToXlsx/xlsxToMarkdown/markdownToXlsx) already followed — each forwarded onDocument to its own last hop, never the first — so a caller of xlsxToPdf still receives the odsToPdf hop's content+layout package rather than the intermediate xlsx->ods bridge's content-only one.
     const isLastHop = i === plan.hops.length - 1;
-    // pages selects pages of the caller's own pdf source, so only the hop that reads that source receives it: the first hop of a plan whose source is pdf. Every other hop's pdf (an intermediate rendering, as on a docx -> ods route through toPdf then fromPdf) is not the caller's document, and selecting its pages would silently drop content or throw for an index the caller never meant against it.
+    // pages and surfaces select what to read of the caller's own pdf source, so only the hop that reads that source receives them: the first hop of a plan whose source is pdf. Every other hop's pdf (an intermediate rendering, as on a docx -> ods route through toPdf then fromPdf) is not the caller's document, and selecting its pages would silently drop content or throw for an index the caller never meant against it, and skipping its surfaces would drop what the caller's own source carried through it.
     const readsCallerPdf = i === 0 && hop.from === "pdf";
     const hopOptions: UnifiedConversionOptions | undefined =
       options === undefined
@@ -729,6 +735,7 @@ export function runCompositionPlan(
             ...options,
             onDocument: isLastHop ? options.onDocument : undefined,
             pages: readsCallerPdf ? options.pages : undefined,
+            surfaces: readsCallerPdf ? options.surfaces : undefined,
           };
     if (hop.executor === "toPdf") {
       if (!isSourceContentFormat(hop.from)) {
