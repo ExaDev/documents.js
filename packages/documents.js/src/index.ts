@@ -149,6 +149,7 @@ export {
 // --- The PDF-side pivot model. The Layout* item family moved to pdf-codec at document-schema.js 4.0.0 (the demotion: a LayoutDocument is the pdf codec's own read/write artefact, not a shared pivot), so the item types and LAYOUT_FORMAT_VERSION re-export from pdf-codec here, while LayoutMetadata/LayoutFont/LayoutFrame — the members the content model itself references — stay re-exported from the schema with the shared primitives below. ---
 export type {
   LayoutDocument,
+  LayoutDocumentSurface,
   LayoutEllipse,
   LayoutImage,
   LayoutImageAsset,
@@ -390,10 +391,14 @@ export {
 } from "./edit/pdf/item";
 
 // --- The hand-written PDF codec, now an external dependency — see pdf-codec's own README (https://github.com/ExaDev/pdf-codec) for its internals. ---
-export type { ReadPdfOptions } from "pdf-codec";
+export type { ReadPdfOptions, ReadPdfSurfaces } from "pdf-codec";
 export { readPdf } from "pdf-codec";
 export type { WritePdfOptions } from "pdf-codec";
-export { PdfPartialDocumentError, writePdf } from "pdf-codec";
+export {
+  PdfPartialDocumentError,
+  PdfSkippedSurfacesError,
+  writePdf,
+} from "pdf-codec";
 export type {
   PdfDiagnostic,
   PdfDiagnosticSeverity,

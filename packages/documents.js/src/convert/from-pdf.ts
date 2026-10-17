@@ -13,12 +13,23 @@ import {
 import type { MarkdownImageResolver } from "markdown-codec";
 import type { LayoutDocument, PdfDiagnosticSink } from "pdf-codec";
 import { readPdf } from "pdf-codec/read";
+import type { ReadPdfSurfaces } from "pdf-codec/read";
 import { convertDocumentFromPdf } from "./composition";
 import type { CsvWriteOptions, SvgWriteOptions } from "./convert";
 import { stampPdfPackageTables } from "./pdf-package-tables";
 import type { DocumentFormat } from "./port";
 import { CONTENT_READERS } from "../codecs/read";
 import { reconstructWordprocessing } from "../layout/reconstruct";
+
+// Every document-level surface off, for readDocumentMetadata's pdf read. Required rather than a partial object so a surface pdf-codec adds later fails to typecheck here until it is decided, instead of being read by default.
+const METADATA_SURFACES: Required<ReadPdfSurfaces> = {
+  outline: false,
+  destinations: false,
+  form: false,
+  layers: false,
+  structure: false,
+  residue: false,
+};
 
 export interface ReadDocumentMetadataOptions {
   readonly signal?: AbortSignal;
@@ -31,8 +42,12 @@ export function readDocumentMetadata(
   options?: ReadDocumentMetadataOptions,
 ): LayoutMetadata {
   if (format === "pdf") {
-    // Metadata is document-level, so no page is read: an empty selection skips every page's content streams and the fonts and images they use, and the source's embedded files. It does not reduce the read to the catalog and /Info: the outline, destinations, AcroForm, structure tree and /ParentTree, and package residue are still read whole (see ReadPdfOptions.pages).
-    return readPdf(bytes, { signal: options?.signal, pages: [] }).metadata;
+    // Metadata is read from the trailer's /Info, the catalog's /Lang and the XMP packet alone, so the read takes nothing else: an empty selection skips every page's content streams, the fonts and images they use and the source's embedded files, and METADATA_SURFACES skips every document-level surface (outline, destinations, AcroForm, layers, structure tree and /ParentTree, residue), none of which metadata is built from.
+    return readPdf(bytes, {
+      signal: options?.signal,
+      pages: [],
+      surfaces: METADATA_SURFACES,
+    }).metadata;
   }
   return CONTENT_READERS[format](bytes, { signal: options?.signal }).metadata;
 }
@@ -47,6 +62,10 @@ export interface ReadNativeDocumentTreeOptions {
    * The pages of a pdf source to read, exactly as UnifiedConversionOptions.pages describes them (zero-based, negative from the end, document order, `PdfPageSelectionError` for an index naming no page). Consulted only for a pdf source, since no other format's reader has pages to select. The unselected pages' content streams, the fonts and images only they use, and the source's embedded files are never read, and the selected pages are reconstructed from themselves alone (see PdfToDocumentOptions.pages for how that can change a cover page's headings). Every frame in the result names the page's index in the source PDF, so a DocumentTree read this way carries no `pages` envelope: that array is indexed by those source indices and a selection cannot fill it.
    */
   readonly pages?: readonly number[];
+  /**
+   * The document-level surfaces of a pdf source to read, exactly as UnifiedConversionOptions.surfaces describes them: one boolean per surface, each read unless set to `false`, independent of `pages`. Consulted only for a pdf source. A skipped surface is absent from the read, so the tree carries none of its tables, and reconstruction loses what it took from it: without `structure` a tagged PDF's headings, table cells and divisions are inferred from geometry, and without `layers` hidden-layer content is kept as if visible.
+   */
+  readonly surfaces?: ReadPdfSurfaces;
 }
 
 // readContentDocument's own options are the identical shape — one options type for both, so a caller forwarding {signal, images, sink} through either entry point never needs to know which fields the OTHER one ignores.
@@ -63,6 +82,7 @@ function readNativeContent(
       signal: options?.signal,
       sink: options?.sink,
       pages: options?.pages,
+      surfaces: options?.surfaces,
     });
     const content = reconstructWordprocessing(layout, {
       signal: options?.signal,
@@ -117,6 +137,10 @@ export interface PdfToDocumentOptions {
    * Reconstruction sees only the selected pages, so a page can come out differently than it would in a full conversion. Heading detection measures text against the body size, taken as the most common size across the pages read: a cover page read on its own, dominated by large title text, takes the title's size as its body, and the title is then a paragraph rather than a heading. Reading the cover together with a few ordinary pages restores the document's real body size.
    */
   readonly pages?: readonly number[];
+  /**
+   * The document-level surfaces to read, exactly as UnifiedConversionOptions.surfaces describes them: one boolean per surface (`outline`, `destinations`, `form`, `layers`, `structure`, `residue`), each read unless set to `false`, independent of `pages`. A skipped surface is never parsed, and the conversion carries nothing built from it. Without `structure` a tagged PDF's headings, table cells and divisions are inferred from geometry as for an untagged file, and without `layers` content the default view hides is kept as if visible.
+   */
+  readonly surfaces?: ReadPdfSurfaces;
   // Called exactly once, synchronously, with the DocumentTree (the readPdf-produced layout, and the reconstructed content built from it) this conversion built internally, before the function returns its bytes — see convert.ts's DocumentToPdfOptions.onDocument for the mirrored X-to-PDF side of this same side channel.
   readonly onDocument?: (pkg: DocumentTree) => void;
 }
