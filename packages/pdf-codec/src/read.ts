@@ -21,7 +21,11 @@ import { LAYOUT_FORMAT_VERSION } from "./layout";
 import { openPdfDocument } from "./document";
 import type { PdfDocument } from "./document";
 import type { PdfDiagnosticSink } from "./diagnostics";
-import { NOOP_DIAGNOSTIC_SINK, PdfParseError } from "./diagnostics";
+import {
+  NOOP_DIAGNOSTIC_SINK,
+  PdfPageSelectionError,
+  PdfParseError,
+} from "./diagnostics";
 import { decodeStream } from "./filters";
 import { throwIfAborted } from "./util/abort";
 import type { FontResolverService } from "./font-read";
@@ -57,6 +61,30 @@ import { decodePdfString, parsePdfDate } from "./pdf-text";
 export interface ReadPdfOptions {
   readonly sink?: PdfDiagnosticSink;
   readonly signal?: AbortSignal;
+  /**
+   * The pages to read, as zero-based indices into the document's page tree; a negative index counts from the end (`-1` is the last page). Omitted, every page is read.
+   *
+   * Only the selected pages' content streams are fetched, decoded and interpreted, so the fonts and images only unselected pages use are never resolved either: reading the cover or the last page of a large file costs roughly the memory of those pages, not of the file. The page tree itself is still walked in full (a negative index and every document-level page reference resolve against it), and the document-level readers still run over the whole document, since none of them touches page content: the outline, destinations, optional-content layers, the AcroForm, the structure tree, metadata and package residue, and embedded files (whose `/FileAttachment` annotations are read from every page's annotation dictionaries, never its content).
+   *
+   * Duplicates collapse, and the result's `pages` holds the selected pages in ascending document order whatever order they were asked for in, each carrying its source position as `index`, with the document's total as `pageCount`; every document-level reference keeps naming source indices. An empty array is a valid selection: it reads no page and returns the document-level surfaces with `pageCount`, the cheapest way to learn a file's length and metadata. An entry naming no page throws `PdfPageSelectionError` rather than being skipped.
+   */
+  readonly pages?: readonly number[];
+}
+
+// Resolves a page selection against the page tree's length: negative indices counted from the end, duplicates collapsed, and the result as a set, since readPdf walks the tree in document order and asks it per page. Throws on the first entry that names no page, before any page is read.
+function resolvePageSelection(
+  selection: readonly number[],
+  pageCount: number,
+): ReadonlySet<number> {
+  const resolved = new Set<number>();
+  for (const requested of selection) {
+    const index = requested < 0 ? pageCount + requested : requested;
+    if (!Number.isInteger(requested) || index < 0 || index >= pageCount) {
+      throw new PdfPageSelectionError(requested, pageCount);
+    }
+    resolved.add(index);
+  }
+  return resolved;
 }
 
 const PDF_HEADER_BYTES = new TextEncoder().encode("%PDF-");
@@ -103,6 +131,10 @@ export function readPdf(
 
   // The page tree is walked first (materialising the page-index map a destination's page reference resolves against), then the navigation surfaces: page interpretation interns direct destination arrays into the registry as it meets them, so links on page N can name a destination minted by nothing but themselves.
   const pageDicts = doc.pages();
+  const selection =
+    options?.pages === undefined
+      ? undefined
+      : resolvePageSelection(options.pages, pageDicts.length);
   const destinationRegistry = createDestinationRegistry(
     doc.catalog,
     doc,
@@ -122,7 +154,11 @@ export function readPdf(
   const source = readDocumentResidue(doc, sink);
   const pageBoxRows: PdfObject[] = [];
 
-  const pages = pageDicts.map((pageDict, index) => {
+  // An unselected page is skipped before readPage, the only path that fetches a page's /Contents, interprets it, and resolves the fonts and images it names: those costs are paid for selected pages alone. Each page keeps its source position as the page index readPage stamps (diagnostics, the structure-ownership lookup, the page-boxes residue row), and a selected page also carries it as `index`, since its position in `pages` no longer says which page it is.
+  const pages = pageDicts.flatMap((pageDict, index) => {
+    if (selection !== undefined && !selection.has(index)) {
+      return [];
+    }
     throwIfAborted(signal);
     const read = readPage(
       index,
@@ -139,7 +175,7 @@ export function readPdf(
     if (read.boxRow !== undefined) {
       pageBoxRows.push(read.boxRow);
     }
-    return read.page;
+    return [selection === undefined ? read.page : { ...read.page, index }];
   });
 
   // The per-page boundary declarations a distinct crop box or a print-production box left behind, quarantined with the other package-level residue rows.
@@ -154,6 +190,7 @@ export function readPdf(
     formatVersion: LAYOUT_FORMAT_VERSION,
     metadata: readMetadata(doc.trailer, doc, doc.catalog, sink),
     pages,
+    ...(selection !== undefined ? { pageCount: pageDicts.length } : {}),
     images,
     ...(destinationRegistry.entries.length > 0
       ? { destinations: [...destinationRegistry.entries] }
