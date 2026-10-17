@@ -35,6 +35,7 @@ import type {
   LayoutText,
   LayoutDocument,
 } from "pdf-codec";
+import { sourcePageIndex } from "pdf-codec/layout";
 import type { Margins } from "document-schema.js";
 import { throwIfAborted } from "../ports/abort";
 import { stampFrame } from "./shared";
@@ -76,21 +77,21 @@ export function reconstructWordprocessing(
   const structure = indexStructure(doc);
   const sections: ContentSection[] = [];
   let currentGroup: LayoutPage[] = [];
-  let groupStartPageIndex = 0;
+  let groupStartPosition = 0;
   for (const page of doc.pages) {
     throwIfAborted(signal);
     if (currentGroup.length > 0 && !samePageSize(currentGroup[0]!, page)) {
       sections.push(
         buildSection(
           currentGroup,
-          groupStartPageIndex,
+          groupStartPosition,
           doc.images,
           headingLevels,
           doc.form,
           structure,
         ),
       );
-      groupStartPageIndex += currentGroup.length;
+      groupStartPosition += currentGroup.length;
       currentGroup = [];
     }
     currentGroup.push(page);
@@ -99,7 +100,7 @@ export function reconstructWordprocessing(
     sections.push(
       buildSection(
         currentGroup,
-        groupStartPageIndex,
+        groupStartPosition,
         doc.images,
         headingLevels,
         doc.form,
@@ -323,10 +324,10 @@ function samePageSize(a: LayoutPage, b: LayoutPage): boolean {
 }
 
 // Margins have no PDF equivalent to recover — there is no principled way to distinguish "intentional margin" from "wherever the content happened to start" from geometry alone, so this deliberately reports zero rather than fabricating a plausible-looking value (ZERO_MARGINS, defined above).
-// startPageIndex is this section's own first page's absolute index in the whole LayoutDocument — a frame's pageIndex names a page of the SOURCE document, not a page within one section, so every block this section builds stamps absolute indices derived from it.
+// startPosition is this section's own first page's position in the whole LayoutDocument's pages. A frame's pageIndex names a page of the SOURCE document, not a page within one section, so every block this section builds stamps the source index sourcePageIndex resolves from the page and its position: the position itself on a full read, the page's own index on a page-selected one, where it is also the index every form widget and destination already names.
 function buildSection(
   pages: readonly LayoutPage[],
-  startPageIndex: number,
+  startPosition: number,
   images: Record<string, LayoutImageAsset>,
   headingLevels: ReadonlyMap<number, number>,
   form: readonly LayoutFormField[] | undefined,
@@ -342,7 +343,7 @@ function buildSection(
     blocks.push(
       ...reconstructPageBlocks(
         page,
-        startPageIndex + i,
+        sourcePageIndex(page, startPosition + i),
         images,
         headingLevels,
         form,
@@ -731,9 +732,13 @@ export function reconstructSpreadsheet(
   options?: ReconstructOptions,
 ): ContentDocument {
   const signal = options?.signal;
-  const sheets: ContentSheet[] = doc.pages.map((page, index) => {
+  const sheets: ContentSheet[] = doc.pages.map((page, position) => {
     throwIfAborted(signal);
-    return reconstructSheet(page, index, options?.onCellTypeInference);
+    return reconstructSheet(
+      page,
+      sourcePageIndex(page, position),
+      options?.onCellTypeInference,
+    );
   });
   return { kind: "spreadsheet", metadata: doc.metadata, sheets };
 }

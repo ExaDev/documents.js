@@ -1,6 +1,6 @@
 // The pdf -> X conversion family and this package's read-only entry point: every pdfTo* function lives here rather than in convert.ts so that a consumer importing documents.js/read (package.json's explicit ./read export onto this module) gets a module graph that excludes every X-to-PDF renderer and therefore every vendored font asset — the same split pdf-codec made with its own ./read entry. convert.ts holds both directions in one module, so its graph statically contains the write path; each pdfTo* function below forwards to convertDocumentFromPdf (src/convert/composition.ts, the composition engine's read half), which resolves and runs exactly the plan convertDocument('pdf', target, ...) would — identical executors, identical routes (a route out of pdf never re-enters pdf), no forked behaviour. src/read-graph.test.ts walks this module's static import graph across the workspace boundary into pdf-codec's own source and fails the build if the write path or a font asset becomes reachable.
 //
-// readDocumentMetadata is defined here too (#744), owning its dispatch through the read-only codec half (src/codecs/read.ts: CONTENT_READERS for the eleven content formats, readDocumentLayout for pdf) rather than the both-directions registry — whose write halves import writePdf from the pdf-codec root barrel and would drag the write path, and pdf-codec's vendored font assets, back into this entry's graph. The root barrel re-exports it from here unchanged (one definition, one identity, the same arrangement the pdfTo* family already has). Its xlsx branch no longer renders a preview PDF: the old xlsxToPdf-then-readPdf path reported facts about the render rather than the workbook — createdIso/modifiedIso stamped at the render moment for a file carrying none of its own (buildOdsPackage's default systemClock, which is why the old test for that case needed fake timers), and a producer naming the preview PDF's writer. A workbook that does declare its own dcterms:created/dcterms:modified keeps reporting them exactly as before (the render path never overwrote a source timestamp either), app.xml's Application still arrives as creator, and producer stays unset per the schema's own rule that it is a PDF-only concept no semantic reader ever sets. setDocumentMetadata — the write-side sibling — stays in src/metadata/write.ts, which has no graph constraint to satisfy.
+// readDocumentMetadata is defined here too (#744), owning its dispatch through the read-only codec half (src/codecs/read.ts: CONTENT_READERS for the eleven content formats; pdf reads through pdf-codec/read's readPdf with an empty page selection, since metadata never depends on page content) rather than the both-directions registry — whose write halves import writePdf from the pdf-codec root barrel and would drag the write path, and pdf-codec's vendored font assets, back into this entry's graph. The root barrel re-exports it from here unchanged (one definition, one identity, the same arrangement the pdfTo* family already has). Its xlsx branch no longer renders a preview PDF: the old xlsxToPdf-then-readPdf path reported facts about the render rather than the workbook — createdIso/modifiedIso stamped at the render moment for a file carrying none of its own (buildOdsPackage's default systemClock, which is why the old test for that case needed fake timers), and a producer naming the preview PDF's writer. A workbook that does declare its own dcterms:created/dcterms:modified keeps reporting them exactly as before (the render path never overwrote a source timestamp either), app.xml's Application still arrives as creator, and producer stays unset per the schema's own rule that it is a PDF-only concept no semantic reader ever sets. setDocumentMetadata — the write-side sibling — stays in src/metadata/write.ts, which has no graph constraint to satisfy.
 //
 // readNativeDocumentTree (#823 Ask 1) is the third dispatcher in this same read-only family: it reports the SOURCE format's own native DocumentTree, with no cross-format bridging or conversion target involved at all — unlike ConversionResult.package/onDocument, which report whatever hop actually produced a REQUESTED conversion's output (a lossy cross-variant bridge's shape for a target sharing no ContentDocument variant with the source, e.g. xlsx -> markdown composing through a pdf pivot and reporting that pivot's wordprocessing-shaped ContentDocument, with no sheet/cell/formula/A1 data at all — the exact bug #823 reports). Every DocumentFormat member reads through CONTENT_READERS directly (no reconstruction, no pages, a bridge-free ContentDocument straight from that format's own reader — odf's readOdfFormulaContent included, since CONTENT_READERS already covers it) except pdf, which has no ContentDocument reader of its own: its native representation is readPdf's LayoutDocument reconstructed into a wordprocessing ContentDocument via reconstructWordprocessing (the identical reconstruction executeFromPdf's own pdf-to-docx hop runs, and the one OUTLINE_CONVERSION_TARGET/OUTLINE_PROBE_TARGETS already treat as pdf's "native" tree), with pages/frames and the document-level PDF tables (destinations/outline/attachments/layers/structure/comment bodies) stamped on exactly as that hop's own onDocument report already carries. readPdf is called directly (not through readDocumentLayout, which carries no sink) so a caller of readNativeDocumentTree gets the identical PDF-parse diagnostics a real pdf-sourced conversion would report.
 
@@ -17,7 +17,7 @@ import { convertDocumentFromPdf } from "./composition";
 import type { CsvWriteOptions, SvgWriteOptions } from "./convert";
 import { stampPdfPackageTables } from "./pdf-package-tables";
 import type { DocumentFormat } from "./port";
-import { CONTENT_READERS, readDocumentLayout } from "../codecs/read";
+import { CONTENT_READERS } from "../codecs/read";
 import { reconstructWordprocessing } from "../layout/reconstruct";
 
 export interface ReadDocumentMetadataOptions {
@@ -31,7 +31,8 @@ export function readDocumentMetadata(
   options?: ReadDocumentMetadataOptions,
 ): LayoutMetadata {
   if (format === "pdf") {
-    return readDocumentLayout(bytes, { signal: options?.signal }).metadata;
+    // Metadata is document-level, so no page is read: an empty selection skips every page's content stream (and the source's embedded files), which keeps identifying a document as cheap as its catalog and /Info allow.
+    return readPdf(bytes, { signal: options?.signal, pages: [] }).metadata;
   }
   return CONTENT_READERS[format](bytes, { signal: options?.signal }).metadata;
 }
@@ -42,6 +43,10 @@ export interface ReadNativeDocumentTreeOptions {
   readonly images?: MarkdownImageResolver;
   // Consulted only for a pdf source — every other format's reader has nothing to report through it.
   readonly sink?: PdfDiagnosticSink;
+  /**
+   * The pages of a pdf source to read, exactly as UnifiedConversionOptions.pages describes them (zero-based, negative from the end, document order, `PdfPageSelectionError` for an index naming no page). Consulted only for a pdf source, since no other format's reader has pages to select. The unselected pages' content streams, the fonts and images only they use, and the source's embedded files are never read, and the selected pages are reconstructed from themselves alone (see PdfToDocumentOptions.pages for how that can change a cover page's headings). Every frame in the result names the page's index in the source PDF, so a DocumentTree read this way carries no `pages` envelope: that array is indexed by those source indices and a selection cannot fill it.
+   */
+  readonly pages?: readonly number[];
 }
 
 // readContentDocument's own options are the identical shape — one options type for both, so a caller forwarding {signal, images, sink} through either entry point never needs to know which fields the OTHER one ignores.
@@ -57,6 +62,7 @@ function readNativeContent(
     const layout = readPdf(bytes, {
       signal: options?.signal,
       sink: options?.sink,
+      pages: options?.pages,
     });
     const content = reconstructWordprocessing(layout, {
       signal: options?.signal,
@@ -78,10 +84,14 @@ export function readNativeDocumentTree(
 ): DocumentTree {
   const { content, layout } = readNativeContent(format, bytes, options);
   if (layout !== undefined) {
-    const pages = layout.pages.map((page) => ({
-      widthPt: page.widthPt,
-      heightPt: page.heightPt,
-    }));
+    // A page-selected read's frames name source page indices, which an array of only the selected pages' sizes could not be indexed by, so its tree carries no pages envelope (see ReadNativeDocumentTreeOptions.pages).
+    const pages =
+      options?.pages === undefined
+        ? layout.pages.map((page) => ({
+            widthPt: page.widthPt,
+            heightPt: page.heightPt,
+          }))
+        : undefined;
     const reported = assembleTree(content, pages);
     stampPdfPackageTables(reported, layout);
     return reported;
@@ -101,6 +111,12 @@ export function readContentDocument(
 export interface PdfToDocumentOptions {
   readonly signal?: AbortSignal;
   readonly sink?: PdfDiagnosticSink;
+  /**
+   * The pages to convert, exactly as UnifiedConversionOptions.pages describes them: zero-based page-tree indices, a negative index counted from the end, duplicates collapsed, document order, and `PdfPageSelectionError` for an index naming no page. The unselected pages' content streams, the fonts and images only they use, and the source's embedded files are never read. pdfToMarkdown labels each page it writes with its original one-based page number (`<!-- page 7 -->`), so the text says which pages it holds.
+   *
+   * Reconstruction sees only the selected pages, so a page can come out differently than it would in a full conversion. Heading detection measures text against the body size, taken as the most common size across the pages read: a cover page read on its own, dominated by large title text, takes the title's size as its body, and the title is then a paragraph rather than a heading. Reading the cover together with a few ordinary pages restores the document's real body size.
+   */
+  readonly pages?: readonly number[];
   // Called exactly once, synchronously, with the DocumentTree (the readPdf-produced layout, and the reconstructed content built from it) this conversion built internally, before the function returns its bytes — see convert.ts's DocumentToPdfOptions.onDocument for the mirrored X-to-PDF side of this same side channel.
   readonly onDocument?: (pkg: DocumentTree) => void;
 }

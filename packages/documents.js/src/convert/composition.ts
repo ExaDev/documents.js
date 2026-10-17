@@ -22,6 +22,7 @@ import {
   decodePackage as decodeOdfPackage,
   encodePackage as encodeOdfPackage,
 } from "odf.js";
+import { sourcePageIndex } from "pdf-codec/layout";
 import { readPdf } from "pdf-codec/read";
 import type {
   LayoutDocument,
@@ -196,7 +197,8 @@ export const FORMAT_NODES: Readonly<Record<ContentFormat, FormatNode>> = {
         signal: options?.signal,
         images: options?.images,
       }),
-    build: (content) => buildMarkdownText(content),
+    build: (content, options) =>
+      buildMarkdownText(content, { pageNumbers: options?.pageNumbers }),
     encode: (text) => encodeMarkdownText(text),
     hasSourcePackage: false,
   },
@@ -316,6 +318,17 @@ export interface UnifiedConversionOptions {
   readonly page?: number;
   readonly onSvgDiagnostic?: SvgDiagnosticSink;
   readonly clock?: ClockPort;
+  /**
+   * The pages of a pdf source to convert, as pdf-codec's `ReadPdfOptions.pages` reads them: zero-based page-tree indices, a negative index counted from the end, duplicates collapsed, the result in document order, and an index naming no page throwing `PdfPageSelectionError`. Only the plan's first hop receives it, and only when the conversion's source is pdf: a conversion from any other format ignores it, including one whose route renders an intermediate pdf internally (docx to ods goes through toPdf then fromPdf), since that pdf is not the caller's document. The unselected pages' content streams, the fonts and images only they use, and the source's embedded files are never read (see `ReadPdfOptions.pages` for exactly what is and is not skipped).
+   *
+   * The output holds only those pages. A markdown target labels each with its original one-based page number (`<!-- page 7 -->` at the start of the page, beside the usual `<!-- page break -->` between pages), so the text says which pages it holds. A page-addressing option of a later stage, such as `page` for an svg target, counts within the selection. Reconstruction infers from the selected pages alone, so a page can reconstruct differently than it would in a full conversion: the body text size heading detection compares against is the most common size across the selection, which on a cover page dominated by large title text is the title's own size, leaving the title a paragraph rather than a heading. The DocumentTree `onDocument` reports carries no `pages` envelope for a page-selected conversion: its frames name source page indices, which an envelope holding only the selected pages could not be indexed by.
+   */
+  readonly pages?: readonly number[];
+}
+
+// What the fromPdf executor knows about a conversion's pages that a text build needs and the caller's options do not carry, passed to a text node's build alongside those options: the original one-based page number of each page the read returned, set only for a page-selected read (see UnifiedConversionOptions.pages), where a page's position in the output no longer says which page it is. Internal to the executors, never caller-supplied.
+interface TextBuildContext {
+  readonly pageNumbers?: readonly number[];
 }
 
 // --- Registry: declarative per-format primitive wiring -----------------------------------------
@@ -391,7 +404,7 @@ interface TextFormatNode {
   ) => ContentDocument;
   readonly build: (
     content: ContentDocument,
-    options?: UnifiedConversionOptions,
+    options?: UnifiedConversionOptions & TextBuildContext,
   ) => string;
   readonly encode: (text: string) => Uint8Array<ArrayBuffer>;
   readonly hasSourcePackage: false;
@@ -620,6 +633,13 @@ export function executeBridge(
   return out;
 }
 
+// The original one-based page number of each page a read returned, in order: what a page-selected markdown output labels its pages with.
+function layoutPageNumbers(layout: LayoutDocument): number[] {
+  return layout.pages.map(
+    (page, position) => sourcePageIndex(page, position) + 1,
+  );
+}
+
 // readPdf -> reconstruct(target variant) -> build(target) -> encode(target), reproducing the exact sequence and option-threading of convert.ts's pdfTo* functions (pdfToDocx/pdfToOdt/pdfToOdp/pdfToOds/pdfToOdg/pdfToMarkdown). sink reaches readPdf; signal reaches both readPdf and the reconstructor. onCellTypeInference reaches the reconstructor (reconstructSpreadsheet's audit channel) AND csv's read — the two places a cell re-typing decision can happen, threaded on the one options object every hop receives; the ergonomic pdfTo* functions do not declare it, so a caller wanting that audit channel on a pdf -> spreadsheet route passes it to convertDocument directly (the first-class entry point every named function forwards to). The package build half is called with no options, matching pdfTo*'s own `buildXPackage(content)` calls (no clock, no onMathDiagnostic threaded on this direction); the text build half receives options because csv's build consumes { delimiter, sheet }.
 export function executeFromPdf(
   target: ContentFormat,
@@ -630,21 +650,28 @@ export function executeFromPdf(
   const layout = readPdf(bytes, {
     signal: options?.signal,
     sink: options?.sink,
+    pages: options?.pages,
   });
   const content = RECONSTRUCTORS[node.variant](layout, {
     signal: options?.signal,
     onCellTypeInference: options?.onCellTypeInference,
   });
-  // The pages half derives from the read LayoutDocument's own pages — every rendered page's size, indexed to match the frames the reconstructor attached to the content it built.
-  const pages = layout.pages.map((page) => ({
-    widthPt: page.widthPt,
-    heightPt: page.heightPt,
-  }));
+  const selected = options?.pages !== undefined;
+  // The pages half derives from the read LayoutDocument's own pages: every rendered page's size, indexed to match the frames the reconstructor attached to the content it built. A page-selected read has no such array to offer, since its frames name source page indices and its pages are only the selection, so the envelope is left off rather than indexed wrongly.
+  const pages = selected
+    ? undefined
+    : layout.pages.map((page) => ({
+        widthPt: page.widthPt,
+        heightPt: page.heightPt,
+      }));
 
   // Build + encode the target first, then report the package (the ownership rule every construction site follows), with assembleTree decomposing the reconstructed content + page sizes into the tree-form DocumentTree. stampPdfPackageTables then lands the layout's document-level surfaces (destinations, outline, attachments, layers, residue, comment bodies) on the tree — the tables the flat ContentDocument has no root for.
   let out: Uint8Array<ArrayBuffer>;
   if (isTextFormatNode(node)) {
-    const text = node.build(content, options);
+    const text = node.build(content, {
+      ...options,
+      pageNumbers: selected ? layoutPageNumbers(layout) : undefined,
+    });
     out = node.encode(text);
   } else {
     const pkg = node.build(content);
@@ -693,11 +720,16 @@ export function runCompositionPlan(
     }
     // onDocument fires on the last hop only: null out onDocument for every hop before the last, then pass the caller's options through unchanged on the final hop so the callback receives the package that actually produced the output bytes. This mirrors the convention the original hand-written composed functions (xlsxToPdf/pdfToXlsx/xlsxToMarkdown/markdownToXlsx) already followed — each forwarded onDocument to its own last hop, never the first — so a caller of xlsxToPdf still receives the odsToPdf hop's content+layout package rather than the intermediate xlsx->ods bridge's content-only one.
     const isLastHop = i === plan.hops.length - 1;
-    const hopOptions: UnifiedConversionOptions | undefined = isLastHop
-      ? options
-      : options === undefined
+    // pages selects pages of the caller's own pdf source, so only the hop that reads that source receives it: the first hop of a plan whose source is pdf. Every other hop's pdf (an intermediate rendering, as on a docx -> ods route through toPdf then fromPdf) is not the caller's document, and selecting its pages would silently drop content or throw for an index the caller never meant against it.
+    const readsCallerPdf = i === 0 && hop.from === "pdf";
+    const hopOptions: UnifiedConversionOptions | undefined =
+      options === undefined
         ? undefined
-        : { ...options, onDocument: undefined };
+        : {
+            ...options,
+            onDocument: isLastHop ? options.onDocument : undefined,
+            pages: readsCallerPdf ? options.pages : undefined,
+          };
     if (hop.executor === "toPdf") {
       if (!isSourceContentFormat(hop.from)) {
         throw new Error(

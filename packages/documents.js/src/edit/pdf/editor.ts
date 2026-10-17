@@ -68,11 +68,15 @@ export class PdfEditor {
 // Parses `bytes` via pdf-codec's own readPdf and wraps the result as the one live, mutable LayoutDocument this editor and every PdfPage/PdfItem it hands out share.
 //
 // SECURITY NOTE: if `bytes` is encrypted with the PDF standard security handler and an empty user password (the common "restrict editing, not reading" case), readPdf decrypts it transparently and this call succeeds with a perfectly ordinary-looking PdfEditor — there is no field on the resulting document recording that this happened. toBytes() on the returned editor writes a plain, UNENCRYPTED PDF regardless, even though the source was encrypted. A caller that needs to preserve or re-apply the source's encryption must do so itself; this editor has no re-encryption path at all. A source requiring a real (non-empty) password throws PdfPasswordRequiredError, and one using an unsupported security handler throws PdfEncryptedError, both from readPdf itself before this function returns.
+//
+// Always reads every page, which is why `pages` is not among the options: an editor holds a document to change and write back, and a page-selected read is only part of one (its references still name source pages, and writePdf refuses it with PdfPartialDocumentError). The two options it does take are forwarded field by field, so a wider-typed options value carrying `pages` cannot slip a selection through either.
 export function openPdf(
   bytes: Uint8Array<ArrayBuffer>,
-  options?: ReadPdfOptions,
+  options?: Omit<ReadPdfOptions, "pages">,
 ): PdfEditor {
-  return new PdfEditor(readPdf(bytes, options));
+  return new PdfEditor(
+    readPdf(bytes, { sink: options?.sink, signal: options?.signal }),
+  );
 }
 
 export interface CreatePdfOptions {
