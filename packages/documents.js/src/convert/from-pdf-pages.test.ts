@@ -15,6 +15,8 @@ import {
 import { describe, expect, it } from "vitest";
 import { decodePackage } from "odf.js";
 import { createDocx } from "../edit/docx/editor";
+import { SvgMultiPageNotSpecifiedError } from "../svg/write";
+import { buildDocumentBytes } from "./from-package";
 import { readOdsContent } from "../odf/ods/read";
 import { createPdf, openPdf } from "../edit/pdf/editor";
 import { fixedClock } from "../ports/clock";
@@ -38,6 +40,7 @@ import {
 } from "../markdown/write";
 import { renderContentDocumentToMarkdown } from "../markdown/render";
 import {
+  pdfToDocx,
   pdfToMarkdown,
   pdfToSvg,
   readContentDocument,
@@ -169,6 +172,23 @@ describe("pdfToMarkdown with a page selection", () => {
     expect(frameIndicesOf(reported)).toEqual([LAST_PAGE_INDEX]);
   });
 
+  it("reports a tree that cannot be rebuilt to pdf, with an error naming the page-selected case", () => {
+    let reported: DocumentTree | undefined;
+    pdfToDocx(fivePagePdf(), {
+      pages: [0],
+      onDocument: (tree) => {
+        reported = tree;
+      },
+    });
+    if (reported === undefined) {
+      throw new Error("expected onDocument to report a tree");
+    }
+    const tree = reported;
+    expect(() => buildDocumentBytes(tree, "pdf")).toThrow(
+      /page-selected pdf-to-<format> conversion/u,
+    );
+  });
+
   it("throws PdfPageSelectionError for an index naming no page", () => {
     expect(() => markdownOf([PAGE_SIZES.length])).toThrow(
       PdfPageSelectionError,
@@ -203,7 +223,9 @@ describe("pdfToSvg with a page selection", () => {
   const WIDE_PAGE_INDEX = PAGE_SIZES.indexOf(WIDE);
 
   it("needs no page option once the selection holds a single page, and writes that page", () => {
-    expect(() => pdfToSvg(fivePagePdf())).toThrow();
+    expect(() => pdfToSvg(fivePagePdf())).toThrow(
+      SvgMultiPageNotSpecifiedError,
+    );
     const svg = new TextDecoder().decode(
       pdfToSvg(fivePagePdf(), { pages: [WIDE_PAGE_INDEX] }),
     );
