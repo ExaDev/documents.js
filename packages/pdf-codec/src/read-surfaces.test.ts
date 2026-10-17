@@ -156,6 +156,49 @@ function expectedWithout(
   };
 }
 
+// The destinations table entry a link or outline entry names, or undefined when the document holds none by that name.
+function destinationNamed(
+  doc: LayoutDocument,
+  name: string,
+): Record<string, unknown> | undefined {
+  const entry = doc.destinations?.find(
+    (destination) => destination.name === name,
+  );
+  return entry === undefined
+    ? undefined
+    : { pageIndex: entry.pageIndex, target: entry.target };
+}
+
+// The rule a skipped outline adds to the per-surface comparison: the reader mints a `destN` name for each direct destination array in the order it meets them, and the outline is read before any page, so leaving it out renumbers the names minted for page links and drops the entries only the outline minted. A document compared under this rule has each internal link's destination name replaced by the entry it resolves to, and its destinations table reduced to the entries some page item names, keyed by what they resolve to rather than by name.
+function withLinksByTarget(
+  doc: LayoutDocument | Record<string, unknown>,
+  source: LayoutDocument,
+): Record<string, unknown> {
+  const linkedNames = new Set(
+    source.pages.flatMap((page) =>
+      page.items.flatMap((item) =>
+        item.kind === "internalLink" ? [item.destination] : [],
+      ),
+    ),
+  );
+  return {
+    ...withoutField(doc, "destinations"),
+    pages: mapItems(source.pages, (items) =>
+      items.map((item) =>
+        item.kind === "internalLink"
+          ? {
+              ...item,
+              destination: destinationNamed(source, item.destination),
+            }
+          : item,
+      ),
+    ),
+    linkedDestinations: (source.destinations ?? [])
+      .filter((destination) => linkedNames.has(destination.name))
+      .map((destination) => destinationNamed(source, destination.name)),
+  };
+}
+
 beforeEach(() => {
   vi.mocked(readOutline).mockClear();
   vi.mocked(createDestinationRegistry).mockClear();
@@ -232,11 +275,38 @@ describe("readPdf surfaces: what a skipped surface's result holds", () => {
     "with %s skipped, equals the full read minus that field and what depended on it, naming it in skippedSurfaces",
     (surface) => {
       const full = readWith(undefined).doc;
-      expect(readWith(only(surface)).doc).toEqual(
-        expectedWithout(full, surface),
-      );
+      const skipped = readWith(only(surface)).doc;
+      if (surface === "outline") {
+        // A skipped outline also renumbers minted destination names (see withLinksByTarget), so links are compared by the entry they resolve to.
+        expect(withLinksByTarget(skipped, skipped)).toEqual(
+          withLinksByTarget(expectedWithout(full, surface), full),
+        );
+        return;
+      }
+      expect(skipped).toEqual(expectedWithout(full, surface));
     },
   );
+
+  it("renumbers the destN names minted for page links when the outline is skipped, and drops the entries only the outline minted", () => {
+    const full = readWith(undefined).doc;
+    const skipped = readWith(only("outline")).doc;
+    const directLinkOf = (doc: LayoutDocument): string | undefined =>
+      doc.pages[0]?.items.flatMap((item) =>
+        item.kind === "internalLink" && item.destination !== "second"
+          ? [item.destination]
+          : [],
+      )[0];
+    expect(full.outline?.[1]?.destination).toBe("dest1");
+    expect(directLinkOf(full)).toBe("dest2");
+    expect(directLinkOf(skipped)).toBe("dest1");
+    expect(destinationNamed(skipped, "dest1")).toEqual(
+      destinationNamed(full, "dest2"),
+    );
+    expect(destinationNamed(skipped, "dest2")).toBeUndefined();
+    expect(
+      skipped.destinations?.filter((d) => !/^dest\d+$/u.test(d.name)),
+    ).toEqual(full.destinations?.filter((d) => !/^dest\d+$/u.test(d.name)));
+  });
 
   it("omits a skipped surface's field rather than leaving it present and empty", () => {
     const { doc } = readWith(NONE);
