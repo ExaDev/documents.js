@@ -170,12 +170,9 @@ function destinationNamed(
 }
 
 // The rule a skipped outline adds to the per-surface comparison: the reader mints a `destN` name for each direct destination array in the order it meets them, and the outline is read before any page, so leaving it out renumbers the names minted for page links and drops the entries only the outline minted. A document compared under this rule has each internal link's destination name replaced by the entry it resolves to, and its destinations table reduced to the entries some page item names, keyed by what they resolve to rather than by name.
-function withLinksByTarget(
-  doc: LayoutDocument | Record<string, unknown>,
-  source: LayoutDocument,
-): Record<string, unknown> {
+function withLinksByTarget(doc: LayoutDocument): Record<string, unknown> {
   const linkedNames = new Set(
-    source.pages.flatMap((page) =>
+    doc.pages.flatMap((page) =>
       page.items.flatMap((item) =>
         item.kind === "internalLink" ? [item.destination] : [],
       ),
@@ -183,19 +180,19 @@ function withLinksByTarget(
   );
   return {
     ...withoutField(doc, "destinations"),
-    pages: mapItems(source.pages, (items) =>
+    pages: mapItems(doc.pages, (items) =>
       items.map((item) =>
         item.kind === "internalLink"
           ? {
               ...item,
-              destination: destinationNamed(source, item.destination),
+              destination: destinationNamed(doc, item.destination),
             }
           : item,
       ),
     ),
-    linkedDestinations: (source.destinations ?? [])
+    linkedDestinations: (doc.destinations ?? [])
       .filter((destination) => linkedNames.has(destination.name))
-      .map((destination) => destinationNamed(source, destination.name)),
+      .map((destination) => destinationNamed(doc, destination.name)),
   };
 }
 
@@ -278,9 +275,10 @@ describe("readPdf surfaces: what a skipped surface's result holds", () => {
       const skipped = readWith(only(surface)).doc;
       if (surface === "outline") {
         // A skipped outline also renumbers minted destination names (see withLinksByTarget), so links are compared by the entry they resolve to.
-        expect(withLinksByTarget(skipped, skipped)).toEqual(
-          withLinksByTarget(expectedWithout(full, surface), full),
-        );
+        expect(withLinksByTarget(skipped)).toEqual({
+          ...withoutField(withLinksByTarget(full), SURFACE_FIELD.outline),
+          skippedSurfaces: [surface],
+        });
         return;
       }
       expect(skipped).toEqual(expectedWithout(full, surface));
