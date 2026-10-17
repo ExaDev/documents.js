@@ -152,7 +152,7 @@ describe("readDocumentMetadata", () => {
     expect(metadata.producer).toBeUndefined();
   });
 
-  it("pdf: forwards the abort signal to readDocumentLayout, which checks it before parsing", () => {
+  it("pdf: forwards the abort signal to readPdf, which checks it before parsing", () => {
     const controller = new AbortController();
     controller.abort();
     const bytes = docxToPdf(minimalDocxBytes());
