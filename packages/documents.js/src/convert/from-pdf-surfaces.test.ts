@@ -128,6 +128,37 @@ describe("readDocumentMetadata for a pdf", () => {
   });
 });
 
+// An XMP packet carrying a title and creator the /Info dictionary below does not, so a reader can only report them through the XMP fallback, which reads the catalog's /Metadata stream (the same stream the residue surface quarantines).
+const XMP_ONLY_FIELDS_PACKET = [
+  '<?xpacket begin="" id="W5M0MpCehiHzreSzNTczkc9d"?>',
+  '<x:xmpmeta xmlns:x="adobe:ns:meta/">',
+  '<rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">',
+  '<rdf:Description rdf:about="" xmlns:dc="http://purl.org/dc/elements/1.1/">',
+  '<dc:title><rdf:Alt><rdf:li xml:lang="x-default">Title from XMP</rdf:li></rdf:Alt></dc:title>',
+  "<dc:creator><rdf:Seq><rdf:li>XMP Author</rdf:li></rdf:Seq></dc:creator>",
+  "</rdf:Description>",
+  "</rdf:RDF>",
+  "</x:xmpmeta>",
+  '<?xpacket end="w"?>',
+].join("\n");
+
+describe("readDocumentMetadata for a pdf whose metadata comes partly from XMP", () => {
+  it("still falls back to the XMP packet with residue skipped, reporting exactly what a full read does", () => {
+    const pdf = writePdf({
+      formatVersion: LAYOUT_FORMAT_VERSION,
+      metadata: { subject: "Only in /Info" },
+      images: {},
+      pages: [{ ...PAGE, items: [] }],
+      source: { xmp: { format: "pdf", xml: XMP_ONLY_FIELDS_PACKET } },
+    });
+    const full = readPdf(pdf);
+    expect(full.metadata.title).toBe("Title from XMP");
+    expect(full.metadata.author).toBe("XMP Author");
+    expect(full.metadata.subject).toBe("Only in /Info");
+    expect(readDocumentMetadata("pdf", pdf)).toEqual(full.metadata);
+  });
+});
+
 describe("the pdf conversions with surfaces", () => {
   it("hand surfaces to readPdf from every pdfTo* conversion and from readNativeDocumentTree/readContentDocument", () => {
     const pdf = everySurfacePdf();
