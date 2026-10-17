@@ -5,6 +5,7 @@ import type {
   LayoutOutlineItem,
   LayoutStructureElement,
 } from "pdf-codec";
+import { sourcePageIndex } from "pdf-codec/layout";
 
 // The package-table half of PDF-side construct surfacing (#721): stamping the LayoutDocument's document-level surfaces onto the tree the fromPdf executor assembles. The flat ContentDocument a reconstructor returns has no root for these tables (they are tree-only by design), so this runs immediately after assembleTree — the one place both the layout (the facts) and the package (the home) are in hand. Entry vocabularies are this package's own tenants inside the generic definitions-table facility: a destinations entry names a page and a view, an outline entry names its title/destination and parent, an attachment carries decoded bytes, a layer its visibility, and (#760) a structure entry states one tagged-PDF element's type and attributes, parent stated as a reference.
 
@@ -100,7 +101,8 @@ export function stampPdfPackageTables(
 
   // Comment bodies: the same deterministic pdf-annot-{page}-{index} keys reconstruct.ts's anchor constructs reference, so the marker and its definition can never drift apart — both derive from one walk of the same annotations array.
   const definitions: Record<string, DefinitionEntry> = {};
-  layout.pages.forEach((page, pageIndex) => {
+  layout.pages.forEach((page, position) => {
+    const pageIndex = sourcePageIndex(page, position);
     (page.annotations ?? []).forEach(
       (annotation: LayoutAnnotation, annotIndex) => {
         definitions[`pdf-annot-${String(pageIndex)}-${String(annotIndex)}`] = {

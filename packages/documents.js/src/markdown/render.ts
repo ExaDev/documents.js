@@ -13,9 +13,9 @@ import type {
   LayoutMetadata,
 } from "document-schema.js";
 import { PAGE_SIZE_A4 } from "document-schema.js";
-import type { WriteMarkdownOptions } from "markdown-codec";
 import { headingStyleId } from "markdown-codec";
 import { formulaPlaceholderText } from "../model/formula";
+import type { BuildMarkdownTextOptions } from "./write";
 import { buildMarkdownText } from "./write";
 
 // documents.js has plenty of ways to get INTO a ContentDocument from any of its eight content formats, and one way out to real bytes per format via buildXPackage — but no way to get plain Markdown text out of an arbitrary ContentDocument, regardless of which of the five kinds it happens to be. buildMarkdownText (src/markdown/write.ts) already covers the one kind markdown-codec itself understands ('wordprocessing'); this module is what makes every OTHER kind reachable too, by flattening its own shape-specific structure (slides, sheets, drawing pages, a bare formula) into the same ContentBlock vocabulary markdown-codec's writeMarkdownContent already knows how to render, then delegating to buildMarkdownText.
@@ -56,7 +56,7 @@ const NOOP_RENDER_DIAGNOSTIC_SINK: MarkdownRenderDiagnosticSink = () => {
   // Deliberately empty — the default when a caller supplies no onDiagnostic, mirroring markdown-codec's own NOOP_MARKDOWN_DIAGNOSTIC_SINK.
 };
 
-export interface RenderMarkdownOptions extends WriteMarkdownOptions {
+export interface RenderMarkdownOptions extends BuildMarkdownTextOptions {
   // Called once per degrade decision this module makes while flattening a non-wordprocessing ContentDocument. Never called for a 'wordprocessing' document — there is nothing to degrade on that path, since it goes straight to writeMarkdownContent.
   readonly onDiagnostic?: MarkdownRenderDiagnosticSink;
 }

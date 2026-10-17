@@ -24,6 +24,87 @@ const MATH_INLINE_SOURCE = "markdown:math-inline";
 // The read-side inverse lives in src/markdown/read.ts and turns this exact literal back into a pageBreak block, so the marker MEANS a page break rather than decorating one: markdownToPdf re-renders a real page boundary, and a pdfToMarkdown -> markdownToPdf round trip regenerates markers from real boundaries instead of accumulating the previous round's markers as visible literal text.
 export const PAGE_BREAK_MARKER = "<!-- page break -->";
 
+/**
+ * The marker opening a page that `BuildMarkdownTextOptions.pageNumbers` labels: an HTML comment naming the page's number, `<!-- page 7 -->` for page 7, on a line of its own. A one-way annotation for readers of the text rather than a directive: unlike {@link PAGE_BREAK_MARKER} it states which page follows, not that a page ends, so reading markdown back drops it (src/markdown/read.ts) instead of turning it into content.
+ * @param pageNumber - the number the page is labelled with, as the caller supplied it
+ * @returns the marker text
+ */
+export function pageNumberMarker(pageNumber: number): string {
+  return `<!-- page ${String(pageNumber)} -->`;
+}
+
+// The exact shape pageNumberMarker writes, for the read side to recognise and drop: the number is whatever the caller labelled the page with, so any run of digits matches.
+export const PAGE_NUMBER_MARKER_PATTERN = /^<!-- page \d+ -->$/u;
+
+/**
+ * `BuildMarkdownTextOptions.pageNumbers` did not supply exactly one number per page of the document. Thrown rather than labelling a prefix or padding, since a label on the wrong page is worse than none.
+ */
+export class MarkdownPageNumberCountError extends Error {
+  readonly pageCount: number;
+  readonly pageNumberCount: number;
+
+  constructor(pageCount: number, pageNumberCount: number) {
+    super(
+      `pageNumbers supplies ${String(pageNumberCount)} page numbers for a document of ${String(pageCount)} pages; it must supply exactly one per page`,
+    );
+    this.name = "MarkdownPageNumberCountError";
+    this.pageCount = pageCount;
+    this.pageNumberCount = pageNumberCount;
+  }
+}
+
+export interface BuildMarkdownTextOptions extends WriteMarkdownOptions {
+  /**
+   * One number per page of the document, in page order, written as {@link pageNumberMarker} at the start of each page so a reader of the text can tell which page each part came from. A page starts at the beginning of the document, after every top-level page break, and at the start of every section after the first that does not continue its predecessor's page (`breakType` other than `continuous`). Omitted, no page is labelled. The pdf conversions supply it for a page-selected read (`pages`), with each page's original one-based page number, since there the position of a part no longer says which page it is.
+   * @throws MarkdownPageNumberCountError when the count differs from the document's page count
+   */
+  readonly pageNumbers?: readonly number[];
+}
+
+function pageNumberParagraph(pageNumber: number): ContentBlock {
+  return {
+    kind: "paragraph",
+    runs: [{ text: pageNumberMarker(pageNumber) }],
+    styleId: HTML_PREFORMATTED_STYLE_ID,
+  };
+}
+
+type WordprocessingSection = Extract<
+  ContentDocument,
+  { kind: "wordprocessing" }
+>["sections"][number];
+
+// Inserts pageNumberMarker at the start of every page, by the page-start rule BuildMarkdownTextOptions.pageNumbers states. Runs on the content before markdownBlock lowers page breaks, so a page break is still a pageBreak block here.
+function labelPages(
+  sections: readonly WordprocessingSection[],
+  pageNumbers: readonly number[],
+): WordprocessingSection[] {
+  let pageCount = 0;
+  // A page beyond the supplied numbers is counted but left unlabelled; the count check below then refuses the whole call, so no partially labelled text is ever returned.
+  const label = (): ContentBlock[] => {
+    const pageNumber = pageNumbers[pageCount];
+    pageCount++;
+    return pageNumber === undefined ? [] : [pageNumberParagraph(pageNumber)];
+  };
+  const labelled = sections.map((section, sectionIndex) => {
+    const blocks: ContentBlock[] = [];
+    if (sectionIndex === 0 || section.breakType !== "continuous") {
+      blocks.push(...label());
+    }
+    for (const block of section.blocks) {
+      blocks.push(block);
+      if (block.kind === "pageBreak") {
+        blocks.push(...label());
+      }
+    }
+    return { ...section, blocks };
+  });
+  if (pageCount !== pageNumbers.length) {
+    throw new MarkdownPageNumberCountError(pageCount, pageNumbers.length);
+  }
+  return labelled;
+}
+
 function formulaParagraph(
   formula: NonNullable<ReturnType<typeof formulaOfBlock>>,
 ): ContentBlock {
@@ -89,12 +170,17 @@ function markdownTableCell(cell: ContentTableCell): ContentTableCell {
 // writeMarkdownContent throws MarkdownUnsupportedDocumentKindError on its own for a non-'wordprocessing' input — this adapter's own guard mirrors that exact check, now for a genuinely different reason than it used to: TypeScript needs `document` narrowed to the wordprocessing variant before this function can map over its own `sections` field at all (a presentation/spreadsheet/drawing/formula-kind ContentDocument has no `sections` field), not to work around any version-skew mismatch.
 export function buildMarkdownText(
   document: ContentDocument,
-  options?: WriteMarkdownOptions,
+  options?: BuildMarkdownTextOptions,
 ): string {
   if (document.kind !== "wordprocessing") {
     throw new MarkdownUnsupportedDocumentKindError(document.kind);
   }
-  const sections = document.sections.map((section) => ({
+  const pageNumbers = options?.pageNumbers;
+  const labelled =
+    pageNumbers === undefined
+      ? document.sections
+      : labelPages(document.sections, pageNumbers);
+  const sections = labelled.map((section) => ({
     ...section,
     blocks: section.blocks.map(markdownBlock),
   }));
