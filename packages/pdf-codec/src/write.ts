@@ -162,6 +162,23 @@ function codePointsOf(texts: readonly string[]): Set<number> {
   );
 }
 
+/**
+ * writePdf was handed a LayoutDocument from a page-selected read (one carrying `pageCount`). Such a document is a reading of part of a file, not a document to re-emit: its pages are a selection while its destinations, form widgets and outline still name source page indices, and the writer places pages by position, so writing it would point those references at the wrong pages or past the end. Thrown rather than writing a file whose links silently lie.
+ */
+export class PdfPartialDocumentError extends Error {
+  readonly pageCount: number;
+  readonly selectedPageCount: number;
+
+  constructor(pageCount: number, selectedPageCount: number) {
+    super(
+      `this LayoutDocument holds ${String(selectedPageCount)} pages selected from a ${String(pageCount)}-page file (it carries pageCount, which only a page-selected read sets); its page references name pages of the source file, so it cannot be written as a document of its own`,
+    );
+    this.name = "PdfPartialDocumentError";
+    this.pageCount = pageCount;
+    this.selectedPageCount = selectedPageCount;
+  }
+}
+
 // Assembles a LayoutDocument into a complete PDF file: the object graph (Catalog, Pages, Info, one Font+FontDescriptor pair per standard-14 face actually used, one Image XObject (+SMask) per image asset actually referenced, one embedded math composite font group when options.formulas is non-empty (Type0/CIDFontType0/FontDescriptor/FontFile3/ToUnicode — see math-font-write.ts), one embedded text font group per subsetted face when options.fonts resolved any (Type0/CIDFontType2/FontDescriptor/FontFile2/ToUnicode — see embedded-font-write.ts), then each page's own Page dict, Contents stream (ordinary LayoutItem bytes followed by that page's own formula bytes, if any — see math-content-write.ts), and optional Annots), a classic cross-reference table, and a trailer. Objects are allocated in this fixed order — never derived from Map/object iteration order — so identical input always produces byte-identical output (see the determinism tests).
 //
 // Without options.fonts, no embedded text face can exist, so that group consumes no object numbers and every other object is numbered exactly as it was before embedded-font support: output is byte-identical to a build with none of it (proved by the golden digests in write-embedded-font.test.ts).
@@ -169,6 +186,9 @@ export function writePdf(
   doc: LayoutDocument,
   options: WritePdfOptions = {},
 ): Uint8Array<ArrayBuffer> {
+  if (doc.pageCount !== undefined) {
+    throw new PdfPartialDocumentError(doc.pageCount, doc.pages.length);
+  }
   const compress = options.compress ?? true;
   const registry = options.fonts;
   const measurer = createFontMeasurer(registry);

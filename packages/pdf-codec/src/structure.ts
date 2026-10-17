@@ -16,9 +16,19 @@ export interface StructureContext {
   readonly ownerOf: (pageIndex: number, mcid: number) => string | undefined;
 }
 
+/**
+ * Reads the tagged-structure element tree and the (page, MCID) ownership map.
+ * @param catalog - the document catalog
+ * @param pages - every page of the page tree, in document order, so a position is a source page index
+ * @param includePage - whether the page at a source index is being read: ownership entries and parent-tree diagnostics are built for those pages only, while the element tree itself is document-level and always read whole
+ * @param resolver - the object resolver
+ * @param sink - where recoverable parse diagnostics go
+ * @returns the element tree and an owner lookup answering for included pages
+ */
 export function readStructure(
   catalog: PdfDict,
   pages: readonly PdfDict[],
+  includePage: (pageIndex: number) => boolean,
   resolver: Readonly<PdfObjectResolver>,
   sink: PdfDiagnosticSink,
 ): StructureContext {
@@ -97,7 +107,14 @@ export function readStructure(
 
   return {
     tree,
-    ownerOf: parentTreeOwners(root, pages, resolver, idByDict, sink),
+    ownerOf: parentTreeOwners(
+      root,
+      pages,
+      includePage,
+      resolver,
+      idByDict,
+      sink,
+    ),
   };
 }
 
@@ -229,6 +246,7 @@ function numberTreeEntries(
 function parentTreeOwners(
   root: PdfDict,
   pages: readonly PdfDict[],
+  includePage: (pageIndex: number) => boolean,
   resolver: Readonly<PdfObjectResolver>,
   idByDict: Map<PdfDict, string>,
   sink: PdfDiagnosticSink,
@@ -248,6 +266,9 @@ function parentTreeOwners(
   const entries = new Map(numberTreeEntries(documentTree, resolver, new Set()));
   const owners = new Map<string, string>();
   pages.forEach((page, pageIndex) => {
+    if (!includePage(pageIndex)) {
+      return; // a page not being read has no items to associate, so its ownership and its parent-tree diagnostics are skipped
+    }
     const structParents = asNumber(dictGet(page, "StructParents"));
     if (structParents === undefined) {
       return; // a page declaring no /StructParents states no MCID numbering of its own: nothing it paints can be associated
