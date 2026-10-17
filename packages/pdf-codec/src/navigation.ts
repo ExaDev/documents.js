@@ -150,7 +150,7 @@ function optionalCoords(
   return out;
 }
 
-// The one table every navigation consumer resolves against: the document's named destinations plus reader-minted entries for direct destination arrays. `intern` is the single entry point both link annotations and outline items go through, so a direct array shared by a link and a bookmark mints ONE destination, not two.
+// The one table every navigation consumer resolves against: the document's named destinations plus reader-minted entries for direct destination arrays. `intern` is the single entry point both link annotations and outline items go through. Every direct array it is given mints its own entry, with no identity or value check, so a direct array shared by a link and a bookmark (even one indirect object both reference) mints two destinations, each naming the same target.
 export interface DestinationRegistry {
   readonly entries: readonly LayoutDestination[];
   // A named destination (PDF string) resolves to its own name when the table carries it; a direct destination array mints a fresh collision-free `destN` entry. Returns undefined (with a diagnostic) for a dangling name or an unparseable array.
