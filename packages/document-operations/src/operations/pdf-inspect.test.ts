@@ -52,7 +52,8 @@ describe("pdfInspectOperation", () => {
       source: { bytesBase64, format: "pdf" },
     });
 
-    if (!("pageCount" in result)) {
+    // formatVersion, not pageCount, tells the two shapes apart: a LayoutDocument carries pageCount too when it comes from a page-selected read, while formatVersion is on every LayoutDocument and on no summary.
+    if ("formatVersion" in result) {
       throw new Error("expected a summary, not a full LayoutDocument");
     }
     expect(result.pageCount).toBe(1);
