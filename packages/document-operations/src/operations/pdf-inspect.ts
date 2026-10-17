@@ -43,6 +43,7 @@ const PdfInspectInputSchema = z.object({
     ),
 });
 
+// Both shapes carry pageCount (a LayoutDocument does on a page-selected read), so a caller telling them apart discriminates on formatVersion, which every LayoutDocument has and no summary does; pdf_inspect itself never page-selects.
 interface PdfInspectSummary {
   readonly pageCount: number;
   readonly pages: readonly {
