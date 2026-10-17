@@ -28,6 +28,29 @@ export class PdfParseError extends Error {
   }
 }
 
+/**
+ * A `ReadPdfOptions.pages` entry that names no page of the document: an integer outside `[-pageCount, pageCount - 1]` (code `pdf/page-out-of-range`) or a value that is not an integer at all (code `pdf/page-index-not-integer`). Thrown rather than skipped, because a caller asking for a page it believes exists has a wrong belief about the file, and a result quietly missing that page would let the wrong belief stand.
+ *
+ * `pageIndex` is the entry exactly as the caller wrote it (negative indices included); `pageCount` is the number of pages the document's page tree holds, so the caller can correct the selection without a second read.
+ */
+export class PdfPageSelectionError extends PdfParseError {
+  readonly pageIndex: number;
+  readonly pageCount: number;
+
+  constructor(pageIndex: number, pageCount: number) {
+    const isInteger = Number.isInteger(pageIndex);
+    super(
+      isInteger ? "pdf/page-out-of-range" : "pdf/page-index-not-integer",
+      isInteger
+        ? `page index ${pageIndex} names no page of this ${pageCount}-page document; a selection takes zero-based indices from 0 to pageCount - 1, or negative indices from -pageCount to -1 counted from the end`
+        : `page index ${pageIndex} is not an integer; a selection takes zero-based integer page indices`,
+    );
+    this.name = "PdfPageSelectionError";
+    this.pageIndex = pageIndex;
+    this.pageCount = pageCount;
+  }
+}
+
 // /Encrypt present, and encrypted in a way this codec cannot read at all: a non-standard security handler (/Filter other than /Standard, e.g. a public-key one), an unpublished or unrecognised /V, or a crypt filter naming a /CFM this codec does not implement. Distinct from PdfPasswordRequiredError below, which means the encryption itself IS supported and the file simply needs a password we do not have.
 export class PdfEncryptedError extends PdfParseError {
   constructor(message = "this PDF is encrypted and unsupported") {
