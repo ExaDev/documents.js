@@ -1,3 +1,23 @@
+## [14.5.0](https://github.com/ExaDev/documents.js/compare/documents.js%4014.4.124...documents.js%4014.5.0) (2026-10-17)
+
+### Features
+
+* **documents.js:** convert a selection of a PDF's pages ([15780c7](https://github.com/ExaDev/documents.js/commit/15780c7c339eaffcd0e4b2295e7b919f06d5a072)), references [#1688](https://github.com/ExaDev/documents.js/issues/1688)
+
+### Bug Fixes
+
+* **documents.js:** name the page-selected case when a tree cannot become pdf ([24c2a61](https://github.com/ExaDev/documents.js/commit/24c2a61d1e13a87955276f227f525cb3fc65a98d)), references [#1688](https://github.com/ExaDev/documents.js/issues/1688)
+
+### Documentation
+
+* **documents.js:** correct the metadata architecture bullet and drop stale format counts ([699fe71](https://github.com/ExaDev/documents.js/commit/699fe712c87b8ab7a1b133d0957f68ba31c1ef90))
+* **documents.js:** say readDocumentMetadata reads pdf through readPdf ([883f5ac](https://github.com/ExaDev/documents.js/commit/883f5acebf5a68ffb3f29ef1b62eea5274191d4f)), references [#1688](https://github.com/ExaDev/documents.js/issues/1688)
+
+
+### Dependencies
+
+- Updated pdf-codec to 5.4.0
+
 ## [14.4.124](https://github.com/ExaDev/documents.js/compare/documents.js%4014.4.123...documents.js%4014.4.124) (2026-10-01)
 
 ### Bug Fixes
