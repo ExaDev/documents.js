@@ -97,7 +97,7 @@
   "devDependencies": {
     "@arethetypeswrong/cli": "0.18.5",
     "@cloudflare/vitest-pool-workers": "0.21.2",
-    "@modelcontextprotocol/client": "2.0.0",
+    "@modelcontextprotocol/client": "2.2.0",
     "@stryker-mutator/core": "10.0.0",
     "@stryker-mutator/typescript-checker": "10.0.0",
     "@stryker-mutator/vitest-runner": "10.0.0",
