@@ -16,8 +16,9 @@ import type {
   LayoutImageAsset,
   LayoutItem,
   LayoutPage,
+  LayoutDocumentSurface,
 } from "./layout";
-import { LAYOUT_FORMAT_VERSION } from "./layout";
+import { LAYOUT_FORMAT_VERSION, LayoutDocumentSurfaceSchema } from "./layout";
 import { openPdfDocument } from "./document";
 import type { PdfDocument } from "./document";
 import type { PdfDiagnosticSink } from "./diagnostics";
@@ -66,12 +67,49 @@ export interface ReadPdfOptions {
    *
    * What a selected read skips: an unselected page's content stream is never fetched, decoded or interpreted, so the fonts and images only unselected pages use are never resolved; embedded-file payloads are never decoded, so `attachments` is absent from a page-selected result (an attachment is document-level payload whose size is independent of the pages asked for, and decoding it would cost the same whichever pages were selected).
    *
-   * What it still reads whole, because a negative index and every document-level page reference resolve against it or because it is document-level and holds no page content stream: the page tree, the outline, named destinations, optional-content layers, the AcroForm, the structure element tree and the /ParentTree number tree (both of which scale with the document), metadata and package residue. Two surfaces are built from page content and so cover selected pages only: the structure-ownership association an item's `structure` field names (and its parent-tree diagnostics), and the `page-boxes` residue row. Destinations a link states as a direct array are minted into `destinations` (as `dest1`, `dest2`, ...) only when their page is interpreted, so an unselected page's direct link destinations are absent and a minted name depends on which pages were read; named destinations are unaffected.
+   * What it still reads whole, because a negative index and every document-level page reference resolve against it or because it is document-level and holds no page content stream: the page tree, the outline, named destinations, optional-content layers, the AcroForm, the structure element tree and the /ParentTree number tree (both of which scale with the document), metadata and package residue; every one of those but the page tree and metadata can be left out as well with `surfaces`. Two surfaces are built from page content and so cover selected pages only: the structure-ownership association an item's `structure` field names (and its parent-tree diagnostics), and the `page-boxes` residue row. Destinations a link states as a direct array are minted into `destinations` (as `dest1`, `dest2`, ...) only when their page is interpreted, so an unselected page's direct link destinations are absent and a minted name depends on which pages were read; named destinations are unaffected.
    *
    * Duplicates collapse, and the result's `pages` holds the selected pages in ascending document order whatever order they were asked for in, each carrying its source position as `index`, with the document's total as `pageCount`; every document-level reference keeps naming source indices. An empty array is a valid selection: it reads no page and returns the document-level surfaces with `pageCount`, the cheapest way to learn a file's length and metadata. An entry naming no page throws `PdfPageSelectionError` rather than being skipped.
    */
   readonly pages?: readonly number[];
+  /**
+   * Which document-level surfaces to read. Each is read unless its entry is `false`, so omitting the setting, or an entry, reads it as before. Independent of `pages`: it applies to a full read and a page-selected read alike.
+   *
+   * A surface turned off is never parsed (its part of the catalog is not walked, so a malformed outline, form, layer list or structure tree reports no diagnostic) and its field is absent from the result whatever the file holds; the result lists it in `skippedSurfaces`, which is how a caller tells "not read" from "none". What each one covers, and what page items lose without it:
+   *
+   * - `outline`: the `/Outlines` bookmark tree (`outline`). Page items do not depend on it.
+   * - `destinations`: the named destinations of the catalog `/Dests` dictionary and the `/Names /Dests` name tree, and the registry links and outline entries name their targets through (`destinations`). Without it nothing can name an internal target, so a link whose target is internal (a `/Dest`, or a `/GoTo` action, named or direct) is left out of its page's items, and a read outline entry carries no `destination`; a link to a URI is kept as usual.
+   * - `form`: the AcroForm field tree (`form`). Page items do not depend on it: a widget annotation is never a page item or annotation either way.
+   * - `layers`: optional content, the `/OCProperties` groups and their default visibility (`layers`). Without it no item carries a `layer`, since an `/OC` membership resolves to no name; the items themselves are all still read, so content the default view hides is indistinguishable from visible content.
+   * - `structure`: the `/StructTreeRoot` element tree and its `/ParentTree` ownership map (`structure`). Without it no item carries a `structure` owner, and the parent-tree diagnostics are not reported.
+   * - `residue`: the package-level residue rows (`source`), including the per-page `page-boxes` row. Page items do not depend on it; `metadata` still reads the XMP packet it falls back to.
+   *
+   * Apart from those stated losses, every page item is exactly what a read with the surface on produces.
+   */
+  readonly surfaces?: ReadPdfSurfaces;
 }
+
+/**
+ * One entry per document-level surface `readPdf` can leave out, each read unless set to `false` (see `ReadPdfOptions.surfaces` for what each covers and what page items lose without it).
+ */
+export type ReadPdfSurfaces = Readonly<
+  Partial<Record<LayoutDocumentSurface, boolean>>
+>;
+
+// The surfaces a setting turns off, in LayoutDocumentSurfaceSchema's order, so the result's skippedSurfaces lists them the same way however the caller spelled the object.
+function skippedSurfacesOf(
+  surfaces: ReadPdfSurfaces | undefined,
+): LayoutDocumentSurface[] {
+  return LayoutDocumentSurfaceSchema.options.filter(
+    (surface) => surfaces?.[surface] === false,
+  );
+}
+
+// A registry for a read that skips destinations: it holds no entry and names nothing, so a link or outline entry asking it for a target gets none, without a diagnostic (nothing was looked up, so nothing dangles).
+const UNREAD_DESTINATION_REGISTRY: DestinationRegistry = {
+  entries: [],
+  intern: () => undefined,
+};
 
 // Resolves a page selection against the page tree's length: negative indices counted from the end, duplicates collapsed, and the result as a set, since readPdf walks the tree in document order and asks it per page. Throws on the first entry that names no page, before any page is read.
 function resolvePageSelection(
@@ -137,33 +175,42 @@ export function readPdf(
     options?.pages === undefined
       ? undefined
       : resolvePageSelection(options.pages, pageDicts.length);
-  const destinationRegistry = createDestinationRegistry(
-    doc.catalog,
-    doc,
-    (obj) => doc.pageIndex(obj),
-    sink,
-  );
-  const outline = readOutline(doc.catalog, destinationRegistry, doc, sink);
+  // Each surface ReadPdfOptions.surfaces turns off is never parsed: its reader is not called, and what page interpretation would have asked of it answers nothing (see ReadPdfOptions.surfaces for what page items lose).
+  const skippedSurfaces = skippedSurfacesOf(options?.surfaces);
+  const reads = (surface: LayoutDocumentSurface): boolean =>
+    !skippedSurfaces.includes(surface);
+  const destinationRegistry = reads("destinations")
+    ? createDestinationRegistry(
+        doc.catalog,
+        doc,
+        (obj) => doc.pageIndex(obj),
+        sink,
+      )
+    : UNREAD_DESTINATION_REGISTRY;
+  const outline = reads("outline")
+    ? readOutline(doc.catalog, destinationRegistry, doc, sink)
+    : undefined;
   // A page-selected read decodes no embedded file: see ReadPdfOptions.pages.
   const attachments =
     selection === undefined
       ? readAttachments(doc.catalog, pageDicts, doc, sink)
       : [];
-  const optionalContent = readOptionalContent(doc.catalog, doc, sink);
-  const form = readAcroForm(
-    doc.catalog,
-    doc,
-    (obj) => doc.pageIndex(obj),
-    sink,
-  );
-  const structure = readStructure(
-    doc.catalog,
-    pageDicts,
-    (index) => selection === undefined || selection.has(index),
-    doc,
-    sink,
-  );
-  const source = readDocumentResidue(doc, sink);
+  const optionalContent = reads("layers")
+    ? readOptionalContent(doc.catalog, doc, sink)
+    : undefined;
+  const form = reads("form")
+    ? readAcroForm(doc.catalog, doc, (obj) => doc.pageIndex(obj), sink)
+    : undefined;
+  const structure = reads("structure")
+    ? readStructure(
+        doc.catalog,
+        pageDicts,
+        (index) => selection === undefined || selection.has(index),
+        doc,
+        sink,
+      )
+    : undefined;
+  const source = reads("residue") ? readDocumentResidue(doc, sink) : undefined;
   const pageBoxRows: PdfObject[] = [];
 
   // An unselected page is skipped before readPage, the only path that fetches a page's /Contents, interprets it, and resolves the fonts and images it names: those costs are paid for selected pages alone. Each page keeps its source position as the page index readPage stamps (diagnostics, the structure-ownership lookup, the page-boxes residue row), and a selected page also carries it as `index`, since its position in `pages` no longer says which page it is.
@@ -180,8 +227,8 @@ export function readPdf(
       images,
       imageIdCache,
       destinationRegistry,
-      optionalContent.layerNameOf,
-      structure.ownerOf,
+      optionalContent?.layerNameOf ?? noLayerName,
+      structure?.ownerOf ?? noStructureOwner,
       sink,
     );
     if (read.boxRow !== undefined) {
@@ -190,8 +237,8 @@ export function readPdf(
     return [selection === undefined ? read.page : { ...read.page, index }];
   });
 
-  // The per-page boundary declarations a distinct crop box or a print-production box left behind, quarantined with the other package-level residue rows.
-  if (pageBoxRows.length > 0) {
+  // The per-page boundary declarations a distinct crop box or a print-production box left behind, quarantined with the other package-level residue rows, and so left out with them when residue is skipped.
+  if (source !== undefined && pageBoxRows.length > 0) {
     source["page-boxes"] = {
       format: "pdf",
       xml: serializeObjectToText(pdfArray(pageBoxRows)),
@@ -207,15 +254,29 @@ export function readPdf(
     ...(destinationRegistry.entries.length > 0
       ? { destinations: [...destinationRegistry.entries] }
       : {}),
-    ...(outline.length > 0 ? { outline } : {}),
+    ...(outline !== undefined && outline.length > 0 ? { outline } : {}),
     ...(attachments.length > 0 ? { attachments } : {}),
-    ...(optionalContent.layers.length > 0
+    ...(optionalContent !== undefined && optionalContent.layers.length > 0
       ? { layers: [...optionalContent.layers] }
       : {}),
-    ...(form.length > 0 ? { form } : {}),
-    ...(structure.tree.length > 0 ? { structure: [...structure.tree] } : {}),
-    ...(Object.keys(source).length > 0 ? { source } : {}),
+    ...(form !== undefined && form.length > 0 ? { form } : {}),
+    ...(structure !== undefined && structure.tree.length > 0
+      ? { structure: [...structure.tree] }
+      : {}),
+    ...(source !== undefined && Object.keys(source).length > 0
+      ? { source }
+      : {}),
+    ...(skippedSurfaces.length > 0 ? { skippedSurfaces } : {}),
   };
+}
+
+// What page interpretation asks of a skipped layers or structure surface: an /OC membership names no layer, and marked content has no owner.
+function noLayerName(): undefined {
+  return undefined;
+}
+
+function noStructureOwner(): undefined {
+  return undefined;
 }
 
 // --- Page geometry: MediaBox origin shift + /Rotate, composed into one matrix applied to every extracted item on the page. ---

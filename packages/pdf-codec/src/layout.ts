@@ -9,7 +9,7 @@ import {
 
 // pdf-codec's own native document model: LayoutDocument, the positioned item layer readPdf assembles from a PDF's bytes and writePdf draws into new ones. Ported verbatim from document-schema.js's own src/layout.ts (its home from the content pivot until that package's 4.0.0 promoted DocumentTree and dropped it) because a codec's native model belongs in the codec — the same family pattern as ooxml.js's Package/XmlElement and markdown-codec's AST; only PDF's native model was ever a public shared-schema export, an accident of this package predating the content pivot. The item layer remains the honest boundary between what the format says (positions) and what we think it means (structure): when documents.js's reconstruction misjudges a wrapped paragraph, these items stay inspectable as the PDF's actual testimony. Reconstruction heuristics are semantic policy and stay in documents.js, not here. The shared leaf shapes the family composes from (Color, ContentStrokeStyleSchema, LayoutFont, LayoutMetadata) stay in document-schema.js and are imported above, so content and layout keep one definition of each.
 
-// Bumped whenever LayoutDocumentSchema's shape changes incompatibly, so a value serialized by one version of a consumer can be recognised (and rejected, rather than silently misread) by another. Still 1: moving the schemas between packages changed where the family lives, not what it accepts. Additive optional fields do not bump it either, following every field added since (structure, layers, attachments, writingMode among them); that holds for LayoutPage.index and LayoutDocument.pageCount too, which only a page-selected read writes, because the package has no serialized form of a page-selected layout and writePdf refuses one, so an older consumer never receives one from this package with those fields stripped.
+// Bumped whenever LayoutDocumentSchema's shape changes incompatibly, so a value serialized by one version of a consumer can be recognised (and rejected, rather than silently misread) by another. Still 1: moving the schemas between packages changed where the family lives, not what it accepts. Additive optional fields do not bump it either, following every field added since (structure, layers, attachments, writingMode among them); that holds for LayoutPage.index and LayoutDocument.pageCount too, which only a page-selected read writes, and for LayoutDocument.skippedSurfaces, which only a read with ReadPdfOptions.surfaces writes, because the package has no serialized form of either kind of partial layout and writePdf refuses both, so an older consumer never receives one from this package with those fields stripped.
 export const LAYOUT_FORMAT_VERSION = 1;
 
 // sourcePath is assigned by each format's reader at read time and copied onto emitted LayoutItems by the layout engine; this module only defines the field, it doesn't generate values. Known limitation: sourcePath values are stable within one read+layout pass over a single document, not across edits — inserting content earlier in a document shifts every later path. This is not a stable identity scheme for incremental re-layout; it exists for tagged/accessible-PDF-style traceability and debugging, not edit-tracking.
@@ -381,6 +381,19 @@ export interface LayoutStructureElement {
   readonly children: readonly LayoutStructureElement[];
 }
 
+/**
+ * The document-level surfaces a read can leave out (`ReadPdfOptions.surfaces`), each named by the `LayoutDocument` field it fills: `outline`, `destinations`, `form`, `layers` and `structure` are those fields, and `residue` is the package-level `source` channel. A `LayoutDocument` lists the ones its read skipped in `skippedSurfaces`.
+ */
+export const LayoutDocumentSurfaceSchema = z.enum([
+  "outline",
+  "destinations",
+  "form",
+  "layers",
+  "structure",
+  "residue",
+]);
+export type LayoutDocumentSurface = z.infer<typeof LayoutDocumentSurfaceSchema>;
+
 export const LayoutDocumentSchema = z.object({
   formatVersion: z.literal(LAYOUT_FORMAT_VERSION),
   metadata: LayoutMetadataSchema,
@@ -396,5 +409,7 @@ export const LayoutDocumentSchema = z.object({
   form: z.array(LayoutFormFieldSchema).optional(),
   // The package-level half of the quarantined residue channel (document-schema.js's SourceResidue): whole-document PDF facts no content node owns — the raw XMP packet, output intents, viewer/session behaviour, private application data, the trailer /ID. Keyed by the fact's own name, opaque to everything downstream exactly as the channel's contract states.
   source: z.record(z.string(), SourceResidueSchema).optional(),
+  // The document-level surfaces readPdf left unread because ReadPdfOptions.surfaces turned them off, in LayoutDocumentSurfaceSchema's order. Each one's field is absent from the document whatever the file holds, so an absent field here means "not read" rather than "none"; this list is how a consumer tells the two apart, as pageCount does for attachments on a page-selected read. Absent when every surface was read, and never empty.
+  skippedSurfaces: z.array(LayoutDocumentSurfaceSchema).min(1).optional(),
 });
 export type LayoutDocument = z.infer<typeof LayoutDocumentSchema>;

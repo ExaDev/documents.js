@@ -18,6 +18,7 @@ import { emitFontObjects } from "./write-font-objects";
 import { emitPageObjects } from "./write-page-emit";
 import { emitOutlineObjects } from "./write-outline";
 import { buildInfoDict } from "./write-strings";
+import { PdfSkippedSurfacesError } from "./write-skipped-surfaces";
 import type { PositionedFormula } from "document-schema.js";
 import type {
   LayoutDocument,
@@ -188,6 +189,9 @@ export function writePdf(
 ): Uint8Array<ArrayBuffer> {
   if (doc.pageCount !== undefined) {
     throw new PdfPartialDocumentError(doc.pageCount, doc.pages.length);
+  }
+  if (doc.skippedSurfaces !== undefined) {
+    throw new PdfSkippedSurfacesError(doc.skippedSurfaces);
   }
   const compress = options.compress ?? true;
   const registry = options.fonts;
