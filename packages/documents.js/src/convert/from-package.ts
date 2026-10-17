@@ -66,7 +66,7 @@ export function buildDocumentBytes(
   if (target === "pdf") {
     if (pkg.pages === undefined) {
       throw new Error(
-        "this DocumentTree has no pages — only a package dumped from a <format>-to-pdf or pdf-to-<format> conversion carries them; a bridge conversion's own dump (e.g. odt-to-docx) never does, so 'pdf' is not a reachable target from it",
+        "this DocumentTree has no pages, so 'pdf' is not a reachable target from it: only a package dumped from a <format>-to-pdf conversion or a full pdf-to-<format> conversion carries them. A bridge conversion's own dump (e.g. odt-to-docx) never does, and neither does a page-selected pdf-to-<format> conversion's, whose frames name source page indices a pages array of only the selection could not be indexed by",
       );
     }
     const { document: layout, formulas, fonts } = packageToLayout(pkg);

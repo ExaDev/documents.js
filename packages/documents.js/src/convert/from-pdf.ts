@@ -31,7 +31,7 @@ export function readDocumentMetadata(
   options?: ReadDocumentMetadataOptions,
 ): LayoutMetadata {
   if (format === "pdf") {
-    // Metadata is document-level, so no page is read: an empty selection skips every page's content stream (and the source's embedded files), which keeps identifying a document as cheap as its catalog and /Info allow.
+    // Metadata is document-level, so no page is read: an empty selection skips every page's content streams and the fonts and images they use, and the source's embedded files. It does not reduce the read to the catalog and /Info: the outline, destinations, AcroForm, structure tree and /ParentTree, and package residue are still read whole (see ReadPdfOptions.pages).
     return readPdf(bytes, { signal: options?.signal, pages: [] }).metadata;
   }
   return CONTENT_READERS[format](bytes, { signal: options?.signal }).metadata;
