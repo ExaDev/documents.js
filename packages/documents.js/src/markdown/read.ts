@@ -6,7 +6,7 @@ import {
 import type { ContentBlock, ContentDocument } from "document-schema.js";
 import { lowerMarkdownMath } from "./math";
 import type { MarkdownMathLoweringOptions } from "./math";
-import { PAGE_BREAK_MARKER } from "./write";
+import { PAGE_BREAK_MARKER, PAGE_NUMBER_MARKER_PATTERN } from "./write";
 
 // markdown text -> ContentDocument (the wordprocessing variant). A thin adapter over markdown-codec's own readMarkdownContent, mirroring src/ooxml/docx/read.ts's readDocxContent / src/odf/ods/read.ts's readOdsContent: markdown-codec's own readMarkdownContent produces a document-schema.js ContentDocument (kind/formatVersion/metadata/sections) directly. This used to be two nominally distinct ContentDocument types (markdown-codec independently pinned document-schema.js at ^1.5.3, a pre-2.0.0 release, one major behind the 2.0.0+ this package depends on directly), which forced a re-parse through this package's own ContentDocumentSchema to sidestep the recursively-nested mismatch. That version skew is gone: markdown-codec now depends on document-schema.js@^2.2.4, the same range this package depends on directly, and pnpm resolves both to the single installed copy (`pnpm why document-schema.js` shows exactly one) — so the reader's return value is now genuinely, nominally the same ContentDocument type this function returns, and the plain pass-through this comment used to anticipate is what's below. markdown-codec 4.0.0 renamed this flat reader to readMarkdownContent and gave the bare readMarkdown name to its tree-form DocumentTree counterpart — the import is aliased here only because this module's own export is itself named readMarkdownContent.
 //
@@ -29,7 +29,7 @@ export function readMarkdownContent(
   return lowerMarkdownMath(promotePageBreakMarkers(document), math);
 }
 
-// The read-side inverse of src/markdown/write.ts's PAGE_BREAK_MARKER: markdown-codec lowers an `<!-- page break -->` HTML comment to an HTMLPreformatted paragraph carrying that literal text, and this pass promotes exactly that paragraph — the whole paragraph's text equal to the marker, nothing less — back to the pageBreak block it spelled, so a marker in markdown means a page boundary in the ContentDocument (markdownToPdf renders one; buildDocxPackage/buildOdtPackage write one). The match is deliberately exact rather than substring-based: a longer comment merely CONTAINING the marker is a genuine comment, not this package's page-break directive, and stays a paragraph. Runs before lowerMarkdownMath because a marker paragraph carries no math to lower either way. The walk is top-level only by structure, not oversight: GFM table cells hold inline content, so markdown-codec lowers a cell's `<!-- page break -->` to plain literal text runs — never the HTMLPreformatted paragraph shape this pass matches — and a marker inside a table cell can therefore never be promoted; it reads back as its literal text, the one-way annotation src/markdown/write.ts's own recursion emits it as.
+// The read-side inverse of src/markdown/write.ts's PAGE_BREAK_MARKER: markdown-codec lowers an `<!-- page break -->` HTML comment to an HTMLPreformatted paragraph carrying that literal text, and this pass promotes exactly that paragraph — the whole paragraph's text equal to the marker, nothing less — back to the pageBreak block it spelled, so a marker in markdown means a page boundary in the ContentDocument (the page labels a page-selected conversion writes beside it are dropped on the same walk, see isPageNumberMarker) (markdownToPdf renders one; buildDocxPackage/buildOdtPackage write one). The match is deliberately exact rather than substring-based: a longer comment merely CONTAINING the marker is a genuine comment, not this package's page-break directive, and stays a paragraph. Runs before lowerMarkdownMath because a marker paragraph carries no math to lower either way. The walk is top-level only by structure, not oversight: GFM table cells hold inline content, so markdown-codec lowers a cell's `<!-- page break -->` to plain literal text runs — never the HTMLPreformatted paragraph shape this pass matches — and a marker inside a table cell can therefore never be promoted; it reads back as its literal text, the one-way annotation src/markdown/write.ts's own recursion emits it as.
 type WordprocessingContent = Extract<
   ContentDocument,
   { kind: "wordprocessing" }
@@ -42,9 +42,20 @@ function promotePageBreakMarkers(
     ...document,
     sections: document.sections.map((section) => ({
       ...section,
-      blocks: section.blocks.map(promoteBlock),
+      blocks: section.blocks
+        .filter((block) => !isPageNumberMarker(block))
+        .map(promoteBlock),
     })),
   };
+}
+
+// A page label src/markdown/write.ts's pageNumberMarker wrote, in the same lowered shape the page-break marker arrives in (a single HTMLPreformatted paragraph whose whole text is the marker). Dropped rather than kept as a paragraph: it annotates which page the text came from, a fact about the markdown's source rather than content of the document, and kept it would render as visible literal text in any format markdown converts to.
+function isPageNumberMarker(block: ContentBlock): boolean {
+  return (
+    block.kind === "paragraph" &&
+    block.styleId === HTML_PREFORMATTED_STYLE_ID &&
+    PAGE_NUMBER_MARKER_PATTERN.test(block.runs.map((run) => run.text).join(""))
+  );
 }
 
 // Exported (not merely internal) so the two conditions that gate a promotion — the block's own styleId, and the exact (not merely substring, not merely per-run) text match — are directly testable: a real markdown-codec-lowered marker paragraph is always a single run, so a hand-built multi-run block is the only way to exercise the join("") boundary, and a same-text-wrong-style paragraph is not a shape markdown-codec's own HTML-block lowering can produce for anything OTHER than this exact marker's own preformatted styling.

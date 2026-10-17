@@ -42,6 +42,10 @@ export interface ReadNativeDocumentTreeOptions {
   readonly images?: MarkdownImageResolver;
   // Consulted only for a pdf source — every other format's reader has nothing to report through it.
   readonly sink?: PdfDiagnosticSink;
+  /**
+   * The pages of a pdf source to read, exactly as UnifiedConversionOptions.pages describes them (zero-based, negative from the end, document order, `PdfPageSelectionError` for an index naming no page). Consulted only for a pdf source, since no other format's reader has pages to select. Only the selected pages are parsed and reconstructed, and every frame in the result names the page's index in the source PDF. A DocumentTree read this way carries no `pages` envelope, because that array is indexed by those source indices and a selection cannot fill it.
+   */
+  readonly pages?: readonly number[];
 }
 
 // readContentDocument's own options are the identical shape — one options type for both, so a caller forwarding {signal, images, sink} through either entry point never needs to know which fields the OTHER one ignores.
@@ -57,6 +61,7 @@ function readNativeContent(
     const layout = readPdf(bytes, {
       signal: options?.signal,
       sink: options?.sink,
+      pages: options?.pages,
     });
     const content = reconstructWordprocessing(layout, {
       signal: options?.signal,
@@ -78,10 +83,14 @@ export function readNativeDocumentTree(
 ): DocumentTree {
   const { content, layout } = readNativeContent(format, bytes, options);
   if (layout !== undefined) {
-    const pages = layout.pages.map((page) => ({
-      widthPt: page.widthPt,
-      heightPt: page.heightPt,
-    }));
+    // A page-selected read's frames name source page indices, which an array of only the selected pages' sizes could not be indexed by, so its tree carries no pages envelope (see ReadNativeDocumentTreeOptions.pages).
+    const pages =
+      options?.pages === undefined
+        ? layout.pages.map((page) => ({
+            widthPt: page.widthPt,
+            heightPt: page.heightPt,
+          }))
+        : undefined;
     const reported = assembleTree(content, pages);
     stampPdfPackageTables(reported, layout);
     return reported;
@@ -101,6 +110,10 @@ export function readContentDocument(
 export interface PdfToDocumentOptions {
   readonly signal?: AbortSignal;
   readonly sink?: PdfDiagnosticSink;
+  /**
+   * The pages to convert, exactly as UnifiedConversionOptions.pages describes them: zero-based page-tree indices, a negative index counted from the end, duplicates collapsed, document order, and `PdfPageSelectionError` for an index naming no page. Only those pages are parsed and laid out, so converting a large file's cover or last page costs roughly the memory of those pages. pdfToMarkdown labels each page it writes with its original one-based page number (`<!-- page 7 -->`), so the text says which pages it holds.
+   */
+  readonly pages?: readonly number[];
   // Called exactly once, synchronously, with the DocumentTree (the readPdf-produced layout, and the reconstructed content built from it) this conversion built internally, before the function returns its bytes — see convert.ts's DocumentToPdfOptions.onDocument for the mirrored X-to-PDF side of this same side channel.
   readonly onDocument?: (pkg: DocumentTree) => void;
 }

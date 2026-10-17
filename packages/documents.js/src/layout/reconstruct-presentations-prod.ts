@@ -28,6 +28,7 @@ import type {
   LayoutRect,
   LayoutSubpath,
 } from "pdf-codec";
+import { sourcePageIndex } from "pdf-codec/layout";
 import { flipY } from "../model/geometry";
 import { buildDrawingBlock } from "../model/embedded-drawing";
 import { stampFrame } from "./shared";
@@ -64,9 +65,14 @@ export function reconstructPresentation(
 ): ContentDocument {
   const signal = options?.signal;
   const structure = indexStructure(doc);
-  const slides = doc.pages.map((page, pageIndex) => {
+  const slides = doc.pages.map((page, position) => {
     throwIfAborted(signal);
-    return reconstructSlide(page, pageIndex, doc.images, structure);
+    return reconstructSlide(
+      page,
+      sourcePageIndex(page, position),
+      doc.images,
+      structure,
+    );
   });
   return { kind: "presentation", metadata: doc.metadata, slides };
 }
@@ -320,9 +326,13 @@ export function reconstructDrawing(
   options?: ReconstructOptions,
 ): ContentDocument {
   const signal = options?.signal;
-  const pages: ContentDrawPage[] = doc.pages.map((page, pageIndex) => {
+  const pages: ContentDrawPage[] = doc.pages.map((page, position) => {
     throwIfAborted(signal);
-    return reconstructDrawPage(page, pageIndex, doc.images);
+    return reconstructDrawPage(
+      page,
+      sourcePageIndex(page, position),
+      doc.images,
+    );
   });
   return { kind: "drawing", metadata: doc.metadata, pages };
 }

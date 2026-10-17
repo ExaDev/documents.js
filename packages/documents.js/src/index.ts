@@ -162,7 +162,11 @@ export type {
   LayoutSubpath,
   LayoutText,
 } from "pdf-codec";
-export { LAYOUT_FORMAT_VERSION, LayoutDocumentSchema } from "pdf-codec";
+export {
+  LAYOUT_FORMAT_VERSION,
+  LayoutDocumentSchema,
+  sourcePageIndex,
+} from "pdf-codec";
 export type { LayoutMetadata } from "document-schema.js";
 
 // --- document-schema.js's own tree-form DocumentTree (structure, layout, and content fused in one tree since 4.0.0) and its self-describing-JSON helpers. contentDocumentWithSchema / documentSchemaKindOf / documentFromJson's ContentDocument branch / ContentDocumentJson all operate on the identical ContentDocument type exported above. The package's own layoutDocumentWithSchema/LayoutDocumentJson exports retired with the demotion: a LayoutDocument has no schema-stamped JSON envelope any more, it is a pdf-codec value. ---
@@ -398,6 +402,7 @@ export type {
 export {
   NOOP_DIAGNOSTIC_SINK,
   PdfEncryptedError,
+  PdfPageSelectionError,
   PdfParseError,
 } from "pdf-codec";
 export type { WinAnsiSubstitution } from "pdf-codec";
@@ -555,7 +560,13 @@ export {
 // markdown <-> ContentDocument — readMarkdownContent/buildMarkdownText are thin adapters over markdown-codec's own readMarkdownContent/writeMarkdownContent (see src/markdown/read.ts's own module comment), never re-exported here directly for the same reason ooxml.js's flat docx/pptx readers aren't (see this section's own top-of-file note): markdown-codec's own readMarkdownContent/writeMarkdownContent operate on document-schema.js's ContentDocument shape directly, a nominally different type from this package's own local ContentDocument above, so exposing both would invite a caller to reach for the wrong one. decodeMarkdownText/encodeMarkdownText are the byte<->text boundary markdown-codec itself has no opinion on (it operates on strings, not bytes), decodeMarkdownText working the character encoding out from the bytes rather than assuming UTF-8 and encodeMarkdownText always writing UTF-8 — exported for a caller composing readMarkdownContent/buildMarkdownText directly, matching every other independently-exported pipeline stage in this section. Construct markers pass straight through to markdown-codec's own writer, which resolves them as balanced brackets and renders each construct it has a markdown spelling for (a footnote, a blockquote division, a titled image) and renders the rest transparently.
 export { decodeMarkdownText, encodeMarkdownText } from "./markdown/text";
 export { readMarkdownContent } from "./markdown/read";
-export { buildMarkdownText } from "./markdown/write";
+export type { BuildMarkdownTextOptions } from "./markdown/write";
+// pageNumbers labels each page of the written markdown with pageNumberMarker; the pdf conversions supply it for a page-selected read so the text says which original pages it holds, and a caller composing readPdf with a page selection, reconstructWordprocessing and this writer (or renderContentDocumentToMarkdown) supplies it the same way, from sourcePageIndex(page, position) + 1 per page.
+export {
+  buildMarkdownText,
+  MarkdownPageNumberCountError,
+  pageNumberMarker,
+} from "./markdown/write";
 // csv <-> ContentDocument — the same independently-usable pipeline stages the other adapter families above expose: decodeCsvText/encodeCsvText are the byte<->text boundary, with decodeCsvText working the character encoding out from the bytes (byte-codec's decodeText) rather than assuming UTF-8, so Excel's own windows-1252 export and a UTF-16 save both read, and encodeCsvText always writing UTF-8, readCsvContent parses RFC 4180 text into a one-sheet spreadsheet ContentDocument (first record as the header row, data cells heuristically re-typed by inferCellValue — the identical heuristic pdfToOds applies, exported standalone further above), buildCsvText writes a sheet back out emitting each cell's displayText. TSV is a delimiter option on these same stages ({ delimiter: '\t' }), not a separate format. The errors are exported beside them so a caller composing the stages directly can branch on them by class: CsvUndecodableTextError (bytes that are not text in any supported character encoding), CsvParseError (RFC 4180 violations — an unterminated quoted field, a multi-character delimiter), CsvUnsupportedDocumentKindError (a non-spreadsheet ContentDocument), and the multi-sheet selection pair CsvSheetNotSpecifiedError/CsvSheetNotFoundError — the identical contract odbToCsv's own table selection follows.
 export { decodeCsvText, encodeCsvText } from "./csv/text";
 export { CsvUndecodableTextError } from "./csv/text";
