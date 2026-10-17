@@ -1,3 +1,20 @@
+## [1.1.188](https://github.com/ExaDev/documents.js/compare/document-operations%401.1.187...document-operations%401.1.188) (2026-10-17)
+
+### Documentation
+
+* **document-operations:** tell pdf_inspect results apart by formatVersion ([398c800](https://github.com/ExaDev/documents.js/commit/398c80049e30a9af51f1685091f5e028f6ec289d))
+
+### Tests
+
+* **document-operations:** tell a pdf_inspect summary apart by formatVersion ([ca8b8a1](https://github.com/ExaDev/documents.js/commit/ca8b8a1cd8caa7da38e8f07349d31337bfea7bfd))
+
+
+### Dependencies
+
+- Updated document-outline.js to 3.10.60
+- Updated documents.js to 14.5.0
+- Updated document-compute.js to 1.6.135
+
 ## [1.1.187](https://github.com/ExaDev/documents.js/compare/document-operations%401.1.186...document-operations%401.1.187) (2026-10-01)
 
 

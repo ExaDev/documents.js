@@ -1,3 +1,14 @@
+## [5.4.0](https://github.com/ExaDev/documents.js/compare/pdf-codec%405.3.32...pdf-codec%405.4.0) (2026-10-17)
+
+### Features
+
+* **pdf-codec:** read a selection of pages with ReadPdfOptions.pages ([d7500ae](https://github.com/ExaDev/documents.js/commit/d7500aeaedad6884724bf4554cfb3a7cf20a0ebf)), references [#1688](https://github.com/ExaDev/documents.js/issues/1688)
+
+### Documentation
+
+* **pdf-codec:** spell serialized consistently in the format version comment ([1bfacae](https://github.com/ExaDev/documents.js/commit/1bfacae4e3726092820ed5ca2152ab69bc617604))
+* **pdf-codec:** state what a page-selected read still reads whole ([a253d36](https://github.com/ExaDev/documents.js/commit/a253d36ba21d7ff26b4f8347187404f191a108a3)), references [#1688](https://github.com/ExaDev/documents.js/issues/1688)
+
 ## [5.3.32](https://github.com/ExaDev/documents.js/compare/pdf-codec%405.3.31...pdf-codec%405.3.32) (2026-10-01)
 
 ### Code Refactoring
