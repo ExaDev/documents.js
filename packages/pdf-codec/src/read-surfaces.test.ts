@@ -169,7 +169,7 @@ function destinationNamed(
     : { pageIndex: entry.pageIndex, target: entry.target };
 }
 
-// The rule a skipped outline adds to the per-surface comparison: the reader mints a `destN` name for each direct destination array in the order it meets them, and the outline is read before any page, so leaving it out renumbers the names minted for page links and drops the entries only the outline minted. A document compared under this rule has each internal link's destination name replaced by the entry it resolves to, and its destinations table reduced to the entries some page item names, keyed by what they resolve to rather than by name.
+// The rule a skipped outline adds to the per-surface comparison: the reader mints a `destN` name for each direct destination array in the order it meets them, and the outline is read before any page, so leaving it out renumbers the names minted for page links and drops the entries only the outline minted. A document compared under this rule has each internal link's destination name replaced by the entry it resolves to, and its destinations table reduced to the entries some page item names, as an ordered list of what each resolves to (`{ pageIndex, target }`) with the names dropped. Comparing those lists in order is sound because both reads list the named destinations first and then the entries minted for page links in page order, and the outline's own mints, which a full read lists between them, are named by no page item and so are not in the list.
 function withLinksByTarget(doc: LayoutDocument): Record<string, unknown> {
   const linkedNames = new Set(
     doc.pages.flatMap((page) =>
