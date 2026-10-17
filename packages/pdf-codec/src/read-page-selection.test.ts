@@ -14,11 +14,15 @@ import {
   PAGE_SELECTION_IMAGE_PAGE_INDEX,
   PAGE_SELECTION_STREAM,
   PAGE_SELECTION_TRAP_PAGE_INDEX,
+  PAGE_SELECTION_TRIM_BOX_PAGE_INDICES,
   navigationClusterPdf,
   pagelessPdf,
   pageSelectionPdf,
 } from "./test-support/pdf";
-import { parentTreeMissingEntryPdf } from "./test-support/pdf-structures";
+import {
+  parentTreeMissingEntryPdf,
+  taggedStructurePdf,
+} from "./test-support/pdf-structures";
 
 // The interpreter entry readPage calls, wrapped so a test can count how many content streams a read interpreted. The real implementation still runs: this observes, it does not stub.
 vi.mock("./interpret", async (importOriginal) => {
@@ -149,6 +153,31 @@ describe("readPdf: page selection never touches an unselected page's content", (
     expect(doc.structure).toEqual(
       readPdf(parentTreeMissingEntryPdf()).structure,
     );
+  });
+
+  it("still associates a selected non-first page's marked content with its owning structure element, exactly as a full read does", () => {
+    const full = readPdf(taggedStructurePdf());
+    const secondPage = full.pages[1];
+    const owned = secondPage?.items.filter(
+      (item) => "structure" in item && item.structure !== undefined,
+    );
+    expect(owned?.length).toBeGreaterThan(0);
+    expect(readPdf(taggedStructurePdf(), { pages: [1] }).pages).toEqual([
+      { ...secondPage, index: 1 },
+    ]);
+  });
+
+  it("keeps only the selected pages' rows in the page-boxes residue", () => {
+    const rowsOf = (pages?: readonly number[]): string[] =>
+      [
+        ...(
+          readPdf(pageSelectionPdf(), { pages }).source?.["page-boxes"]?.xml ??
+          ""
+        ).matchAll(/\/Page (\d+)/gu),
+      ].map((match) => match[1] ?? "");
+    expect(rowsOf()).toEqual(PAGE_SELECTION_TRIM_BOX_PAGE_INDICES.map(String));
+    expect(rowsOf([LAST_PAGE_INDEX])).toEqual([String(LAST_PAGE_INDEX)]);
+    expect(rowsOf([1, 2])).toEqual([]);
   });
 
   it("never resolves an image only an unselected page draws", () => {

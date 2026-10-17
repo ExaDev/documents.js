@@ -548,7 +548,7 @@ export function navigationClusterPdf(): Uint8Array<ArrayBuffer> {
   return b.bytes();
 }
 
-// A four-page document built to prove a page-selected read never touches what only unselected pages, or the document's embedded files, hold. Page 1 (index 1) is the trap: its content stream declares a filter no reader implements, so decoding it reports pdf/unsupported-filter (the bytes then pass through undecoded, which here are plain content), and it is the only page using font F2, an embedded TrueType whose font program is its own stream. Page 2 (index 2) is the only page drawing the image XObject, so the image registry is non-empty exactly when that page's content was interpreted. The catalog carries one embedded file. Every stream a test needs to recognise carries a /FixtureStream name (PAGE_SELECTION_STREAM), a key no reader interprets, so a spy on the stream decoder can tell which of them a read decoded. Every page shows its own one-based page number as text ("Page 1" to "Page 4"), so a test can tell from the text alone which pages it got.
+// A four-page document built to prove a page-selected read never touches what only unselected pages, or the document's embedded files, hold. Page 1 (index 1) is the trap: its content stream declares a filter no reader implements, so decoding it reports pdf/unsupported-filter (the bytes then pass through undecoded, which here are plain content), and it is the only page using font F2, an embedded TrueType whose font program is its own stream. Page 2 (index 2) is the only page drawing the image XObject, so the image registry is non-empty exactly when that page's content was interpreted. The catalog carries one embedded file, and pages 0 and 3 declare a /TrimBox, so each contributes a page-boxes residue row naming its page. Every stream a test needs to recognise carries a /FixtureStream name (PAGE_SELECTION_STREAM), a key no reader interprets, so a spy on the stream decoder can tell which of them a read decoded. Every page shows its own one-based page number as text ("Page 1" to "Page 4"), so a test can tell from the text alone which pages it got.
 export const PAGE_SELECTION_TRAP_PAGE_INDEX = 1;
 export const PAGE_SELECTION_IMAGE_PAGE_INDEX = 2;
 export const PAGE_SELECTION_STREAM = {
@@ -557,6 +557,8 @@ export const PAGE_SELECTION_STREAM = {
   attachment: "Attachment",
 } as const;
 export const PAGE_SELECTION_ATTACHMENT_NAME = "notes.txt";
+// The pages declaring a /TrimBox, each therefore contributing one row to the page-boxes residue.
+export const PAGE_SELECTION_TRIM_BOX_PAGE_INDICES: readonly number[] = [0, 3];
 export function pageSelectionPdf(): Uint8Array<ArrayBuffer> {
   const b = new FixtureBuilder().header(PDF_1_4);
   const PAGE_OBJS = [3, 4, 5, 6] as const;
@@ -585,9 +587,12 @@ export function pageSelectionPdf(): Uint8Array<ArrayBuffer> {
       index === PAGE_SELECTION_TRAP_PAGE_INDEX
         ? `/F2 ${TRAP_FONT_OBJ} 0 R`
         : `/F1 ${SHARED_FONT_OBJ} 0 R`;
+    const boxes = PAGE_SELECTION_TRIM_BOX_PAGE_INDICES.includes(index)
+      ? " /TrimBox [10 10 190 90]"
+      : "";
     b.object(
       pageObj,
-      `<< /Type /Page /Parent 2 0 R /Resources << /Font << ${fonts} >>${xObjects} >> /Contents ${CONTENT_OBJS[index]} 0 R >>`,
+      `<< /Type /Page /Parent 2 0 R /Resources << /Font << ${fonts} >>${xObjects} >> /Contents ${CONTENT_OBJS[index]} 0 R${boxes} >>`,
     );
   });
   b.object(SHARED_FONT_OBJ, HELVETICA_FONT_DICT);
