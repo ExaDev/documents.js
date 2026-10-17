@@ -20,6 +20,7 @@ export type {
 export {
   NOOP_DIAGNOSTIC_SINK,
   PdfEncryptedError,
+  PdfPageSelectionError,
   PdfParseError,
   PdfPasswordRequiredError,
 } from "./diagnostics";

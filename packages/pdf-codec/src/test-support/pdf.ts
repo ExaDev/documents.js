@@ -547,3 +547,51 @@ export function navigationClusterPdf(): Uint8Array<ArrayBuffer> {
   b.classicXrefAndTrailer(LINK_TO_GOTO_ACTION_OBJ, "/Root 1 0 R");
   return b.bytes();
 }
+
+// A four-page document built to prove a page-selected read never touches an unselected page's content. Page 1 (index 1) is the trap: its content stream declares a filter no reader implements, so decoding it reports pdf/unsupported-filter (the bytes then pass through undecoded, which here are plain content), and a read that skips the page can never report it. Page 2 (index 2) is the only page drawing the image XObject, so the image registry is non-empty exactly when that page's content was interpreted. Every page shows its own one-based page number as text ("Page 1" to "Page 4"), so a test can tell from the text alone which pages it got.
+export const PAGE_SELECTION_TRAP_PAGE_INDEX = 1;
+export const PAGE_SELECTION_IMAGE_PAGE_INDEX = 2;
+export function pageSelectionPdf(): Uint8Array<ArrayBuffer> {
+  const b = new FixtureBuilder().header(PDF_1_4);
+  const PAGE_OBJS = [3, 4, 5, 6] as const;
+  const SHARED_FONT_OBJ = 7;
+  const CONTENT_OBJS = [8, 9, 10, 11] as const;
+  const IMAGE_OBJ = 12;
+  b.object(1, "<< /Type /Catalog /Pages 2 0 R >>");
+  b.object(
+    2,
+    `<< /Type /Pages /Kids [${PAGE_OBJS.map((num) => `${num} 0 R`).join(" ")}] /Count ${PAGE_OBJS.length} /MediaBox [0 0 200 100] >>`,
+  );
+  PAGE_OBJS.forEach((pageObj, index) => {
+    const xObjects =
+      index === PAGE_SELECTION_IMAGE_PAGE_INDEX
+        ? ` /XObject << /Im1 ${IMAGE_OBJ} 0 R >>`
+        : "";
+    b.object(
+      pageObj,
+      `<< /Type /Page /Parent 2 0 R /Resources << /Font << /F1 ${SHARED_FONT_OBJ} 0 R >>${xObjects} >> /Contents ${CONTENT_OBJS[index]} 0 R >>`,
+    );
+  });
+  b.object(SHARED_FONT_OBJ, HELVETICA_FONT_DICT);
+  CONTENT_OBJS.forEach((contentObj, index) => {
+    const text = `BT /F1 12 Tf 10 50 Td (Page ${index + 1}) Tj ET`;
+    if (index === PAGE_SELECTION_TRAP_PAGE_INDEX) {
+      b.stream(contentObj, "<< /Filter /NoSuchDecode >>", enc(text));
+    } else if (index === PAGE_SELECTION_IMAGE_PAGE_INDEX) {
+      b.stream(
+        contentObj,
+        EMPTY_DICT,
+        enc(`${text} q 10 0 0 10 150 10 cm /Im1 Do Q`),
+      );
+    } else {
+      b.stream(contentObj, EMPTY_DICT, enc(text));
+    }
+  });
+  b.stream(
+    IMAGE_OBJ,
+    "<< /Type /XObject /Subtype /Image /Width 1 /Height 1 /ColorSpace /DeviceGray /BitsPerComponent 8 >>",
+    new Uint8Array([0x80]),
+  );
+  b.classicXrefAndTrailer(IMAGE_OBJ, "/Root 1 0 R");
+  return b.bytes();
+}

@@ -204,8 +204,20 @@ export const LayoutPageSchema = z.object({
   annotations: z.array(LayoutAnnotationSchema).optional(),
   // pptx speaker notes for the slide this page came from, if any — carried as a private, non-visible entry on the PDF page's own dictionary, never painted into the page content. PDF has no native concept of hidden presenter notes, so this is a round-trip mechanism specific to a writer/reader pair that both honour it, not a real PDF feature — a PDF produced by anything else will never have it, and a PDF consumer that doesn't specifically know this convention will never see it either.
   notes: z.string().optional(),
+  // The page's zero-based position in the source PDF's page tree, set by readPdf on every page of a page-selected read (ReadPdfOptions.pages), where the page's position in `pages` no longer says which page it is. Absent on a full read and on a page any other producer builds: there the position in `pages` IS the index, and stating it twice would be a second copy to keep in agreement. Every document-level reference to a page (a destination's or form widget's pageIndex, a page-boxes residue row, a structure association) names this source index, never the position. Read it through sourcePageIndex rather than branching on its presence.
+  index: z.number().int().nonnegative().optional(),
 });
 export type LayoutPage = z.infer<typeof LayoutPageSchema>;
+
+/**
+ * The zero-based index in the source PDF's page tree of the page at `position` in a `LayoutDocument`'s `pages`: the page's own `index` when a page-selected read set one, otherwise `position` itself, which is the source index whenever `pages` holds every page in document order. The one place that rule is spelled, so every consumer resolving a page against a document-level reference (a destination, a form widget, a frame) agrees on it.
+ * @param page - the page as it appears in `pages`
+ * @param position - the page's position in `pages`
+ * @returns the page's index in the source document's page tree
+ */
+export function sourcePageIndex(page: LayoutPage, position: number): number {
+  return page.index ?? position;
+}
 
 // An entry in the top-level image registry: bytes live here once, keyed by imageId, so a repeated logo across many pages/slides embeds (or extracts) exactly once. Bytes are the original file bytes for the given format — PNG bytes are re-encoded from decoded pixels where needed; JPEG bytes are the original encoded stream, verbatim, in both directions.
 export const LayoutImageAssetSchema = z.object({
@@ -373,6 +385,8 @@ export const LayoutDocumentSchema = z.object({
   formatVersion: z.literal(LAYOUT_FORMAT_VERSION),
   metadata: LayoutMetadataSchema,
   pages: z.array(LayoutPageSchema),
+  // The number of pages in the source PDF's page tree, set by readPdf on a page-selected read (ReadPdfOptions.pages), where `pages` holds only the selection and so no longer says how long the document is: a caller that asked for the last page, or wants to know which pages it has not read, needs the total from the same read rather than from a second pass over the file. Absent on a full read, where it would restate pages.length. A field rather than a separate page-count function because the page tree is walked by readPdf anyway (destinations and the selection both resolve against it), so reporting its length costs nothing, while a separate call would parse the cross-reference table and walk the tree a second time.
+  pageCount: z.number().int().nonnegative().optional(),
   images: z.record(z.string(), LayoutImageAssetSchema),
   destinations: z.array(LayoutDestinationSchema).optional(),
   outline: z.array(LayoutOutlineItemSchema).optional(),
