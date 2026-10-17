@@ -63,7 +63,7 @@ export interface ReadNativeDocumentTreeOptions {
    */
   readonly pages?: readonly number[];
   /**
-   * The document-level surfaces of a pdf source to read, exactly as UnifiedConversionOptions.surfaces describes them: one boolean per surface, each read unless set to `false`, independent of `pages`. Consulted only for a pdf source. A skipped surface is absent from the read, so the tree carries none of its tables, and reconstruction loses what it took from it: without `structure` a tagged PDF's headings, table cells and divisions are inferred from geometry, and without `layers` hidden-layer content is kept as if visible.
+   * The document-level surfaces of a pdf source to read, exactly as UnifiedConversionOptions.surfaces describes them: one boolean per surface, each read unless set to `false`, independent of `pages`. Consulted only for a pdf source. A skipped surface is absent from the read, so the tree carries nothing built from it (see UnifiedConversionOptions.surfaces for exactly what: `outline-N` entries in `destinations`, destinations and internal link constructs, form `contentControl` constructs, the layers table, structure entries in `definitions`, residue), and reconstruction loses what it took from it: without `structure` a tagged PDF's headings, table cells and divisions are inferred from geometry, and without `layers` hidden-layer content is kept as if visible.
    */
   readonly surfaces?: ReadPdfSurfaces;
 }
