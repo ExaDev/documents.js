@@ -1,3 +1,19 @@
+## [5.5.0](https://github.com/ExaDev/documents.js/compare/pdf-codec%405.4.0...pdf-codec%405.5.0) (2026-10-17)
+
+### Features
+
+* **pdf-codec:** leave document-level surfaces out of a read ([3fd3fc2](https://github.com/ExaDev/documents.js/commit/3fd3fc2268276962b167e3a5a6c27a5afa51906d)), references [#1692](https://github.com/ExaDev/documents.js/issues/1692)
+
+### Documentation
+
+* **pdf-codec:** say a shared direct destination array mints twice ([bd337aa](https://github.com/ExaDev/documents.js/commit/bd337aa020c64215a0b8d34d6c77f3faa40f4d20)), references [#1692](https://github.com/ExaDev/documents.js/issues/1692)
+* **pdf-codec:** state that a skipped outline renumbers minted destinations ([99312ca](https://github.com/ExaDev/documents.js/commit/99312ca0bfba9abeb50a16b36e29cf1baf00683b)), references [#1692](https://github.com/ExaDev/documents.js/issues/1692)
+
+### Tests
+
+* **pdf-codec:** compare a skipped-outline read by link target from one document ([2127750](https://github.com/ExaDev/documents.js/commit/212775045987cf98c2183cc2e9beb2b3e353b5bd)), references [#1692](https://github.com/ExaDev/documents.js/issues/1692)
+* **pdf-codec:** describe the outline comparison's destination list exactly ([7acae63](https://github.com/ExaDev/documents.js/commit/7acae63d4a0527318bc2a868b5a80ec7800cb720)), references [#1692](https://github.com/ExaDev/documents.js/issues/1692)
+
 ## [5.4.0](https://github.com/ExaDev/documents.js/compare/pdf-codec%405.3.32...pdf-codec%405.4.0) (2026-10-17)
 
 ### Features

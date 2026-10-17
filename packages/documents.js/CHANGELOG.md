@@ -1,3 +1,25 @@
+## [14.6.0](https://github.com/ExaDev/documents.js/compare/documents.js%4014.5.0...documents.js%4014.6.0) (2026-10-17)
+
+### Features
+
+* **documents.js:** thread ReadPdfOptions.surfaces through the pdf conversions ([a91d322](https://github.com/ExaDev/documents.js/commit/a91d322124ba3de520891af1c6a3306d8c56698e)), references [#1692](https://github.com/ExaDev/documents.js/issues/1692)
+
+### Documentation
+
+* **documents.js:** describe what a pdf rebuild and a skipped outline change ([f3e262f](https://github.com/ExaDev/documents.js/commit/f3e262f558cc930f99b639f76bbc1f381681c7e2)), references [#1692](https://github.com/ExaDev/documents.js/issues/1692)
+* **documents.js:** name what a pdf rebuild draws from a tree ([db4b526](https://github.com/ExaDev/documents.js/commit/db4b5267e32011b7b532c542275458fead608a23)), references [#1692](https://github.com/ExaDev/documents.js/issues/1692)
+* **documents.js:** name what a skipped surface removes from the tree ([5194c56](https://github.com/ExaDev/documents.js/commit/5194c568922912090d37eefc289efca519dab773)), references [#1692](https://github.com/ExaDev/documents.js/issues/1692)
+* **documents.js:** say where the outline lives in the tree and what a rebuild draws ([dcc3c33](https://github.com/ExaDev/documents.js/commit/dcc3c3324509c4d1252b340b910eaa9ce023381b)), references [#1692](https://github.com/ExaDev/documents.js/issues/1692)
+
+### Tests
+
+* **documents.js:** cover readDocumentMetadata's XMP fallback with residue skipped ([04231a3](https://github.com/ExaDev/documents.js/commit/04231a3d169c6411360c69feb0c931908e9203d0)), references [#1692](https://github.com/ExaDev/documents.js/issues/1692)
+
+
+### Dependencies
+
+- Updated pdf-codec to 5.5.0
+
 ## [14.5.0](https://github.com/ExaDev/documents.js/compare/documents.js%4014.4.124...documents.js%4014.5.0) (2026-10-17)
 
 ### Features
