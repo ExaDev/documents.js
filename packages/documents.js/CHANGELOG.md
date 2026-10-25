@@ -1,3 +1,13 @@
+## [14.6.1](https://github.com/ExaDev/documents.js/compare/documents.js%4014.6.0...documents.js%4014.6.1) (2026-10-25)
+
+### Bug Fixes
+
+* **documents.js:** read text set in columns one column at a time ([da0de16](https://github.com/ExaDev/documents.js/commit/da0de16ade26eb8709301e0a4f4649f59b17b1dd))
+
+### Tests
+
+* **documents.js:** give the ragged-cell table a prose-wide measure on both sides ([b9174f8](https://github.com/ExaDev/documents.js/commit/b9174f839e46773bd7f0a542fb6b53929389afbe))
+
 ## [14.6.0](https://github.com/ExaDev/documents.js/compare/documents.js%4014.5.0...documents.js%4014.6.0) (2026-10-17)
 
 ### Features
