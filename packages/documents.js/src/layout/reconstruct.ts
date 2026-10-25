@@ -12,7 +12,6 @@ import {
   reconstructSheet,
 } from "./reconstruct-presentations-prod";
 import {
-  clusterIntoLines,
   clusterIntoParagraphs,
   type TextParagraph,
   HALF_POINT_BUCKET_PT,
@@ -20,6 +19,7 @@ import {
   paragraphToContentParagraph,
 } from "./reconstruct-lines";
 import { recoverTables } from "./reconstruct-tables";
+import { compareReadingPosition, readingOrder } from "./reading-order";
 
 // Deep-imported from pdf-codec's asset-free read-side modules rather than its root barrel: the reconstruction path is part of this package's read-only graph (documents.js/read), and the barrel's write half would drag the vendored font assets into it. See src/read-graph.test.ts.
 import type {
@@ -386,8 +386,8 @@ function reconstructPageBlocks(
   const imageItems = page.items.filter(
     (i): i is LayoutImage => i.kind === "image",
   );
-  const lines = clusterIntoLines(textItems);
-  const paragraphs = clusterIntoParagraphs(lines);
+  // Text set in columns is split at its gutters first, so each column clusters into lines and paragraphs as its own flow; every block below is then ordered by the flow it sits in before its height on the page (see reading-order.ts).
+  const order = readingOrder(textItems);
 
   // The one place a block's division chain is recorded from its own source items — the chain of /Part /Sect /Div elements enclosing them, common-prefixed across the cluster (a paragraph geometry merged across a division boundary claims only the divisions both halves share).
   const recordDivisions = (
@@ -399,25 +399,31 @@ function reconstructPageBlocks(
     }
   };
 
-  const positioned: { yPt: number; block: ContentBlock }[] = [];
-  for (const paragraph of paragraphs) {
-    const paragraphItems = paragraph.lines.flatMap((line) => line.items);
-    // Structure over geometry: an authoritative resolution replaces the census outright — including the level-undefined veto, where a producer-tagged body paragraph at heading SIZE stays a paragraph.
-    const structural =
-      structure === undefined
-        ? undefined
-        : structureHeadingLevel(paragraphItems, structure);
-    const headingLevel =
-      structural !== undefined
-        ? structural.level
-        : headingLevelOf(paragraph, headingLevels);
-    const block = paragraphToContentParagraph(
-      paragraph,
-      pageIndex,
-      headingLevel,
-    );
-    recordDivisions(block, paragraphItems);
-    positioned.push({ yPt: paragraph.lines[0]!.baselineY, block });
+  const positioned: {
+    path: readonly number[];
+    yPt: number;
+    block: ContentBlock;
+  }[] = [];
+  for (const { lines, path } of order.regions) {
+    for (const paragraph of clusterIntoParagraphs(lines)) {
+      const paragraphItems = paragraph.lines.flatMap((line) => line.items);
+      // Structure over geometry: an authoritative resolution replaces the census outright — including the level-undefined veto, where a producer-tagged body paragraph at heading SIZE stays a paragraph.
+      const structural =
+        structure === undefined
+          ? undefined
+          : structureHeadingLevel(paragraphItems, structure);
+      const headingLevel =
+        structural !== undefined
+          ? structural.level
+          : headingLevelOf(paragraph, headingLevels);
+      const block = paragraphToContentParagraph(
+        paragraph,
+        pageIndex,
+        headingLevel,
+      );
+      recordDivisions(block, paragraphItems);
+      positioned.push({ path, yPt: paragraph.lines[0]!.baselineY, block });
+    }
   }
   for (const img of imageItems) {
     const asset = images[img.imageId];
@@ -436,12 +442,23 @@ function reconstructPageBlocks(
         heightPt: img.heightPt,
       });
       recordDivisions(block, [img]);
-      positioned.push({ yPt: img.yPt, block });
+      positioned.push({
+        path: order.locate(img.xPt + img.widthPt / 2, img.yPt),
+        yPt: img.yPt,
+        block,
+      });
     }
   }
   for (const recovered of recoveredTables) {
     recordDivisions(recovered.table, [...recovered.consumedText]);
-    positioned.push({ yPt: recovered.topYPt, block: recovered.table });
+    positioned.push({
+      path: order.locate(
+        recovered.frame.xPt + recovered.frame.widthPt / 2,
+        recovered.topYPt,
+      ),
+      yPt: recovered.topYPt,
+      block: recovered.table,
+    });
   }
   const recoveredVectors = recoverPageVectors(page, pageIndex, claimedItems);
   if (recoveredVectors !== undefined) {
@@ -451,12 +468,14 @@ function reconstructPageBlocks(
         layoutItemToVector(item, page.heightPt) !== undefined,
     );
     recordDivisions(recoveredVectors.block, vectorItems);
+    // A page's recovered drawing gathers every vector on the page into one block, so it has no single column; it is read with the leftmost.
     positioned.push({
+      path: order.locate(Number.NEGATIVE_INFINITY, recoveredVectors.topYPt),
       yPt: recoveredVectors.topYPt,
       block: recoveredVectors.block,
     });
   }
-  positioned.sort((a, b) => b.yPt - a.yPt);
+  positioned.sort(compareReadingPosition);
   const blocks = positioned.map((p) => p.block);
   reconcileLinks(blocks, page, pageIndex);
   appendAnnotationConstructs(blocks, page, pageIndex);
