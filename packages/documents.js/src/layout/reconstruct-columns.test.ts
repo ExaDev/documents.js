@@ -287,22 +287,27 @@ describe("reconstructWordprocessing: column reading order", () => {
   });
 
   it("leaves a table of wide columns holding short ragged cells read across its rows", () => {
+    // Each column's longest cell gives it a prose-wide measure, so only the raggedness of its line ends tells it from a column of running text.
     const cells = [
-      ["Lifting operations", "Yes"],
-      ["Work at height", "Not applicable"],
-      ["Confined spaces", "See note 4"],
+      [
+        "Lifting operations and lifting equipment",
+        "Thorough examination every six months",
+      ],
+      ["Work at height", "Yes"],
+      ["Confined spaces", "Not applicable"],
       ["Hot work", "Permit required"],
       ["Excavations", "Yes"],
     ];
+    const valueColumnX = 330;
     const items = cells.flatMap(([label, value], row) => [
       text(label!, LEFT_COLUMN_X, 700 - row * LEADING_PT),
       text(
         value!,
-        RIGHT_COLUMN_X,
+        valueColumnX,
         700 + RIGHT_BASELINE_OFFSET - row * LEADING_PT,
       ),
     ]);
-    // The cells are tens of points apart, beyond the reader's two-em tab gap, so each row reads as one tab-separated line.
+    // The columns are further apart than the reader's two-em tab gap, so each row reads as one tab-separated line.
     expect(paragraphTexts(docFrom(items))).toEqual([
       cells.map((row) => row.join("\t")).join(" "),
     ]);
