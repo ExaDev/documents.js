@@ -37,7 +37,6 @@ import { throwIfAborted } from "../ports/abort";
 import type { ReconstructOptions } from "./reconstruct";
 import { indexStructure, ZERO_MARGINS } from "./reconstruct";
 import {
-  clusterIntoLines,
   fontSizesClose,
   gapExceeds,
   LARGE_GAP_EM_MULTIPLIER,
@@ -52,6 +51,7 @@ import {
 import type { TextLine } from "./reconstruct-lines";
 import type { StructureIndex } from "./reconstruct";
 import { recoverTables } from "./reconstruct-tables";
+import { readingOrder } from "./reading-order";
 import type { CellTypingContext } from "./reconstruct-tables";
 import { detectGridLattice } from "./lattice";
 import {
@@ -102,8 +102,10 @@ function reconstructSlide(
     (i): i is LayoutImage => i.kind === "image",
   );
 
-  const lines = clusterIntoLines(textItems);
-  const blocks = clusterIntoBlocks(lines);
+  // Each column of text set in columns builds its own blocks, in reading order (see reading-order.ts).
+  const blocks = readingOrder(textItems).regions.flatMap((region) =>
+    clusterIntoBlocks(region.lines),
+  );
   const textShapes = blocks.map((block) =>
     blockToShape(block, page.heightPt, pageIndex),
   );
