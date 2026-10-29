@@ -1,3 +1,9 @@
+## [7.16.2](https://github.com/ExaDev/documents.js/compare/document-schema.js%407.16.1...document-schema.js%407.16.2) (2026-10-29)
+
+### Performance Improvements
+
+* **document-schema.js:** walk a table's grid in linear time ([6e36670](https://github.com/ExaDev/documents.js/commit/6e366702ffac3b8e2f14f9ab3d14c14525f14d1a))
+
 ## [7.16.1](https://github.com/ExaDev/documents.js/compare/document-schema.js%407.16.0...document-schema.js%407.16.1) (2026-10-01)
 
 ### Miscellaneous Chores
