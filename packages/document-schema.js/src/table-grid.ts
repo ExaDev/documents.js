@@ -60,34 +60,38 @@ interface AnchorFootprint {
   readonly columnEnd: number;
 }
 
-// The anchors seen so far, queried before the current position is itself classified — which is what makes "is this position covered" answerable without excluding the position from its own footprint: an anchor only ever covers positions at or after its own, so a position asking the question is never yet in the list when it asks. No `anchor.row <= rowIndex` term appears, deliberately: every anchor in the list is at or before the asking row already, so `rowIndex < anchor.rowEnd` alone decides the vertical extent.
+// The anchors seen so far, kept per grid column and queried before the current position is itself classified — which is what makes "is this position covered" answerable without excluding the position from its own footprint: an anchor only ever covers positions at or after its own, so a position asking the question is never yet in a list when it asks. Each column's list holds, in the order the anchors were met, the anchors whose footprint includes that column, so the first anchor in a list still reaching the asking row is the first anchor in reading order covering the position: the one the position is assigned to. An anchor whose last row is above the asking row never covers any later position, since rows are asked in order, so it is dropped from the front of the list; an unmerged cell's anchor therefore never outlives the row it sits in, and a lookup costs the anchors still reaching its row rather than every anchor met. No `anchor.row <= rowIndex` term appears, deliberately: every anchor in a list is at or before the asking row already, so `rowIndex < anchor.rowEnd` alone decides the vertical extent.
+type ColumnAnchors = AnchorFootprint[];
+
 function coveringAnchor(
-  anchors: readonly AnchorFootprint[],
+  columnAnchors: ColumnAnchors | undefined,
   rowIndex: number,
-  columnIndex: number,
 ): AnchorFootprint | undefined {
-  for (const anchor of anchors) {
-    if (
-      rowIndex < anchor.rowEnd &&
-      anchor.column <= columnIndex &&
-      columnIndex < anchor.columnEnd
-    ) {
-      return anchor;
-    }
+  if (columnAnchors === undefined) {
+    return undefined;
   }
-  return undefined;
+  let first = columnAnchors[0];
+  while (first !== undefined && first.rowEnd <= rowIndex) {
+    columnAnchors.shift();
+    first = columnAnchors[0];
+  }
+  return first;
 }
 
 /**
  * Classify every entry of every row as an anchor or as covered, in row-major order, one inner array per table row.
  *
  * This is the walk a consumer runs instead of accumulating spans itself. A writer targeting a format that stores only anchors (HTML's `<td colspan>`, a docx `w:tc` with `w:gridSpan`) keeps the anchors and drops the covered positions; a writer targeting a format that stores covered positions explicitly (ODF, pptx) writes both; a reader checks its own output against it.
+ *
+ * The work is linear in the table's entries plus the grid positions the anchors' spans cover, not quadratic in the entries: a position asks only about the anchors reaching its own column and row.
  */
 export function walkTableGrid(table: ContentTable): TableGridPosition[][] {
-  const anchors: AnchorFootprint[] = [];
+  const anchorsByColumn = new Map<number, ColumnAnchors>();
+  // No position is asked past the widest row, so an anchor's footprint is recorded no further than that, however wide its `colSpan` claims to be.
+  const gridWidth = widestRowLength(table);
   return table.rows.map((row, rowIndex) =>
     row.cells.map((cell, columnIndex): TableGridPosition => {
-      const anchor = coveringAnchor(anchors, rowIndex, columnIndex);
+      const anchor = coveringAnchor(anchorsByColumn.get(columnIndex), rowIndex);
       if (anchor !== undefined) {
         return {
           rowIndex,
@@ -97,12 +101,24 @@ export function walkTableGrid(table: ContentTable): TableGridPosition[][] {
           anchorColumnIndex: anchor.column,
         };
       }
-      anchors.push({
+      const footprint: AnchorFootprint = {
         row: rowIndex,
         column: columnIndex,
         rowEnd: rowIndex + tableCellRowSpan(cell),
         columnEnd: columnIndex + tableCellColumnSpan(cell),
-      });
+      };
+      for (
+        let column = columnIndex;
+        column < Math.min(footprint.columnEnd, gridWidth);
+        column++
+      ) {
+        const columnAnchors = anchorsByColumn.get(column);
+        if (columnAnchors === undefined) {
+          anchorsByColumn.set(column, [footprint]);
+        } else {
+          columnAnchors.push(footprint);
+        }
+      }
       return { rowIndex, columnIndex, cell };
     }),
   );

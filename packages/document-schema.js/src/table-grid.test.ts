@@ -226,6 +226,132 @@ describe("walkTableGrid", () => {
   });
 });
 
+// The walk as it was written before it kept anchors per column: every position asks every anchor met so far, in reading order, and takes the first that covers it. Kept as the reference the per-column walk is compared against, since "the first anchor in reading order covering the position" is the rule, and the per-column lists are only a faster way to ask it.
+function referenceWalk(source: ContentTable): TableGridPosition[][] {
+  const anchors: {
+    row: number;
+    column: number;
+    rowEnd: number;
+    columnEnd: number;
+  }[] = [];
+  return source.rows.map((row, rowIndex) =>
+    row.cells.map((entry, columnIndex): TableGridPosition => {
+      const anchor = anchors.find(
+        (candidate) =>
+          rowIndex < candidate.rowEnd &&
+          candidate.column <= columnIndex &&
+          columnIndex < candidate.columnEnd,
+      );
+      if (anchor !== undefined) {
+        return {
+          rowIndex,
+          columnIndex,
+          cell: entry,
+          anchorRowIndex: anchor.row,
+          anchorColumnIndex: anchor.column,
+        };
+      }
+      anchors.push({
+        row: rowIndex,
+        column: columnIndex,
+        rowEnd: rowIndex + tableCellRowSpan(entry),
+        columnEnd: columnIndex + tableCellColumnSpan(entry),
+      });
+      return { rowIndex, columnIndex, cell: entry };
+    }),
+  );
+}
+
+// A small, seeded generator (mulberry32), so the generated tables are the same on every run.
+function seededRandom(seed: number): () => number {
+  let state = seed;
+  return () => {
+    state = (state + 0x6d2b79f5) | 0;
+    let mixed = Math.imul(state ^ (state >>> 15), 1 | state);
+    mixed = (mixed + Math.imul(mixed ^ (mixed >>> 7), 61 | mixed)) ^ mixed;
+    return ((mixed ^ (mixed >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+describe("walkTableGrid against the reference walk", () => {
+  const MAX_ROWS = 7;
+  const MAX_ROW_LENGTH = 7;
+  const MAX_SPAN = 5;
+  const GENERATED_TABLES = 2000;
+  const SEED = 20261029;
+
+  // Spans run from 0 (a span the walk must treat as covering nothing) to past the grid, rows have unequal lengths and anchors start inside other anchors' footprints: every table the rule forbids is a table the walk still has to classify as it always did.
+  function generatedTable(random: () => number): ContentTable {
+    const rowCount = 1 + Math.floor(random() * MAX_ROWS);
+    const rows = Array.from({ length: rowCount }, (_row, rowIndex) => ({
+      cells: Array.from(
+        { length: 1 + Math.floor(random() * MAX_ROW_LENGTH) },
+        (_entry, columnIndex) =>
+          cell(`${String(rowIndex)},${String(columnIndex)}`, {
+            colSpan: Math.floor(random() * (MAX_SPAN + 1)),
+            rowSpan: Math.floor(random() * (MAX_SPAN + 1)),
+          }),
+      ),
+    }));
+    return { kind: "table", rows, columns: [] };
+  }
+
+  it("classifies every position as the reference walk does, tables that break the grid rule included", () => {
+    const random = seededRandom(SEED);
+    for (let generated = 0; generated < GENERATED_TABLES; generated++) {
+      const source = generatedTable(random);
+      expect(walkTableGrid(source)).toEqual(referenceWalk(source));
+    }
+  });
+
+  it("classifies a span reaching past the widest row without recording the columns that are not there", () => {
+    const hugeSpan = Number.MAX_SAFE_INTEGER;
+    const source = table(
+      [
+        [cell("wide", { colSpan: hugeSpan, rowSpan: 2 }), EMPTY],
+        [EMPTY, EMPTY],
+      ],
+      [PLACEHOLDER_WIDTH_PT, PLACEHOLDER_WIDTH_PT],
+    );
+
+    expect(classifyGrid(source)).toEqual([
+      ["anchor", "covered by 0,0"],
+      ["covered by 0,0", "covered by 0,0"],
+    ]);
+  });
+});
+
+// The work of one walk is bounded by the table's entries, not by their square: an unmerged cell's anchor reaches only its own row, so no later position asks about it. This table holds UNMERGED_ENTRIES entries, none merged, so the walk makes that many lookups of one anchor each, where asking every anchor met so far costs UNMERGED_ENTRIES squared over two comparisons, about 4.5e10 here, which is far past the budget below at any speed a machine runs at; the budget is the vitest default, named so it is not mistaken for a measurement.
+describe("walkTableGrid's work on a large unmerged table", () => {
+  const UNMERGED_COLUMNS = 5;
+  const UNMERGED_ROWS = 60_000;
+  const UNMERGED_ENTRIES = UNMERGED_COLUMNS * UNMERGED_ROWS;
+  const QUADRATIC_WORK_BUDGET_MS = 5_000;
+
+  it(
+    "classifies every one of its entries as an anchor",
+    () => {
+      const source: ContentTable = {
+        kind: "table",
+        columns: [],
+        rows: Array.from({ length: UNMERGED_ROWS }, () => ({
+          cells: Array.from({ length: UNMERGED_COLUMNS }, () => EMPTY),
+        })),
+      };
+
+      const walked = walkTableGrid(source);
+
+      expect(walked.flat()).toHaveLength(UNMERGED_ENTRIES);
+      expect(
+        walked
+          .flat()
+          .every((position) => position.anchorRowIndex === undefined),
+      ).toBe(true);
+    },
+    QUADRATIC_WORK_BUDGET_MS,
+  );
+});
+
 describe("denseTableRows", () => {
   it("fills every position no cell was placed at with an empty cell", () => {
     const wide = cell("wide", { colSpan: 2 });
