@@ -1,3 +1,13 @@
+## [1.0.95](https://github.com/ExaDev/documents.js/compare/pdf-raster-cpu%401.0.94...pdf-raster-cpu%401.0.95) (2026-10-30)
+
+### Performance Improvements
+
+* **pdf-raster-cpu:** read back and clear only the pixels a coverage pass marked ([fb9d591](https://github.com/ExaDev/documents.js/commit/fb9d59131487c02268e85eaa61b27709c851be93))
+
+### Tests
+
+* **pdf-raster-cpu:** compare the rasteriser against the whole-canvas clear and walk ([2fe7fd9](https://github.com/ExaDev/documents.js/commit/2fe7fd94e1f11e6def23641ba606294cbae016a9))
+
 ## [1.0.94](https://github.com/ExaDev/documents.js/compare/pdf-raster-cpu%401.0.93...pdf-raster-cpu%401.0.94) (2026-10-29)
 
 
