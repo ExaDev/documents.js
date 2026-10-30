@@ -1,5 +1,6 @@
 import { concatBytes } from "./bytes/writer";
 import { readPageAnnotations } from "./annotations";
+import type { ImageRegistry } from "./read-convert";
 import {
   convertExtractedItem,
   readLinkAnnotations,
@@ -75,7 +76,7 @@ export interface ReadPdfOptions {
   /**
    * Which document-level surfaces to read. Each is read unless its entry is `false`, so omitting the setting, or an entry, reads it as before. Independent of `pages`: it applies to a full read and a page-selected read alike.
    *
-   * A surface turned off is never parsed (its part of the catalog is not walked, so a malformed outline, form, layer list or structure tree reports no diagnostic) and its field is absent from the result whatever the file holds; the result lists it in `skippedSurfaces`, which is how a caller tells "not read" from "none". What each one covers, and what page items lose without it:
+   * A surface turned off is never parsed (its part of the catalog is not walked, so a malformed outline, form, layer list or structure tree reports no diagnostic, and no image a page draws is decoded or diagnosed) and its field is absent from the result whatever the file holds (`images` is left empty instead); the result lists it in `skippedSurfaces`, which is how a caller tells "not read" from "none". What each one covers, and what page items lose without it:
    *
    * - `outline`: the `/Outlines` bookmark tree (`outline`). Page items do not depend on it, except through minted names: a destination stated as a direct array is named with the first unused `destN` in the order the reader meets it, and the outline is read before any page, so an outline entry's direct destination takes a lower number than any link's. Without the outline, the names minted for page links' direct destinations are renumbered, and `destinations` loses the entries only the outline minted; each link still resolves to the same target.
    * - `destinations`: the named destinations of the catalog `/Dests` dictionary and the `/Names /Dests` name tree, and the registry links and outline entries name their targets through (`destinations`). Without it nothing can name an internal target, so a link whose target is internal (a `/Dest`, or a `/GoTo` action, named or direct) is left out of its page's items, and a read outline entry carries no `destination`; a link to a URI is kept as usual.
@@ -83,6 +84,7 @@ export interface ReadPdfOptions {
    * - `layers`: optional content, the `/OCProperties` groups and their default visibility (`layers`). Without it no item carries a `layer`, since an `/OC` membership resolves to no name; the items themselves are all still read, so content the default view hides is indistinguishable from visible content.
    * - `structure`: the `/StructTreeRoot` element tree and its `/ParentTree` ownership map (`structure`). Without it no item carries a `structure` owner, and the parent-tree diagnostics are not reported.
    * - `residue`: the package-level residue rows (`source`), including the per-page `page-boxes` row. Page items do not depend on it; `metadata` still reads the XMP packet it falls back to.
+   * - `images`: the image registry (`images`), which holds every image XObject and inline image a read page draws, decoded to PNG or passed through as JPEG. Without it no image's stream is decoded, `images` is an empty record (every `LayoutDocument` carries one), and each page's `image` items are left out, since they would name assets that were never read. Decoding an image costs memory in proportion to its pixels, so a read that wants only a page's text leaves this out.
    *
    * Apart from those stated losses and the renumbering a skipped outline causes, every page item is exactly what a read with the surface on produces.
    */
@@ -167,7 +169,6 @@ export function readPdf(
   const doc = openPdfDocument(bytes, sink);
   const fontResolver = createFontResolver({ resolver: doc, sink });
   const images: Record<string, LayoutImageAsset> = {};
-  const imageIdCache = new Map<PdfDict, string | null>();
 
   // The page tree is walked first (materialising the page-index map a destination's page reference resolves against), then the navigation surfaces: page interpretation interns direct destination arrays into the registry as it meets them, so links on page N can name a destination minted by nothing but themselves.
   const pageDicts = doc.pages();
@@ -179,6 +180,9 @@ export function readPdf(
   const skippedSurfaces = skippedSurfacesOf(options?.surfaces);
   const reads = (surface: LayoutDocumentSurface): boolean =>
     !skippedSurfaces.includes(surface);
+  const imageRegistry: ImageRegistry | undefined = reads("images")
+    ? { images, imageIdCache: new Map() }
+    : undefined;
   const destinationRegistry = reads("destinations")
     ? createDestinationRegistry(
         doc.catalog,
@@ -224,8 +228,7 @@ export function readPdf(
       pageDict,
       doc,
       fontResolver,
-      images,
-      imageIdCache,
+      imageRegistry,
       destinationRegistry,
       optionalContent?.layerNameOf ?? noLayerName,
       structure?.ownerOf ?? noStructureOwner,
@@ -594,8 +597,8 @@ function readPage(
   page: PdfDict,
   resolver: Readonly<PdfObjectResolver>,
   fontResolver: FontResolverService,
-  images: Record<string, LayoutImageAsset>,
-  imageIdCache: Map<PdfDict, string | null>,
+  // Undefined when the read skips images: then no image item is converted and no image stream is decoded.
+  imageRegistry: ImageRegistry | undefined,
   destinationRegistry: DestinationRegistry,
   layerNameOf: (obj: PdfObject | undefined) => string | undefined,
   structureOwnerOf: (pageIndex: number, mcid: number) => string | undefined,
@@ -643,8 +646,7 @@ function readPage(
         item,
         pageMatrix,
         fontResolver,
-        images,
-        imageIdCache,
+        imageRegistry,
         resolver,
         sink,
       );

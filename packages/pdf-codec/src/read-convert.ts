@@ -47,12 +47,29 @@ import {
   matrixRotationDegrees,
   matrixScaleY,
 } from "./matrix";
+/**
+ * Where a read's images go: the registry each decoded image is stored in once, and the id each image XObject dictionary already decoded to (null for one that could not be).
+ */
+export interface ImageRegistry {
+  readonly images: Record<string, LayoutImageAsset>;
+  readonly imageIdCache: Map<PdfDict, string | null>;
+}
+
+/**
+ * Converts one interpreted item to a layout item in page space.
+ * @param item - The item the content-stream interpreter extracted.
+ * @param pageMatrix - Maps the interpreter's user space into the page's output space.
+ * @param fontResolver - Resolves a text item's font.
+ * @param imageRegistry - Where images are decoded into, or undefined for a read that skips images, which converts no image item and decodes no image stream.
+ * @param resolver - Resolves indirect objects an image names.
+ * @param sink - Receives diagnostics.
+ * @returns The layout item, or undefined for an item that converts to none: an image that could not be decoded, or any image when `imageRegistry` is undefined.
+ */
 export function convertExtractedItem(
   item: ExtractedItem,
   pageMatrix: Matrix,
   fontResolver: FontResolverService,
-  images: Record<string, LayoutImageAsset>,
-  imageIdCache: Map<PdfDict, string | null>,
+  imageRegistry: ImageRegistry | undefined,
   resolver: Readonly<PdfObjectResolver>,
   sink: PdfDiagnosticSink,
 ): LayoutItem | undefined {
@@ -71,10 +88,26 @@ export function convertExtractedItem(
   if (item.kind === "path") {
     return convertPath(item, pageMatrix);
   }
-  if (item.kind === "image") {
-    return convertImage(item, pageMatrix, images, imageIdCache, resolver, sink);
+  if (imageRegistry === undefined) {
+    return undefined;
   }
-  return convertInlineImage(item, pageMatrix, images, resolver, sink);
+  if (item.kind === "image") {
+    return convertImage(
+      item,
+      pageMatrix,
+      imageRegistry.images,
+      imageRegistry.imageIdCache,
+      resolver,
+      sink,
+    );
+  }
+  return convertInlineImage(
+    item,
+    pageMatrix,
+    imageRegistry.images,
+    resolver,
+    sink,
+  );
 }
 
 export function convertText(
