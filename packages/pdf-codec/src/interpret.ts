@@ -464,7 +464,7 @@ function runContentStream(
           totalLength > 0 &&
           adjustment >= DEFAULT_WORD_GAP_EM * gs.fontSizePt;
         if (endsRun) {
-          flushRun();
+          flushRun(); // leaves totalLength at 0, so the start is taken after this adjustment below
         }
         text.tm = multiplyMatrices(
           vertical
@@ -472,7 +472,8 @@ function runContentStream(
             : translationMatrix(adjustment * gs.horizScale, 0),
           text.tm,
         );
-        if (endsRun) {
+        // A run starts where its first glyph is painted, so an adjustment met before any glyph of the run (one leading the array, or one that has just ended the previous run) moves the run's start with the pen. Left at the pen's position before a leading adjustment, the run would claim the gap that adjustment opens as part of its own advance, and a producer that starts a new text-showing operator with a word space expressed as an adjustment would have that word read as touching the one before it.
+        if (totalLength === 0) {
           startMatrix = computeTrm(gs, text);
         }
       }
