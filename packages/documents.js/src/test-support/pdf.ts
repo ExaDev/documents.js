@@ -544,3 +544,134 @@ export function twoPageMultiTextPdf(): Uint8Array<ArrayBuffer> {
   b.classicXrefAndTrailer(SECOND_CONTENT_OBJ, "/Root 1 0 R");
   return b.bytes();
 }
+
+// Helvetica's advance widths, per 1000 em, for the glyphs the character-spaced table fixture below shows.
+const HELVETICA_DIGIT_WIDTH = 556;
+const HELVETICA_PERIOD_WIDTH = 278;
+const TABLE_FONT_SIZE = 10;
+const TABLE_LEFT = 20;
+const TABLE_COLUMN_PITCH = 50;
+const TABLE_COLUMN_COUNT = 4;
+const TABLE_COLUMN_EDGES = Array.from(
+  { length: TABLE_COLUMN_COUNT + 1 },
+  (_, index) => TABLE_LEFT + index * TABLE_COLUMN_PITCH,
+);
+// The character spacing every row is shown under, in text space units: whatever carries the pen from the end of a two-digit figure to the next column's edge, several em, the way a typesetter spacing a column of two-digit figures sets it. Between two such figures the spacing alone positions the next one, so no adjustment marks the boundary and the two figures' glyphs share one string.
+const TABLE_CHAR_SPACE =
+  TABLE_COLUMN_PITCH - (2 * HELVETICA_DIGIT_WIDTH * TABLE_FONT_SIZE) / 1000;
+const TABLE_ROW_HEIGHT = 20;
+const TABLE_TOP = 170;
+const CELL_PADDING = 4;
+const BASELINE_ABOVE_ROW_BOTTOM = 6;
+const ADJUSTMENT_DECIMALS = 3;
+
+function helveticaWidth(glyph: string): number {
+  return glyph === "." ? HELVETICA_PERIOD_WIDTH : HELVETICA_DIGIT_WIDTH;
+}
+
+// One table row the way some typesetters set a row of figures: the whole row is one TJ under a wide character spacing, an adjustment takes that spacing back between the glyphs of each figure, and between two figures the spacing alone, or with an adjustment where the figure is not two digits wide, moves the pen to the next cell's own edge. No figure is shown by an operator of its own, so a reader that measures only the adjustments sees one run spanning every cell.
+function characterSpacedRow(
+  cells: readonly string[],
+  baselineYPt: number,
+): string {
+  const elements: string[] = [];
+  const startXPt = TABLE_LEFT + CELL_PADDING;
+  let penXPt = startXPt;
+  cells.forEach((cell, cellIndex) => {
+    [...cell].forEach((glyph, glyphIndex) => {
+      elements.push(`(${glyph})`);
+      penXPt +=
+        (helveticaWidth(glyph) / 1000) * TABLE_FONT_SIZE + TABLE_CHAR_SPACE;
+      const lastOfCell = glyphIndex === cell.length - 1;
+      if (lastOfCell && cellIndex === cells.length - 1) {
+        return;
+      }
+      const targetXPt = lastOfCell
+        ? startXPt + (cellIndex + 1) * TABLE_COLUMN_PITCH
+        : penXPt - TABLE_CHAR_SPACE;
+      const adjustment = Number(
+        (((penXPt - targetXPt) * 1000) / TABLE_FONT_SIZE).toFixed(
+          ADJUSTMENT_DECIMALS,
+        ),
+      );
+      if (adjustment !== 0) {
+        elements.push(String(adjustment));
+      }
+      penXPt -= (adjustment / 1000) * TABLE_FONT_SIZE;
+    });
+  });
+  // Adjacent strings with no adjustment between them are one string to the producer.
+  const array = elements.join(" ").replaceAll(") (", "");
+  return `BT /F1 ${TABLE_FONT_SIZE} Tf ${TABLE_CHAR_SPACE.toFixed(ADJUSTMENT_DECIMALS)} Tc ${startXPt} ${baselineYPt} Td [${array}] TJ ET`;
+}
+
+// A ruled grid, one stroked line per row and column boundary, so the reconstruction finds the table by its lattice.
+function tableLattice(rowCount: number): string {
+  const bottom = TABLE_TOP - rowCount * TABLE_ROW_HEIGHT;
+
+  const right = TABLE_COLUMN_EDGES[TABLE_COLUMN_EDGES.length - 1]!;
+  const horizontal = Array.from({ length: rowCount + 1 }, (_, index) => {
+    const y = TABLE_TOP - index * TABLE_ROW_HEIGHT;
+    return `${TABLE_LEFT} ${y} m ${right} ${y} l S`;
+  });
+  const vertical = TABLE_COLUMN_EDGES.map(
+    (x) => `${x} ${bottom} m ${x} ${TABLE_TOP} l S`,
+  );
+  return [...horizontal, ...vertical].join(" ");
+}
+
+function characterSpacedTablePage(
+  rows: readonly (readonly string[])[],
+): string {
+  const shown = rows.map((cells, index) =>
+    characterSpacedRow(
+      cells,
+      TABLE_TOP - (index + 1) * TABLE_ROW_HEIGHT + BASELINE_ABOVE_ROW_BOTTOM,
+    ),
+  );
+  return `${tableLattice(rows.length)} ${shown.join(" ")}`;
+}
+
+export const CHARACTER_SPACED_TABLE_PAGES: readonly (readonly (readonly string[])[])[] =
+  [
+    [
+      ["1.5", "21", "18", "22"],
+      ["2.5", "28", "25", "31"],
+    ],
+    [
+      ["4", "38", "33", "41"],
+      ["6", "49", "42", "53"],
+      ["10", "67", "58", "72"],
+    ],
+  ];
+
+// A ruled table continued from its first page onto a second, every row of it set as one character-spaced TJ (characterSpacedRow above).
+export function characterSpacedTablePdf(): Uint8Array<ArrayBuffer> {
+  const b = new FixtureBuilder().header("1.4");
+  b.object(CATALOG_OBJ, "<< /Type /Catalog /Pages 2 0 R >>");
+  b.object(PAGES_OBJ, "<< /Type /Pages /Kids [3 0 R 4 0 R] /Count 2 >>");
+  const [firstPage, secondPage] = CHARACTER_SPACED_TABLE_PAGES;
+  if (firstPage === undefined || secondPage === undefined) {
+    throw new Error("the character-spaced table fixture names two pages");
+  }
+  b.object(
+    PAGE_OBJ,
+    "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 300 200] /Resources << /Font << /F1 5 0 R >> >> /Contents 6 0 R >>",
+  );
+  b.object(
+    FONT_OBJ, // second page
+    "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 300 200] /Resources << /Font << /F1 5 0 R >> >> /Contents 7 0 R >>",
+  );
+  b.object(
+    CONTENT_OBJ, // font
+    "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+  );
+  b.stream(EXTRA_OBJ, "<< >>", enc(characterSpacedTablePage(firstPage)));
+  b.stream(
+    SECOND_CONTENT_OBJ,
+    "<< >>",
+    enc(characterSpacedTablePage(secondPage)),
+  );
+  b.classicXrefAndTrailer(SECOND_CONTENT_OBJ, "/Root 1 0 R");
+  return b.bytes();
+}

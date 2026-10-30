@@ -18,6 +18,8 @@ import { readPdf } from "pdf-codec";
 import { decodeMarkdownText, encodeMarkdownText } from "../markdown/text";
 import { richMarkdownText } from "../test-support/markdown";
 import {
+  CHARACTER_SPACED_TABLE_PAGES,
+  characterSpacedTablePdf,
   leadingTjAdjustmentWordSpacesPdf,
   loweredIndexPdf,
   raisedExponentPdf,
@@ -26,6 +28,7 @@ import {
   stackedScriptsPdf,
   tjAdjustedWordSpacesPdf,
 } from "../test-support/pdf";
+import { reconstructWordprocessing } from "../layout/reconstruct";
 import { minimalOdpBytes } from "../test-support/odp";
 import { gridOdsBytes } from "../test-support/ods";
 import { minimalOdtBytes } from "../test-support/odt";
@@ -217,6 +220,35 @@ describe("pdfToMarkdown tables ruled only between their rows", () => {
     expect(markdown).toContain(
       "The first column of running prose wraps at its measure",
     );
+  });
+});
+
+describe("reconstructing a table whose rows are character-spaced runs", () => {
+  it("gives every row of a table continued across two pages one cell per figure", () => {
+    const content = reconstructWordprocessing(
+      readPdf(characterSpacedTablePdf()),
+    );
+    if (content.kind !== "wordprocessing") {
+      throw new Error("expected wordprocessing content");
+    }
+    const tables = content.sections.flatMap((section) =>
+      section.blocks.filter((block) => block.kind === "table"),
+    );
+    expect(
+      tables.map((table) =>
+        table.rows.map((row) =>
+          row.cells.map((cell) =>
+            cell.blocks
+              .flatMap((block) =>
+                block.kind === "paragraph"
+                  ? block.runs.map((run) => run.text)
+                  : [],
+              )
+              .join(""),
+          ),
+        ),
+      ),
+    ).toEqual(CHARACTER_SPACED_TABLE_PAGES);
   });
 });
 
