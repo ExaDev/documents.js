@@ -180,6 +180,132 @@ export function runGapPt(
   );
 }
 
+// Where a superscript or subscript sits relative to the run it decorates.
+export type PdfScriptPosition = "superscript" | "subscript";
+
+// A script is set smaller than its base: every face whose OS/2 table this was checked against (Arial, Helvetica, Times New Roman, Georgia, Verdana, Courier New) declares its superscript and subscript size as 1331/2048, about 0.65 of the em, and word processors use between 0.58 and 0.67. An ordinary change of size inside a line never comes that close: two steps of the conventional type scale (9 against 11, 10 against 12) still differ by less than a fifth. Three quarters sits between the two.
+const SCRIPT_MAX_SIZE_RATIO = 0.75;
+
+// The baseline shift that marks a run as a script rather than as smaller text sharing the line, in em of the base. Positioning noise in real producers' output is under a hundredth of a point, while the smallest script offset any of the faces above declares is Georgia's subscript at 0.076 em; a twentieth of an em separates the two.
+const SCRIPT_MIN_SHIFT_EM = 0.05;
+
+// The furthest a script's baseline moves from its base's, in em of the base. The faces above declare offsets of at most 0.48 em (Arial's superscript), so a smaller run moved further than half an em has left its base's line rather than decorating it, and that is what keeps a line of small type set just above or below a line of larger type from being read as its scripts.
+const SCRIPT_MAX_SHIFT_EM = 0.5;
+
+/**
+ * Whether `candidate` is a superscript or subscript of `base`: a run set smaller than `base`, with its baseline moved off `base`'s by more than positioning noise and by less than half `base`'s em, and touching it along the baseline (no wider than a word space apart, on either side).
+ *
+ * Runs at different angles or in different writing modes are never scripts of one another, and neither is a pair whose gap cannot be derived because the earlier of the two states no advance width.
+ * @param base - the run the candidate might decorate
+ * @param candidate - the run that might be its superscript or subscript
+ * @returns which side of `base`'s baseline `candidate` is set on, or undefined when it is not a script of `base`
+ */
+export function scriptPositionOf(
+  base: PdfTextRunGeometry,
+  candidate: PdfTextRunGeometry,
+): PdfScriptPosition | undefined {
+  if (candidate.sizePt > SCRIPT_MAX_SIZE_RATIO * base.sizePt) {
+    return undefined;
+  }
+  const rotationDeg = advanceAngleDeg(base);
+  if (
+    rotationDeg !== advanceAngleDeg(candidate) ||
+    base.writingMode !== candidate.writingMode
+  ) {
+    return undefined;
+  }
+  const baseProjected = project(base, rotationDeg);
+  const candidateProjected = project(candidate, rotationDeg);
+  const shiftPt = candidateProjected.acrossPt - baseProjected.acrossPt;
+  const magnitude = Math.abs(shiftPt);
+  if (
+    magnitude < SCRIPT_MIN_SHIFT_EM * base.sizePt ||
+    magnitude > SCRIPT_MAX_SHIFT_EM * base.sizePt
+  ) {
+    return undefined;
+  }
+  const follows = candidateProjected.alongPt >= baseProjected.alongPt;
+  const gapPt = follows ? runGapPt(base, candidate) : runGapPt(candidate, base);
+  // A script may tuck back under its base's overhang (an italic capital's subscript), but never by more than its own em, and never sits a word space or more away from it.
+  if (
+    gapPt === undefined ||
+    gapPt <= -candidate.sizePt ||
+    gapPt >= DEFAULT_WORD_GAP_EM * candidate.sizePt
+  ) {
+    return undefined;
+  }
+  return shiftPt > 0 ? "superscript" : "subscript";
+}
+
+// A line of runs as attachScriptRuns returns it: the caller's own line, and the runs it holds once every script has moved to its base's line.
+export interface PdfLineWithScripts<TLine, TRun extends PdfTextRunGeometry> {
+  readonly line: TLine;
+  readonly runs: TRun[];
+}
+
+/**
+ * Moves every run that is a superscript or subscript of a run on another line onto that run's line.
+ *
+ * A same-baseline tolerance that keeps two lines of type apart cannot also hold every script on its base's line: a script may be raised or lowered by up to half its base's em ({@link scriptPositionOf}), which is more than two thirds of the script's own em once it is set small, so baseline clustering can put a unit's raised exponent on a line of its own. This returns each such run to the line its base is on. Every move is decided against the lines as given, before any is made, so a run that moves is never taken for another run's base and the outcome does not depend on the order of the lines.
+ * @param lines - lines already grouped by baseline, of whatever shape the caller keeps them in
+ * @param runsOf - the runs on one of those lines, in any order
+ * @returns one entry per line, in the order given: the line itself and its runs, less every run that moved off it and followed by every run that moved onto it; a line every run moved off has no runs left, and is kept so that the caller decides what an empty line means
+ */
+export function attachScriptRuns<TLine, TRun extends PdfTextRunGeometry>(
+  lines: readonly TLine[],
+  runsOf: (line: TLine) => readonly TRun[],
+): PdfLineWithScripts<TLine, TRun>[] {
+  const runsByLine = lines.map((line) => runsOf(line));
+  // A script is at most three quarters of its base's size, so a run larger than that fraction of the largest run anywhere can be no line's script, and only runs at or under it are tested.
+  const maxSizePt = Math.max(
+    0,
+    ...runsByLine.flatMap((runs) => runs.map((run) => run.sizePt)),
+  );
+  // Where each line sits, taken from its first run. A script's baseline is within half its base's em of the base's, and a run shares a line with that line's first only within an em of it (a same-baseline tolerance must stay under solid setting, one em, or two lines of one size merge), so only a line placed within one and a half times the largest size of a candidate can hold its base, and the rest are passed over without testing their runs.
+  const reachPt = (1 + SCRIPT_MAX_SHIFT_EM) * maxSizePt;
+  const placed = runsByLine.flatMap((runs, index) =>
+    runs.slice(0, 1).map((first) => {
+      const rotationDeg = advanceAngleDeg(first);
+      return {
+        index,
+        runs,
+        rotationDeg,
+        acrossPt: project(first, rotationDeg).acrossPt,
+      };
+    }),
+  );
+  const moves: { readonly run: TRun; readonly to: number }[] = [];
+  runsByLine.forEach((runs, lineIndex) => {
+    for (const candidate of runs) {
+      if (candidate.sizePt > SCRIPT_MAX_SIZE_RATIO * maxSizePt) {
+        continue;
+      }
+      const rotationDeg = advanceAngleDeg(candidate);
+      const acrossPt = project(candidate, rotationDeg).acrossPt;
+      const target = placed.find(
+        (other) =>
+          other.index !== lineIndex &&
+          other.rotationDeg === rotationDeg &&
+          Math.abs(other.acrossPt - acrossPt) <= reachPt &&
+          other.runs.some(
+            (base) => scriptPositionOf(base, candidate) !== undefined,
+          ),
+      );
+      if (target !== undefined) {
+        moves.push({ run: candidate, to: target.index });
+      }
+    }
+  });
+  const moved = new Set<TRun>(moves.map((move) => move.run));
+  return lines.map((line, index) => ({
+    line,
+    runs: [
+      ...runsOf(line).filter((run) => !moved.has(run)),
+      ...moves.filter((move) => move.to === index).map((move) => move.run),
+    ],
+  }));
+}
+
 interface WorkingLine<TRun extends PdfTextRunGeometry> {
   readonly anchor: Projected<TRun>; // the run that opened the line; its baseline is the line's, and its size is the one every later candidate's tolerance is taken against
   readonly entries: Projected<TRun>[];
@@ -456,7 +582,22 @@ export function groupPdfTextRuns<TRun extends PdfTextRunGeometry>(
       .map((run) => project(run, bucket.rotationDeg))
       // Down the page first (acrossPt decreases downward in every frame, since the perpendicular axis points away from the descender side), then along the baseline, so clustering meets a line's runs before any run of the line below it. For a vertical column this orders the columns right to left, which is the reading order vertical setting is used for.
       .sort((a, b) => b.acrossPt - a.acrossPt || a.alongPt - b.alongPt);
-    for (const line of clusterIntoLines(entries, toleranceEm)) {
+    const attached = attachScriptRuns(
+      clusterIntoLines(entries, toleranceEm),
+      (line) => line.entries.map((entry) => entry.run),
+    );
+    for (const { line: clusteredLine, runs: runsOnLine } of attached) {
+      const lineEntries = runsOnLine.map((run) =>
+        project(run, bucket.rotationDeg),
+      );
+      // The line keeps the run that opened it as its anchor unless that run was itself a script that moved away, when the first run left takes its place.
+      const anchor = runsOnLine.includes(clusteredLine.anchor.run)
+        ? clusteredLine.anchor
+        : lineEntries[0];
+      if (anchor === undefined) {
+        continue;
+      }
+      const line: WorkingLine<TRun> = { anchor, entries: lineEntries };
       line.entries.sort((a, b) => a.alongPt - b.alongPt);
       result.push(
         buildLine(
