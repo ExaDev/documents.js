@@ -1,10 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type * as Form from "./form";
+import type * as ImagesRead from "./images-read";
 import type * as Navigation from "./navigation";
 import type * as OptionalContent from "./optional-content";
 import type * as Structure from "./structure";
 import type { PdfDiagnostic } from "./diagnostics";
 import { readAcroForm } from "./form";
+import { readImageXObject } from "./images-read";
 import type {
   LayoutDocument,
   LayoutDocumentSurface,
@@ -46,18 +48,25 @@ vi.mock("./structure", async (importOriginal) => {
   const actual = await importOriginal<typeof Structure>();
   return { ...actual, readStructure: vi.fn(actual.readStructure) };
 });
+vi.mock("./images-read", async (importOriginal) => {
+  const actual = await importOriginal<typeof ImagesRead>();
+  return { ...actual, readImageXObject: vi.fn(actual.readImageXObject) };
+});
 
 const SURFACES = LayoutDocumentSurfaceSchema.options;
 
 type ReaderSurface = Exclude<LayoutDocumentSurface, "residue">;
 
-// The reader each surface's parse starts in; residue is read by read.ts itself and is covered by its trap alone.
-const SURFACE_READERS: Readonly<Record<ReaderSurface, () => unknown>> = {
-  outline: () => readOutline,
-  destinations: () => createDestinationRegistry,
-  form: () => readAcroForm,
-  layers: () => readOptionalContent,
-  structure: () => readStructure,
+// The reader each surface's parse starts in, and how many times a full read of the fixture enters it; residue is read by read.ts itself and is covered by its trap alone. The image reader runs once per image the fixture's first page draws: an image XObject and an inline image.
+const SURFACE_READERS: Readonly<
+  Record<ReaderSurface, { reader: () => unknown; calls: number }>
+> = {
+  outline: { reader: () => readOutline, calls: 1 },
+  destinations: { reader: () => createDestinationRegistry, calls: 1 },
+  form: { reader: () => readAcroForm, calls: 1 },
+  layers: { reader: () => readOptionalContent, calls: 1 },
+  structure: { reader: () => readStructure, calls: 1 },
+  images: { reader: () => readImageXObject, calls: 2 },
 };
 
 // The LayoutDocument field each surface fills.
@@ -68,6 +77,7 @@ const SURFACE_FIELD = {
   layers: "layers",
   structure: "structure",
   residue: "source",
+  images: "images",
 } as const satisfies Record<LayoutDocumentSurface, keyof LayoutDocument>;
 
 function only(surface: LayoutDocumentSurface): ReadPdfSurfaces {
@@ -145,9 +155,15 @@ function expectedWithout(
           ? mapItems(full.pages, (items) =>
               items.filter((item) => item.kind !== "internalLink"),
             )
-          : full.pages;
+          : surface === "images"
+            ? mapItems(full.pages, (items) =>
+                items.filter((item) => item.kind !== "image"),
+              )
+            : full.pages;
   return {
     ...withoutField(full, SURFACE_FIELD[surface]),
+    // Every LayoutDocument carries an image registry, so a read that skipped images holds an empty one.
+    ...(surface === "images" ? { images: {} } : {}),
     pages,
     ...(surface === "destinations" && full.outline !== undefined
       ? { outline: withoutDestinations(full.outline) }
@@ -202,15 +218,18 @@ beforeEach(() => {
   vi.mocked(readAcroForm).mockClear();
   vi.mocked(readOptionalContent).mockClear();
   vi.mocked(readStructure).mockClear();
+  vi.mocked(readImageXObject).mockClear();
 });
 
 describe("readPdf surfaces: the fixture carries every surface and every dependency", () => {
-  it("reads all six surfaces and every page-item dependency on a full read, and springs every trap", () => {
+  it("reads every surface and every page-item dependency on a full read, and springs every trap", () => {
     const { doc, diagnostics } = readWith(undefined);
     for (const surface of SURFACES) {
       expect(doc[SURFACE_FIELD[surface]]).toBeDefined();
     }
     const items = doc.pages[0]?.items ?? [];
+    expect(items.filter((item) => item.kind === "image")).toHaveLength(2);
+    expect(Object.keys(doc.images)).toHaveLength(2);
     expect(items.some((item) => "structure" in item)).toBe(true);
     expect(items.some((item) => "layer" in item)).toBe(true);
     expect(items.filter((item) => item.kind === "internalLink")).toHaveLength(
@@ -234,12 +253,14 @@ describe("readPdf surfaces: a skipped surface is never parsed", () => {
   )(
     "never enters the %s reader when it is skipped, and does enter it otherwise",
     (surface) => {
-      const reader = SURFACE_READERS[surface]();
+      const reader = SURFACE_READERS[surface].reader();
       readWith(only(surface));
       expect(reader).not.toHaveBeenCalled();
       for (const other of SURFACES) {
         if (other !== surface && other !== "residue") {
-          expect(SURFACE_READERS[other]()).toHaveBeenCalledTimes(1);
+          expect(SURFACE_READERS[other].reader()).toHaveBeenCalledTimes(
+            SURFACE_READERS[other].calls,
+          );
         }
       }
     },
@@ -261,7 +282,7 @@ describe("readPdf surfaces: a skipped surface is never parsed", () => {
   it("reports no diagnostic at all when every surface is skipped, and enters no surface reader", () => {
     const { diagnostics } = readWith(NONE);
     expect(diagnostics).toEqual([]);
-    for (const reader of Object.values(SURFACE_READERS)) {
+    for (const { reader } of Object.values(SURFACE_READERS)) {
       expect(reader()).not.toHaveBeenCalled();
     }
   });
@@ -306,11 +327,14 @@ describe("readPdf surfaces: what a skipped surface's result holds", () => {
     ).toEqual(full.destinations?.filter((d) => !/^dest\d+$/u.test(d.name)));
   });
 
-  it("omits a skipped surface's field rather than leaving it present and empty", () => {
+  it("omits a skipped surface's field rather than leaving it present and empty, except the image registry every document carries, which is left empty", () => {
     const { doc } = readWith(NONE);
     for (const surface of SURFACES) {
-      expect(Object.hasOwn(doc, SURFACE_FIELD[surface])).toBe(false);
+      if (surface !== "images") {
+        expect(Object.hasOwn(doc, SURFACE_FIELD[surface])).toBe(false);
+      }
     }
+    expect(doc.images).toEqual({});
   });
 
   it("lists every skipped surface in schema order, however the setting was spelled", () => {
