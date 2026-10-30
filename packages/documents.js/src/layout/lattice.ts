@@ -1,9 +1,9 @@
 import type { LayoutItem } from "pdf-codec";
 
 // The short-axis thickness under which a filled LayoutRect reads as a drawn line rather than a genuinely filled 2D block — see extractLineCandidates' own module comment for the real-world producer pattern this exists for. 3pt comfortably covers the observed 0.12-2.30pt range of real gridline-rect thicknesses while still excluding an ordinary filled cell/shading block, which is wide AND tall, not thin on exactly one axis.
-const RECT_LINE_THICKNESS_TOLERANCE_PT = 3;
+export const RECT_LINE_THICKNESS_TOLERANCE_PT = 3;
 
-// Gridline-lattice detection over a page's recovered geometry: the one place this package decides that a set of drawn strokes genuinely IS a printed grid rather than a scatter of unrelated rules. Lives in its own module because THREE reconstruction directions now share it — reconstructSpreadsheet (where the lattice's own line positions become cell boundaries directly), and reconstructWordprocessing/reconstructPresentation (where an unambiguously detected lattice is the ONLY signal permitted to synthesize a ContentTable; see reconstruct.ts's own table-recovery note for why text alignment alone deliberately is not).
+// Gridline-lattice detection over a page's recovered geometry: the one place this package decides that a set of drawn strokes genuinely IS a printed grid rather than a scatter of unrelated rules. Lives in its own module because THREE reconstruction directions now share it — reconstructSpreadsheet (where the lattice's own line positions become cell boundaries directly), and reconstructWordprocessing/reconstructPresentation (where drawn rules are the only signal permitted to synthesize a ContentTable: an unambiguously detected lattice, or the horizontal rules of a table ruled only between its rows, whose columns ruled-rows.ts takes from the gutters its rows share; text alignment alone deliberately is not).
 //
 // Every threshold here is a deliberately conservative one: a false negative leaves content as ordinary paragraphs/cells, which is merely a missed improvement, while a false positive invents a structure the source never had. The bar is therefore "unambiguously a grid", not "plausibly a grid".
 //
@@ -183,10 +183,10 @@ function dedupeAxisLines(
 }
 
 // At least 2 bounded rows/columns (3 boundary lines) before this counts as a lattice at all — fewer is a page border or a couple of decorative rules, not a printed grid.
-const MIN_GRIDLINE_COUNT_PER_AXIS = 3;
+export const MIN_GRIDLINE_COUNT_PER_AXIS = 3;
 
 // How much of a target stretch (the outer perimeter's own opposite extent, or one atomic cell's own edge) a single drawn run must cover before it counts as genuinely closing/dividing there. Applied at two different scales by the two checks below — the outer rectangle's own four sides, and every interior cell-to-cell edge — but it is the same question at heart: is there a real, (near-)unbroken stroke across this stretch, or only a fragment of one. 0.9 is generous enough to tolerate the sub-point rounding a real round trip introduces while still rejecting a scatter of unrelated short strokes.
-const EDGE_COVERAGE_RATIO = 0.9;
+export const EDGE_COVERAGE_RATIO = 0.9;
 
 // The total drawn overlap with [aPt, bPt], as a fraction of that target's length — the SUM of every range's own intersection with the target, not just the longest single run (ExaDev/documents.js#1077: a real border interrupted by one genuine gap — e.g. a single row whose own side rule a producer never drew — is still overwhelmingly a drawn boundary, and scoring it by its longest unbroken piece alone halves its coverage for one missing segment out of many). Ranges arrive from mergedRanges, which has already fused every pair that touches or overlaps, so whatever gaps remain between them are real and this sum can never double-count.
 function unionCoverageRatio(
@@ -391,6 +391,40 @@ export interface GridLattice {
   readonly regions: readonly TableRegion[];
   // Every LayoutItem that contributed a segment to a detected boundary. A caller recovering both a table and free-standing vector primitives from the same page needs this to avoid emitting the lattice's own strokes twice — once as the table's structure and again as loose line vectors alongside it.
   readonly sourceItems: ReadonlySet<LayoutItem>;
+}
+
+// One horizontal rule as a table ruled only between its rows draws it: a boundary position, the span from its leftmost to its rightmost drawn point, and the items drawing it. A producer that breaks a rule at each column gutter, or draws it per cell, still draws one rule.
+export interface HorizontalRule {
+  readonly position: number;
+  readonly leftPt: number;
+  readonly rightPt: number;
+  readonly items: readonly LayoutItem[];
+}
+
+/**
+ * Every horizontal rule on the page that its drawn segments cover across its own span, top to bottom.
+ * @param items - the page's items; lines, paths and thin rectangles are read as segments, as for a lattice
+ * @returns one rule per boundary position, merging collinear segments the way a lattice boundary does, and only those whose segments cover at least EDGE_COVERAGE_RATIO of the span from their leftmost to their rightmost point, so a rule broken at a table's column gutters counts while a row of separate short rules (underlines under a few words) does not
+ */
+export function horizontalRules(
+  items: readonly LayoutItem[],
+): HorizontalRule[] {
+  const horizontal = extractLineCandidates(items)
+    .map(classifyAxisLine)
+    .filter(
+      (segment): segment is AxisSegment => segment?.axis === "horizontal",
+    );
+  if (horizontal.length === 0) {
+    return [];
+  }
+  return dedupeAxisLines(horizontal, true).flatMap((line) => {
+    const leftPt = Math.min(...line.ranges.map((range) => range.startPt));
+    const rightPt = Math.max(...line.ranges.map((range) => range.endPt));
+    return unionCoverageRatio(line.ranges, leftPt, rightPt) >=
+      EDGE_COVERAGE_RATIO
+      ? [{ position: line.position, leftPt, rightPt, items: line.items }]
+      : [];
+  });
 }
 
 // A page can carry more than one geometrically valid lattice at once (see clusterSegments above) — every caller here wants exactly one, the way a single detected grid always has, so this keeps whichever valid cluster spans the largest area (width x height of its own outer rectangle) and discards the rest. A real printed table dwarfs the kind of incidental clusters page furniture can otherwise form, so the largest valid cluster is reliably the genuine one.
