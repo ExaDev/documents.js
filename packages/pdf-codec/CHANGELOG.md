@@ -1,3 +1,14 @@
+## [5.6.0](https://github.com/ExaDev/documents.js/compare/pdf-codec%405.5.1...pdf-codec%405.6.0) (2026-10-30)
+
+### Features
+
+* **pdf-codec:** leave images out of a read with surfaces.images ([2b099c3](https://github.com/ExaDev/documents.js/commit/2b099c30a009dd4a2170340a2e9f18fec1c930c3)), closes [#1721](https://github.com/ExaDev/documents.js/issues/1721)
+
+### Bug Fixes
+
+* **pdf-codec:** decode an image's samples into its raster, not a number array ([56f0299](https://github.com/ExaDev/documents.js/commit/56f02996eb0f4eb2d9492c81d6bce45d2754b4f7)), references [#1721](https://github.com/ExaDev/documents.js/issues/1721)
+* **pdf-codec:** decode LZW, ASCII85, ASCIIHex and RunLength into bytes ([6594cb6](https://github.com/ExaDev/documents.js/commit/6594cb60abf682e7b8e5ceb458e64457430f4552)), references [#1721](https://github.com/ExaDev/documents.js/issues/1721)
+
 ## [5.5.1](https://github.com/ExaDev/documents.js/compare/pdf-codec%405.5.0...pdf-codec%405.5.1) (2026-10-29)
 
 
