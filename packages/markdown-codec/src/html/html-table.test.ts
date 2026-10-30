@@ -200,6 +200,22 @@ describe("parseHtmlTable", () => {
     ]);
   });
 
+  it("recognises sup and sub as a raised or lowered run", () => {
+    const table = parse(
+      "<table>\n<tr><td>60m<sup>2</sup> and I<sub>a</sub></td></tr>\n</table>",
+    );
+    const block = table?.rows[0]?.cells[0]?.blocks[0];
+    if (block?.kind !== "paragraph") {
+      throw new Error("expected a paragraph block");
+    }
+    expect(block.runs).toEqual([
+      { text: "60m" },
+      { text: "2", verticalAlign: "superscript" },
+      { text: " and I" },
+      { text: "a", verticalAlign: "subscript" },
+    ]);
+  });
+
   it("recognises the b/i/s/strike tag synonyms real hand-authored HTML commonly uses", () => {
     const table = parse(
       "<table>\n<tr><td><b>bold</b> <i>italic</i> <s>struck</s></td></tr>\n</table>",

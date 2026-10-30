@@ -205,6 +205,28 @@ describe("emitHtmlTable", () => {
     );
   });
 
+  it("writes a raised or lowered run as sup or sub inside its emphasis", () => {
+    const cell: ContentTableCell = {
+      blocks: [
+        {
+          kind: "paragraph",
+          runs: [
+            { text: "60m", bold: true },
+            { text: "2", bold: true, verticalAlign: "superscript" },
+            { text: " and I" },
+            { text: "a", verticalAlign: "subscript" },
+          ],
+        },
+      ],
+    };
+    const { html } = emit(tableWithBodyCell(cell));
+    expect(html).toBe(
+      expectedHtml(
+        "<td><strong>60m</strong><strong><sup>2</sup></strong> and I<sub>a</sub></td>",
+      ),
+    );
+  });
+
   it("writes a Courier New run as a code span and nothing else", () => {
     const cell: ContentTableCell = {
       blocks: [
