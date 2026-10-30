@@ -242,3 +242,104 @@ describe("lowerCodeBlockRun", () => {
     });
   });
 });
+
+describe("lowerInlineNodes: superscript and subscript elements", () => {
+  it("lowers the content of a closed <sup> to superscript runs and drops the tags", () => {
+    const { runs, diagnostics } = lower([
+      { type: "text", value: "280m" },
+      { type: "rawHtml", literal: "<sup>" },
+      { type: "text", value: "2" },
+      { type: "rawHtml", literal: "</sup>" },
+    ]);
+    expect(runs).toStrictEqual([
+      { text: "280m" },
+      { text: "2", verticalAlign: "superscript" },
+    ]);
+    expect(diagnostics).toHaveLength(0);
+  });
+
+  it("lowers a closed <SUB> in any case to subscript runs", () => {
+    const { runs } = lower([
+      { type: "text", value: "I" },
+      { type: "rawHtml", literal: "<SUB>" },
+      { type: "text", value: "a" },
+      { type: "rawHtml", literal: "</Sub>" },
+    ]);
+    expect(runs).toStrictEqual([
+      { text: "I" },
+      { text: "a", verticalAlign: "subscript" },
+    ]);
+  });
+
+  it("closes an element at its own closing tag, skipping the closing tag of a same-named element nested inside it", () => {
+    const { runs } = lower([
+      { type: "rawHtml", literal: "<sup>" },
+      { type: "text", value: "a" },
+      { type: "rawHtml", literal: "<sup>" },
+      { type: "text", value: "b" },
+      { type: "rawHtml", literal: "</sup>" },
+      { type: "text", value: "c" },
+      { type: "rawHtml", literal: "</sup>" },
+      { type: "text", value: "d" },
+    ]);
+    expect(runs).toStrictEqual([
+      { text: "a", verticalAlign: "superscript" },
+      { text: "b", verticalAlign: "superscript" },
+      { text: "c", verticalAlign: "superscript" },
+      { text: "d" },
+    ]);
+  });
+
+  it("does not take a closing </sub> for the end of a <sup>", () => {
+    const { runs } = lower([
+      { type: "rawHtml", literal: "<sup>" },
+      { type: "text", value: "a" },
+      { type: "rawHtml", literal: "</sub>" },
+    ]);
+    expect(runs.map((run) => run.text)).toStrictEqual(["<sup>", "a", "</sub>"]);
+    expect(runs.every((run) => run.verticalAlign === undefined)).toBe(true);
+  });
+
+  it("preserves an unclosed <sup>, and one carrying attributes, as raw HTML text", () => {
+    const unclosed = lower([
+      { type: "rawHtml", literal: "<sup>" },
+      { type: "text", value: "2" },
+    ]);
+    expect(unclosed.runs.map((run) => run.text)).toStrictEqual(["<sup>", "2"]);
+    expect(unclosed.runs[1]!.verticalAlign).toBeUndefined();
+
+    const attributed = lower([
+      { type: "rawHtml", literal: '<sup class="x">' },
+      { type: "text", value: "2" },
+      { type: "rawHtml", literal: "</sup>" },
+    ]);
+    expect(attributed.runs[1]!.verticalAlign).toBeUndefined();
+  });
+
+  it("preserves a closing tag with no opener as raw HTML text", () => {
+    const { runs } = lower([
+      { type: "text", value: "2" },
+      { type: "rawHtml", literal: "</sup>" },
+    ]);
+    expect(runs.map((run) => run.text)).toStrictEqual(["2", "</sup>"]);
+  });
+
+  it("keeps the style around the element on the runs inside it", () => {
+    const { runs } = lower([
+      {
+        type: "strong",
+        marker: "*",
+        children: [
+          { type: "text", value: "m" },
+          { type: "rawHtml", literal: "<sup>" },
+          { type: "text", value: "2" },
+          { type: "rawHtml", literal: "</sup>" },
+        ],
+      },
+    ]);
+    expect(runs).toStrictEqual([
+      { text: "m", bold: true },
+      { text: "2", bold: true, verticalAlign: "superscript" },
+    ]);
+  });
+});
