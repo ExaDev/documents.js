@@ -73,6 +73,39 @@ describe("createFontResolver: composite (Type0) fonts", () => {
     expect(font?.widthOf(999)).toBe(600); // falls back to /DW
   });
 
+  it("reads CID widths through a /DescendantFonts array and a /W array that are both indirect objects", () => {
+    // ISO 32000-1 7.3.10 lets any array be an indirect object: here the Type0 font names its descendant array by reference, that array names the descendant by reference, and the descendant names its /W by reference, the shape some producers write every composite font in.
+    const { sink } = collectDiagnostics();
+    const objects = new Map<number, PdfObject>([
+      [20, pdfArray([pdfRef(21, 0)])],
+      [
+        21,
+        pdfDict({
+          Subtype: pdfName("CIDFontType2"),
+          DW: pdfNum(1000),
+          W: pdfRef(22, 0),
+        }),
+      ],
+      [22, pdfArray([pdfNum(3), pdfRef(23, 0)])],
+      [23, pdfArray([pdfNum(500), pdfNum(250)])],
+    ]);
+    const fontDict = pdfDict({
+      Subtype: pdfName("Type0"),
+      BaseFont: pdfName("ABCDEF+Calibri"),
+      Encoding: pdfName("Identity-H"),
+      DescendantFonts: pdfRef(20, 0),
+    });
+    const resources = pdfDict({ Font: pdfDict({ F1: fontDict }) });
+    const { resolve } = createFontResolver({
+      resolver: makeResolver(objects),
+      sink,
+    });
+    const font = resolve("F1", resources);
+    expect(font?.widthOf(3)).toBe(500);
+    expect(font?.widthOf(4)).toBe(250);
+    expect(font?.widthOf(5)).toBe(1000); // outside /W, so /DW
+  });
+
   it("skips a malformed /W entry (a non-numeric leading operand) rather than losing the rest of the array", () => {
     const { sink } = collectDiagnostics();
     const descendant = pdfDict({
