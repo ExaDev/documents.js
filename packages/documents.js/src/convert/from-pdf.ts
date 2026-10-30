@@ -29,6 +29,7 @@ const METADATA_SURFACES: Required<ReadPdfSurfaces> = {
   layers: false,
   structure: false,
   residue: false,
+  images: false,
 };
 
 export interface ReadDocumentMetadataOptions {
@@ -42,7 +43,7 @@ export function readDocumentMetadata(
   options?: ReadDocumentMetadataOptions,
 ): LayoutMetadata {
   if (format === "pdf") {
-    // Metadata is read from the trailer's /Info, the catalog's /Lang and the XMP packet alone, so the read takes nothing else: an empty selection skips every page's content streams, the fonts and images they use and the source's embedded files, and METADATA_SURFACES skips every document-level surface (outline, destinations, AcroForm, layers, structure tree and /ParentTree, residue), none of which metadata is built from.
+    // Metadata is read from the trailer's /Info, the catalog's /Lang and the XMP packet alone, so the read takes nothing else: an empty selection skips every page's content streams, the fonts and images they use and the source's embedded files, and METADATA_SURFACES skips every document-level surface (outline, destinations, AcroForm, layers, structure tree and /ParentTree, residue, images), none of which metadata is built from.
     return readPdf(bytes, {
       signal: options?.signal,
       pages: [],
@@ -63,7 +64,7 @@ export interface ReadNativeDocumentTreeOptions {
    */
   readonly pages?: readonly number[];
   /**
-   * The document-level surfaces of a pdf source to read, exactly as UnifiedConversionOptions.surfaces describes them: one boolean per surface, each read unless set to `false`, independent of `pages`. Consulted only for a pdf source. A skipped surface is absent from the read, so the tree carries nothing built from it (see UnifiedConversionOptions.surfaces for exactly what: `outline-N` entries in `destinations`, destinations and internal link constructs, form `contentControl` constructs, the layers table, structure entries in `definitions`, residue), and reconstruction loses what it took from it: without `structure` a tagged PDF's headings, table cells and divisions are inferred from geometry, and without `layers` hidden-layer content is kept as if visible.
+   * The document-level surfaces of a pdf source to read, exactly as UnifiedConversionOptions.surfaces describes them: one boolean per surface, each read unless set to `false`, independent of `pages`. Consulted only for a pdf source. A skipped surface is absent from the read, so the tree carries nothing built from it (see UnifiedConversionOptions.surfaces for exactly what: `outline-N` entries in `destinations`, destinations and internal link constructs, form `contentControl` constructs, the layers table, structure entries in `definitions`, residue, images), and reconstruction loses what it took from it: without `structure` a tagged PDF's headings, table cells and divisions are inferred from geometry, and without `layers` hidden-layer content is kept as if visible.
    */
   readonly surfaces?: ReadPdfSurfaces;
 }
@@ -138,7 +139,7 @@ export interface PdfToDocumentOptions {
    */
   readonly pages?: readonly number[];
   /**
-   * The document-level surfaces to read, exactly as UnifiedConversionOptions.surfaces describes them: one boolean per surface (`outline`, `destinations`, `form`, `layers`, `structure`, `residue`), each read unless set to `false`, independent of `pages`. A skipped surface is never parsed, and the conversion carries nothing built from it. Without `structure` a tagged PDF's headings, table cells and divisions are inferred from geometry as for an untagged file, and without `layers` content the default view hides is kept as if visible.
+   * The document-level surfaces to read, exactly as UnifiedConversionOptions.surfaces describes them: one boolean per surface (`outline`, `destinations`, `form`, `layers`, `structure`, `residue`, `images`), each read unless set to `false`, independent of `pages`. A skipped surface is never parsed, and the conversion carries nothing built from it. Without `structure` a tagged PDF's headings, table cells and divisions are inferred from geometry as for an untagged file, and without `layers` content the default view hides is kept as if visible.
    */
   readonly surfaces?: ReadPdfSurfaces;
   // Called exactly once, synchronously, with the DocumentTree (the readPdf-produced layout, and the reconstructed content built from it) this conversion built internally, before the function returns its bytes — see convert.ts's DocumentToPdfOptions.onDocument for the mirrored X-to-PDF side of this same side channel.

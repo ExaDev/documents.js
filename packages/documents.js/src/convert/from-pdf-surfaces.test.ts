@@ -1,5 +1,6 @@
 import { DEFAULT_LAYOUT_FONT } from "document-schema.js";
 import type { LayoutDocument, ReadPdfSurfaces } from "pdf-codec";
+import { bytesToBase64, encodePng } from "byte-codec";
 import { LAYOUT_FORMAT_VERSION, writePdf } from "pdf-codec";
 import type * as PdfCodecRead from "pdf-codec/read";
 import { readPdf } from "pdf-codec/read";
@@ -30,6 +31,7 @@ const NO_SURFACES: Required<ReadPdfSurfaces> = {
   layers: false,
   structure: false,
   residue: false,
+  images: false,
 };
 const XMP_PACKET =
   '<?xpacket begin="" id="W5M0MpCehiHzreSzNTczkc9d"?><x:xmpmeta xmlns:x="adobe:ns:meta/"/><?xpacket end="w"?>';
@@ -200,6 +202,57 @@ describe("the pdf conversions with surfaces", () => {
         ),
       }),
     ).toEqual(full);
+  });
+
+  it("decodes no image and carries none into the conversion when images are skipped, keeping the text", () => {
+    const png = encodePng({
+      width: 2,
+      height: 2,
+      channels: 3,
+      data: new Uint8Array([255, 0, 0, 0, 255, 0, 0, 0, 255, 255, 255, 255]),
+    });
+    const pdf = writePdf({
+      formatVersion: LAYOUT_FORMAT_VERSION,
+      metadata: {},
+      images: {
+        img1: {
+          format: "png",
+          base64: bytesToBase64(png),
+          widthPx: 2,
+          heightPx: 2,
+        },
+      },
+      pages: [
+        {
+          ...PAGE,
+          items: [
+            {
+              kind: "text",
+              text: "Caption text",
+              xPt: 20,
+              yPt: 250,
+              font: DEFAULT_LAYOUT_FONT,
+              sizePt: 12,
+              color: BLACK,
+            },
+            {
+              kind: "image",
+              imageId: "img1",
+              xPt: 20,
+              yPt: 100,
+              widthPt: 100,
+              heightPt: 100,
+            },
+          ],
+        },
+      ],
+    });
+    const markdown = decodeMarkdownText(
+      pdfToMarkdown(pdf, { surfaces: { images: false } }),
+    );
+    expect(markdown).toContain("Caption text");
+    expect(markdown).not.toContain("![");
+    expect(decodeMarkdownText(pdfToMarkdown(pdf))).toContain("![");
   });
 
   it("applies surfaces only to the caller's own pdf: an intermediate pdf a route renders is read whole", () => {
