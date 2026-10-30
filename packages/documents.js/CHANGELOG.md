@@ -1,3 +1,14 @@
+## [14.6.8](https://github.com/ExaDev/documents.js/compare/documents.js%4014.6.7...documents.js%4014.6.8) (2026-10-30)
+
+### Bug Fixes
+
+* **documents.js:** read a sidebar beside prose as its own flow ([468ef7e](https://github.com/ExaDev/documents.js/commit/468ef7e0576e9304ab2b0d4d2352926d5d41feef)), closes [#1729](https://github.com/ExaDev/documents.js/issues/1729)
+
+
+### Dependencies
+
+- Updated pdf-codec to 5.7.2
+
 ## [14.6.7](https://github.com/ExaDev/documents.js/compare/documents.js%4014.6.6...documents.js%4014.6.7) (2026-10-30)
 
 ### Tests
