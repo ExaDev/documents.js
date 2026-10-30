@@ -334,7 +334,7 @@ Reading a program's built-in encoding is what stops a symbol-encoded subset — 
 
 ## Grouping text runs into lines and words
 
-`readPdf` reports one positioned run per text-showing operator, split wherever the operator itself opens a gap at least a word space wide between two of its glyphs (a `TJ` adjustment, a character spacing `Tc`, or the two summed, since a producer can set one against the other), and a PDF says nothing about lines or words: a line of prose can arrive as one run, as one run per word, or as one run per glyph, entirely at the producer's discretion. `groupPdfTextRuns` turns those runs back into lines of words, and `pdf-codec/text-group` serves it without the write half or the vendored fonts, alongside `pdf-codec/read`.
+`readPdf` reports one positioned run per text-showing operator, split wherever the operator itself opens a gap at least a word space wide between two of its glyphs (a `TJ` adjustment, a character spacing `Tc`, or the two summed, since a producer can set one against the other) or steps the next glyph back past the start of the one before it (an equation drawn back and forth across its line), so a run's glyphs always advance along the line, and a PDF says nothing about lines or words: a line of prose can arrive as one run, as one run per word, or as one run per glyph, entirely at the producer's discretion. `groupPdfTextRuns` turns those runs back into lines of words, and `pdf-codec/text-group` serves it without the write half or the vendored fonts, alongside `pdf-codec/read`.
 
 ```ts
 import { readPdf } from "pdf-codec/read";
