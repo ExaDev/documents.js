@@ -77,16 +77,26 @@ function dropDuplicatePaints(
 function dropOverlappingRepeatsWithinLine(
   items: readonly LayoutText[],
 ): LayoutText[] {
-  const rightEdgeByText = new Map<string, number>();
+  const keptByText = new Map<string, LayoutText[]>();
   const kept: LayoutText[] = [];
   for (const item of items) {
     // Trimmed for the same reason duplicatePaintKey above trims: two repeats of one run sometimes differ by only a trailing space.
     const textKey = item.text.trim();
-    const priorRightEdge = rightEdgeByText.get(textKey);
-    if (priorRightEdge !== undefined && item.xPt < priorRightEdge) {
+    const earlier = keptByText.get(textKey);
+    // A repeat is the same run redrawn on its own baseline, within the float noise DUPLICATE_PAINT_BUCKET_PT allows for; the same text set one above the other on a line (a subscript "2" and a superscript "2" stacked after one symbol) is two runs, each of which a reader sees.
+    const repeats = earlier?.some(
+      (prior) =>
+        item.xPt < prior.xPt + (prior.widthPt ?? 0) &&
+        Math.abs(item.yPt - prior.yPt) <= DUPLICATE_PAINT_BUCKET_PT,
+    );
+    if (repeats === true) {
       continue;
     }
-    rightEdgeByText.set(textKey, item.xPt + (item.widthPt ?? 0));
+    if (earlier === undefined) {
+      keptByText.set(textKey, [item]);
+    } else {
+      earlier.push(item);
+    }
     kept.push(item);
   }
   return kept;
