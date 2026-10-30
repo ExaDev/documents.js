@@ -21,6 +21,7 @@ import {
   leadingTjAdjustmentWordSpacesPdf,
   loweredIndexPdf,
   raisedExponentPdf,
+  stackedScriptsPdf,
   tjAdjustedWordSpacesPdf,
 } from "../test-support/pdf";
 import { minimalOdpBytes } from "../test-support/odp";
@@ -181,6 +182,13 @@ describe("pdfToMarkdown superscripts and subscripts", () => {
   it("marks a lowered index as a subscript, leaving the space drawn after it outside it", () => {
     const markdown = new TextDecoder().decode(pdfToMarkdown(loweredIndexPdf()));
     expect(markdown.trim()).toBe("generator G<sub>2</sub> operates");
+  });
+
+  it("keeps a subscript and a superscript of the same text stacked after one symbol", () => {
+    const markdown = new TextDecoder().decode(
+      pdfToMarkdown(stackedScriptsPdf()),
+    );
+    expect(markdown.trim()).toBe("x<sub>2</sub><sup>2</sup> \\+ y");
   });
 });
 
