@@ -1,3 +1,9 @@
+## [11.2.0](https://github.com/ExaDev/documents.js/compare/markdown-codec%4011.1.17...markdown-codec%4011.2.0) (2026-10-30)
+
+### Features
+
+* **markdown-codec:** write a raised or lowered run as sup or sub ([d92483d](https://github.com/ExaDev/documents.js/commit/d92483d185183d0cb3fa56858547036f905d4df3)), references [#1726](https://github.com/ExaDev/documents.js/issues/1726)
+
 ## [11.1.17](https://github.com/ExaDev/documents.js/compare/markdown-codec%4011.1.16...markdown-codec%4011.1.17) (2026-10-29)
 
 

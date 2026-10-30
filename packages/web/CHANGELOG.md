@@ -1,3 +1,11 @@
+## [2.18.74](https://github.com/ExaDev/documents.js/compare/web%402.18.73...web%402.18.74) (2026-10-30)
+
+
+### Dependencies
+
+- Updated markdown-codec to 11.2.0
+- Updated documents.js to 14.6.5
+
 ## [2.18.73](https://github.com/ExaDev/documents.js/compare/web%402.18.72...web%402.18.73) (2026-10-30)
 
 

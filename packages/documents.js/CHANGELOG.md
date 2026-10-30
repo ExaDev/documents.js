@@ -1,3 +1,16 @@
+## [14.6.5](https://github.com/ExaDev/documents.js/compare/documents.js%4014.6.4...documents.js%4014.6.5) (2026-10-30)
+
+### Bug Fixes
+
+* **documents.js:** drop a repeat of a run only on its own baseline ([ce8748c](https://github.com/ExaDev/documents.js/commit/ce8748c3d5b64e7e75a352cfebf1ce0a2324a0d3)), references [#1726](https://github.com/ExaDev/documents.js/issues/1726)
+* **documents.js:** keep a superscript on its base's line and mark it ([715d87a](https://github.com/ExaDev/documents.js/commit/715d87a8ae10d8bf82a5549f3e5ee07e0a71cdfb)), closes [#1726](https://github.com/ExaDev/documents.js/issues/1726)
+
+
+### Dependencies
+
+- Updated markdown-codec to 11.2.0
+- Updated pdf-codec to 5.7.0
+
 ## [14.6.4](https://github.com/ExaDev/documents.js/compare/documents.js%4014.6.3...documents.js%4014.6.4) (2026-10-30)
 
 ### Tests
