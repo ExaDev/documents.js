@@ -1,3 +1,14 @@
+## [14.6.6](https://github.com/ExaDev/documents.js/compare/documents.js%4014.6.5...documents.js%4014.6.6) (2026-10-30)
+
+### Bug Fixes
+
+* **documents.js:** read a table ruled only between its rows cell by cell ([22d4020](https://github.com/ExaDev/documents.js/commit/22d4020b7734112c45ef2b0e197f713a6bf427df)), closes [#1730](https://github.com/ExaDev/documents.js/issues/1730)
+
+
+### Dependencies
+
+- Updated markdown-codec to 11.2.1
+
 ## [14.6.5](https://github.com/ExaDev/documents.js/compare/documents.js%4014.6.4...documents.js%4014.6.5) (2026-10-30)
 
 ### Bug Fixes
