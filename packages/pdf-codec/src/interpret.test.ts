@@ -212,7 +212,7 @@ describe("interpretContentStream: text", () => {
     expect(items).toHaveLength(1);
   });
 
-  it("does not end a run for a wide adjustment that precedes its first string, so the run still starts before it", () => {
+  it("starts a run after an adjustment that precedes its first string, where its first glyph is painted", () => {
     const { sink } = collectDiagnostics();
     const items = interpretContentStream(
       textBytes("BT /F1 10 Tf 0 0 Td [-250 (A)] TJ ET"),
@@ -228,8 +228,48 @@ describe("interpretContentStream: text", () => {
       throw new Error("expected a text item");
     }
     expect(items).toHaveLength(1);
-    expect(item.startMatrix).toEqual([10, 0, 0, 10, 0, 0]);
+    // The adjustment moves the pen 250/1000 * 10 = 2.5 on before 'A' is painted, so the run covers 2.5 to 7.5 and the gap before it stays a gap.
+    expect(item.startMatrix).toEqual([10, 0, 0, 10, 2.5, 0]);
     expect(item.endMatrix).toEqual([10, 0, 0, 10, 7.5, 0]);
+  });
+
+  it("starts a run after a leading adjustment too narrow to be a word space as well", () => {
+    const { sink } = collectDiagnostics();
+    const items = interpretContentStream(
+      textBytes("BT /F1 10 Tf 0 0 Td [-50 (A)] TJ ET"),
+      EMPTY_RESOURCES,
+      {
+        fontMetrics: fixedWidthFontMetrics(500, 1),
+        resolver: makeResolver(new Map()),
+        sink,
+      },
+    );
+    const [item] = items;
+    if (item?.kind !== "text") {
+      throw new Error("expected a text item");
+    }
+    expect(item.startMatrix).toEqual([10, 0, 0, 10, 0.5, 0]);
+    expect(item.endMatrix).toEqual([10, 0, 0, 10, 5.5, 0]);
+  });
+
+  it("keeps a run's start at its first glyph across a kerning adjustment inside it", () => {
+    const { sink } = collectDiagnostics();
+    const items = interpretContentStream(
+      textBytes("BT /F1 10 Tf 0 0 Td [(A) -50 (V)] TJ ET"),
+      EMPTY_RESOURCES,
+      {
+        fontMetrics: fixedWidthFontMetrics(500, 1),
+        resolver: makeResolver(new Map()),
+        sink,
+      },
+    );
+    const [item] = items;
+    if (item?.kind !== "text") {
+      throw new Error("expected a text item");
+    }
+    expect(items).toHaveLength(1);
+    expect(item.startMatrix).toEqual([10, 0, 0, 10, 0, 0]);
+    expect(item.endMatrix).toEqual([10, 0, 0, 10, 10.5, 0]);
   });
 
   it("applies a rotated CTM to the text rendering matrix", () => {
