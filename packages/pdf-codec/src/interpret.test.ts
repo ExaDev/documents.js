@@ -272,6 +272,94 @@ describe("interpretContentStream: text", () => {
     expect(item.endMatrix).toEqual([10, 0, 0, 10, 10.5, 0]);
   });
 
+  it("ends a run where a wide character spacing opens a gap that no adjustment takes back, and only there", () => {
+    // A table row set the way some typesetters set one: a character spacing of half an em after every glyph, taken back by a 500 adjustment between the glyphs of each figure, so the only gaps left are between the figures, one of which falls inside the string (83).
+    const { sink } = collectDiagnostics();
+    const items = interpretContentStream(
+      textBytes("BT /F1 10 Tf 0 0 Td 5 Tc [(3) 500 (83) 500 (3)] TJ ET"),
+      EMPTY_RESOURCES,
+      {
+        fontMetrics: fixedWidthFontMetrics(500, 1),
+        resolver: makeResolver(new Map()),
+        sink,
+      },
+    );
+    const [first, second] = items;
+    if (first?.kind !== "text" || second?.kind !== "text") {
+      throw new Error("expected two text items");
+    }
+    expect(items).toHaveLength(2);
+    expect(Array.from(first.codes)).toEqual(Array.from(textBytes("38")));
+    expect(Array.from(second.codes)).toEqual(Array.from(textBytes("33")));
+    // Each figure ends where its last glyph's width does, so the whole 5-unit spacing after it lies between the two items.
+    expect(first.startMatrix).toEqual([10, 0, 0, 10, 0, 0]);
+    expect(first.endMatrix).toEqual([10, 0, 0, 10, 10, 0]);
+    expect(second.startMatrix).toEqual([10, 0, 0, 10, 15, 0]);
+    expect(second.endMatrix).toEqual([10, 0, 0, 10, 25, 0]);
+  });
+
+  it("ends a run after each glyph of a plain string set under a word-wide character spacing, as if each glyph were placed on its own", () => {
+    const { sink } = collectDiagnostics();
+    const items = interpretContentStream(
+      textBytes("BT /F1 10 Tf 0 0 Td 5 Tc (AB) Tj ET"),
+      EMPTY_RESOURCES,
+      {
+        fontMetrics: fixedWidthFontMetrics(500, 1),
+        resolver: makeResolver(new Map()),
+        sink,
+      },
+    );
+    const [first, second] = items;
+    if (first?.kind !== "text" || second?.kind !== "text") {
+      throw new Error("expected two text items");
+    }
+    expect(items).toHaveLength(2);
+    expect(first.endMatrix).toEqual([10, 0, 0, 10, 5, 0]);
+    expect(second.startMatrix).toEqual([10, 0, 0, 10, 10, 0]);
+  });
+
+  it("keeps a run whole under a character spacing narrower than a word space", () => {
+    const { sink } = collectDiagnostics();
+    const items = interpretContentStream(
+      textBytes("BT /F1 10 Tf 0 0 Td 1 Tc (AB) Tj ET"),
+      EMPTY_RESOURCES,
+      {
+        fontMetrics: fixedWidthFontMetrics(500, 1),
+        resolver: makeResolver(new Map()),
+        sink,
+      },
+    );
+    expect(items).toHaveLength(1);
+  });
+
+  it("keeps a run whole across the word spacing a space glyph takes, since the space character already marks that word", () => {
+    const { sink } = collectDiagnostics();
+    const items = interpretContentStream(
+      textBytes("BT /F1 10 Tf 0 0 Td 5 Tw (A B) Tj ET"),
+      EMPTY_RESOURCES,
+      {
+        fontMetrics: fixedWidthFontMetrics(500, 1),
+        resolver: makeResolver(new Map()),
+        sink,
+      },
+    );
+    expect(items).toHaveLength(1);
+  });
+
+  it("sums consecutive adjustments, so two narrow ones that open a word-wide gap between them end the run", () => {
+    const { sink } = collectDiagnostics();
+    const items = interpretContentStream(
+      textBytes("BT /F1 10 Tf 0 0 Td [(A) -100 -100 (V)] TJ ET"),
+      EMPTY_RESOURCES,
+      {
+        fontMetrics: fixedWidthFontMetrics(500, 1),
+        resolver: makeResolver(new Map()),
+        sink,
+      },
+    );
+    expect(items).toHaveLength(2);
+  });
+
   it("applies a rotated CTM to the text rendering matrix", () => {
     const { sink } = collectDiagnostics();
     const items = interpretContentStream(
