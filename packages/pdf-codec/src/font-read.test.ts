@@ -67,6 +67,29 @@ describe("createFontResolver: simple fonts", () => {
     expect(font?.widthOf(67)).toBe(0); // outside FirstChar..LastChar, no FontDescriptor -> MissingWidth defaults to 0
   });
 
+  it("reads widths from a /Widths array that is an indirect object", () => {
+    const { sink } = collectDiagnostics();
+    const fontDict = pdfDict({
+      Subtype: pdfName("TrueType"),
+      BaseFont: pdfName("ABCDEF+Calibri"),
+      FirstChar: pdfNum(65),
+      LastChar: pdfNum(66),
+      Widths: pdfRef(30, 0),
+    });
+    const resources = pdfDict({ Font: pdfDict({ F1: fontDict }) });
+    const { resolve } = createFontResolver({
+      resolver: makeResolver(
+        new Map<number, PdfObject>([
+          [30, pdfArray([pdfNum(700), pdfNum(650)])],
+        ]),
+      ),
+      sink,
+    });
+    const font = resolve("F1", resources);
+    expect(font?.widthOf(65)).toBe(700);
+    expect(font?.widthOf(66)).toBe(650);
+  });
+
   it("derives family and bold/italic from /BaseFont", () => {
     const { sink } = collectDiagnostics();
     const fontDict = pdfDict({

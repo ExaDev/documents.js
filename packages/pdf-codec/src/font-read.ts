@@ -160,6 +160,23 @@ function readToUnicodeCMap(
   return parseToUnicodeCMap(decoded.bytes, context.sink);
 }
 
+/**
+ * Reads an array-valued font dictionary entry through the document's resolver, with each of its elements resolved too.
+ *
+ * ISO 32000-1 7.3.10 lets any array, and any element of one, be an indirect object, and producers do write `/Widths`, `/DescendantFonts` and `/W` that way. Read without resolving, such an entry is a reference rather than an array and reads as absent, so a composite font loses its descendant and every glyph takes the default width.
+ * @param value - the entry as the dictionary holds it, a direct array or a reference to one
+ * @param context - the font read whose resolver follows references
+ * @returns the array with its elements resolved, or undefined when the entry is absent or not an array
+ */
+function resolvedArray(
+  value: PdfObject | undefined,
+  context: FontReadContext,
+): PdfObject[] | undefined {
+  return asArray(context.resolver.resolve(value))?.map(
+    (item) => context.resolver.resolve(item) ?? item,
+  );
+}
+
 function buildSimpleFont(fontDict: PdfDict, context: FontReadContext): PdfFont {
   const baseFont = asName(dictGet(fontDict, "BaseFont")) ?? "Helvetica";
   const descriptor = context.resolver.resolveDict(
@@ -173,7 +190,7 @@ function buildSimpleFont(fontDict: PdfDict, context: FontReadContext): PdfFont {
   const symbolic = styleFlags.symbolic ?? false;
   const builtinGlyphName = builtinSymbolGlyphNameLookup(baseFamily);
 
-  const widthsArr = asArray(dictGet(fontDict, "Widths"));
+  const widthsArr = resolvedArray(dictGet(fontDict, "Widths"), context);
   const firstChar = asNumber(dictGet(fontDict, "FirstChar")) ?? 0;
   const missingWidth =
     (descriptor !== undefined
@@ -232,7 +249,7 @@ function buildSimpleFont(fontDict: PdfDict, context: FontReadContext): PdfFont {
   }
   const differencesMap = readDifferencesMap(
     encodingDict !== undefined
-      ? asArray(dictGet(encodingDict, "Differences"))
+      ? resolvedArray(dictGet(encodingDict, "Differences"), context)
       : undefined,
   );
   const programEncoding = lazyFontProgram(descriptor, context);
@@ -471,7 +488,10 @@ function buildCompositeFont(
   context: FontReadContext,
 ): PdfFont {
   const baseFont = asName(dictGet(fontDict, "BaseFont")) ?? "Helvetica";
-  const descendants = asArray(dictGet(fontDict, "DescendantFonts"));
+  const descendants = resolvedArray(
+    dictGet(fontDict, "DescendantFonts"),
+    context,
+  );
   const descendantDict =
     descendants !== undefined
       ? context.resolver.resolveDict(descendants[0])
@@ -491,14 +511,14 @@ function buildCompositeFont(
       : DEFAULT_CID_WIDTH;
   const widthMap = readCidWidths(
     descendantDict !== undefined
-      ? asArray(dictGet(descendantDict, "W"))
+      ? resolvedArray(dictGet(descendantDict, "W"), context)
       : undefined,
   );
   const widthOf = (cid: number): number => widthMap.get(cid) ?? dw;
 
   const dw2 =
     descendantDict !== undefined
-      ? asArray(dictGet(descendantDict, "DW2"))
+      ? resolvedArray(dictGet(descendantDict, "DW2"), context)
       : undefined;
   const defaultPositionY =
     (dw2?.length === DW2_ENTRY_COUNT ? asNumber(dw2[0]) : undefined) ??
@@ -508,7 +528,7 @@ function buildCompositeFont(
     DEFAULT_VERTICAL_DISPLACEMENT_Y;
   const verticalMap = readCidVerticalMetrics(
     descendantDict !== undefined
-      ? asArray(dictGet(descendantDict, "W2"))
+      ? resolvedArray(dictGet(descendantDict, "W2"), context)
       : undefined,
   );
   const verticalMetricsOf = (cid: number): VerticalGlyphMetrics => {
