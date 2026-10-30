@@ -1,3 +1,9 @@
+## [5.7.0](https://github.com/ExaDev/documents.js/compare/pdf-codec%405.6.1...pdf-codec%405.7.0) (2026-10-30)
+
+### Features
+
+* **pdf-codec:** tell a superscript or subscript from its size and baseline shift ([b199e1d](https://github.com/ExaDev/documents.js/commit/b199e1de3d3f3d6193df0c00203b9d03287e42a1)), references [#1726](https://github.com/ExaDev/documents.js/issues/1726)
+
 ## [5.6.1](https://github.com/ExaDev/documents.js/compare/pdf-codec%405.6.0...pdf-codec%405.6.1) (2026-10-30)
 
 ### Bug Fixes
