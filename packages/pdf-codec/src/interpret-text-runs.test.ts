@@ -267,6 +267,57 @@ describe("interpretContentStream: where a text run ends and starts", () => {
     expect(items).toHaveLength(1);
   });
 
+  it("ends a run where an adjustment steps the next glyph back past the start of the one before, so each run's glyphs advance along the line", () => {
+    // An equation set by stepping back across it: 'V' is drawn 15 units back from where 'A' left the pen, ten units to the left of 'A' itself.
+    const { sink } = collectDiagnostics();
+    const items = interpretContentStream(
+      textBytes("BT /F1 10 Tf 0 0 Td [(A) 1500 (V)] TJ ET"),
+      EMPTY_RESOURCES,
+      {
+        fontMetrics: fixedWidthFontMetrics(500, 1),
+        resolver: makeResolver(new Map()),
+        sink,
+      },
+    );
+    const [first, second] = items;
+    if (first?.kind !== "text" || second?.kind !== "text") {
+      throw new Error("expected two text items");
+    }
+    expect(items).toHaveLength(2);
+    expect(first.startMatrix).toEqual([10, 0, 0, 10, 0, 0]);
+    expect(first.endMatrix).toEqual([10, 0, 0, 10, 5, 0]);
+    expect(second.startMatrix).toEqual([10, 0, 0, 10, -10, 0]);
+    expect(second.endMatrix).toEqual([10, 0, 0, 10, -5, 0]);
+  });
+
+  it("keeps a run whole when an adjustment overlaps the next glyph with the one before but still starts it further along", () => {
+    const { sink } = collectDiagnostics();
+    const items = interpretContentStream(
+      textBytes("BT /F1 10 Tf 0 0 Td [(A) 400 (V)] TJ ET"),
+      EMPTY_RESOURCES,
+      {
+        fontMetrics: fixedWidthFontMetrics(500, 1),
+        resolver: makeResolver(new Map()),
+        sink,
+      },
+    );
+    expect(items).toHaveLength(1);
+  });
+
+  it("keeps a run whole when an adjustment sets the next glyph exactly over the one before, as an overprinted accent is", () => {
+    const { sink } = collectDiagnostics();
+    const items = interpretContentStream(
+      textBytes("BT /F1 10 Tf 0 0 Td [(A) 500 (V)] TJ ET"),
+      EMPTY_RESOURCES,
+      {
+        fontMetrics: fixedWidthFontMetrics(500, 1),
+        resolver: makeResolver(new Map()),
+        sink,
+      },
+    );
+    expect(items).toHaveLength(1);
+  });
+
   it("sums consecutive adjustments, so two narrow ones that open a word-wide gap between them end the run", () => {
     const { sink } = collectDiagnostics();
     const items = interpretContentStream(

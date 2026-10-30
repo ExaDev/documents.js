@@ -323,19 +323,22 @@ function runContentStream(
       fontResourceName,
       resources,
     );
-    // One item per stretch of the array with no word-wide gap between two of its glyphs. The item's own text carries no trace of the space between its glyphs, so the only way a word space the producer expressed as displacement can reach a consumer is as the gap between two items. The gap after a glyph is everything that moves the pen past the glyph's own width before the next glyph is drawn: its character spacing and every adjustment in between. Both have to be summed, because a producer can set the two against each other: a table row shown as one string under a wide character spacing, with an adjustment taking that spacing back between the glyphs of each figure, leaves a gap only between the figures, and neither number alone says where. Measuring the summed gap is what makes the result independent of how the producer split its operators: glyphs set this way come out as the same runs as glyphs each placed with an operator of their own, which the line grouping then reads as words by the same word-gap rule.
+    // One item per stretch of the array with no word-wide gap between two of its glyphs. The item's own text carries no trace of the space between its glyphs, so the only way a word space the producer expressed as displacement can reach a consumer is as the gap between two items. The gap after a glyph is everything that moves the pen past the glyph's own width before the next glyph is drawn: its character spacing and every adjustment in between. Both have to be summed, because a producer can set the two against each other: a table row shown as one string under a wide character spacing, with an adjustment taking that spacing back between the glyphs of each figure, leaves a gap only between the figures, and neither number alone says where. A run also ends where the gap moves the next glyph back past the start of the one before it: a run's text is read in the order its glyphs were shown, so it can only hold glyphs that advance along the line, and a producer that sets an equation by stepping back and forth across it (a subscript, then the symbol it belongs to; a closing bracket, then the opening one to its left) would otherwise hand a consumer the glyphs in drawing order rather than in the order they sit on the line. An overlap short of that, the kerning that pulls a glyph under the overhang of the one before, still advances and stays in the run. Measuring the gap this way is what makes the result independent of how the producer split its operators: glyphs set this way come out as the same runs as glyphs each placed with an operator of their own, which the line grouping then orders along the line and reads as words by the same word-gap rule.
     const wordGap = DEFAULT_WORD_GAP_EM * gs.fontSizePt;
     let startMatrix = computeTrm(gs, text);
     let chunks: Uint8Array<ArrayBuffer>[] = [];
     let totalLength = 0;
     let firstGlyphPosition: { x: number; y: number } | undefined;
-    // The text matrix where the last glyph's own width ended, and the displacement since then; undefined and zero until the first glyph.
+    // The text matrix where the last glyph's own width ended, that width, and the displacement since then; undefined and zero until the first glyph.
     let lastWidthEndTm: Matrix | undefined;
+    let lastGlyphWidth = 0;
     let gapSinceLastGlyph = 0;
-    // A vertically set gap is never read as a word space: the scripts set vertically do not separate words with spaces at all.
-    const gapIsWordWide = (): boolean =>
-      !vertical && totalLength > 0 && gapSinceLastGlyph >= wordGap;
-    // A run that ends at a word-wide gap ends where its last glyph's width did, so the whole gap lies between it and the next item rather than inside its own advance. Otherwise it ends at the pen, as a run always has.
+    // A vertically set gap never ends a run: the scripts set vertically do not separate words with spaces at all.
+    const gapEndsRun = (): boolean =>
+      !vertical &&
+      totalLength > 0 &&
+      (gapSinceLastGlyph >= wordGap || gapSinceLastGlyph < -lastGlyphWidth);
+    // A run ended by its gap ends where its last glyph's width did, so the whole gap lies between it and the next item rather than inside its own advance. Otherwise it ends at the pen, as a run always has.
     const flushRun = (): void => {
       if (totalLength === 0) {
         return;
@@ -348,7 +351,7 @@ function runContentStream(
       }
       const endMatrix = computeTrm(
         gs,
-        gapIsWordWide() && lastWidthEndTm !== undefined
+        gapEndsRun() && lastWidthEndTm !== undefined
           ? { ...text, tm: lastWidthEndTm }
           : text,
       );
@@ -380,7 +383,7 @@ function runContentStream(
       if (el.kind === "string") {
         let offset = 0;
         while (offset < el.bytes.length) {
-          if (gapIsWordWide()) {
+          if (gapEndsRun()) {
             flushRun();
           }
           // A run starts where its first glyph is painted, so whatever moved the pen before that glyph (an adjustment leading the array, or the gap that has just ended the previous run) is left outside the run. Left at the pen's position before a leading adjustment, the run would claim the gap that adjustment opens as part of its own advance, and a producer that starts a new text-showing operator with a word space expressed as an adjustment would have that word read as touching the one before it.
@@ -395,6 +398,7 @@ function runContentStream(
           totalLength += glyph.byteLength;
           offset += glyph.byteLength;
           lastWidthEndTm = glyph.widthEndTm;
+          lastGlyphWidth = glyph.widthAdvance;
           gapSinceLastGlyph = glyph.charSpaceAfter;
         }
       } else if (el.kind === "number") {

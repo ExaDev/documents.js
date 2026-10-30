@@ -124,17 +124,58 @@ function generateRow(random: () => number): GeneratedRow {
   };
 }
 
+// Where each glyph of a row starts along the line.
+function glyphPositions(row: GeneratedRow): number[] {
+  let x = 0;
+  return row.glyphs.map((_, index) => {
+    const at = x;
+    x += GLYPH_WIDTH + (row.gaps[index] ?? 0);
+    return at;
+  });
+}
+
 // The same glyphs, each shown by its own operator at the position the producer form gives it.
 function referenceContent(row: GeneratedRow): string {
-  let x = 0;
-  const operators: string[] = [];
-  row.glyphs.forEach((glyph, index) => {
-    operators.push(
-      `BT /F1 ${FONT_SIZE} Tf ${x.toFixed(POSITION_DECIMALS)} 0 Td (${glyph}) Tj ET`,
+  const positions = glyphPositions(row);
+  return row.glyphs
+    .map(
+      (glyph, index) =>
+        `BT /F1 ${FONT_SIZE} Tf ${(positions[index] ?? 0).toFixed(POSITION_DECIMALS)} 0 Td (${glyph}) Tj ET`,
+    )
+    .join(" ");
+}
+
+// The same glyphs shown by one TJ in a shuffled order, each reached from where the glyph before left the pen by the adjustment that lands it on its own position: the way an equation setter draws a symbol, steps back for the bracket before it and forward again for its subscript. The first glyph is placed by Td, so the array opens on a glyph.
+function outOfOrderContent(
+  row: GeneratedRow,
+  random: () => number,
+): { content: string; stepsBack: boolean } {
+  const positions = glyphPositions(row);
+  const order = row.glyphs.map((_, index) => index);
+  for (let index = order.length - 1; index > 0; index--) {
+    const swap = Math.floor(random() * (index + 1));
+    [order[index], order[swap]] = [order[swap]!, order[index]!];
+  }
+  const [first, ...rest] = order;
+  if (first === undefined) {
+    throw new Error("a generated row holds at least one glyph");
+  }
+  let pen = (positions[first] ?? 0) + GLYPH_WIDTH;
+  let previous = first;
+  let stepsBack = false;
+  const elements = [`(${row.glyphs[first] ?? ""})`];
+  for (const index of rest) {
+    const target = positions[index] ?? 0;
+    elements.push(
+      ((pen - target) * (1000 / FONT_SIZE)).toFixed(ADJUSTMENT_DECIMALS),
+      `(${row.glyphs[index] ?? ""})`,
     );
-    x += GLYPH_WIDTH + (row.gaps[index] ?? 0);
-  });
-  return operators.join(" ");
+    pen = target + GLYPH_WIDTH;
+    stepsBack ||= index < previous;
+    previous = index;
+  }
+  const content = `BT /F1 ${FONT_SIZE} Tf ${(positions[first] ?? 0).toFixed(POSITION_DECIMALS)} 0 Td [${elements.join(" ")}] TJ ET`;
+  return { content, stepsBack };
 }
 
 function runsOf(items: readonly ExtractedItem[]): PdfTextRunGeometry[] {
@@ -177,5 +218,22 @@ describe("interpretContentStream: a row's words do not depend on how its glyphs 
     }
     // The comparison only discriminates if the seeded rows include the case the fix is for: a word-wide gap inside one string, which only the character spacing opens.
     expect(rowsSplitInsideAString).toBeGreaterThan(0);
+  });
+
+  it(`reads ${CASES} seeded rows whose glyphs one TJ draws in a shuffled order exactly as the same glyphs placed one by one`, () => {
+    const random = seededRandom(3693);
+    let rowsSteppingBack = 0;
+    for (let index = 0; index < CASES; index++) {
+      const row = generateRow(random);
+      const { content, stepsBack } = outOfOrderContent(row, random);
+      if (stepsBack) {
+        rowsSteppingBack++;
+      }
+      expect(readLine(content), content).toEqual(
+        readLine(referenceContent(row)),
+      );
+    }
+    // The comparison only discriminates if some rows draw a glyph to the left of the one drawn before it.
+    expect(rowsSteppingBack).toBeGreaterThan(0);
   });
 });
