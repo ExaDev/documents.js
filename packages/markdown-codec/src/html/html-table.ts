@@ -1,4 +1,4 @@
-// A raw HTML <table> block -> ContentTable: the read-side half of the HTML-table fallback (ExaDev/documents.js#1089), the exact structural inverse of src/emit/html-table.ts. GFM's own pipe-table syntax has no grammar for a cell's colSpan/rowSpan/background, or for a non-inlinable block (a nested table, say) inside a cell (github.github.com/gfm, "Tables (extension)" — a cell holds inline content only); this module recognises the one shape src/emit/html-table.ts writes for that case back into a real ContentTable, so the write-side fallback is a genuine round trip rather than a one-way improvement. A raw HTML `<table>` block is legal CommonMark (spec 0.31.2, "HTML blocks", start condition 6 names `table` directly — https://spec.commonmark.org/0.31.2/#html-blocks), and src/html/html.ts's own top comment states this package's html_block handling never parses such a block's content as markup; this module is the one place that changes, for exactly one recognised shape, in the same bounded-recogniser spirit html.ts already establishes for raw HTML generally — table/tr/td/th and their colspan/rowspan/style attributes specifically, never a general HTML-to-DOM parser. Content inside a raw HTML block is never reprocessed as markdown either (the same top comment), so a cell's own inline formatting is read back from real HTML tags (<strong>/<em>/<del>/<code>/<a href>) rather than markdown syntax.
+// A raw HTML <table> block -> ContentTable: the read-side half of the HTML-table fallback (ExaDev/documents.js#1089), the exact structural inverse of src/emit/html-table.ts. GFM's own pipe-table syntax has no grammar for a cell's colSpan/rowSpan/background, or for a non-inlinable block (a nested table, say) inside a cell (github.github.com/gfm, "Tables (extension)" — a cell holds inline content only); this module recognises the one shape src/emit/html-table.ts writes for that case back into a real ContentTable, so the write-side fallback is a genuine round trip rather than a one-way improvement. A raw HTML `<table>` block is legal CommonMark (spec 0.31.2, "HTML blocks", start condition 6 names `table` directly — https://spec.commonmark.org/0.31.2/#html-blocks), and src/html/html.ts's own top comment states this package's html_block handling never parses such a block's content as markup; this module is the one place that changes, for exactly one recognised shape, in the same bounded-recogniser spirit html.ts already establishes for raw HTML generally — table/tr/td/th and their colspan/rowspan/style attributes specifically, never a general HTML-to-DOM parser. Content inside a raw HTML block is never reprocessed as markdown either (the same top comment), so a cell's own inline formatting is read back from real HTML tags (<strong>/<em>/<del>/<code>/<sup>/<sub>/<a href>) rather than markdown syntax.
 //
 // Whatever shape this parser refuses — multiple top-level tables in one block, stray text alongside a table, an unrecognised or unquoted attribute, an unterminated element — is left for src/lower/lower.ts's own existing opaque-preservation path to handle exactly as it always has; this module returns undefined rather than guessing, and never throws.
 
@@ -168,14 +168,15 @@ function unescapeHtml(text: string): string {
     .replaceAll("&amp;", "&");
 }
 
-// --- Inline content: the small, closed HTML tag vocabulary mirroring exactly what src/emit/inline.ts already spells in markdown syntax for a plain GFM table cell (bold/italic/strike/hyperlink/Courier-New-as-code-span — see that module's own top comment) — retargeted to real HTML tags here because raw HTML block content is never reprocessed as markdown (this module's own top comment). Recognised tags nest in any order and any combination; a run's own accumulated style merges every enclosing recognised tag's flag regardless of nesting order, so the write side is free to pick one fixed order (src/emit/html-table.ts does) without this reader depending on it. ---
+// --- Inline content: the small, closed HTML tag vocabulary mirroring exactly what src/emit/inline.ts already spells in markdown syntax for a plain GFM table cell (bold/italic/strike/hyperlink/Courier-New-as-code-span, and <sup>/<sub> for a raised or lowered run — see that module's own top comment) — retargeted to real HTML tags here because raw HTML block content is never reprocessed as markdown (this module's own top comment). Recognised tags nest in any order and any combination; a run's own accumulated style merges every enclosing recognised tag's flag regardless of nesting order, so the write side is free to pick one fixed order (src/emit/html-table.ts does) without this reader depending on it. ---
 
 type RunStyle = Pick<
   ContentRun,
-  "bold" | "italic" | "strike" | "hyperlink" | "fontFamily"
+  "bold" | "italic" | "strike" | "hyperlink" | "fontFamily" | "verticalAlign"
 >;
 
-const INLINE_TAG_PATTERN = /<(a|strong|b|em|i|del|s|strike|code)\b([^>]*)>/i;
+const INLINE_TAG_PATTERN =
+  /<(a|strong|b|em|i|del|s|strike|code|sup|sub)\b([^>]*)>/i;
 
 function applyTagStyle(
   style: Readonly<RunStyle>,
@@ -195,6 +196,10 @@ function applyTagStyle(
       return { ...style, strike: true };
     case "code":
       return { ...style, fontFamily: MONOSPACE_FONT_FAMILY };
+    case "sup":
+      return { ...style, verticalAlign: "superscript" };
+    case "sub":
+      return { ...style, verticalAlign: "subscript" };
     case "a": {
       const href = readAttr(attrs, "href");
       return href === undefined

@@ -1,6 +1,6 @@
 // ContentTable -> a raw HTML <table> block: the write-side half of the HTML-table fallback (ExaDev/documents.js#1089), src/html/html-table.ts's own exact structural inverse. GFM's own pipe-table syntax has no grammar for a cell's colSpan/rowSpan/background, or for a block inside a cell that isn't a paragraph or an image (most commonly a nested table) — github.github.com/gfm, "Tables (extension)", states a cell holds inline content only, so no single cell of an otherwise-pipe-syntax table can ever carry an HTML sub-block: the moment ANY cell in a table needs one of these, tableNeedsHtmlFallback below says so and src/emit/table.ts's own emitTable renders the WHOLE table through this module instead of the plain `| a | b |` writer. A raw HTML `<table>` block is legal CommonMark regardless (spec 0.31.2, "HTML blocks" start condition 6 names `table` directly — https://spec.commonmark.org/0.31.2/#html-blocks).
 //
-// Raw HTML block content is never reprocessed as markdown (src/html/html.ts's own top comment), so every cell's own inline formatting here is written as real HTML tags — <strong>/<em>/<del>/<code>/<a href> — rather than the markdown syntax src/emit/inline.ts spells for a plain GFM table cell; writing markdown punctuation inside this block would render as its own literal characters in a browser, not as formatting. This is a deliberately closed, symmetric vocabulary matching exactly what that plain writer already supports (bold/italic/strike/hyperlink/Courier-New-as-code-span) — nothing wider, nothing narrower.
+// Raw HTML block content is never reprocessed as markdown (src/html/html.ts's own top comment), so every cell's own inline formatting here is written as real HTML tags — <strong>/<em>/<del>/<code>/<a href> — rather than the markdown syntax src/emit/inline.ts spells for a plain GFM table cell; writing markdown punctuation inside this block would render as its own literal characters in a browser, not as formatting. This is a deliberately closed, symmetric vocabulary matching exactly what that plain writer already supports (bold/italic/strike/hyperlink/Courier-New-as-code-span, and a raised or lowered run as <sup>/<sub>) — nothing wider, nothing narrower.
 //
 // A cell's own nested-block content is bounded to two shapes, matching the issue's own text ("a nested block (e.g. a nested table or multi-paragraph content)"): several paragraph/image blocks join with a literal <br> exactly as the plain GFM writer already joins multi-paragraph cells (MarkdownDiagnosticCodes.TABLE_CELL_MULTI_PARAGRAPH_JOINED), or — when a cell's ENTIRE content is one nested table and nothing else — that table recurses through this same module, unconditionally rendered as HTML regardless of whether ITS OWN cells would otherwise fit plain GFM syntax, since a table nested inside another table's cell can never itself be pipe-syntax (there is no block position for it to occupy there at all). Any other block kind, or a nested table mixed with sibling content in the same cell, has no representation this bounded recogniser attempts and is dropped with MarkdownDiagnosticCodes.TABLE_CELL_FORMATTING_DROPPED, exactly as it always was before this fallback existed.
 
@@ -21,7 +21,10 @@ import {
   MarkdownDiagnosticCodes,
   MarkdownTableGridFaultError,
 } from "../diagnostics/diagnostics";
-import { MONOSPACE_FONT_FAMILY } from "../shared/style-constants";
+import {
+  MONOSPACE_FONT_FAMILY,
+  VERTICAL_ALIGN_TAG,
+} from "../shared/style-constants";
 import type { TableEmitContext } from "./table";
 
 function escapeHtmlText(text: string): string {
@@ -65,6 +68,11 @@ function emitRunHtml(run: ContentRun): string {
   let text = escapeHtmlText(run.text);
   if (run.fontFamily === MONOSPACE_FONT_FAMILY) {
     text = `<code>${text}</code>`;
+  }
+  // Innermost, as src/emit/inline.ts wraps it inside any emphasis or link.
+  if (run.verticalAlign !== undefined) {
+    const tag = VERTICAL_ALIGN_TAG[run.verticalAlign];
+    text = `<${tag}>${text}</${tag}>`;
   }
   if (run.strike === true) {
     text = `<del>${text}</del>`;
