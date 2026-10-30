@@ -1,3 +1,9 @@
+## [11.2.1](https://github.com/ExaDev/documents.js/compare/markdown-codec%4011.2.0...markdown-codec%4011.2.1) (2026-10-30)
+
+### Bug Fixes
+
+* **markdown-codec:** keep a raised or lowered run in an HTML table cell ([6bde4eb](https://github.com/ExaDev/documents.js/commit/6bde4eb5a7f7692ef5eaefc669b56baf0a7ee909)), references [#1726](https://github.com/ExaDev/documents.js/issues/1726)
+
 ## [11.2.0](https://github.com/ExaDev/documents.js/compare/markdown-codec%4011.1.17...markdown-codec%4011.2.0) (2026-10-30)
 
 ### Features
