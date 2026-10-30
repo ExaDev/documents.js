@@ -10,6 +10,31 @@ import { applyPredictor, readPredictorParams } from "./predictors";
 const BITS_PER_BYTE = 8;
 const BYTE_MASK = 0xff; // an all-ones byte: used both to bit-invert a byte (XOR) and to keep only its low 8 bits after a wider shift (AND)
 
+// The output of a decoder whose length is known only once it ends (LZW, ASCII85, RunLength), held as bytes in a buffer that doubles when full, so a decoded byte costs one byte of memory rather than a number array entry (eight bytes or more on 64-bit V8), which for an image stream is the difference between a raster's size and several times it.
+class GrowableBytes {
+  #buffer: Uint8Array<ArrayBuffer>;
+  #length = 0;
+
+  // `capacity` is a first guess at the output's length (at least one byte); a wrong guess costs only doublings.
+  constructor(capacity: number) {
+    this.#buffer = new Uint8Array(Math.max(1, capacity));
+  }
+
+  push(byte: number): void {
+    if (this.#length === this.#buffer.length) {
+      const grown = new Uint8Array(this.#buffer.length * 2);
+      grown.set(this.#buffer);
+      this.#buffer = grown;
+    }
+    this.#buffer[this.#length++] = byte;
+  }
+
+  // An exact-length copy, so the caller holds no unused capacity and gets a buffer of its own, as every other decoder here returns.
+  toBytes(): Uint8Array<ArrayBuffer> {
+    return this.#buffer.slice(0, this.#length);
+  }
+}
+
 export interface DecodedStream {
   readonly bytes: Uint8Array<ArrayBuffer>;
   // Set when decoding stopped before exhausting the /Filter chain: DCTDecode's deliberate JPEG passthrough (the encoded bytes ARE the deliverable — see src/image/*'s own module docs), JPXDecode's own passthrough (a JPEG 2000 codestream carries its own component count and sample depth, which no plain byte array can express — src/images-read.ts decodes it where those are meaningful), a filter this codec doesn't implement (Crypt), or a JBIG2Decode stream using a JBIG2 feature src/image/jbig2.ts does not decode. `bytes` is still encoded per this filter name either way.
@@ -256,7 +281,7 @@ export function lzwDecode(
   earlyChange: boolean,
   sink: PdfDiagnosticSink,
 ): Uint8Array<ArrayBuffer> {
-  const out: number[] = [];
+  const out = new GrowableBytes(data.length);
   let dict = initialLzwDictionary();
   let nextCode = LZW_FIRST_NEW_CODE;
   let codeWidth = LZW_INITIAL_CODE_WIDTH;
@@ -323,7 +348,7 @@ export function lzwDecode(
     }
     prevEntry = entry;
   }
-  return Uint8Array.from(out);
+  return out.toBytes();
 }
 
 // --- ASCII85Decode (ISO 32000-1 7.4.3): groups of 4 bytes as 5 ASCII characters '!'-'u' (0x21-0x75), 'z' as shorthand for four zero bytes, terminated by "~>". ---
@@ -361,7 +386,7 @@ function ascii85GroupBytes(
 export function ascii85Decode(
   data: Uint8Array<ArrayBuffer>,
 ): Uint8Array<ArrayBuffer> {
-  const out: number[] = [];
+  const out = new GrowableBytes(data.length);
   let tuple: number[] = [];
   let i = 0;
   if (
@@ -380,7 +405,9 @@ export function ascii85Decode(
       continue;
     }
     if (byte === ASCII85_ZERO_GROUP_MARKER && tuple.length === 0) {
-      out.push(0, 0, 0, 0);
+      for (let zero = 0; zero < ASCII85_GROUP_BYTES; zero++) {
+        out.push(0);
+      }
       continue;
     }
     if (byte < ASCII85_MIN_DIGIT || byte > ASCII85_MAX_DIGIT) {
@@ -388,7 +415,9 @@ export function ascii85Decode(
     }
     tuple.push(byte - ASCII85_MIN_DIGIT);
     if (tuple.length === ASCII85_GROUP_DIGITS) {
-      out.push(...ascii85GroupBytes(tuple, ASCII85_GROUP_BYTES));
+      for (const decoded of ascii85GroupBytes(tuple, ASCII85_GROUP_BYTES)) {
+        out.push(decoded);
+      }
       tuple = [];
     }
   }
@@ -397,9 +426,11 @@ export function ascii85Decode(
     while (padded.length < ASCII85_GROUP_DIGITS) {
       padded.push(ASCII85_MAX_DIGIT_VALUE);
     }
-    out.push(...ascii85GroupBytes(padded, tuple.length - 1));
+    for (const decoded of ascii85GroupBytes(padded, tuple.length - 1)) {
+      out.push(decoded);
+    }
   }
-  return Uint8Array.from(out);
+  return out.toBytes();
 }
 
 // --- ASCIIHexDecode (ISO 32000-1 7.4.2): hex digits, whitespace ignored, terminated by '>', an odd trailing digit zero-padded. ---
@@ -430,22 +461,29 @@ function hexDigitValue(byte: number): number | undefined {
 export function asciiHexDecode(
   data: Uint8Array<ArrayBuffer>,
 ): Uint8Array<ArrayBuffer> {
-  const digits: number[] = [];
+  // Two passes, so the output is sized exactly and no digit is held anywhere but the input: the first counts the digits before the terminator, the second packs them two to a byte (an odd last digit as the high nibble of a byte whose low nibble is 0).
+  let digitCount = 0;
   for (const byte of data) {
     if (byte === ASCII_HEX_TERMINATOR) {
       break; // '>' terminator
     }
-    const value = hexDigitValue(byte);
-    if (value !== undefined) {
-      digits.push(value);
+    if (hexDigitValue(byte) !== undefined) {
+      digitCount++;
     }
   }
-  if (digits.length % 2 === 1) {
-    digits.push(0);
-  }
-  const out = new Uint8Array(digits.length / 2);
-  for (let i = 0; i < out.length; i++) {
-    out[i] = (digits[i * 2]! << HEX_NIBBLE_BITS) | digits[i * 2 + 1]!;
+  const out = new Uint8Array(Math.ceil(digitCount / 2));
+  let digit = 0;
+  for (const byte of data) {
+    if (byte === ASCII_HEX_TERMINATOR) {
+      break;
+    }
+    const value = hexDigitValue(byte);
+    if (value !== undefined) {
+      const index = Math.floor(digit / 2);
+      out[index] =
+        digit % 2 === 0 ? value << HEX_NIBBLE_BITS : (out[index] ?? 0) | value;
+      digit++;
+    }
   }
   return out;
 }
@@ -458,7 +496,7 @@ const RUN_LENGTH_REPEAT_COUNT_BASE = 257; // one past the maximum byte value (25
 export function runLengthDecode(
   data: Uint8Array<ArrayBuffer>,
 ): Uint8Array<ArrayBuffer> {
-  const out: number[] = [];
+  const out = new GrowableBytes(data.length);
   let i = 0;
   while (i < data.length) {
     const length = data[i]!;
@@ -480,5 +518,5 @@ export function runLengthDecode(
       }
     }
   }
-  return Uint8Array.from(out);
+  return out.toBytes();
 }
