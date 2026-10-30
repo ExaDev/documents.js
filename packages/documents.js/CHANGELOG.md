@@ -1,3 +1,14 @@
+## [14.6.3](https://github.com/ExaDev/documents.js/compare/documents.js%4014.6.2...documents.js%4014.6.3) (2026-10-30)
+
+### Bug Fixes
+
+* **documents.js:** skip images when reading a pdf's metadata ([406bbfd](https://github.com/ExaDev/documents.js/commit/406bbfdc3d2f6092926689e85edf008a2c786a1d))
+
+
+### Dependencies
+
+- Updated pdf-codec to 5.6.0
+
 ## [14.6.2](https://github.com/ExaDev/documents.js/compare/documents.js%4014.6.1...documents.js%4014.6.2) (2026-10-29)
 
 
