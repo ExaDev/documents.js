@@ -467,3 +467,43 @@ describe("the link title a covering run-level extent supplies", () => {
     ).toBe('p[ab](/u "outer")q');
   });
 });
+
+describe("superscript and subscript runs", () => {
+  it("wraps a superscript run in <sup> and a subscript run in <sub>", () => {
+    expect(
+      render([
+        { text: "280m" },
+        { text: "2", verticalAlign: "superscript" },
+        { text: " and I" },
+        { text: "a", verticalAlign: "subscript" },
+      ]),
+    ).toBe("280m<sup>2</sup> and I<sub>a</sub>");
+  });
+
+  it("wraps inside the emphasis around the run, so the emphasis stays whole", () => {
+    expect(
+      render([
+        { text: "m", bold: true },
+        { text: "2", bold: true, verticalAlign: "superscript" },
+      ]),
+    ).toBe("**m<sup>2</sup>**");
+  });
+
+  it("escapes the run's own text inside the element", () => {
+    expect(render([{ text: "-1", verticalAlign: "superscript" }])).toBe(
+      "<sup>\\-1</sup>",
+    );
+  });
+
+  it("leaves a run's own markdown residue verbatim, unwrapped", () => {
+    expect(
+      render([
+        {
+          text: "<b>",
+          verticalAlign: "superscript",
+          source: { format: "markdown", xml: "<b>" },
+        },
+      ]),
+    ).toBe("<b>");
+  });
+});

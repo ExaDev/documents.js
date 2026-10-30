@@ -50,3 +50,11 @@ export const QUOTE_INDENT_PT = 36;
 // GFM task-list checkbox glyphs this package's own lowering/emission pair uses to carry a task item's checked state through ContentParagraph's own flat run-of-text model — document-schema.js's ContentListMembership has no per-item checked field at all (see src/shared/list-id.ts's own top-of-file note), so the state has to live in the paragraph's own text instead. Matches Pandoc's own docx/HTML writer convention for the identical problem (BALLOT BOX / BALLOT BOX WITH X), not an invented glyph pair.
 export const TASK_CHECKBOX_UNCHECKED = "☐"; // BALLOT BOX
 export const TASK_CHECKBOX_CHECKED = "☒"; // BALLOT BOX WITH X
+
+// The HTML element each ContentRun.verticalAlign value is written as, and the only spelling read back into the field. Markdown has no syntax of its own for either, CommonMark passes both through as inline raw HTML (spec 0.31.2, "Raw HTML"), and these two elements are what a renderer of inline HTML draws as a raised or lowered run.
+export const VERTICAL_ALIGN_TAG: Readonly<
+  Record<"superscript" | "subscript", "sup" | "sub">
+> = {
+  superscript: "sup",
+  subscript: "sub",
+};

@@ -21,6 +21,7 @@ import {
 import {
   MATH_INLINE_FONT_MARKER,
   MONOSPACE_FONT_FAMILY,
+  VERTICAL_ALIGN_TAG,
 } from "../shared/style-constants";
 
 export interface InlineEmitContext {
@@ -131,6 +132,8 @@ function footnoteReferenceAt(
 //
 // A run carrying this package's own markdown HTML residue (src/lower/inline.ts's rawHtml case) re-emits that residue verbatim: re-serialising opaque residue is the restorable tier's whole mechanism, and it is what distinguishes genuine preserved HTML from literal text that merely looks like a tag — the pattern-matching exemption escapeMarkdownText used to carry (leave a recognised tag unescaped) could not tell those apart and is gone, so ordinary text now always escapes a literal '<' and a real HTML run never passes through escaping at all.
 //
+// A run carrying ContentRun.verticalAlign is wrapped in `<sup>` or `<sub>` around its leaf, inside any emphasis or link around it, so `**m<sup>2</sup>**` keeps the exponent bold and the bold whole.
+//
 // A footnote reference site is keyed off the run-level anchor extent naming it, not off anything about the run's own text: escapeMarkdownText escapes `[`, `^`, and `]`, so a deliberately-escaped literal `\[^1\]` and a genuine reference are the same run text by the time they reach here, and only the extent separates them (the identical non-pattern-based principle the math marker below plays). The spelling comes from the extent's own name — the same authority the definition marker takes its label from (renderConstruct, src/emit/emit.ts) — so the run's text is the materialised rendering (this package's own read mints it as `[^name]` verbatim; a foreign producer's contentless mark run loses nothing by being re-spelled). A name this package's own [^label] grammar cannot represent takes the definition half's degrade: the run's own text, escaped, plus CONSTRUCT_UNREPRESENTED.
 function renderLeaf(
   run: ContentRun,
@@ -141,6 +144,20 @@ function renderLeaf(
   if (run.source?.format === "markdown") {
     return run.source.xml;
   }
+  const body = renderLeafBody(run, context, index, constructs);
+  if (run.verticalAlign === undefined) {
+    return body;
+  }
+  const tag = VERTICAL_ALIGN_TAG[run.verticalAlign];
+  return `<${tag}>${body}</${tag}>`;
+}
+
+function renderLeafBody(
+  run: ContentRun,
+  context: InlineEmitContext,
+  index: number,
+  constructs: readonly RunConstructExtent[] | undefined,
+): string {
   if (run.fontFamily === MONOSPACE_FONT_FAMILY) {
     context.sink({
       code: MarkdownDiagnosticCodes.CODE_SPAN_AS_MONOSPACE_RUN,
