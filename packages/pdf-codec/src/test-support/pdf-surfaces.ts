@@ -7,7 +7,7 @@ import {
   PAGE_OBJ,
 } from "./pdf";
 
-// A two-page document carrying every document-level surface ReadPdfOptions.surfaces can leave out, each with a trap: one reference to an object number the cross-reference table does not hold (DOCUMENT_SURFACE_TRAP_OBJECTS), reached only by that surface's own reader, so resolving it reports pdf/object-missing-value naming that number exactly when the surface was parsed. The outline's second entry states a direct destination array (to page 0), so the reader mints a `destN` name for it before any page's link is read. The traps sit in the outline's /Next chain, the old-style /Dests dictionary, the AcroForm /Fields array, the /OCGs array, the structure root's /K array and the catalog /OutputIntents (residue). Page 0 also carries what page items take from those surfaces: a structure-owned marked-content span (MCID 0), a span in the "Hidden" layer (off in the default configuration), an internal link naming a name-tree destination, an internal link stating a direct destination array, a URI link, and a /TrimBox for the page-boxes residue row. Page 1 exists so destinations resolve to a real second page.
+// A two-page document carrying every document-level surface ReadPdfOptions.surfaces can leave out, each with a trap: one reference to an object number the cross-reference table does not hold (DOCUMENT_SURFACE_TRAP_OBJECTS), reached only by that surface's own reader, so resolving it reports pdf/object-missing-value naming that number exactly when the surface was parsed. The outline's second entry states a direct destination array (to page 0), so the reader mints a `destN` name for it before any page's link is read. The traps sit in the outline's /Next chain, the old-style /Dests dictionary, the AcroForm /Fields array, the /OCGs array, the structure root's /K array, the catalog /OutputIntents (residue) and an image XObject's /SMask (images, reached only when the image is decoded). Page 0 also carries what page items take from those surfaces: a structure-owned marked-content span (MCID 0), a span in the "Hidden" layer (off in the default configuration), an internal link naming a name-tree destination, an internal link stating a direct destination array, a URI link, a /TrimBox for the page-boxes residue row, and an image XObject and an inline image. Page 1 exists so destinations resolve to a real second page.
 export const DOCUMENT_SURFACE_TRAP_OBJECTS = {
   outline: 901,
   form: 902,
@@ -15,6 +15,7 @@ export const DOCUMENT_SURFACE_TRAP_OBJECTS = {
   structure: 904,
   destinations: 905,
   residue: 906,
+  images: 907,
 } as const;
 export function documentSurfacesPdf(): Uint8Array<ArrayBuffer> {
   const b = new FixtureBuilder().header();
@@ -35,6 +36,7 @@ export function documentSurfacesPdf(): Uint8Array<ArrayBuffer> {
   const OUTLINE_ITEM_OBJ = 18;
   const PARENT_TREE_OBJ = 19;
   const OUTLINE_DIRECT_ITEM_OBJ = 20;
+  const IMAGE_OBJ = 21;
   b.object(
     1,
     `<< /Type /Catalog /Pages 2 0 R /Outlines ${OUTLINES_ROOT_OBJ} 0 R /Dests ${OLD_STYLE_DESTS_OBJ} 0 R /Names << /Dests ${NAME_TREE_OBJ} 0 R >> /AcroForm << /Fields [${FIELD_OBJ} 0 R ${DOCUMENT_SURFACE_TRAP_OBJECTS.form} 0 R] >> /OCProperties << /OCGs [${OCG_HIDDEN_OBJ} 0 R ${DOCUMENT_SURFACE_TRAP_OBJECTS.layers} 0 R] /D << /OFF [${OCG_HIDDEN_OBJ} 0 R] >> >> /StructTreeRoot ${STRUCT_TREE_ROOT_OBJ} 0 R /PageMode /UseOutlines /OutputIntents [${DOCUMENT_SURFACE_TRAP_OBJECTS.residue} 0 R] >>`,
@@ -42,7 +44,7 @@ export function documentSurfacesPdf(): Uint8Array<ArrayBuffer> {
   b.object(2, `<< /Type /Pages /Kids [3 0 R ${PAGE_1_OBJ} 0 R] /Count 2 >>`);
   b.object(
     PAGE_OBJ,
-    `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 200] /TrimBox [10 10 190 190] /Resources << /Font << /F1 ${SHARED_FONT_OBJ} 0 R >> /Properties << /L1 << /OC ${OCG_HIDDEN_OBJ} 0 R >> >> >> /Contents ${CONTENT_PAGE_0_OBJ} 0 R /StructParents 0 /Annots [${LINK_NAMED_OBJ} 0 R ${LINK_DIRECT_OBJ} 0 R ${LINK_URI_OBJ} 0 R] >>`,
+    `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 200] /TrimBox [10 10 190 190] /Resources << /Font << /F1 ${SHARED_FONT_OBJ} 0 R >> /XObject << /Im1 ${IMAGE_OBJ} 0 R >> /Properties << /L1 << /OC ${OCG_HIDDEN_OBJ} 0 R >> >> >> /Contents ${CONTENT_PAGE_0_OBJ} 0 R /StructParents 0 /Annots [${LINK_NAMED_OBJ} 0 R ${LINK_DIRECT_OBJ} 0 R ${LINK_URI_OBJ} 0 R] >>`,
   );
   b.object(
     PAGE_1_OBJ,
@@ -61,6 +63,9 @@ export function documentSurfacesPdf(): Uint8Array<ArrayBuffer> {
         "BT /F1 12 Tf 10 150 Td (Hidden layer text) Tj ET",
         EMC,
         "BT /F1 12 Tf 10 120 Td (Plain text) Tj ET",
+        "q 40 0 0 20 120 60 cm /Im1 Do Q",
+        // A 2 by 1 gray inline image whose two samples are the ASCII letters A and B.
+        "q 20 0 0 10 120 30 cm BI /W 2 /H 1 /CS /G /BPC 8 ID AB EI Q",
       ].join("\n"),
     ),
   );
@@ -115,6 +120,11 @@ export function documentSurfacesPdf(): Uint8Array<ArrayBuffer> {
     `<< /Title (Opening) /Parent ${OUTLINES_ROOT_OBJ} 0 R /Dest [3 0 R /XYZ 0 50 null] /Next ${DOCUMENT_SURFACE_TRAP_OBJECTS.outline} 0 R >>`,
   );
   b.object(PARENT_TREE_OBJ, `<< /Nums [0 [${STRUCT_PARA_OBJ} 0 R]] >>`);
-  b.classicXrefAndTrailer(OUTLINE_DIRECT_ITEM_OBJ, "/Root 1 0 R");
+  b.stream(
+    IMAGE_OBJ,
+    `<< /Type /XObject /Subtype /Image /Width 2 /Height 2 /ColorSpace /DeviceRGB /BitsPerComponent 8 /SMask ${DOCUMENT_SURFACE_TRAP_OBJECTS.images} 0 R >>`,
+    enc("ABCDEFGHIJKL"),
+  );
+  b.classicXrefAndTrailer(IMAGE_OBJ, "/Root 1 0 R");
   return b.bytes();
 }

@@ -382,7 +382,7 @@ export interface LayoutStructureElement {
 }
 
 /**
- * The document-level surfaces a read can leave out (`ReadPdfOptions.surfaces`), each named by the `LayoutDocument` field it fills: `outline`, `destinations`, `form`, `layers` and `structure` are those fields, and `residue` is the package-level `source` channel. A `LayoutDocument` lists the ones its read skipped in `skippedSurfaces`.
+ * The document-level surfaces a read can leave out (`ReadPdfOptions.surfaces`), each named by the `LayoutDocument` field it fills: `outline`, `destinations`, `form`, `layers`, `structure` and `images` are those fields, and `residue` is the package-level `source` channel. A `LayoutDocument` lists the ones its read skipped in `skippedSurfaces`.
  */
 export const LayoutDocumentSurfaceSchema = z.enum([
   "outline",
@@ -391,6 +391,7 @@ export const LayoutDocumentSurfaceSchema = z.enum([
   "layers",
   "structure",
   "residue",
+  "images",
 ]);
 export type LayoutDocumentSurface = z.infer<typeof LayoutDocumentSurfaceSchema>;
 
@@ -409,7 +410,7 @@ export const LayoutDocumentSchema = z.object({
   form: z.array(LayoutFormFieldSchema).optional(),
   // The package-level half of the quarantined residue channel (document-schema.js's SourceResidue): whole-document PDF facts no content node owns — the raw XMP packet, output intents, viewer/session behaviour, private application data, the trailer /ID. Keyed by the fact's own name, opaque to everything downstream exactly as the channel's contract states.
   source: z.record(z.string(), SourceResidueSchema).optional(),
-  // The document-level surfaces readPdf left unread because ReadPdfOptions.surfaces turned them off, in LayoutDocumentSurfaceSchema's order. Each one's field is absent from the document whatever the file holds, so an absent field here means "not read" rather than "none"; this list is how a consumer tells the two apart, as pageCount does for attachments on a page-selected read. Absent when every surface was read, and never empty.
+  // The document-level surfaces readPdf left unread because ReadPdfOptions.surfaces turned them off, in LayoutDocumentSurfaceSchema's order. Each one's field is absent from the document whatever the file holds (`images`, which every LayoutDocument carries, is left empty instead), so an absent or empty field here means "not read" rather than "none"; this list is how a consumer tells the two apart, as pageCount does for attachments on a page-selected read. Absent when every surface was read, and never empty.
   skippedSurfaces: z.array(LayoutDocumentSurfaceSchema).min(1).optional(),
 });
 export type LayoutDocument = z.infer<typeof LayoutDocumentSchema>;
