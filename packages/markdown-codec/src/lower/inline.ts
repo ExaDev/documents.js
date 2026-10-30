@@ -9,6 +9,7 @@ import { MarkdownDiagnosticCodes } from "../diagnostics/diagnostics";
 import {
   MATH_INLINE_FONT_MARKER,
   MONOSPACE_FONT_FAMILY,
+  VERTICAL_ALIGN_TAG,
 } from "../shared/style-constants";
 
 export interface InlineLowerContext {
@@ -21,6 +22,7 @@ interface RunStyle {
   readonly italic?: boolean;
   readonly strike?: boolean;
   readonly hyperlink?: string;
+  readonly verticalAlign?: ContentRun["verticalAlign"];
 }
 
 // What lowering one inline sequence produces: the paragraph's runs, plus the run-level construct extents the walk opened over them — a titled link's `link` descriptor with its `title` field (the one slot a flat ContentRun has nowhere to put an annotation; the standing reconciliation: ContentRun.hyperlink keeps the target, the construct carries what the run field cannot express), and a footnote reference's point `anchor` extent (the reference site itself, the mechanism that retired the old marked-run carry). The runs keep their hyperlink untouched; an extent adds what the run fields cannot express rather than replacing anything.
@@ -40,6 +42,9 @@ function buildRun(
     ...(style.italic === true ? { italic: true } : {}),
     ...(style.strike === true ? { strike: true } : {}),
     ...(style.hyperlink !== undefined ? { hyperlink: style.hyperlink } : {}),
+    ...(style.verticalAlign !== undefined
+      ? { verticalAlign: style.verticalAlign }
+      : {}),
     ...(fontFamily !== undefined ? { fontFamily } : {}),
   };
 }
@@ -198,14 +203,76 @@ function lowerInlineNodeInto(
   }
 }
 
+// The ContentRun.verticalAlign value an inline raw HTML tag opens or closes, exactly as src/emit/inline.ts writes one: a bare `<sup>` or `<sub>` with no attributes, in either case, or its closing tag. Any other tag, one carrying attributes included, is ordinary raw HTML and is preserved as such.
+function scriptTag(node: MarkdownInlineNode):
+  | {
+      readonly position: "superscript" | "subscript";
+      readonly closing: boolean;
+    }
+  | undefined {
+  if (node.type !== "rawHtml") {
+    return undefined;
+  }
+  const match = /^<(\/?)(sup|sub)>$/i.exec(node.literal);
+  if (match === null) {
+    return undefined;
+  }
+  const name = match[2]?.toLowerCase();
+  const position =
+    name === VERTICAL_ALIGN_TAG.superscript ? "superscript" : "subscript";
+  return { position, closing: match[1] === "/" };
+}
+
+// The index of the tag closing the script element opened at `open`, among the same siblings, or undefined when it is never closed there. An element of the same name opened inside it nests, so its own closing tag is skipped over rather than taken for this one's.
+function closingScriptTagIndex(
+  nodes: readonly MarkdownInlineNode[],
+  open: number,
+  position: "superscript" | "subscript",
+): number | undefined {
+  let depth = 0;
+  for (let index = open + 1; index < nodes.length; index++) {
+    const tag = scriptTag(nodes[index]!);
+    if (tag?.position !== position) {
+      continue;
+    }
+    if (!tag.closing) {
+      depth += 1;
+    } else if (depth === 0) {
+      return index;
+    } else {
+      depth -= 1;
+    }
+  }
+  return undefined;
+}
+
+// A `<sup>` or `<sub>` element closed among the same siblings is the raised or lowered run src/emit/inline.ts writes for ContentRun.verticalAlign, so its content lowers with that field set and the two tags themselves become nothing. An unclosed tag, or a closing tag with no opener, is ordinary raw HTML and keeps its preserved-as-text handling, since nothing says which runs it was meant to cover.
 function lowerNodesInto(
   nodes: readonly MarkdownInlineNode[],
   style: RunStyle,
   context: InlineLowerContext,
   acc: RunAccumulator,
 ): void {
-  for (const node of nodes) {
+  let index = 0;
+  while (index < nodes.length) {
+    const node = nodes[index]!;
+    const tag = scriptTag(node);
+    const close =
+      tag === undefined || tag.closing
+        ? undefined
+        : closingScriptTagIndex(nodes, index, tag.position);
+    if (tag !== undefined && close !== undefined) {
+      lowerNodesInto(
+        nodes.slice(index + 1, close),
+        { ...style, verticalAlign: tag.position },
+        context,
+        acc,
+      );
+      index = close + 1;
+      continue;
+    }
     lowerInlineNodeInto(node, style, context, acc);
+    index += 1;
   }
 }
 
