@@ -36,31 +36,33 @@ export class CoverageMask {
   readonly widthPx: number;
   readonly heightPx: number;
   private readonly counts: Uint16Array;
-  // The inclusive pixel-index range every mark since the last reset has landed in. Seeded to an empty range (a first past the last valid index, a last at the very first one) so a mask nothing has marked walks no pixels at all, and grown by markSpan as it writes.
-  private markedFirst: number;
-  private markedLast: number;
+  // The index of every pixel holding a nonzero count, each recorded once, at the mark that takes its count from zero to one. It is what bounds the one pass that reads the counts back, drain: that pass visits exactly these pixels and zeroes them as it goes, so blending a shape and clearing the mask after it cost the area the shape covers rather than the canvas it sits on. A per-row first and last column would bound the pass by the rows a shape spans instead, which still walks the whole interior of a hollow shape such as a stroked page frame; this list never visits a pixel the shape does not cover.
+  private readonly marked: number[] = [];
+  private visited = 0;
 
   constructor(widthPx: number, heightPx: number) {
     this.widthPx = widthPx;
     this.heightPx = heightPx;
     this.counts = new Uint16Array(widthPx * heightPx);
-    this.markedFirst = this.counts.length;
-    this.markedLast = 0;
   }
 
-  reset(): void {
-    this.counts.fill(0);
-    this.markedFirst = this.counts.length;
-    this.markedLast = 0;
+  // The cumulative number of pixel cells drain has visited since this mask was constructed: the work measure the readback is bounded by, so a test can assert what a sequence of fills cost in cells rather than by timing it.
+  get cellsVisited(): number {
+    return this.visited;
   }
 
   countAt(pixelIndex: number): number {
     return this.counts[pixelIndex] ?? 0;
   }
 
-  // The inclusive pixel-index range this mask may hold a nonzero count in, as { first, last } — empty when last is below first, which is how a mask nothing has marked reads. Every pixel outside it is guaranteed zero, so a blend pass walks this range rather than the whole canvas: for a small shape on a large page that is the difference between the shape's own pixels and every pixel of the page.
-  markedRange(): { readonly first: number; readonly last: number } {
-    return { first: this.markedFirst, last: this.markedLast };
+  // Calls visit once for every pixel holding a nonzero count, with its index and its subsample count, and for no other pixel, zeroing each count once it has been read: afterwards the mask is empty, ready for the next fill, without a separate clear over anything. Pixels arrive in the order they were first marked (subsample row by subsample row, left to right within one), not in row-major order: a blend reads and writes one pixel at a time, so the order cannot change what it paints.
+  drain(visit: (pixelIndex: number, samples: number) => void): void {
+    for (const pixelIndex of this.marked) {
+      visit(pixelIndex, this.countAt(pixelIndex));
+      this.counts[pixelIndex] = 0;
+    }
+    this.visited += this.marked.length;
+    this.marked.length = 0;
   }
 
   // The sub-scanline fill: for each subsample row, find every polygon edge crossing it, sort the crossings by x, and derive the covered x-spans from the winding rule. The half-open crossing test ((a.y <= y) !== (b.y <= y)) counts an edge whose endpoint sits exactly on the row exactly once rather than twice, and a polygon's implied closing edge is walked like any other, so an open subpath handed in as a polygon is filled as implicitly closed — the port's own fill semantics (ISO 32000-1 8.5.3.1).
@@ -155,9 +157,10 @@ export class CoverageMask {
       const cellIndex = pixelRowBase + Math.floor(c / SUPERSAMPLE_PER_AXIS);
       const cell = this.counts[cellIndex];
       if (cell !== undefined) {
+        if (cell === 0) {
+          this.marked.push(cellIndex);
+        }
         this.counts[cellIndex] = cell + 1;
-        this.markedFirst = Math.min(this.markedFirst, cellIndex);
-        this.markedLast = Math.max(this.markedLast, cellIndex);
       }
     }
   }

@@ -13,7 +13,7 @@ import { COVERAGE_DENOMINATOR, CoverageMask } from "./coverage";
 import type { Pt } from "./geometry";
 import { flattenSubpath, strokeOutlinePolygons } from "./stroke";
 
-// The pure-software reference backend for pdf-codec's PageRasteriser port: a colour canvas (three opaque bytes per pixel) painted by scanline coverage with 4x4 supersampling and encoded to PNG by byte-codec at finish. No canvas API, no DOM, no node:* builtins, no network, and nothing beyond arithmetic on the draw ops themselves — so it runs identically under Node, a browser Worker, and workerd, which the workerd suite pins. It is the port's reference consumer: correct and deterministic first, fast second (a page of text at 300 dpi is seconds, not milliseconds; a runtime with a real canvas supplies its own backend through the same port).
+// The pure-software reference backend for pdf-codec's PageRasteriser port: a colour canvas (three opaque bytes per pixel) painted by scanline coverage with 4x4 supersampling and encoded to PNG by byte-codec at finish. No canvas API, no DOM, no node:* builtins, no network, and nothing beyond arithmetic on the draw ops themselves — so it runs identically under Node, a browser Worker, and workerd, which the workerd suite pins. It is the port's reference consumer: correct and deterministic first, fast second (every op is a software supersampled sweep; a runtime with a real canvas supplies its own backend through the same port).
 
 // The one capability boundary this backend states up front: JPEG image ops are declined by name rather than drawn. byte-codec, this package's only image decoder, decodes PNG and reads JPEG metadata but carries no DCT decoder, and re-encoding or approximating a JPEG's pixels would be a silent misrender — so the placement is skipped, the diagnostic says why, and a consumer that wants the scan's own pixels still has them through the port's op (or readPdf's image recovery). A canvas-owning backend draws these natively instead.
 export interface RasterCpuDiagnostic {
@@ -75,6 +75,11 @@ export class CpuRasteriser implements PageRasteriser {
     return this.decodedImages.get(decodeCacheKey(bytes));
   }
 
+  // The cumulative cells the current page's coverage mask has read back and cleared (CoverageMask.cellsVisited), exposed so the tests can assert that a path or image op costs work in proportion to the pixels it covers rather than to the canvas, with no timing involved; the same testing seam decodedImageForTesting above is.
+  maskCellsVisitedForTesting(): number {
+    return this.requirePage("maskCellsVisitedForTesting").mask.cellsVisited;
+  }
+
   draw(op: RasterDrawOp): void {
     if (op.kind === "fillRect") {
       this.fillRectOp(op);
@@ -133,7 +138,7 @@ export class CpuRasteriser implements PageRasteriser {
       const rowBase = row * geometry.widthPx;
       for (let column = columnStart; column < columnEnd; column++) {
         const coverage = coverageY * pixelOverlap(column, left, right);
-        this.blendPixel(canvas, rowBase + column, colour, coverage);
+        blendPixel(canvas, rowBase + column, colour, coverage);
       }
     }
   }
@@ -147,7 +152,6 @@ export class CpuRasteriser implements PageRasteriser {
       const polygons = flattened
         .map((subpath) => subpath.points)
         .filter((points) => points.length >= MIN_POLYGON_VERTICES);
-      mask.reset();
       mask.fillPolygons(polygons, op.fill.fillRule);
       this.blendMask(canvas, mask, op.fill.color);
     }
@@ -157,13 +161,12 @@ export class CpuRasteriser implements PageRasteriser {
         op.stroke.widthPx,
         op.stroke.dashPx,
       );
-      mask.reset();
       mask.fillPolygons(polygons, "nonzero");
       this.blendMask(canvas, mask, op.stroke.color);
     }
   }
 
-  // --- image: bilinear sampling under the placement quad's own coverage, so a rotated placement antialiases exactly like every other edge this backend paints. The pixel walk is bounded by the quad's bounding box — the coverage mask is empty everywhere outside it.
+  // --- image: bilinear sampling under the placement quad's own coverage, so a rotated placement antialiases exactly like every other edge this backend paints. The pixel walk is bounded by the pixels the quad's own coverage pass marked, the coverage mask being empty everywhere else.
   private imageOp(op: RasterImageOp): void {
     const { geometry, canvas, mask } = this.requirePage("draw");
     if (op.format === "jpeg") {
@@ -176,27 +179,24 @@ export class CpuRasteriser implements PageRasteriser {
     }
     const source = this.decodeCached(op.bytes);
     const quad = quadCorners(op.matrix);
-    mask.reset();
     mask.fillPolygons([quad], "nonzero");
     const inverse = invertMatrix(op.matrix);
-    // The linear pixel-index range this one fillPolygons call actually marked, rather than a hand-computed bounding box over the quad's own corners: markedRange() reflects the fill pass's real output, so there is no separately-derived bound that could disagree with it, and the loop below is the same range-walk blendMask uses for a fill or stroke's own mask. No samples-zero skip inside the range: this.blendPixel at alpha 0 leaves the destination byte exactly as it was (bg + (fg - bg) * 0 rounds back to the same already-integer bg), so a gap pixel between two marked spans costs a wasted call, never a wrong one.
-    const { first, last } = mask.markedRange();
-    for (let i = first; i <= last; i++) {
-      const samples = mask.countAt(i);
-      const row = Math.floor(i / geometry.widthPx);
-      const column = i % geometry.widthPx;
+    // The pixels this one fillPolygons call actually marked, rather than a hand-computed bounding box over the quad's own corners: the mask's own record of its fill pass, so there is no separately derived bound that could disagree with it, and the same walk blendMask uses for a fill or stroke. Only covered pixels are visited, so a thin rotated placement across the page costs its own pixels, not the rows or the canvas it spans.
+    mask.drain((pixelIndex, samples) => {
+      const row = Math.floor(pixelIndex / geometry.widthPx);
+      const column = pixelIndex % geometry.widthPx;
       const [u, v] = inverse(
         column + PIXEL_CENTER_OFFSET,
         row + PIXEL_CENTER_OFFSET,
       );
       const [r, g, b, a] = sampleBilinear(source, u, v);
-      this.blendPixel(
+      blendPixel(
         canvas,
-        i,
+        pixelIndex,
         { r, g, b },
         (samples / COVERAGE_DENOMINATOR) * a,
       );
-    }
+    });
   }
 
   // The port may hand the same image bytes repeatedly (one XObject drawn for every stamp of a logo); PNG decoding is this backend's most expensive per-op step, so decoded images are cached by content within the page. crc32 over the bytes plus the byte length is the key — cheap relative to the decode, and two distinct images colliding on both is not a case a page's own content can produce.
@@ -217,31 +217,9 @@ export class CpuRasteriser implements PageRasteriser {
     color: UnitRgb,
   ): void {
     const colour = colourBytes(color);
-    const { first, last } = mask.markedRange();
-    // No samples-zero skip: this.blendPixel at alpha 0 is a no-op (per fillRectOp's identical reasoning), so a gap pixel between two marked spans costs a wasted call, never a wrong one.
-    for (let i = first; i <= last; i++) {
-      const samples = mask.countAt(i);
-      this.blendPixel(canvas, i, colour, samples / COVERAGE_DENOMINATOR);
-    }
-  }
-
-  // Source-over of an opaque colour at fractional coverage: out = bg + (fg - bg) * alpha, rounded once per channel. Coverage arrives from the mask (already 0..1) or the analytic rect overlap; colour components arrive as bytes for vector paints and as 0..255 floats for image samples, rounded here identically. The background reads fall back to 0 only on an index the caller's own walk has already bounded — the same provably-in-bounds arithmetic archive-codec's sector assembly uses.
-  private blendPixel(
-    canvas: Uint8Array<ArrayBuffer>,
-    pixelIndex: number,
-    colour: { readonly r: number; readonly g: number; readonly b: number },
-    alpha: number,
-  ): void {
-    const base = pixelIndex * RGB_CHANNELS;
-    canvas[base] = Math.round(
-      (canvas[base] ?? 0) + (colour.r - (canvas[base] ?? 0)) * alpha,
-    );
-    canvas[base + 1] = Math.round(
-      (canvas[base + 1] ?? 0) + (colour.g - (canvas[base + 1] ?? 0)) * alpha,
-    );
-    canvas[base + 2] = Math.round(
-      (canvas[base + 2] ?? 0) + (colour.b - (canvas[base + 2] ?? 0)) * alpha,
-    );
+    mask.drain((pixelIndex, samples) => {
+      blendPixel(canvas, pixelIndex, colour, samples / COVERAGE_DENOMINATOR);
+    });
   }
 }
 
@@ -262,6 +240,25 @@ export function colourBytes(color: UnitRgb): {
     g: Math.round(color.g * RGB_CHANNEL_MAX),
     b: Math.round(color.b * RGB_CHANNEL_MAX),
   };
+}
+
+// Source-over of an opaque colour at fractional coverage, exported (from this module only) for the reference rasteriser the differential tests compare this one against: out = bg + (fg - bg) * alpha, rounded once per channel. Coverage arrives from the mask (already 0..1) or the analytic rect overlap; colour components arrive as bytes for vector paints and as 0..255 floats for image samples, rounded here identically. The background reads fall back to 0 only on an index the caller's own walk has already bounded — the same provably-in-bounds arithmetic archive-codec's sector assembly uses.
+export function blendPixel(
+  canvas: Uint8Array<ArrayBuffer>,
+  pixelIndex: number,
+  colour: { readonly r: number; readonly g: number; readonly b: number },
+  alpha: number,
+): void {
+  const base = pixelIndex * RGB_CHANNELS;
+  canvas[base] = Math.round(
+    (canvas[base] ?? 0) + (colour.r - (canvas[base] ?? 0)) * alpha,
+  );
+  canvas[base + 1] = Math.round(
+    (canvas[base + 1] ?? 0) + (colour.g - (canvas[base + 1] ?? 0)) * alpha,
+  );
+  canvas[base + 2] = Math.round(
+    (canvas[base + 2] ?? 0) + (colour.b - (canvas[base + 2] ?? 0)) * alpha,
+  );
 }
 
 // The image-decode cache key, shared between decodeCached's own lookup/populate and decodedImageForTesting's read-only inspection so the two can never disagree about which entry a given set of bytes maps to.
