@@ -1,3 +1,9 @@
+## [5.7.1](https://github.com/ExaDev/documents.js/compare/pdf-codec%405.7.0...pdf-codec%405.7.1) (2026-10-30)
+
+### Bug Fixes
+
+* **pdf-codec:** end a text run at a word-wide gap opened by character spacing ([56a0c32](https://github.com/ExaDev/documents.js/commit/56a0c329ff15b9c086e57b3f4b4c7324ecc5a176)), closes [#1716](https://github.com/ExaDev/documents.js/issues/1716)
+
 ## [5.7.0](https://github.com/ExaDev/documents.js/compare/pdf-codec%405.6.1...pdf-codec%405.7.0) (2026-10-30)
 
 ### Features

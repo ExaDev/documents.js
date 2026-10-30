@@ -1,3 +1,14 @@
+## [14.6.7](https://github.com/ExaDev/documents.js/compare/documents.js%4014.6.6...documents.js%4014.6.7) (2026-10-30)
+
+### Tests
+
+* **documents.js:** recover every cell of a ruled table set as character-spaced runs ([cc06c2b](https://github.com/ExaDev/documents.js/commit/cc06c2b3d0343f330af8405609a529c1c448459e))
+
+
+### Dependencies
+
+- Updated pdf-codec to 5.7.1
+
 ## [14.6.6](https://github.com/ExaDev/documents.js/compare/documents.js%4014.6.5...documents.js%4014.6.6) (2026-10-30)
 
 ### Bug Fixes
