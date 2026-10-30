@@ -3,6 +3,8 @@
 // The split is a recursive XY cut restricted to what reading order needs. A gutter is a vertical strip that no item on any of a run of consecutive lines touches, with text on both sides of it inside that run; the run of lines it holds for is a column band. Lines above and below a band (a full-width heading, a boxed passage spanning both columns, a single-column section) cross the strip, so they end the band and form bands of their own, read in page order before and after it. Each side of a band, and each band above and below it, is split again the same way, which is what reads a three-column page correctly. A page with no gutter is one flow holding exactly the items it was given, so its lines and paragraphs are byte for byte what clustering the whole page always produced.
 //
 // Tables are the hard case: a table's columns also leave empty vertical strips with shared baselines, but a table's rows are read across. What separates them is the geometry of running prose, tested on each side of a candidate gutter (isRunningProse below): a prose column is set to a measure many characters wide and its lines wrap, so a line stops short of the column's right edge only when the next line's first word would not have fitted. A table column holds short cells whose line ends are ragged by far more than one word, or (a column of codes or figures, every cell the same width) is a handful of characters wide. A candidate gutter splits only when the text on both sides of it passes; a table, whose columns fail, keeps the full-width lines it always had.
+//
+// A sidebar beside prose (a list of names, a margin note) is the other side of that test: its text is not prose either, but it is not a table's column. A table's cells are set row by row on shared baselines, while a sidebar is set as a flow of its own, on a leading of its own, so most of its lines sit on no baseline of the prose beside it (isSidebarBeside below). A candidate gutter with running prose on one side and such a sidebar on the other splits, so the prose's sentences are read whole rather than broken by the sidebar's lines.
 import type { LayoutText } from "pdf-codec";
 import { afmWidthOfCode } from "pdf-codec/afm-widths";
 import { resolveStandardFont } from "pdf-codec/fonts";
@@ -49,6 +51,11 @@ const MIN_COLUMN_LINES = 3;
 
 // The narrowest measure, in characters, read as a prose column. Bringhurst gives 40 to 50 characters as the usual line length for multi-column work (The Elements of Typographic Style, section 2.1.2); half of its lower end still admits the narrow columns of newsletters and leaflets, while a table column of codes, figures or dates, whose every cell can fill the column exactly, is a handful of characters wide and stays well below it. Measured in the column's own average character advance, so it holds at any font size.
 const MIN_PROSE_MEASURE_CHARS = 20;
+
+// How far apart, in em of the smaller of two items, two baselines may sit and still be one table row. A row's cells are set on one baseline, so their baselines differ by no more than the rounding of the position each cell's text is placed at, far below a tenth of an em; lines set on two independent leadings differ by anything up to half a line, and a tenth of an em is still a small part of that, so only a coincidence puts a sidebar's line this close to a prose line, and a majority of them cannot be.
+// Denominator of the tenth-of-an-em row tolerance derived above.
+const ROW_BASELINE_TOLERANCE_DENOMINATOR = 10;
+const ROW_BASELINE_TOLERANCE_EM = 1 / ROW_BASELINE_TOLERANCE_DENOMINATOR;
 
 // The space character's code, whose advance in the item's own font is the natural word space that a gutter must be wider than.
 const SPACE_CHAR_CODE = 0x20;
@@ -201,14 +208,45 @@ function findColumnSplit(lines: readonly TextLine[]): ColumnSplit | undefined {
     }
     const left = runItems.filter((item) => rightEdge(item) <= run.loPt);
     const right = runItems.filter((item) => item.xPt >= run.hiPt);
+    const gutterWidthPt = run.hiPt - run.loPt;
+    const leftIsProse = isRunningProse(left, gutterWidthPt);
+    const rightIsProse = isRunningProse(right, gutterWidthPt);
     if (
-      isRunningProse(left, run.hiPt - run.loPt) &&
-      isRunningProse(right, run.hiPt - run.loPt)
+      (leftIsProse && rightIsProse) ||
+      (rightIsProse && isSidebarBeside(left, right)) ||
+      (leftIsProse && isSidebarBeside(right, left))
     ) {
       return { ...run, left, right };
     }
   }
   return undefined;
+}
+
+// Whether `side`, text beside a column of running prose that is not itself prose, is a sidebar set on its own leading (a list of names, a margin note) rather than the first column of a table. A table's cells are set row by row, so each line of a column of labels sits on the baseline of the row it labels; a sidebar is set as a flow of its own, on its own line spacing, so its lines fall wherever that spacing puts them against the prose's lines, beside one line, between two, off every one. A majority of `side`'s lines sitting on no baseline of the prose is that second shape. The ambiguity this leaves is a table whose label cells are centred against multi-line descriptions with no rule drawn round them: the geometry of such a table is the geometry of a sidebar, and it reads column by column.
+function isSidebarBeside(
+  side: readonly LayoutText[],
+  prose: readonly LayoutText[],
+): boolean {
+  const sideLines = clusterIntoLines(side);
+  if (sideLines.length < MIN_COLUMN_LINES) {
+    return false;
+  }
+  const proseLines = clusterIntoLines(prose);
+  const offRow = sideLines.filter((line) => {
+    const anchor = line.items[0]!;
+    return !proseLines.some((proseLine) =>
+      setOnOneBaseline(anchor, proseLine.items[0]!),
+    );
+  });
+  return offRow.length * 2 > sideLines.length;
+}
+
+// Whether two items are set on one baseline, as the cells of a table row are: their baselines agree to within ROW_BASELINE_TOLERANCE_EM of the smaller item's size.
+function setOnOneBaseline(a: LayoutText, b: LayoutText): boolean {
+  return (
+    Math.abs(a.yPt - b.yPt) <=
+    ROW_BASELINE_TOLERANCE_EM * Math.min(a.sizePt, b.sizePt)
+  );
 }
 
 // A gutter is drawn from item extents, so every item needs a reported advance along the horizontal axis. An item without one, a vertically set one or a rotated one has no horizontal extent to test, and rather than guess one the page keeps the full-width lines it always had.

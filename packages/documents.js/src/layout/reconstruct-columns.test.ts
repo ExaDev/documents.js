@@ -333,6 +333,70 @@ describe("reconstructWordprocessing: column reading order", () => {
   });
 });
 
+describe("reconstructWordprocessing: a sidebar beside prose", () => {
+  const SIDEBAR_X = 40;
+  const BODY_X = 170;
+  const BODY_WIDTH = 380;
+  const NAMES = [
+    "Ada Lovelace",
+    "Charles Babbage",
+    "Grace Hopper",
+    "Alan Turing",
+    "Edsger Dijkstra",
+    "Barbara Liskov",
+    "Donald Knuth",
+    "Frances Allen",
+  ];
+
+  // The names set down the margin on a leading of their own, `leadingPt` apart from a first baseline `offsetPt` below the body's.
+  function sidebar(leadingPt: number, offsetPt: number): LayoutText[] {
+    return NAMES.map((name, index) =>
+      text(name, SIDEBAR_X, 700 - offsetPt - index * leadingPt),
+    );
+  }
+
+  // Sidebar leadings that are not the body's own, the shape a separately set flow has: each a different ratio to the body's line spacing, each starting at its own offset from the body's first baseline.
+  const SIDEBAR_SETTINGS = [
+    { leadingPt: LEADING_PT * 1.5, offsetPt: 2 },
+    { leadingPt: LEADING_PT * 1.3, offsetPt: 0 },
+    { leadingPt: LEADING_PT * 1.62, offsetPt: 5 },
+    { leadingPt: LEADING_PT * 2.2, offsetPt: 7 },
+  ];
+
+  for (const { leadingPt, offsetPt } of SIDEBAR_SETTINGS) {
+    it(`reads the prose whole beside names set ${String(leadingPt)}pt apart, ${String(offsetPt)}pt off its first baseline`, () => {
+      const body = setColumn(RIGHT_PARAGRAPHS, BODY_X, 700, {
+        widthPt: BODY_WIDTH,
+      });
+      const paragraphs = paragraphTexts(
+        docFrom([...sidebar(leadingPt, offsetPt), ...body.items]),
+      );
+      // Every paragraph of the body comes out exactly as it was set, and no paragraph holds both a name and the body's words.
+      for (const expected of body.expected) {
+        expect(paragraphs).toContain(expected);
+      }
+      const nameParagraphs = paragraphs.filter(
+        (paragraph) => !body.expected.includes(paragraph),
+      );
+      expect(nameParagraphs.join(" ").split(/\s+/u).sort()).toEqual(
+        NAMES.join(" ").split(" ").sort(),
+      );
+    });
+  }
+
+  it("still reads a column of row labels set on the body's own baselines across its rows", () => {
+    // The same names, each on the baseline of a line of the prose beside it: a table of labels, not a sidebar, so each row stays one line.
+    const body = setColumn(RIGHT_PARAGRAPHS, BODY_X, 700, {
+      widthPt: BODY_WIDTH,
+    });
+    const labels = NAMES.map((name, index) =>
+      text(name, SIDEBAR_X, 700 - index * LEADING_PT),
+    );
+    const paragraphs = paragraphTexts(docFrom([...labels, ...body.items]));
+    expect(paragraphs[0]).toContain(`${NAMES[0]!}\t`);
+  });
+});
+
 describe("reconstructPresentation: column reading order", () => {
   it("builds each prose column into its own text shapes, the left column's first", () => {
     const { items, left, right } = twoColumns();
