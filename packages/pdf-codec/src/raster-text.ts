@@ -174,7 +174,9 @@ function buildTextOutlineFace(
         "a Type0 font whose /Encoding is neither Identity-H nor Identity-V (a predefined or embedded CMap this raster walk does not decode)",
       );
     }
-    const descendants = asArray(dictGet(fontDict, "DescendantFonts"));
+    const descendants = asArray(
+      resolver.resolve(dictGet(fontDict, "DescendantFonts")),
+    );
     const descendant =
       descendants !== undefined
         ? resolver.resolveDict(descendants[0])
