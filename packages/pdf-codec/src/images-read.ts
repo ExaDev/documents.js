@@ -28,7 +28,7 @@ export interface ExtractedPdfImage {
   };
 }
 
-type ResolvedColorSpace =
+export type ResolvedColorSpace =
   | { readonly kind: "gray" }
   | { readonly kind: "rgb" }
   | { readonly kind: "cmyk" }
@@ -127,39 +127,82 @@ function resolveColorSpace(
   };
 }
 
-// Unpacks sub-byte-depth samples (1/2/4-bit) into one array entry per sample, each row starting on its own byte boundary — the same row-padding convention PNG's own IDAT payload uses. The 8-bit case is a fast path: already byte-aligned, one sample per byte.
-function unpackSamples(
+/**
+ * Allocates the buffers one `decodeImageSamples` call needs and counts their bytes, so a test can bound the decode's memory in bytes rather than time.
+ */
+export class SampleDecodeWork {
+  #bytesAllocated = 0;
+
+  /** Bytes of every buffer the decode allocated: its raster, its one reusable row and its lookup table. Each lives until the decode returns, so this is also the decode's peak; a view onto the stream it was given costs nothing. */
+  get bytesAllocated(): number {
+    return this.#bytesAllocated;
+  }
+
+  /**
+   * A zero-filled buffer of `length` bytes, counted.
+   * @param length - Its length in bytes.
+   * @returns The buffer.
+   */
+  allocate(length: number): Uint8Array<ArrayBuffer> {
+    this.#bytesAllocated += length;
+    return new Uint8Array(length);
+  }
+}
+
+// Fills `target` (one row's worth of samples) with row `row`'s raw sample values. Each row starts on its own byte boundary (ISO 32000-1 8.9.3), the same row padding PNG's own IDAT payload uses, and a sub-byte sample (1, 2 or 4 bits) never straddles a byte, packing most significant bit first. A sample past the end of a short stream reads as 0.
+function readSampleRow(
+  data: Uint8Array<ArrayBuffer>,
+  row: number,
+  bitsPerComponent: number,
+  target: Uint8Array<ArrayBuffer>,
+): void {
+  const samplesPerRow = target.length;
+  if (bitsPerComponent === BITS_PER_BYTE) {
+    const rowStart = row * samplesPerRow;
+    for (let s = 0; s < samplesPerRow; s++) {
+      target[s] = data[rowStart + s] ?? 0;
+    }
+    return;
+  }
+  const rowStart =
+    row * Math.ceil((samplesPerRow * bitsPerComponent) / BITS_PER_BYTE);
+  const sampleMask = (1 << bitsPerComponent) - 1;
+  for (let s = 0; s < samplesPerRow; s++) {
+    const bitPos = s * bitsPerComponent;
+    const byte = data[rowStart + Math.floor(bitPos / BITS_PER_BYTE)] ?? 0;
+    // The sample's own low bit sits this many places above the byte's low bit.
+    const shift = BITS_PER_BYTE - bitsPerComponent - (bitPos % BITS_PER_BYTE);
+    target[s] = (byte >> shift) & sampleMask;
+  }
+}
+
+// Calls `visit` once per row with that row's raw samples and the flat (row-major) index of its first sample, in one row buffer reused for every row, so walking an image holds one row of samples at a time rather than all of them.
+function forEachSampleRow(
   data: Uint8Array<ArrayBuffer>,
   width: number,
   height: number,
   componentsPerPixel: number,
   bitsPerComponent: number,
-): number[] {
-  if (bitsPerComponent === BITS_PER_BYTE) {
-    return Array.from(data.subarray(0, width * height * componentsPerPixel));
-  }
+  work: SampleDecodeWork,
+  visit: (samples: Uint8Array<ArrayBuffer>, firstSample: number) => void,
+): void {
   const samplesPerRow = width * componentsPerPixel;
-  const bytesPerRow = Math.ceil(
-    (samplesPerRow * bitsPerComponent) / BITS_PER_BYTE,
-  );
-  const out: number[] = [];
+  const rowSamples = work.allocate(samplesPerRow);
   for (let row = 0; row < height; row++) {
-    const rowStart = row * bytesPerRow;
-    let bitPos = 0;
-    for (let s = 0; s < samplesPerRow; s++) {
-      let value = 0;
-      for (let b = 0; b < bitsPerComponent; b++) {
-        const byteIndex = rowStart + Math.floor(bitPos / BITS_PER_BYTE);
-        // Bits pack MSB-first within each byte, so the bit at position `bitPos` within the row sits this many places from that byte's own high bit.
-        const bitIndex = BITS_PER_BYTE - 1 - (bitPos % BITS_PER_BYTE);
-        const bit = ((data[byteIndex] ?? 0) >> bitIndex) & 1;
-        value = (value << 1) | bit;
-        bitPos++;
-      }
-      out.push(value);
-    }
+    readSampleRow(data, row, bitsPerComponent, rowSamples);
+    visit(rowSamples, row * samplesPerRow);
   }
-  return out;
+}
+
+// How many of an image's samples carry a value into a gray, RGB or indexed raster. An 8-bit stream shorter than the image yields only the samples it holds, and the raster built from it is that much shorter (encodePng reads past its end as 0); a sub-byte stream's rows are always unpacked whole, a missing byte reading as 0.
+function availableSampleCount(
+  data: Uint8Array<ArrayBuffer>,
+  sampleCount: number,
+  bitsPerComponent: number,
+): number {
+  return bitsPerComponent === BITS_PER_BYTE
+    ? Math.min(data.length, sampleCount)
+    : sampleCount;
 }
 
 export function scaleToByte(
@@ -210,105 +253,138 @@ export function sampleFromPalette(
   };
 }
 
-function buildRawImage(
+// scaleToByte for every value a sample of this depth can hold, so a decode looks each sample up rather than rescaling it.
+function scaleTable(
+  maxValue: number,
+  inverted: boolean,
+  work: SampleDecodeWork,
+): Uint8Array<ArrayBuffer> {
+  const table = work.allocate(maxValue + 1);
+  for (let value = 0; value <= maxValue; value++) {
+    table[value] = scaleToByte(value, maxValue, inverted);
+  }
+  return table;
+}
+
+/**
+ * Decodes an image's samples into the 8-bit raster `encodePng` takes, holding at most the raster itself, one row of samples and a lookup table of at most 256 entries beside the stream; nothing is allocated per sample.
+ * @param data - The image's decoded stream: rows of `width` pixels padded to a whole byte, sub-byte samples packed most significant bit first.
+ * @param width - Pixels per row.
+ * @param height - Rows.
+ * @param bitsPerComponent - 1, 2, 4 or 8.
+ * @param colorSpace - The resolved colour space; never `unsupported`.
+ * @param inverted - Whether `/Decode` is `[1 0]`, which a gray, RGB or CMYK sample is inverted by and an indexed one ignores.
+ * @param work - Counts the bytes allocated; see SampleDecodeWork.
+ * @returns A gray or RGB raster. An 8-bit gray or RGB image with no `/Decode` inversion is already that raster, so its data is a view onto `data` and costs no allocation. An 8-bit stream shorter than the image yields a gray, RGB or indexed raster holding only the pixels the stream covers, and a CMYK one in which each missing sample reads as 0.
+ */
+export function decodeImageSamples(
   data: Uint8Array<ArrayBuffer>,
   width: number,
   height: number,
   bitsPerComponent: number,
-  colorSpace: ResolvedColorSpace,
+  colorSpace: Exclude<ResolvedColorSpace, { readonly kind: "unsupported" }>,
   inverted: boolean,
+  work: SampleDecodeWork = new SampleDecodeWork(),
 ): RawImage {
   const maxValue = (1 << bitsPerComponent) - 1;
+  const pixelCount = width * height;
 
   if (colorSpace.kind === "indexed") {
-    const indices = unpackSamples(data, width, height, 1, bitsPerComponent);
+    const channels = colorSpace.base.kind === "gray" ? 1 : RGB_CHANNEL_COUNT;
     const baseComponents = componentsOf(colorSpace.base);
-    const out = new Uint8Array(
-      width *
-        height *
-        (colorSpace.base.kind === "gray" ? 1 : RGB_CHANNEL_COUNT),
-    );
-    let outIdx = 0;
-    for (const index of indices) {
+    // Every colour an index of this depth can name, already in the raster's channel layout.
+    const palette = work.allocate((maxValue + 1) * channels);
+    for (let index = 0; index <= maxValue; index++) {
       const rgb = sampleFromPalette(
         colorSpace.base,
         colorSpace.lookup,
         index * baseComponents,
       );
-      if (colorSpace.base.kind === "gray") {
-        out[outIdx++] = rgb.r;
-      } else {
-        out[outIdx++] = rgb.r;
-        out[outIdx++] = rgb.g;
-        out[outIdx++] = rgb.b;
+      palette[index * channels] = rgb.r;
+      if (channels === RGB_CHANNEL_COUNT) {
+        palette[index * channels + 1] = rgb.g;
+        palette[index * channels + 2] = rgb.b;
       }
     }
-    return {
-      width,
-      height,
-      channels: colorSpace.base.kind === "gray" ? 1 : RGB_CHANNEL_COUNT,
-      data: out,
-    };
-  }
-
-  if (colorSpace.kind === "gray") {
-    const samples = unpackSamples(data, width, height, 1, bitsPerComponent);
-    const out = Uint8Array.from(samples, (v) =>
-      scaleToByte(v, maxValue, inverted),
-    );
-    return { width, height, channels: 1, data: out };
-  }
-
-  if (colorSpace.kind === "rgb") {
-    const samples = unpackSamples(
+    const out = work.allocate(pixelCount * channels);
+    const indexed = availableSampleCount(data, pixelCount, bitsPerComponent);
+    forEachSampleRow(
       data,
       width,
       height,
-      RGB_CHANNEL_COUNT,
+      1,
+      bitsPerComponent,
+      work,
+      (indices, firstPixel) => {
+        const count = Math.min(indices.length, indexed - firstPixel);
+        for (let i = 0; i < count; i++) {
+          const entry = indices[i]! * channels;
+          const at = (firstPixel + i) * channels;
+          for (let channel = 0; channel < channels; channel++) {
+            out[at + channel] = palette[entry + channel]!;
+          }
+        }
+      },
+    );
+    return { width, height, channels, data: out };
+  }
+
+  if (colorSpace.kind === "gray" || colorSpace.kind === "rgb") {
+    const channels = colorSpace.kind === "gray" ? 1 : RGB_CHANNEL_COUNT;
+    const available = availableSampleCount(
+      data,
+      pixelCount * channels,
       bitsPerComponent,
     );
-    const out = Uint8Array.from(samples, (v) =>
-      scaleToByte(v, maxValue, inverted),
+    if (bitsPerComponent === BITS_PER_BYTE && !inverted) {
+      return { width, height, channels, data: data.subarray(0, available) };
+    }
+    const scale = scaleTable(maxValue, inverted, work);
+    const out = work.allocate(available);
+    forEachSampleRow(
+      data,
+      width,
+      height,
+      channels,
+      bitsPerComponent,
+      work,
+      (samples, firstSample) => {
+        const count = Math.min(samples.length, available - firstSample);
+        for (let i = 0; i < count; i++) {
+          out[firstSample + i] = scale[samples[i]!]!;
+        }
+      },
     );
-    return { width, height, channels: RGB_CHANNEL_COUNT, data: out };
+    return { width, height, channels, data: out };
   }
 
   // cmyk
-  const samples = unpackSamples(
+  const scale = scaleTable(maxValue, inverted, work);
+  const out = work.allocate(pixelCount * RGB_CHANNEL_COUNT);
+  forEachSampleRow(
     data,
     width,
     height,
     CMYK_COMPONENT_COUNT,
     bitsPerComponent,
+    work,
+    (samples, firstSample) => {
+      const firstPixel = firstSample / CMYK_COMPONENT_COUNT;
+      for (let px = 0; px < width; px++) {
+        const base = px * CMYK_COMPONENT_COUNT;
+        const rgb = cmykToRgbByte(
+          scale[samples[base]!]! / MAX_BYTE_VALUE,
+          scale[samples[base + 1]!]! / MAX_BYTE_VALUE,
+          scale[samples[base + 2]!]! / MAX_BYTE_VALUE,
+          scale[samples[base + (CMYK_COMPONENT_COUNT - 1)]!]! / MAX_BYTE_VALUE,
+        );
+        const outBase = (firstPixel + px) * RGB_CHANNEL_COUNT;
+        out[outBase] = rgb.r;
+        out[outBase + 1] = rgb.g;
+        out[outBase + 2] = rgb.b;
+      }
+    },
   );
-  const out = new Uint8Array(width * height * RGB_CHANNEL_COUNT);
-  for (let px = 0; px < width * height; px++) {
-    const c =
-      scaleToByte(samples[px * CMYK_COMPONENT_COUNT] ?? 0, maxValue, inverted) /
-      MAX_BYTE_VALUE;
-    const m =
-      scaleToByte(
-        samples[px * CMYK_COMPONENT_COUNT + 1] ?? 0,
-        maxValue,
-        inverted,
-      ) / MAX_BYTE_VALUE;
-    const y =
-      scaleToByte(
-        samples[px * CMYK_COMPONENT_COUNT + 2] ?? 0,
-        maxValue,
-        inverted,
-      ) / MAX_BYTE_VALUE;
-    const k =
-      scaleToByte(
-        samples[px * CMYK_COMPONENT_COUNT + (CMYK_COMPONENT_COUNT - 1)] ?? 0,
-        maxValue,
-        inverted,
-      ) / MAX_BYTE_VALUE;
-    const rgb = cmykToRgbByte(c, m, y, k);
-    out[px * RGB_CHANNEL_COUNT] = rgb.r;
-    out[px * RGB_CHANNEL_COUNT + 1] = rgb.g;
-    out[px * RGB_CHANNEL_COUNT + 2] = rgb.b;
-  }
   return { width, height, channels: RGB_CHANNEL_COUNT, data: out };
 }
 
@@ -543,7 +619,7 @@ export function readImageXObject(
 
   const width = asNumber(dictGet(dict, "Width") ?? dictGet(dict, "W"));
   const height = asNumber(dictGet(dict, "Height") ?? dictGet(dict, "H"));
-  // Mirrors encodePng's own dimension guard exactly (both the per-dimension PNG_MAX_DIMENSION ceiling and the PNG_MAX_PIXELS product ceiling), rather than only the lower bound — everything decoded past this point eventually reaches encodePng via buildRawImage's own width*height-sized allocation below, so a dict this guard lets through must already be a dimension pair encodePng is guaranteed to accept, or a malformed producer's out-of-range /Width or /Height would abort this document's entire parse instead of degrading to the diagnostic below.
+  // Mirrors encodePng's own dimension guard exactly (both the per-dimension PNG_MAX_DIMENSION ceiling and the PNG_MAX_PIXELS product ceiling), rather than only the lower bound — everything decoded past this point eventually reaches encodePng via decodeImageSamples' own width*height-sized raster below, so a dict this guard lets through must already be a dimension pair encodePng is guaranteed to accept, or a malformed producer's out-of-range /Width or /Height would abort this document's entire parse instead of degrading to the diagnostic below.
   if (
     width === undefined ||
     height === undefined ||
@@ -603,7 +679,7 @@ export function readImageXObject(
     asNumber(decodeArr[0]) === 1 &&
     asNumber(decodeArr[1]) === 0;
 
-  const rawImage = buildRawImage(
+  const rawImage = decodeImageSamples(
     decoded.bytes,
     width,
     height,
