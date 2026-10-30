@@ -42,6 +42,13 @@ describe("CpuRasteriser: draw ops driven directly", () => {
     }).toThrow(/CpuRasteriser.draw\(\) was called before beginPage/);
   });
 
+  it("names the work accessor when asked for a page's mask work before beginPage", () => {
+    const rasteriser = new CpuRasteriser();
+    expect(() => rasteriser.maskCellsVisitedForTesting()).toThrow(
+      /CpuRasteriser.maskCellsVisitedForTesting\(\) was called before beginPage/,
+    );
+  });
+
   it("names imageOp's own draw call when refusing an image before beginPage", () => {
     const rasteriser = new CpuRasteriser();
     const op: RasterImageOp = {
@@ -80,7 +87,7 @@ describe("CpuRasteriser: draw ops driven directly", () => {
   });
 
   it("blends the mask's own last marked pixel, not just every pixel before it", () => {
-    // A triangle covering the whole canvas: the mask's own markedRange().last is the bottom-right pixel's index, and blendMask must walk up to and including it — stopping one short would leave that one corner pixel white while every other pixel the shape covers turns black.
+    // A triangle covering the whole canvas: the bottom-right pixel is the last one the mask records, and blendMask must visit it too, stopping one short would leave that one corner pixel white while every other pixel the shape covers turns black.
     const pageSize = 3;
     const rasteriser = new CpuRasteriser();
     rasteriser.beginPage(pageGeometry(pageSize, pageSize));
@@ -143,7 +150,7 @@ describe("CpuRasteriser: draw ops driven directly", () => {
   });
 
   it("does not let a stroke's blend see a fill's own leftover mask coverage from an earlier draw", () => {
-    // Two disjoint path draws on one page, in order: a full fill of the top-left region, then a stroke of the bottom-right region. If the stroke branch's own mask.reset() were skipped, blendMask — which paints every mask cell with a nonzero count, wherever it came from — would repaint the fill's already-covered pixels in the stroke's own colour, since CoverageMask carries state across draw calls on the same page.
+    // Two disjoint path draws on one page, in order: a full fill of the top-left region, then a stroke of the bottom-right region. If the fill's own blend left its counts in the mask rather than draining them, the stroke's blend, which paints every mask cell with a nonzero count wherever it came from, would repaint the fill's already-covered pixels in the stroke's own colour, since CoverageMask carries state across draw calls on the same page.
     const fillRegion: RasterSubpath = {
       startXPx: 0,
       startYPx: 0,
@@ -181,7 +188,7 @@ describe("CpuRasteriser: draw ops driven directly", () => {
   });
 
   it("does not let a fill's blend see a stroke's own leftover mask coverage from an earlier draw", () => {
-    // The mirror image of the previous test: stroke first, then a disjoint fill — pinning the fill branch's own mask.reset(), not the stroke branch's.
+    // The mirror image of the previous test: stroke first, then a disjoint fill — pinning the stroke's own drain, not the fill's.
     const pageSize = 20;
     const rasteriser = new CpuRasteriser();
     rasteriser.beginPage(pageGeometry(pageSize, pageSize));
@@ -221,7 +228,7 @@ describe("CpuRasteriser: draw ops driven directly", () => {
   });
 
   it("does not let an image's blend see an earlier draw's own leftover mask coverage at the same location", () => {
-    // imageOp reads only the mask cells inside its own quad's bounding box, so a leftover fill elsewhere on the page is never even looked at — what actually exercises this reset() is a fill and an image placement that OVERLAP: without the reset, the image's own fillPolygons call adds its quad's coverage on top of the fill's already-full coverage denominator, pushing the affected cells to double (an alpha of 2 instead of 1) and visibly overshooting the blend.
+    // A fill and an image placement that OVERLAP: if the fill's blend left its counts in the mask rather than draining them, the image's own fillPolygons call would add its quad's coverage on top of the fill's already-full coverage denominator, pushing the shared cells to double (an alpha of 2 instead of 1) and visibly overshooting the blend.
     const pageSize = 10;
     const rasteriser = new CpuRasteriser();
     rasteriser.beginPage(pageGeometry(pageSize, pageSize));

@@ -4,7 +4,7 @@ import { COVERAGE_DENOMINATOR, CoverageMask } from "./coverage";
 // Direct unit tests for the scanline coverage accumulator, distinct from rasteriser.test.ts's pixel-level PDF-driven assertions: these pin edge cases in the winding walk and its clamps that a real page's content streams rarely happen to construct — an exactly scanline-aligned vertex, a degenerate sub-path mixed with real geometry, and a shape that overflows the canvas edge.
 
 describe("CoverageMask", () => {
-  it("clears every subsample count on reset", () => {
+  it("visits every marked pixel once with its own count, then leaves every count at zero", () => {
     const maskWidth = 2;
     const maskHeight = 2;
     const mask = new CoverageMask(maskWidth, maskHeight);
@@ -19,12 +19,100 @@ describe("CoverageMask", () => {
       ],
       "nonzero",
     );
-    expect(mask.countAt(0)).toBeGreaterThan(0);
-    mask.reset();
+    const visits: [number, number][] = [];
+    mask.drain((pixelIndex, samples) => {
+      visits.push([pixelIndex, samples]);
+    });
     const totalPixels = maskWidth * maskHeight;
+    expect(visits.sort(([p], [q]) => p - q)).toEqual(
+      Array.from({ length: totalPixels }, (_pixel, index) => [
+        index,
+        COVERAGE_DENOMINATOR,
+      ]),
+    );
     for (let i = 0; i < totalPixels; i++) {
       expect(mask.countAt(i)).toBe(0);
     }
+  });
+
+  it("visits only the pixels a fill covered, however large the canvas, and counts exactly those as its work", () => {
+    // A 2x3-pixel rectangle on a canvas far larger than it: the drain's visits, and the work it records, are the rectangle's six pixels, not the canvas's.
+    const canvasSide = 64;
+    const left = 10;
+    const top = 20;
+    const rectWidth = 2;
+    const rectHeight = 3;
+    const mask = new CoverageMask(canvasSide, canvasSide);
+    mask.fillPolygons(
+      [
+        [
+          { x: left, y: top },
+          { x: left + rectWidth, y: top },
+          { x: left + rectWidth, y: top + rectHeight },
+          { x: left, y: top + rectHeight },
+        ],
+      ],
+      "nonzero",
+    );
+    const visited: number[] = [];
+    mask.drain((pixelIndex) => {
+      visited.push(pixelIndex);
+    });
+    const expected: number[] = [];
+    for (let row = top; row < top + rectHeight; row++) {
+      for (let column = left; column < left + rectWidth; column++) {
+        expected.push(row * canvasSide + column);
+      }
+    }
+    expect(visited.sort((p, q) => p - q)).toEqual(expected);
+    expect(mask.cellsVisited).toBe(expected.length);
+  });
+
+  it("visits a pixel two fills both marked once, with their summed count, and forgets it after the drain", () => {
+    // Two overlapping fills without a drain between them: the shared pixel is recorded once (at its first mark), and reads back the sum of both fills' subsamples. A second drain then visits nothing and adds no work: the first one emptied the record along with the counts.
+    const maskWidth = 3;
+    const mask = new CoverageMask(maskWidth, 1);
+    const square = (left: number) => [
+      { x: left, y: 0 },
+      { x: left + 2, y: 0 },
+      { x: left + 2, y: 1 },
+      { x: left, y: 1 },
+    ];
+    mask.fillPolygons([square(0)], "nonzero");
+    mask.fillPolygons([square(1)], "nonzero");
+    const visits = new Map<number, number>();
+    let visitCount = 0;
+    mask.drain((pixelIndex, samples) => {
+      visits.set(pixelIndex, samples);
+      visitCount++;
+    });
+    const shared = 1;
+    expect(visitCount).toBe(maskWidth);
+    expect(visits.get(shared)).toBe(2 * COVERAGE_DENOMINATOR);
+    expect(visits.get(0)).toBe(COVERAGE_DENOMINATOR);
+    expect(visits.get(2)).toBe(COVERAGE_DENOMINATOR);
+    expect(mask.cellsVisited).toBe(maskWidth);
+    mask.drain(() => {
+      visitCount++;
+    });
+    expect(visitCount).toBe(maskWidth);
+    expect(mask.cellsVisited).toBe(maskWidth);
+  });
+
+  it("starts the next fill from zero after a drain", () => {
+    const maskWidth = 2;
+    const mask = new CoverageMask(maskWidth, 1);
+    const halfCovering = [
+      { x: 0, y: 0 },
+      { x: 1, y: 0 },
+      { x: 1, y: 1 },
+      { x: 0, y: 1 },
+    ];
+    mask.fillPolygons([halfCovering], "nonzero");
+    mask.drain(() => undefined);
+    mask.fillPolygons([halfCovering], "nonzero");
+    expect(mask.countAt(0)).toBe(COVERAGE_DENOMINATOR);
+    expect(mask.countAt(1)).toBe(0);
   });
 
   it("paints nothing when every polygon is degenerate (fewer than three points)", () => {
