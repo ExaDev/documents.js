@@ -8,7 +8,13 @@ import type { Alignment } from "document-schema.js";
 import type { LayoutText } from "pdf-codec";
 import { resolveStandardFont } from "pdf-codec/fonts";
 import { STANDARD_METRICS } from "pdf-codec/afm-widths";
-import { runGapPt, runsShareBaseline } from "pdf-codec/text-group";
+import type { PdfScriptPosition } from "pdf-codec/text-group";
+import {
+  attachScriptRuns,
+  runGapPt,
+  runsShareBaseline,
+  scriptPositionOf,
+} from "pdf-codec/text-group";
 import { stampFrame } from "./shared";
 
 // --- Shared: cluster positioned text into lines, then measure per-item vertical extent from real AFM ascent/descent (not a generic guess — afm-widths.ts already carries verified per-face metrics from the same data the write path itself uses). ---
@@ -18,7 +24,7 @@ export interface TextLine {
   readonly baselineY: number;
 }
 
-// Baseline-proximity tolerance of 0.5x font size — wide enough to catch superscripts into their own line, tight enough to never merge two genuinely separate lines (plan Step 10). The fraction stays at this package's own tuned value rather than pdf-codec's looser default, but the em it is a fraction of now comes from the SMALLER of the two runs being compared rather than from whichever of them happened to supply it (ExaDev/documents.js#1317): taken from the larger, a 30pt heading's own 15pt window swallowed the 9pt line 12pt beneath it, and the merged line's runs then sorted by x into a sequence whose gaps were negative, which pushRunsForLine reads as one word, concatenating the two lines into run-together text.
+// Baseline-proximity tolerance of 0.5x font size, tight enough to never merge two genuinely separate lines (plan Step 10). A superscript raised further than half its own em is clustered into a line of its own by it, and clusterIntoLines returns it to its base's line (Superscripts and subscripts, below). The fraction stays at this package's own tuned value rather than pdf-codec's looser default, but the em it is a fraction of now comes from the SMALLER of the two runs being compared rather than from whichever of them happened to supply it (ExaDev/documents.js#1317): taken from the larger, a 30pt heading's own 15pt window swallowed the 9pt line 12pt beneath it, and the merged line's runs then sorted by x into a sequence whose gaps were negative, which pushRunsForLine reads as one word, concatenating the two lines into run-together text.
 const LINE_BASELINE_TOLERANCE_FACTOR = 0.5;
 
 // AFM font metrics are stated in thousandths of an em, the factor that turns them into points at a given size.
@@ -255,12 +261,36 @@ export function clusterIntoLines(items: readonly LayoutText[]): TextLine[] {
       line.items.push(item);
     }
   }
-  for (const line of working) {
+  const lines = attachScriptRuns(working, (line) => line.items)
+    .filter(({ runs }) => runs.length > 0)
+    .map(({ line, runs }) => ({ ...line, items: runs }));
+  for (const line of lines) {
     line.items.sort((a, b) => a.xPt - b.xPt);
     line.items = dropOverlappingRepeatsWithinLine(line.items);
   }
-  working.sort((a, b) => b.baselineY - a.baselineY);
-  return working;
+  lines.sort((a, b) => b.baselineY - a.baselineY);
+  return lines;
+}
+
+// --- Superscripts and subscripts ---
+//
+// sharesBaseline admits half the SMALLER run's em, the script's own, while a script may be raised by up to half its base's em (pdf-codec's scriptPositionOf states the bounds). A unit's exponent set at 7pt and raised 4pt over a 12pt line ("m" then "2") is therefore clustered as a line of its own, and its reader would see the base line end in "m" and a bare "2" on the line above. pdf-codec's attachScriptRuns returns each such run to its base's line, where its order along the baseline puts it beside its base and pushRunsForLine marks it; a line left with nothing on it is dropped.
+
+// Whether `item` is set as a superscript or subscript of a run beside it on its line. A script's base is the run it touches, so only the runs on the same line are candidates, and the rule's own adjacency bound keeps a script from being read against anything further away.
+function scriptPositionOnLine(
+  item: LayoutText,
+  line: TextLine,
+): PdfScriptPosition | undefined {
+  for (const base of line.items) {
+    if (base === item) {
+      continue;
+    }
+    const position = scriptPositionOf(base, item);
+    if (position !== undefined) {
+      return position;
+    }
+  }
+  return undefined;
 }
 
 export function textItemVerticalExtent(item: LayoutText): {
@@ -341,7 +371,7 @@ export function lineBox(line: TextLine, pageIndex: number): LayoutFrame {
   };
 }
 
-// Appends ContentRuns for one line's items, inserting the word-space or tab a caller reading the reconstructed text needs between them: PDF text extraction carries no literal space characters between separately-shown words (interpret.ts's word-wrapping and per-item positioning use xOffsetPt, not embedded spaces), so a positive gap between consecutive items must be turned back into an actual space (or, when it's large enough to read as tabbed/columnar content, a tab) rather than silently concatenating adjacent words together.
+// Appends ContentRuns for one line's items, inserting the word-space or tab a caller reading the reconstructed text needs between them: PDF text extraction carries no literal space characters between separately-shown words (interpret.ts's word-wrapping and per-item positioning use xOffsetPt, not embedded spaces), so a positive gap between consecutive items must be turned back into an actual space (or, when it's large enough to read as tabbed/columnar content, a tab) rather than silently concatenating adjacent words together. A run set as a superscript or subscript of the run beside it carries ContentRun.verticalAlign, so "m" and a raised "2" reach every writer as a squared unit rather than as "m2".
 // pageIndex threads through so every run rebuilt from an item carries that item's own rendered position as its frame — the PDF->X half of the frames fusion, where each reconstructed node's frames are exactly the items it was clustered from (sourcePath survives on items as traceability only).
 export function pushRunsForLine(
   runs: ContentRun[],
@@ -354,13 +384,42 @@ export function pushRunsForLine(
       if (gapExceeds(prevItem, item, LARGE_GAP_EM_MULTIPLIER * item.sizePt)) {
         runs.push({ text: "\t" });
       } else if (gapExceeds(prevItem, item, MIN_WORD_GAP_PT)) {
-        runs[runs.length - 1]!.text += " ";
+        appendWordSpace(runs);
       }
     }
     const run = textItemToContentRun(item);
     stampFrame(run, pageIndex, textBoxOfItem(item, pageIndex));
-    runs.push(run);
+    const verticalAlign = scriptPositionOnLine(item, line);
+    const core = item.text.trim();
+    // An item of whitespace alone has nothing raised or lowered to mark.
+    if (verticalAlign === undefined || core.length === 0) {
+      runs.push(run);
+      return;
+    }
+    // A producer that draws a script's trailing (or leading) space glyph at the script's size and offset has drawn a word space, not part of what is raised or lowered, so the run keeps only the script's own text and the space reaches the line as ordinary text beside it.
+    const leading = item.text.slice(
+      0,
+      item.text.length - item.text.trimStart().length,
+    );
+    const trailing = item.text.slice(item.text.trimEnd().length);
+    if (leading.length > 0) {
+      runs.push({ text: leading });
+    }
+    runs.push({ ...run, text: core, verticalAlign });
+    if (trailing.length > 0) {
+      runs.push({ text: trailing });
+    }
   });
+}
+
+// Ends the runs so far with a word space. It joins the last run's own text unless that run is a superscript or subscript, whose text is only what is raised or lowered: a space inside it would be drawn and written as part of the script ("G<sub>2 </sub>operates"), so the space becomes a run of its own after it.
+function appendWordSpace(runs: ContentRun[]): void {
+  const last = runs[runs.length - 1]!;
+  if (last.verticalAlign === undefined) {
+    last.text += " ";
+  } else {
+    runs.push({ text: " " });
+  }
 }
 
 export function bucketCounts(
@@ -524,9 +583,8 @@ export function paragraphToContentParagraph(
     stampFrame(result, pageIndex, lineBox(line, pageIndex));
     // Lines within a paragraph join with a single space — deliberately not de-hyphenating a trailing hyphen, since the "looks like a soft hyphen" heuristic corrupts genuine hyphenated compounds about as often as it fixes wrapped words (plan Step 10).
     if (lineIndex > 0) {
-      const lastRun = result.runs[result.runs.length - 1];
-      if (lastRun !== undefined) {
-        lastRun.text += " ";
+      if (result.runs.length > 0) {
+        appendWordSpace(result.runs);
       }
     }
     pushRunsForLine(result.runs, line, pageIndex);
