@@ -1,3 +1,14 @@
+## [14.6.4](https://github.com/ExaDev/documents.js/compare/documents.js%4014.6.3...documents.js%4014.6.4) (2026-10-30)
+
+### Tests
+
+* **documents.js:** read words apart when a TJ array opens with the space ([dca3643](https://github.com/ExaDev/documents.js/commit/dca3643a8c9c21132c7b94a02de42ecbe94f6df2)), references [#1724](https://github.com/ExaDev/documents.js/issues/1724)
+
+
+### Dependencies
+
+- Updated pdf-codec to 5.6.1
+
 ## [14.6.3](https://github.com/ExaDev/documents.js/compare/documents.js%4014.6.2...documents.js%4014.6.3) (2026-10-30)
 
 ### Bug Fixes

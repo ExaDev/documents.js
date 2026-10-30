@@ -1,3 +1,9 @@
+## [5.6.1](https://github.com/ExaDev/documents.js/compare/pdf-codec%405.6.0...pdf-codec%405.6.1) (2026-10-30)
+
+### Bug Fixes
+
+* **pdf-codec:** start a text run where its first glyph is painted ([119c225](https://github.com/ExaDev/documents.js/commit/119c22507c50ff14b19bf2379615b8206e4cbb64)), closes [#1724](https://github.com/ExaDev/documents.js/issues/1724)
+
 ## [5.6.0](https://github.com/ExaDev/documents.js/compare/pdf-codec%405.5.1...pdf-codec%405.6.0) (2026-10-30)
 
 ### Features
