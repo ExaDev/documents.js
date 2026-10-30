@@ -1,3 +1,14 @@
+## [5.7.2](https://github.com/ExaDev/documents.js/compare/pdf-codec%405.7.1...pdf-codec%405.7.2) (2026-10-30)
+
+### Bug Fixes
+
+* **pdf-codec:** end a text run where its next glyph steps back past the last ([2d22411](https://github.com/ExaDev/documents.js/commit/2d22411277a2dd20fc305d187763adf4b80d72c7)), closes [#1728](https://github.com/ExaDev/documents.js/issues/1728)
+* **pdf-codec:** resolve a font's indirect /Widths, /DescendantFonts and /W arrays ([81116ea](https://github.com/ExaDev/documents.js/commit/81116ea726c58c3aa3c9772f65877387ff8c44c7)), closes [#1733](https://github.com/ExaDev/documents.js/issues/1733)
+
+### Tests
+
+* **pdf-codec:** move the text-run splitting tests out of interpret.test.ts ([6cdc525](https://github.com/ExaDev/documents.js/commit/6cdc5252b352f1259a2dc3b692443730d2c2c872))
+
 ## [5.7.1](https://github.com/ExaDev/documents.js/compare/pdf-codec%405.7.0...pdf-codec%405.7.1) (2026-10-30)
 
 ### Bug Fixes
