@@ -72,6 +72,8 @@ export interface GlyphStep {
   readonly tm: Matrix;
   /** The text matrix at the end of the glyph's own advance width, before any spacing. */
   readonly widthEndTm: Matrix;
+  /** The glyph's own advance width in unscaled text space units, along the direction the font is set in. */
+  readonly widthAdvance: number;
   /** The character spacing added after the glyph's width, in unscaled text space units. The word spacing a single-byte space takes is not counted: the space character already records that word boundary in the run's text. */
   readonly charSpaceAfter: number;
 }
@@ -112,6 +114,7 @@ export function stepPastGlyph(
     // The pen moves by width and spacing in one translation, so a run whose spacing is zero lands exactly where its widths alone put it.
     tm: multiplyMatrices(along(widthAdvance + spacing), tm),
     widthEndTm: multiplyMatrices(along(widthAdvance), tm),
+    widthAdvance,
     charSpaceAfter: gs.charSpace,
   };
 }
