@@ -43,6 +43,7 @@ import { stampFrame } from "./shared";
 import { flipY } from "../model/geometry";
 import { findColumnIndex } from "./lattice";
 import { detectGridLattice, findRowIndex } from "./lattice";
+import { detectRuledRowLattice } from "./ruled-rows";
 import type { GridLattice } from "./lattice";
 import { inferCellValue } from "./cell-typing";
 
@@ -57,8 +58,34 @@ export function recoverTables(
       return tagged;
     }
   }
-  const lattice = recoverTable(page, pageIndex);
-  return lattice === undefined ? [] : [lattice];
+  // A fully ruled table first; then a table ruled only between its rows (ruled-rows.ts), read from what the first leaves: its strokes are not rules of a second table, and a grid lying across its area is not one either.
+  const grid = detectGridLattice(page.items);
+  const gridItems = grid?.sourceItems ?? NO_ITEMS;
+  const ruled = detectRuledRowLattice(
+    page.items.filter((item) => !gridItems.has(item)),
+  );
+  return [grid, ruled]
+    .filter((lattice) => lattice !== undefined)
+    .filter(
+      (lattice, index, lattices) =>
+        index === 0 || !latticesOverlap(lattices[0]!, lattice),
+    )
+    .flatMap((lattice) => {
+      const table = recoverTable(page, pageIndex, lattice);
+      return table === undefined ? [] : [table];
+    });
+}
+
+function latticesOverlap(a: GridLattice, b: GridLattice): boolean {
+  const aLeft = a.columnBoundariesAscPt[0]!;
+  const aRight = a.columnBoundariesAscPt.at(-1)!;
+  const aTop = a.rowBoundariesDescPt[0]!;
+  const aBottom = a.rowBoundariesDescPt.at(-1)!;
+  const bLeft = b.columnBoundariesAscPt[0]!;
+  const bRight = b.columnBoundariesAscPt.at(-1)!;
+  const bTop = b.rowBoundariesDescPt[0]!;
+  const bBottom = b.rowBoundariesDescPt.at(-1)!;
+  return aLeft < bRight && bLeft < aRight && aBottom < bTop && bBottom < aTop;
 }
 
 // One tagged table: rows are the /TR descendants of its /Table element in document order, cells positional by their TD/TH order within the row, every cell's blocks built from exactly the text items its owning cell element claims. A /TH degrades to an ordinary cell — the content vocabulary has no header-cell spelling to state one with (the same honest narrowing radio fields took), while the structure table the reader emitted still carries the fact. Column widths are the only geometry-derived values, measured from the cells' own item extents.
@@ -236,11 +263,8 @@ function indexRegions(
 function recoverTable(
   page: LayoutPage,
   pageIndex: number,
+  lattice: GridLattice,
 ): RecoveredTable | undefined {
-  const lattice = detectGridLattice(page.items);
-  if (lattice === undefined) {
-    return undefined;
-  }
   const rowCount = lattice.rowBoundariesDescPt.length - 1;
   const columnCount = lattice.columnBoundariesAscPt.length - 1;
   const regionAt = indexRegions(lattice, rowCount, columnCount);

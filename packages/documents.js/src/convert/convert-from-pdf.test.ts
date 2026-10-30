@@ -21,6 +21,8 @@ import {
   leadingTjAdjustmentWordSpacesPdf,
   loweredIndexPdf,
   raisedExponentPdf,
+  ruledProseColumnsPdf,
+  ruledRowTablePdf,
   stackedScriptsPdf,
   tjAdjustedWordSpacesPdf,
 } from "../test-support/pdf";
@@ -189,6 +191,32 @@ describe("pdfToMarkdown superscripts and subscripts", () => {
       pdfToMarkdown(stackedScriptsPdf()),
     );
     expect(markdown.trim()).toBe("x<sub>2</sub><sup>2</sup> \\+ y");
+  });
+});
+
+describe("pdfToMarkdown tables ruled only between their rows", () => {
+  it("reads each row's cells whole, whatever order the columns were drawn in", () => {
+    const markdown = new TextDecoder().decode(
+      pdfToMarkdown(ruledRowTablePdf()),
+    );
+    expect(markdown.trim()).toBe(
+      [
+        "| Title | Group | Purpose |",
+        "| --- | --- | --- |",
+        "| Shop and<br>commercial | 4 | Shops or premises<br>for trade\\. |",
+        "| Office | 3 | Offices\\. |",
+      ].join("\n"),
+    );
+  });
+
+  it("reads two columns of running prose between rules as columns, not as a table", () => {
+    const markdown = new TextDecoder().decode(
+      pdfToMarkdown(ruledProseColumnsPdf()),
+    );
+    expect(markdown).not.toContain("|");
+    expect(markdown).toContain(
+      "The first column of running prose wraps at its measure",
+    );
   });
 });
 

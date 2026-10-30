@@ -196,6 +196,64 @@ export function stackedScriptsPdf(): Uint8Array<ArrayBuffer> {
   return b.bytes();
 }
 
+// A table ruled only between its rows, as many typeset tables are: four full-width rules and no vertical rule, three columns set apart by whitespace, and cells that wrap over two lines. The producer draws it one column at a time, the way a page-layout program flows each column's text, so content order says nothing about which lines belong to which row. Column x positions leave a gutter of at least 12pt beside every cell, from Helvetica's widths at 10pt ("commercial" is 51.11pt from x 22, "Group" 27.79pt from x 110).
+export function ruledRowTablePdf(): Uint8Array<ArrayBuffer> {
+  const b = new FixtureBuilder().header("1.4");
+  catalogPagesPageFontObjects(b, CONTENT_OBJ, "[0 0 400 200]");
+  b.stream(
+    CONTENT_OBJ,
+    "<< >>",
+    enc(
+      [
+        "0.5 w 20 170 m 380 170 l S 20 150 m 380 150 l S 20 110 m 380 110 l S 20 80 m 380 80 l S",
+        "BT /F1 10 Tf 1 0 0 1 22 157 Tm (Title) Tj 1 0 0 1 22 138 Tm (Shop and) Tj 1 0 0 1 22 126 Tm (commercial) Tj 1 0 0 1 22 92 Tm (Office) Tj ET",
+        "BT /F1 10 Tf 1 0 0 1 110 157 Tm (Group) Tj 1 0 0 1 110 138 Tm (4) Tj 1 0 0 1 110 92 Tm (3) Tj ET",
+        "BT /F1 10 Tf 1 0 0 1 150 157 Tm (Purpose) Tj 1 0 0 1 150 138 Tm (Shops or premises) Tj 1 0 0 1 150 126 Tm (for trade.) Tj 1 0 0 1 150 92 Tm (Offices.) Tj ET",
+      ].join("\n"),
+    ),
+  );
+  b.classicXrefAndTrailer(CONTENT_OBJ, "/Root 1 0 R");
+  return b.bytes();
+}
+
+// The same rules over two columns of running prose: every line wraps within a measure well over twenty characters. The gutter between the columns is not a table's, so the page is read one column at a time, not as a grid.
+export function ruledProseColumnsPdf(): Uint8Array<ArrayBuffer> {
+  const b = new FixtureBuilder().header("1.4");
+  catalogPagesPageFontObjects(b, CONTENT_OBJ, "[0 0 400 200]");
+  const left = [
+    "The first column of running",
+    "prose wraps at its measure",
+    "and carries on below it to",
+    "the end of the paragraph.",
+  ];
+  const right = [
+    "The second column is set to",
+    "the same measure and wraps",
+    "in the same way all down to",
+    "its own final short line.",
+  ];
+  const lines = (x: number, texts: readonly string[], firstY: number): string =>
+    texts
+      .map(
+        (text, index) =>
+          `1 0 0 1 ${String(x)} ${String(firstY - index * 12)} Tm (${text}) Tj`,
+      )
+      .join(" ");
+  b.stream(
+    CONTENT_OBJ,
+    "<< >>",
+    enc(
+      [
+        "0.5 w 20 170 m 380 170 l S 20 120 m 380 120 l S 20 60 m 380 60 l S",
+        `BT /F1 10 Tf ${lines(22, left, 157)} ${lines(205, right, 157)} ET`,
+        `BT /F1 10 Tf ${lines(22, left, 107)} ${lines(205, right, 107)} ET`,
+      ].join("\n"),
+    ),
+  );
+  b.classicXrefAndTrailer(CONTENT_OBJ, "/Root 1 0 R");
+  return b.bytes();
+}
+
 // The single highest-value fixture in the suite: Word/PowerPoint/Chrome/LibreOffice all default to PDF 1.5+ cross-reference *streams* with object streams, not the classic table our own writer emits — a reader that only handles the classic form would fail on the overwhelming majority of real-world, non-self-produced PDFs. Catalog/Pages/Page are packed into one compressed object stream (a stream object itself is never permitted inside an object stream, per ISO 32000-1 7.5.7, so the content stream, the object stream, and the xref stream itself all remain ordinary top-level objects). The xref stream is self-referential: its own entry describes its own byte offset.
 // A classic cross-reference stream row (ISO 32000-1 Table 18) is /W [1 4 2]: a 1-byte type field, a 4-byte second field, a 2-byte third field, seven bytes total.
 const XREF_STREAM_ROW_WIDTH = 7;

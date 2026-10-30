@@ -224,7 +224,7 @@ function rightEdge(item: LayoutText): number {
   return item.xPt + (item.widthPt ?? 0);
 }
 
-function spaceAdvancePt(item: LayoutText): number {
+export function spaceAdvancePt(item: LayoutText): number {
   const { standardName } = resolveStandardFont(
     item.font.family,
     item.font.weight === "bold",
@@ -310,7 +310,7 @@ function gutterRuns(
 }
 
 // Whether the text on one side of a candidate gutter reads as a column of running prose rather than a column of table cells: enough lines to judge, a measure at least MIN_PROSE_MEASURE_CHARS of its own characters wide, and lines that wrap. A wrapped line ends short of the column's right edge by less than the next line's first word plus a space, since that word would otherwise have been set on it; a paragraph's last line is the one ordinary exception, so a majority of the judged lines (every line but the column's last, which has no next line) must wrap. A table cell's line ends where its content does, ragged by far more than a word. The column's own word gaps must also be narrower than the gutter: two justified columns stretch their word spaces, but never to the width of the strip between the columns, while a strip a few lines long that a coincidence of stretched word gaps leaves empty (a river) is as narrow as those gaps themselves.
-function isRunningProse(
+export function isRunningProse(
   items: readonly LayoutText[],
   gutterWidthPt: number,
 ): boolean {
