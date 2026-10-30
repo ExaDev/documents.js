@@ -1,8 +1,4 @@
-import {
-  COLOR_BLACK,
-  type Color as LayoutColor,
-  type Point,
-} from "document-schema.js";
+import { COLOR_BLACK, type Point } from "document-schema.js";
 import { decodeStream } from "./filters";
 import type { Matrix } from "./matrix";
 import {
@@ -15,6 +11,15 @@ import type { PdfDict, PdfObject } from "./objects";
 import { asArray, asName, asNumber, dictGet } from "./objects";
 import { readContentStream } from "./content-read";
 import { DEFAULT_WORD_GAP_EM } from "./text-group";
+import {
+  GLYPH_SPACE_PER_TEXT_SPACE_UNIT,
+  type GlyphStep,
+  type GraphicsState,
+  computeTrm,
+  defaultTextObjectState,
+  initialTextParameters,
+  stepPastGlyph,
+} from "./interpret-state";
 import {
   grayColor,
   rgbColor,
@@ -40,67 +45,8 @@ import type {
 // The graphics/text state machine: walks a page's (or a recursed form XObject's) content-stream operations, tracking exactly the state v1 needs to recover — CTM, fill/stroke colour, line width, and text position/font/size — and emits one ExtractedItem per meaningful paint operation. Everything else (clipping, shadings, patterns) is deliberately not modelled; see the implementation plan's v1 scope for the reasoning. General path construction (m/l/c/v/y/h/re) and stroking ARE modelled, recovered as ExtractedPath below — or, when the recovered geometry matches one of the three characteristic simple-shape patterns classifyShape recognises, as the more specific ExtractedRect/ExtractedEllipse/ExtractedLine instead.
 
 const MAX_FORM_XOBJECT_DEPTH = 12;
-// An unremarkable mid-range glyph advance (half an em) used only when a shown font resource can't be resolved to any width table at all — purely to stop subsequent glyphs collapsing onto the same point; the position is already degraded at that point regardless, and is reported via a diagnostic.
-const FALLBACK_GLYPH_WIDTH_PER_1000 = 500;
-// Every "...Per1000" value above is expressed in thousandths of a text-space unit, matching PDF's own /Widths convention (see widthPer1000's own comment); dividing by this converts back to text-space units before scaling by the font size.
-const GLYPH_SPACE_PER_TEXT_SPACE_UNIT = 1000;
-// The ASCII space character: word spacing (Tw) applies only to a single-byte code equal to this value (ISO 32000-1 9.3.3).
-const ASCII_SPACE = 0x20;
 // ISO 32000-1 Table 52: the graphics state's own line width parameter defaults to 1.0 (user-space units) until a `w` operator sets it explicitly.
 const DEFAULT_LINE_WIDTH_PT = 1;
-
-// ISO 32000-1 Table 52 lists the text state parameters — the font and size a Tf selects, plus Tc/Tw/Tz/TL/Ts — among the device-independent graphics state parameters, so they belong here rather than beside the text matrix: `q` saves them and `Q` restores them exactly as it does the CTM or the fill colour, and a form XObject invoked by `Do` inherits them exactly as it inherits the CTM (8.10.2). Only the text matrix and text line matrix are excluded, and they live in TextObjectState below. Modelling the two as one record is what makes both facts structural rather than something each operator has to remember.
-interface GraphicsState {
-  readonly ctm: Matrix;
-  readonly fillColor: LayoutColor;
-  readonly strokeColor: LayoutColor;
-  readonly lineWidth: number;
-  readonly dashArray: readonly number[]; // the `d` operator's own dash array (ISO 32000-1 8.4.3.6), empty for the PDF default (a solid line) — the dash phase is write-only state this package never reads back, since content-write.ts always emits phase 0 and no recoverable ContentStrokeStyle distinguishes phases
-  readonly fontResourceName: string | undefined;
-  readonly fontSizePt: number;
-  readonly charSpace: number;
-  readonly wordSpace: number;
-  readonly horizScale: number; // Tz / 100
-  readonly leading: number;
-  readonly rise: number;
-}
-
-// The text matrix and text line matrix: text OBJECT state (ISO 32000-1 9.4.1), not graphics state. They exist only between BT and ET, are reset to identity by every BT, and are the one part of the text machinery `Q` must not restore — so they sit outside GraphicsState and outside the q/Q stack entirely.
-interface TextObjectState {
-  tm: Matrix;
-  tlm: Matrix;
-}
-
-function initialTextParameters(): Omit<
-  GraphicsState,
-  "ctm" | "fillColor" | "strokeColor" | "lineWidth" | "dashArray"
-> {
-  return {
-    fontResourceName: undefined,
-    fontSizePt: 0,
-    charSpace: 0,
-    wordSpace: 0,
-    horizScale: 1,
-    leading: 0,
-    rise: 0,
-  };
-}
-
-function defaultTextObjectState(): TextObjectState {
-  return { tm: IDENTITY_MATRIX, tlm: IDENTITY_MATRIX };
-}
-
-function computeTrm(gs: GraphicsState, text: TextObjectState): Matrix {
-  const fontMatrix: Matrix = [
-    gs.fontSizePt * gs.horizScale,
-    0,
-    0,
-    gs.fontSizePt,
-    0,
-    gs.rise,
-  ];
-  return multiplyMatrices(multiplyMatrices(fontMatrix, text.tm), gs.ctm);
-}
 
 export function numAt(operands: readonly PdfObject[], index: number): number {
   return asNumber(operands[index]) ?? 0;
@@ -321,57 +267,28 @@ function runContentStream(
     resetPath();
   };
 
-  const advanceThroughString = (codes: Uint8Array<ArrayBuffer>): void => {
-    const fontResourceName = gs.fontResourceName;
-    if (fontResourceName === undefined) {
-      return;
+  // Moves the text matrix past the one glyph of `codes` that starts at `offset`, reporting a font this content stream names but the metrics cannot resolve.
+  const advanceThroughGlyph = (
+    fontResourceName: string,
+    codes: Uint8Array<ArrayBuffer>,
+    offset: number,
+  ): GlyphStep => {
+    const glyph = context.fontMetrics.glyphAdvance(
+      fontResourceName,
+      resources,
+      codes,
+      offset,
+    );
+    if (glyph === undefined) {
+      context.sink({
+        code: "pdf/font-not-resolved",
+        severity: "warning",
+        message: `could not resolve font resource /${fontResourceName} to compute a glyph advance; assuming a fallback width`,
+      });
     }
-    let offset = 0;
-    while (offset < codes.length) {
-      const glyph = context.fontMetrics.glyphAdvance(
-        fontResourceName,
-        resources,
-        codes,
-        offset,
-      );
-      if (glyph === undefined) {
-        context.sink({
-          code: "pdf/font-not-resolved",
-          severity: "warning",
-          message: `could not resolve font resource /${fontResourceName} to compute a glyph advance; assuming a fallback width`,
-        });
-      }
-      const widthPer1000 = glyph?.widthPer1000 ?? FALLBACK_GLYPH_WIDTH_PER_1000;
-      const byteLength = glyph?.byteLengthConsumed ?? 1;
-      const isSingleByteSpace =
-        byteLength === 1 && codes[offset] === ASCII_SPACE;
-      const spacing = gs.charSpace + (isSingleByteSpace ? gs.wordSpace : 0);
-      // ISO 32000-1 9.4.4's own two displacement formulas. Horizontal advances by the glyph's width along x, scaled by Tz; vertical advances by the glyph's own w1y along y, which Tz does not touch since it scales horizontally only.
-      const vertical = glyph?.vertical;
-      text.tm =
-        vertical === undefined
-          ? multiplyMatrices(
-              translationMatrix(
-                ((widthPer1000 / GLYPH_SPACE_PER_TEXT_SPACE_UNIT) *
-                  gs.fontSizePt +
-                  spacing) *
-                  gs.horizScale,
-                0,
-              ),
-              text.tm,
-            )
-          : multiplyMatrices(
-              translationMatrix(
-                0,
-                (vertical.displacementPer1000 /
-                  GLYPH_SPACE_PER_TEXT_SPACE_UNIT) *
-                  gs.fontSizePt +
-                  spacing,
-              ),
-              text.tm,
-            );
-      offset += byteLength;
-    }
+    const step = stepPastGlyph(gs, text.tm, glyph, codes, offset);
+    text.tm = step.tm;
+    return step;
   };
 
   // The first glyph of `codes` as a translation in GLYPH space, the space a matrix pre-composed onto a text rendering matrix acts in: the font matrix inside that Trm is what turns these fractions of an em into points, supplying the font size and the horizontal scaling exactly as it does for a glyph's own outline coordinates.
@@ -406,11 +323,19 @@ function runContentStream(
       fontResourceName,
       resources,
     );
-    // One item per stretch of the array with no word-wide adjustment inside it. The item's own text carries no trace of a numeric adjustment, so the only way a word space that a producer expressed as one (a font with no space glyph, or a typesetter that positions words rather than spacing them) can reach a consumer is as the gap between two items.
+    // One item per stretch of the array with no word-wide gap between two of its glyphs. The item's own text carries no trace of the space between its glyphs, so the only way a word space the producer expressed as displacement can reach a consumer is as the gap between two items. The gap after a glyph is everything that moves the pen past the glyph's own width before the next glyph is drawn: its character spacing and every adjustment in between. Both have to be summed, because a producer can set the two against each other: a table row shown as one string under a wide character spacing, with an adjustment taking that spacing back between the glyphs of each figure, leaves a gap only between the figures, and neither number alone says where. Measuring the summed gap is what makes the result independent of how the producer split its operators: glyphs set this way come out as the same runs as glyphs each placed with an operator of their own, which the line grouping then reads as words by the same word-gap rule.
+    const wordGap = DEFAULT_WORD_GAP_EM * gs.fontSizePt;
     let startMatrix = computeTrm(gs, text);
     let chunks: Uint8Array<ArrayBuffer>[] = [];
     let totalLength = 0;
     let firstGlyphPosition: { x: number; y: number } | undefined;
+    // The text matrix where the last glyph's own width ended, and the displacement since then; undefined and zero until the first glyph.
+    let lastWidthEndTm: Matrix | undefined;
+    let gapSinceLastGlyph = 0;
+    // A vertically set gap is never read as a word space: the scripts set vertically do not separate words with spaces at all.
+    const gapIsWordWide = (): boolean =>
+      !vertical && totalLength > 0 && gapSinceLastGlyph >= wordGap;
+    // A run that ends at a word-wide gap ends where its last glyph's width did, so the whole gap lies between it and the next item rather than inside its own advance. Otherwise it ends at the pen, as a run always has.
     const flushRun = (): void => {
       if (totalLength === 0) {
         return;
@@ -421,7 +346,12 @@ function runContentStream(
         combined.set(chunk, at);
         at += chunk.length;
       }
-      const endMatrix = computeTrm(gs, text);
+      const endMatrix = computeTrm(
+        gs,
+        gapIsWordWide() && lastWidthEndTm !== undefined
+          ? { ...text, tm: lastWidthEndTm }
+          : text,
+      );
       // A vertically set run paints its glyphs offset from the text position by the position vector, so the run is reported where its ink actually is rather than where its column's spine runs. Both matrices take the FIRST glyph's vector, which keeps their difference (and so the run's reported advance) exactly the total displacement: the vector's y is one figure for the whole font in every real file, and its x only shifts the run sideways, across the axis the advance is measured along.
       const shift =
         firstGlyphPosition === undefined
@@ -448,34 +378,36 @@ function runContentStream(
     };
     for (const el of elements) {
       if (el.kind === "string") {
-        firstGlyphPosition ??= vertical
-          ? positionVectorOf(el.bytes)
-          : undefined;
-        chunks.push(el.bytes);
-        totalLength += el.bytes.length;
-        advanceThroughString(el.bytes);
+        let offset = 0;
+        while (offset < el.bytes.length) {
+          if (gapIsWordWide()) {
+            flushRun();
+          }
+          // A run starts where its first glyph is painted, so whatever moved the pen before that glyph (an adjustment leading the array, or the gap that has just ended the previous run) is left outside the run. Left at the pen's position before a leading adjustment, the run would claim the gap that adjustment opens as part of its own advance, and a producer that starts a new text-showing operator with a word space expressed as an adjustment would have that word read as touching the one before it.
+          if (totalLength === 0) {
+            startMatrix = computeTrm(gs, text);
+          }
+          firstGlyphPosition ??= vertical
+            ? positionVectorOf(el.bytes.subarray(offset))
+            : undefined;
+          const glyph = advanceThroughGlyph(fontResourceName, el.bytes, offset);
+          chunks.push(el.bytes.subarray(offset, offset + glyph.byteLength));
+          totalLength += glyph.byteLength;
+          offset += glyph.byteLength;
+          lastWidthEndTm = glyph.widthEndTm;
+          gapSinceLastGlyph = glyph.charSpaceAfter;
+        }
       } else if (el.kind === "number") {
         // ISO 32000-1 9.4.3: the adjustment is subtracted from whichever coordinate the writing mode advances along, and Tz scales the horizontal one only.
         const adjustment =
           -(el.value / GLYPH_SPACE_PER_TEXT_SPACE_UNIT) * gs.fontSizePt;
-        // A horizontally set adjustment that opens a gap of at least a word space ends the run before it. Vertical setting is left alone: the scripts set vertically do not separate words with spaces at all, so an adjustment there is never one.
-        const endsRun =
-          !vertical &&
-          totalLength > 0 &&
-          adjustment >= DEFAULT_WORD_GAP_EM * gs.fontSizePt;
-        if (endsRun) {
-          flushRun(); // leaves totalLength at 0, so the start is taken after this adjustment below
-        }
+        gapSinceLastGlyph += adjustment;
         text.tm = multiplyMatrices(
           vertical
             ? translationMatrix(0, adjustment)
             : translationMatrix(adjustment * gs.horizScale, 0),
           text.tm,
         );
-        // A run starts where its first glyph is painted, so an adjustment met before any glyph of the run (one leading the array, or one that has just ended the previous run) moves the run's start with the pen. Left at the pen's position before a leading adjustment, the run would claim the gap that adjustment opens as part of its own advance, and a producer that starts a new text-showing operator with a word space expressed as an adjustment would have that word read as touching the one before it.
-        if (totalLength === 0) {
-          startMatrix = computeTrm(gs, text);
-        }
       }
     }
     flushRun();

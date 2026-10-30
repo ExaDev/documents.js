@@ -161,7 +161,7 @@ describe("interpretContentStream: XObjects", () => {
       Subtype: pdfName("Form"),
     });
     const objects = new Map<number, PdfObject>([
-      [31, pdfStream(formDict, textBytes("BT /F2 24 Tf 8 Tc (Inner) Tj ET"))],
+      [31, pdfStream(formDict, textBytes("BT /F2 24 Tf 2 Tc (Inner) Tj ET"))],
     ]);
     const resources = pdfDict({ XObject: pdfDict({ Fm3: pdfRef(31, 0) }) });
     const items = interpretContentStream(
@@ -181,7 +181,7 @@ describe("interpretContentStream: XObjects", () => {
     expect(inner.fontResourceName).toBe("F2");
     expect(after.fontResourceName).toBe("F1");
     expect(after.sizePt).toBe(10);
-    // Five glyphs at width 5 each with the caller's own Tc=0, not the form's Tc=8.
+    // Five glyphs at width 5 each with the caller's own Tc=0, not the form's Tc=2. The form's spacing stays under a word space at its own 24pt size (an eighth of an em is 3), so its text is still the one item this test counts.
     expect(after.endMatrix).toEqual([10, 0, 0, 10, 25, 0]);
   });
 
