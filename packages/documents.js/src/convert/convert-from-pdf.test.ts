@@ -17,7 +17,10 @@ import { requireArrayBufferBytes } from "../model/bytes";
 import { readPdf } from "pdf-codec";
 import { decodeMarkdownText, encodeMarkdownText } from "../markdown/text";
 import { richMarkdownText } from "../test-support/markdown";
-import { tjAdjustedWordSpacesPdf } from "../test-support/pdf";
+import {
+  leadingTjAdjustmentWordSpacesPdf,
+  tjAdjustedWordSpacesPdf,
+} from "../test-support/pdf";
 import { minimalOdpBytes } from "../test-support/odp";
 import { gridOdsBytes } from "../test-support/ods";
 import { minimalOdtBytes } from "../test-support/odt";
@@ -155,6 +158,13 @@ describe("pdfToMarkdown word spacing", () => {
       pdfToMarkdown(tjAdjustedWordSpacesPdf()),
     );
     expect(markdown.trim()).toBe("It should be noted");
+  });
+
+  it("keeps a word space a TJ array opens with, across a colour change between operators", () => {
+    const markdown = new TextDecoder().decode(
+      pdfToMarkdown(leadingTjAdjustmentWordSpacesPdf()),
+    );
+    expect(markdown.trim()).toBe("shown in Table 2\\. Generators");
   });
 });
 
