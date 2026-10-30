@@ -19,6 +19,8 @@ import { decodeMarkdownText, encodeMarkdownText } from "../markdown/text";
 import { richMarkdownText } from "../test-support/markdown";
 import {
   leadingTjAdjustmentWordSpacesPdf,
+  loweredIndexPdf,
+  raisedExponentPdf,
   tjAdjustedWordSpacesPdf,
 } from "../test-support/pdf";
 import { minimalOdpBytes } from "../test-support/odp";
@@ -165,6 +167,20 @@ describe("pdfToMarkdown word spacing", () => {
       pdfToMarkdown(leadingTjAdjustmentWordSpacesPdf()),
     );
     expect(markdown.trim()).toBe("shown in Table 2\\. Generators");
+  });
+});
+
+describe("pdfToMarkdown superscripts and subscripts", () => {
+  it("keeps a raised exponent on its base's line, as a superscript, with the word space after it outside it", () => {
+    const markdown = new TextDecoder().decode(
+      pdfToMarkdown(raisedExponentPdf()),
+    );
+    expect(markdown.trim()).toBe("Floor area of 280m<sup>2</sup> per storey");
+  });
+
+  it("marks a lowered index as a subscript, leaving the space drawn after it outside it", () => {
+    const markdown = new TextDecoder().decode(pdfToMarkdown(loweredIndexPdf()));
+    expect(markdown.trim()).toBe("generator G<sub>2</sub> operates");
   });
 });
 

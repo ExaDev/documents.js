@@ -151,6 +151,36 @@ export function leadingTjAdjustmentWordSpacesPdf(): Uint8Array<ArrayBuffer> {
   return b.bytes();
 }
 
+// A unit's exponent set the way a typesetter places one: the base line in 12pt Helvetica, then the "2" in 7pt with its own text matrix 4pt higher, then the next word back on the base's baseline a word space on. Raised by more than half its own em, the "2" is too far from the base line for line clustering to keep it there. Its x is where "Floor area of 280m" ends, from Helvetica's widths (8448/1000 em at 12pt is 101.376pt, from x 10), and the next word starts one 12pt Helvetica space (278/1000 em, 3.336pt) after the 7pt "2" (556/1000 em, 3.892pt) ends, with no space character drawn.
+export function raisedExponentPdf(): Uint8Array<ArrayBuffer> {
+  const b = new FixtureBuilder().header("1.4");
+  catalogPagesPageFontObjects(b, CONTENT_OBJ);
+  b.stream(
+    CONTENT_OBJ,
+    "<< >>",
+    enc(
+      "BT /F1 12 Tf 1 0 0 1 10 60 Tm (Floor area of 280m) Tj /F1 7 Tf 1 0 0 1 111.376 64 Tm (2) Tj /F1 12 Tf 1 0 0 1 118.604 60 Tm (per storey) Tj ET",
+    ),
+  );
+  b.classicXrefAndTrailer(CONTENT_OBJ, "/Root 1 0 R");
+  return b.bytes();
+}
+
+// A symbol's index set with text rise in one text object: 10pt text, then a 7pt "2" lowered 2pt with Ts and drawn with the word space after it, then the line continuing on its baseline. The index stays within line clustering's tolerance, so it is already on its base's line and only its position marks it out; the space drawn at its size is still a word space, not part of the index.
+export function loweredIndexPdf(): Uint8Array<ArrayBuffer> {
+  const b = new FixtureBuilder().header("1.4");
+  catalogPagesPageFontObjects(b, CONTENT_OBJ);
+  b.stream(
+    CONTENT_OBJ,
+    "<< >>",
+    enc(
+      "BT /F1 10 Tf 10 30 Td (generator G) Tj /F1 7 Tf -2 Ts (2 ) Tj /F1 10 Tf 0 Ts (operates) Tj ET",
+    ),
+  );
+  b.classicXrefAndTrailer(CONTENT_OBJ, "/Root 1 0 R");
+  return b.bytes();
+}
+
 // The single highest-value fixture in the suite: Word/PowerPoint/Chrome/LibreOffice all default to PDF 1.5+ cross-reference *streams* with object streams, not the classic table our own writer emits — a reader that only handles the classic form would fail on the overwhelming majority of real-world, non-self-produced PDFs. Catalog/Pages/Page are packed into one compressed object stream (a stream object itself is never permitted inside an object stream, per ISO 32000-1 7.5.7, so the content stream, the object stream, and the xref stream itself all remain ordinary top-level objects). The xref stream is self-referential: its own entry describes its own byte offset.
 // A classic cross-reference stream row (ISO 32000-1 Table 18) is /W [1 4 2]: a 1-byte type field, a 4-byte second field, a 2-byte third field, seven bytes total.
 const XREF_STREAM_ROW_WIDTH = 7;
