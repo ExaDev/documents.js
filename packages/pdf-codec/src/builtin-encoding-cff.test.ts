@@ -10,7 +10,7 @@ import {
 } from "./test-support/cff";
 import {} from "./test-support/sfnt";
 
-const OHM_SIGN = 0x2126; // the Adobe Glyph List's own mapping for the glyph name "Omega"
+const OHM_SIGN = "\u2126"; // the Adobe Glyph List's own mapping for the glyph name "Omega"
 
 function charsetFormat0(sids: readonly number[]): number[] {
   return [0, ...sids.flatMap((sid) => [(sid >> 8) & 0xff, sid & 0xff])];
@@ -72,7 +72,7 @@ describe("readFontProgramEncoding: CFF charset and encoding bounds", () => {
       charStrings: [[14], [14]],
     });
     const encoding = readFontProgramEncoding(program);
-    expect(encoding?.glyphIdToUnicode(1)).toBe(0x20);
+    expect(encoding?.glyphIdToUnicode(1)).toBe(String.fromCodePoint(0x20));
     expect(encoding?.glyphIdToUnicode(2)).toBeUndefined();
   });
 
@@ -125,7 +125,9 @@ describe("readFontProgramEncoding: CFF charset and encoding bounds", () => {
     });
     // Patch the charset operand to 4: the raw layout placed it after the indexes.
     const patched = patchCharsetOffset(program, 4);
-    expect(readFontProgramEncoding(patched)?.glyphIdToUnicode(1)).toBe(0x24);
+    expect(readFontProgramEncoding(patched)?.glyphIdToUnicode(1)).toBe(
+      String.fromCodePoint(0x24),
+    );
   });
 
   it("refuses a charset operator pointing into the header itself, before any table", () => {
@@ -216,7 +218,7 @@ describe("readFontProgramEncoding: CFF charset and encoding bounds", () => {
     });
     const encoding = readFontProgramEncoding(program);
     expect(encoding?.codeToUnicode(0x57)).toBe(OHM_SIGN);
-    expect(encoding?.codeToUnicode(0x6d)).toBe(0xb5);
+    expect(encoding?.codeToUnicode(0x6d)).toBe(String.fromCodePoint(0xb5));
     expect(encoding?.codeToUnicode(0x41)).toBeUndefined();
   });
 
@@ -234,10 +236,10 @@ describe("readFontProgramEncoding: CFF charset and encoding bounds", () => {
       encodingFormat: 1,
     });
     const encoding = readFontProgramEncoding(program);
-    expect(encoding?.codeToUnicode(0x41)).toBe(0x41);
-    expect(encoding?.codeToUnicode(0x43)).toBe(0x43);
-    expect(encoding?.codeToUnicode(0x61)).toBe(0x61);
-    expect(encoding?.codeToUnicode(0x62)).toBe(0x62);
+    expect(encoding?.codeToUnicode(0x41)).toBe(String.fromCodePoint(0x41));
+    expect(encoding?.codeToUnicode(0x43)).toBe(String.fromCodePoint(0x43));
+    expect(encoding?.codeToUnicode(0x61)).toBe(String.fromCodePoint(0x61));
+    expect(encoding?.codeToUnicode(0x62)).toBe(String.fromCodePoint(0x62));
   });
 
   it("keeps only the glyphs a truncated format 1 Encoding did map", () => {
@@ -292,7 +294,7 @@ describe("readFontProgramEncoding: CFF charset and encoding bounds", () => {
     });
     const encoding = readFontProgramEncoding(program);
     expect(encoding?.codeToUnicode(0x1a)).toBe(OHM_SIGN);
-    expect(encoding?.codeToUnicode(0x1b)).toBe(0xb5);
+    expect(encoding?.codeToUnicode(0x1b)).toBe(String.fromCodePoint(0xb5));
     expect(encoding?.codeToUnicode(0x57)).toBe(OHM_SIGN);
   });
 
