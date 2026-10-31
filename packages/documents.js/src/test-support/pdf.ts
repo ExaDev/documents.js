@@ -196,6 +196,26 @@ export function stackedScriptsPdf(): Uint8Array<ArrayBuffer> {
   return b.bytes();
 }
 
+// A fraction whose numerator squares a symbol, set the way an equation setter sizes its first-level scripts: "1 + K" and "R" in 9.16pt Helvetica with a 7.33pt "2" between them (four fifths of the base size), raised by `raisedPt` on its own text matrix, then the fraction rule and the denominator below. The "2" starts where "1 + K" ends (2363/1000 em at 9.16pt is 21.645pt, from x 20) and "R" where the "2" ends (556/1000 em at 7.33pt, 4.075pt).
+export function fractionNumeratorExponentPdf(
+  raisedPt: number,
+): Uint8Array<ArrayBuffer> {
+  const b = new FixtureBuilder().header("1.4");
+  catalogPagesPageFontObjects(b, CONTENT_OBJ);
+  b.stream(
+    CONTENT_OBJ,
+    "<< >>",
+    enc(
+      [
+        "0.4 w 20 56 m 53 56 l S",
+        `BT /F1 9.16 Tf 1 0 0 1 20 60 Tm (1 + K) Tj /F1 7.33 Tf 1 0 0 1 41.645 ${60 + raisedPt} Tm (2) Tj /F1 9.16 Tf 1 0 0 1 45.72 60 Tm (R) Tj 1 0 0 1 20 46 Tm (R + X) Tj ET`,
+      ].join("\n"),
+    ),
+  );
+  b.classicXrefAndTrailer(CONTENT_OBJ, "/Root 1 0 R");
+  return b.bytes();
+}
+
 // A table ruled only between its rows, as many typeset tables are: four full-width rules and no vertical rule, three columns set apart by whitespace, and cells that wrap over two lines. The producer draws it one column at a time, the way a page-layout program flows each column's text, so content order says nothing about which lines belong to which row. Column x positions leave a gutter of at least 12pt beside every cell, from Helvetica's widths at 10pt ("commercial" is 51.11pt from x 22, "Group" 27.79pt from x 110).
 export function ruledRowTablePdf(): Uint8Array<ArrayBuffer> {
   const b = new FixtureBuilder().header("1.4");
