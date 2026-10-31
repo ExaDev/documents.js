@@ -1,3 +1,9 @@
+## [5.7.3](https://github.com/ExaDev/documents.js/compare/pdf-codec%405.7.2...pdf-codec%405.7.3) (2026-10-31)
+
+### Bug Fixes
+
+* **pdf-codec:** read a script set at up to 9/11 of its base's size ([eae411d](https://github.com/ExaDev/documents.js/commit/eae411dce1ec5e385adb1af829e776eaaff13e49)), references [#1738](https://github.com/ExaDev/documents.js/issues/1738)
+
 ## [5.7.2](https://github.com/ExaDev/documents.js/compare/pdf-codec%405.7.1...pdf-codec%405.7.2) (2026-10-30)
 
 ### Bug Fixes
