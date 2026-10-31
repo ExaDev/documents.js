@@ -1,4 +1,4 @@
-// Hand-built sfnt tables describing a font as a whole rather than its glyph encoding: 'name', 'hhea', 'hmtx' and 'maxp', for tests that assemble a synthetic font through test-support/sfnt.ts's buildSfnt. Built by literal byte layout against ISO/IEC 14496-22, importing nothing from this package's own sfnt readers, for the reason that file's header states.
+// Hand-built sfnt tables describing a font as a whole rather than its glyph encoding: 'name', 'head', 'hhea', 'hmtx' and 'maxp', for tests that assemble a synthetic font through test-support/sfnt.ts's buildSfnt. Built by literal byte layout against ISO/IEC 14496-22, importing nothing from this package's own sfnt readers, for the reason that file's header states.
 
 // A minimal, hand-built 'name' table — the same record layout font-tables.test.ts's own buildFontWithNameTable uses (clause 5.2.7), returning the bare table bytes so it can be combined with other synthetic tables via buildSfnt.
 export function buildNameTable(
@@ -61,6 +61,16 @@ export function buildHmtxTable(
   advanceWidths.forEach((width, index) => {
     view.setUint16(index * 4, width);
   });
+  return table;
+}
+
+// A minimal 'head' table (clause 5.2.2, 54 bytes): the magic number, a design grid and a valid indexToLocFormat, the fields font-tables.ts's parseHead requires before it accepts the table at all.
+export function buildHeadTable(unitsPerEm: number): Uint8Array<ArrayBuffer> {
+  const table = new Uint8Array(54);
+  const view = new DataView(table.buffer);
+  view.setUint32(12, 0x5f0f3cf5); // magicNumber
+  view.setUint16(18, unitsPerEm);
+  view.setInt16(50, 0); // indexToLocFormat
   return table;
 }
 

@@ -10,8 +10,15 @@ import {
 } from "./cff";
 import type { CmapSubtable } from "./cmap-table";
 import { readCmapSubtables } from "./cmap-table";
+import { coreFaceGlyphOrder } from "./core-font-glyph-orders";
 import { standardGlyphName } from "./encoding-standard-tables";
-import { parseMaxp, parsePostGlyphNames } from "./font-tables";
+import { withoutSubsetTag } from "./font-style";
+import {
+  parseHead,
+  parseMaxp,
+  parseName,
+  parsePostGlyphNames,
+} from "./font-tables";
 import { glyphNameToUnicode } from "./glyph-names";
 import type { SfntFont } from "./sfnt";
 import { hasBytes, parseSfnt, sfntTableBytes, u8, u16 } from "./sfnt";
@@ -23,7 +30,7 @@ import { hasBytes, parseSfnt, sfntTableBytes, u8, u16 } from "./sfnt";
 //   - CFF (/FontFile3 /Type1C, or an sfnt 'CFF ' table): the Top DICT's Encoding operator maps codes to glyphs and its charset names each glyph, both directly (CFF 1.0 spec, sections 12 and 13).
 //   - Type 1 (/FontFile): the /Encoding array in the program's own cleartext header names a glyph per code outright.
 //
-// Every route ends at a PostScript glyph name resolved through the Adobe Glyph List, or — where a subsetting tool has stripped the names — at a code point recovered by reading the program's Unicode mapping backwards. Where neither is available the answer is `undefined`, never a guess: the caller reports an honestly unmapped code rather than a plausible wrong character.
+// Every route ends at a PostScript glyph name resolved through the Adobe Glyph List, at a code point recovered by reading the program's Unicode mapping backwards where a subsetting tool has stripped the names, or, for a TrueType program that has lost both its names and its 'cmap' but still identifies itself as one of the core faces, at that face's published glyph order (core-font-glyph-orders.ts). Where none is available the answer is `undefined`, never a guess: the caller reports an honestly unmapped code rather than a plausible wrong character.
 
 export interface BuiltinEncoding {
   // The program's own character code -> the text its glyph draws. Always undefined for a program that states no code-keyed encoding at all (a CID-keyed CFF, or a TrueType with no symbolic subtable), which is exactly the case a simple font must fall back from.
@@ -53,7 +60,7 @@ function isPrivateUse(codePoint: number): boolean {
   );
 }
 
-// The sources a program can supply, each independently optional: a code -> glyph mapping, a glyph -> name mapping and its inverse, and a glyph -> text mapping recovered from a Unicode subtable. A Type 1 program supplies a code -> name mapping directly instead, with no glyph IDs anywhere in it.
+// The sources a program can supply, each independently optional: a code -> glyph mapping, a glyph -> name mapping and its inverse, and a glyph -> text mapping recovered from a Unicode subtable or a core face's glyph order. A Type 1 program supplies a code -> name mapping directly instead, with no glyph IDs anywhere in it.
 interface ProgramSources {
   readonly codeToGlyphId?: (code: number) => number | undefined;
   readonly codeToName?: (code: number) => string | undefined;
@@ -183,7 +190,60 @@ function invertUnicodeSubtable(
   };
 }
 
-function trueTypeSources(font: SfntFont): ProgramSources {
+// Byte offsets the advance-width read below needs: 'hhea' numberOfHMetrics (ISO/IEC 14496-22 clause 5.2.3) and the size of one 'hmtx' longHorMetric record (clause 5.2.4).
+const HHEA_NUMBER_OF_H_METRICS_OFFSET = 34;
+const HMTX_LONG_HOR_METRIC_SIZE = 4;
+
+// The program's own advance width per glyph, or undefined for a program whose metrics cannot be read: bounds-checked because the program is untrusted input, so a table too short for what 'hhea' claims gives no widths at all rather than a read past its end. A glyph past the last full metric takes that metric's width (clause 5.2.4).
+function advanceWidths(
+  font: SfntFont,
+): ((glyphId: number) => number) | undefined {
+  const hhea = sfntTableBytes(font, "hhea");
+  const hmtx = sfntTableBytes(font, "hmtx");
+  if (
+    hhea === undefined ||
+    hmtx === undefined ||
+    !hasBytes(hhea, HHEA_NUMBER_OF_H_METRICS_OFFSET, 2)
+  ) {
+    return undefined;
+  }
+  const metricCount = u16(hhea, HHEA_NUMBER_OF_H_METRICS_OFFSET);
+  if (
+    metricCount === 0 ||
+    !hasBytes(hmtx, 0, metricCount * HMTX_LONG_HOR_METRIC_SIZE)
+  ) {
+    return undefined;
+  }
+  return (glyphId) =>
+    u16(hmtx, Math.min(glyphId, metricCount - 1) * HMTX_LONG_HOR_METRIC_SIZE);
+}
+
+// The core face a TrueType program is, if it is one, checked glyph by glyph against the program's own advance widths (see core-font-glyph-orders.ts). The program's own PostScript name identifies it; the font dictionary's /BaseFont stands in only for a program whose 'name' table states none.
+function coreFaceSource(
+  font: SfntFont,
+  fontName: string | undefined,
+): ((glyphId: number) => string | undefined) | undefined {
+  const name = parseName(font)?.postScriptName ?? fontName;
+  const unitsPerEm = parseHead(font)?.unitsPerEm;
+  const advanceOf = advanceWidths(font);
+  if (
+    name === undefined ||
+    unitsPerEm === undefined ||
+    advanceOf === undefined
+  ) {
+    return undefined;
+  }
+  const order = coreFaceGlyphOrder(withoutSubsetTag(name), unitsPerEm);
+  if (order === undefined) {
+    return undefined;
+  }
+  return (glyphId) => order(glyphId, advanceOf(glyphId));
+}
+
+function trueTypeSources(
+  font: SfntFont,
+  fontName: string | undefined,
+): ProgramSources {
   const subtables = readCmapSubtables(font);
   const symbol = symbolSubtable(subtables);
   const unicode = unicodeSubtable(subtables);
@@ -198,6 +258,9 @@ function trueTypeSources(font: SfntFont): ProgramSources {
         : undefined;
   const glyphIdToName = parsePostGlyphNames(font);
   const glyphCount = parseMaxp(font)?.numGlyphs;
+  const fromCmap =
+    unicode !== undefined ? invertUnicodeSubtable(unicode) : undefined;
+  const fromCoreFace = coreFaceSource(font, fontName);
   return {
     codeToGlyphId: symbolLookup,
     glyphIdToName,
@@ -205,8 +268,11 @@ function trueTypeSources(font: SfntFont): ProgramSources {
       glyphIdToName !== undefined && glyphCount !== undefined
         ? invertGlyphNames(glyphIdToName, glyphCount)
         : undefined,
+    // What the program's own Unicode subtable says comes first; a core face's order answers only for a glyph the program says nothing about.
     glyphIdToUnicode:
-      unicode !== undefined ? invertUnicodeSubtable(unicode) : undefined,
+      fromCmap === undefined && fromCoreFace === undefined
+        ? undefined
+        : (glyphId) => fromCmap?.(glyphId) ?? fromCoreFace?.(glyphId),
   };
 }
 
@@ -483,14 +549,20 @@ function type1Sources(
     : { codeToName: (code) => nameByCode.get(code) };
 }
 
-// Reads whatever encoding an embedded font program carries in itself. `undefined` means this program states nothing this codec can read — a program in a format not read here, or one too damaged to parse — and the caller must fall back rather than treat the absence as a mapping.
+/**
+ * Reads whatever encoding an embedded font program carries in itself.
+ * @param program - the decoded bytes of a /FontFile, /FontFile2 or /FontFile3 stream
+ * @param fontName - the font dictionary's /BaseFont, which identifies a core face only when the program's own 'name' table states no PostScript name; absent when the program is read on its own
+ * @returns the program's encoding, or undefined when it states nothing this codec can read (a program in a format not read here, or one too damaged to parse), in which case the caller must fall back rather than treat the absence as a mapping
+ */
 export function readFontProgramEncoding(
   program: Uint8Array<ArrayBuffer>,
+  fontName?: string,
 ): BuiltinEncoding | undefined {
   const font = parseSfnt(program);
   if (font !== undefined) {
     const cff = sfntTableBytes(font, "CFF ");
-    const container = trueTypeSources(font);
+    const container = trueTypeSources(font, fontName);
     // A CFF-flavoured OpenType font carries both halves: the CFF program names the glyphs where the container's 'post' table does not, while the container's own 'cmap' remains what says which codes reach them.
     const outlines = cff === undefined ? undefined : cffSources(cff, false);
     return encodingFromSources({

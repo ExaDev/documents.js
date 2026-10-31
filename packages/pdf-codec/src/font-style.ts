@@ -36,13 +36,24 @@ function stripStyleSuffix(name: string): string {
   return name;
 }
 
+/**
+ * A font name with any subset tag removed.
+ *
+ * Exactly six uppercase letters followed by '+' (ISO 32000-1 9.6.4) marks a subsetted font's unique tag, meaningless to a reader and never part of the real font name. The same tag prefixes the PostScript name inside the embedded program a producer subsetted.
+ * @param fontName - a /BaseFont value or an embedded program's own PostScript name
+ * @returns the name without its leading subset tag, or the name unchanged when it carries none
+ */
+export function withoutSubsetTag(fontName: string): string {
+  // Declared here rather than as a module-level constant for the same reachability reason as knownStyleSuffixes in stripStyleSuffix above.
+  const subsetTagPattern = /^[A-Z]{6}\+/;
+  return fontName.replace(subsetTagPattern, "");
+}
+
 export function styleFromBaseFontName(
   baseFont: string,
   flags?: FontStyleFlags,
 ): FontNameStyle {
-  // Exactly six uppercase letters followed by '+' (ISO 32000-1 9.6.4) marks a subsetted font's unique tag — meaningless to a reader and never part of the real family name. Declared here rather than as a module-level constant for the same reachability reason as knownStyleSuffixes in stripStyleSuffix above.
-  const subsetTagPattern = /^[A-Z]{6}\+/;
-  const withoutSubset = baseFont.replace(subsetTagPattern, "");
+  const withoutSubset = withoutSubsetTag(baseFont);
   const lower = withoutSubset.toLowerCase();
   const nameBold = lower.includes("bold");
   const nameItalic = /italic|oblique/.test(lower);

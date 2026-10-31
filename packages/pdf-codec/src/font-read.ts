@@ -94,6 +94,7 @@ function builtinSymbolGlyphNameLookup(
 // The embedded font program a /FontDescriptor carries, whichever of the three keys it is under: /FontFile (Type 1), /FontFile2 (TrueType), /FontFile3 (CFF, or a whole sfnt under /Subtype /OpenType). The bytes themselves say which shape they are, so the key they arrived under is not consulted — a producer that files a TrueType program under /FontFile3 (a real and not especially rare malformation) is still read correctly.
 function readFontProgram(
   descriptor: PdfDict | undefined,
+  baseFont: string,
   context: FontReadContext,
 ): BuiltinEncoding | undefined {
   if (descriptor === undefined) {
@@ -105,7 +106,7 @@ function readFontProgram(
       continue;
     }
     const decoded = decodeStream(stream.raw, stream.dict, context.sink);
-    const encoding = readFontProgramEncoding(decoded.bytes);
+    const encoding = readFontProgramEncoding(decoded.bytes, baseFont);
     if (encoding !== undefined) {
       return encoding;
     }
@@ -116,11 +117,12 @@ function readFontProgram(
 // The embedded program, opened only if some code actually falls through to it and then remembered. A font whose /ToUnicode covers every code it shows never pays for this at all, which is where the cost is largest: an embedded face is routinely hundreds of kilobytes, and opening one means inflating the stream and parsing its tables.
 function lazyFontProgram(
   descriptor: PdfDict | undefined,
+  baseFont: string,
   context: FontReadContext,
 ): () => BuiltinEncoding | undefined {
   let read: { readonly encoding: BuiltinEncoding | undefined } | undefined;
   return () => {
-    read ??= { encoding: readFontProgram(descriptor, context) };
+    read ??= { encoding: readFontProgram(descriptor, baseFont, context) };
     return read.encoding;
   };
 }
@@ -249,7 +251,7 @@ function buildSimpleFont(fontDict: PdfDict, context: FontReadContext): PdfFont {
       ? resolvedArray(dictGet(encodingDict, "Differences"), context)
       : undefined,
   );
-  const programEncoding = lazyFontProgram(descriptor, context);
+  const programEncoding = lazyFontProgram(descriptor, baseFont, context);
 
   // A code /Differences names is drawn with the glyph of that name, so only the name can say what it is: through the Adobe Glyph List, or, for a name the list does not know (a subsetter's "g27"), through the embedded program's own glyph of that name and whatever the program states about that glyph. The base encoding and the program's built-in encoding describe the glyph the code reached before /Differences replaced it, so neither is consulted for such a code; reading the code through them anyway would report the character the producer overrode.
   const unicodeForDifferencesName = (name: string): string | undefined => {
@@ -499,7 +501,7 @@ function readsVertically(fontDict: PdfDict, context: FontReadContext): boolean {
 const CID_TO_GID_ENTRY_SIZE = 2; // ISO 32000-1 Table 117: a /CIDToGIDMap stream holds one big-endian two-byte glyph index per CID, CID c at bytes 2c and 2c + 1
 
 /**
- * How a composite font's codes reach the embedded program's glyphs, so the program itself can say what a glyph is when the font dictionary's /ToUnicode CMap is absent or incomplete: through the glyph's own name, or its program's Unicode mapping read backwards.
+ * How a composite font's codes reach the embedded program's glyphs, so the program itself can say what a glyph is when the font dictionary's /ToUnicode CMap is absent or incomplete: through the glyph's own name, its program's Unicode mapping read backwards, or the glyph order of the core face the program is.
  *
  * With /Identity-H or /Identity-V a code is its CID. A /CIDToGIDMap that is absent or /Identity then makes the CID the glyph index, and a /CIDToGIDMap stream gives each CID its glyph index explicitly (ISO 32000-1 9.7.4.2). Any other /Encoding is a CMap from codes to CIDs this reader does not apply, and then the program is not consulted at all rather than being read against the wrong glyph.
  * @param fontDict - the Type0 font dictionary
@@ -601,7 +603,9 @@ function buildCompositeFont(
   const toUnicode = readToUnicodeCMap(fontDict, context);
   const glyphIdOf = cidToGlyphId(fontDict, descendantDict, context);
   const programEncoding =
-    glyphIdOf !== undefined ? lazyFontProgram(descriptor, context) : undefined;
+    glyphIdOf !== undefined
+      ? lazyFontProgram(descriptor, baseFont, context)
+      : undefined;
 
   const decodeToUnicode = (codes: Uint8Array<ArrayBuffer>): string => {
     let out = "";
