@@ -254,6 +254,210 @@ export function ruledProseColumnsPdf(): Uint8Array<ArrayBuffer> {
   return b.bytes();
 }
 
+// A table framed left and right and ruled above its header, under its header and under its last row, with a header of two lines: a label column ("Conductor" over "mm" with a superscript "2"), two group headings, and under the second of them three sub-headings, r, x and z. The first two body rows state one figure under each group heading, the second group's figure set under the middle sub-heading, and the other two state r, x and z apart. The second group heading is wider than the gap between its r and x sub-columns, so it runs across the strip every other line leaves between them. Text is 9pt Helvetica (Two-core cable, AC is 79.02pt from x 280, 0.175 is 22.52pt from x 340, and the 7pt superscript starts where mm, 14.99pt from x 80, ends). Coordinates are as the page is displayed, the table upright either way.
+export const FRAMED_TABLE_TITLE = "TABLE 1 Voltage drop";
+const FRAMED_TABLE_FONT_SIZE = 9;
+const FRAMED_TABLE_SUPERSCRIPT_SIZE = 7;
+const FRAMED_TABLE_SUPERSCRIPT_RISE = 3;
+const FRAMED_TABLE_COLUMN_X = [80, 180, 280, 340, 400] as const;
+const FRAMED_TABLE_LEFT = 77;
+const FRAMED_TABLE_RIGHT = 460;
+const FRAMED_TABLE_TITLE_Y = 560;
+const FRAMED_TABLE_GROUP_HEADING_Y = 530;
+const FRAMED_TABLE_SUB_HEADING_Y = 516;
+const FRAMED_TABLE_FIRST_ROW_Y = 498;
+const FRAMED_TABLE_ROW_PITCH = 14;
+// Rules clear the text beside them: the top rule an em and a little above the group headings' baseline, the others below the descenders of the line above.
+const FRAMED_TABLE_TOP_RULE_Y = 541;
+const FRAMED_TABLE_RULE_BELOW_BASELINE = 3;
+const FRAMED_TABLE_HEADER_RULE_Y =
+  FRAMED_TABLE_SUB_HEADING_Y - FRAMED_TABLE_RULE_BELOW_BASELINE;
+// The page the table is set on, A4 portrait.
+const FRAMED_TABLE_PAGE_WIDTH = 595;
+const FRAMED_TABLE_PAGE_HEIGHT = 842;
+
+const FRAMED_TABLE_BODY_ROWS: readonly (readonly (readonly [
+  string,
+  number,
+])[])[] = [
+  [
+    ["1.5", 80],
+    ["31", 180],
+    ["32", 340],
+  ],
+  [
+    ["2.5", 80],
+    ["19", 180],
+    ["20", 340],
+  ],
+  [
+    ["25", 80],
+    ["1.85", 180],
+    ["1.80", 280],
+    ["0.175", 340],
+    ["1.85", 400],
+  ],
+  [
+    ["35", 80],
+    ["1.30", 180],
+    ["1.30", 280],
+    ["0.170", 340],
+    ["1.35", 400],
+  ],
+];
+
+const FRAMED_TABLE_BOTTOM_RULE_Y =
+  FRAMED_TABLE_FIRST_ROW_Y -
+  (FRAMED_TABLE_BODY_ROWS.length - 1) * FRAMED_TABLE_ROW_PITCH -
+  FRAMED_TABLE_RULE_BELOW_BASELINE;
+
+interface FramedTableText {
+  readonly text: string;
+  readonly xPt: number;
+  readonly yPt: number;
+  readonly sizePt: number;
+}
+
+interface FramedTableRule {
+  readonly x1Pt: number;
+  readonly y1Pt: number;
+  readonly x2Pt: number;
+  readonly y2Pt: number;
+}
+
+function framedTableText(): FramedTableText[] {
+  const at = (
+    text: string,
+    xPt: number,
+    yPt: number,
+    sizePt = FRAMED_TABLE_FONT_SIZE,
+  ): FramedTableText => ({ text, xPt, yPt, sizePt });
+  const [labelX, firstGroupX, rX, xX, zX] = FRAMED_TABLE_COLUMN_X;
+  // "mm" in 9pt Helvetica is two 833/1000 em glyphs wide.
+  const mmWidth = (2 * 833 * FRAMED_TABLE_FONT_SIZE) / 1000;
+  return [
+    at(FRAMED_TABLE_TITLE, labelX, FRAMED_TABLE_TITLE_Y),
+    at("Conductor", labelX, FRAMED_TABLE_GROUP_HEADING_Y),
+    at("Two-core cable, DC", firstGroupX, FRAMED_TABLE_GROUP_HEADING_Y),
+    at("Two-core cable, AC", rX, FRAMED_TABLE_GROUP_HEADING_Y),
+    at("mm", labelX, FRAMED_TABLE_SUB_HEADING_Y),
+    at(
+      "2",
+      labelX + mmWidth,
+      FRAMED_TABLE_SUB_HEADING_Y + FRAMED_TABLE_SUPERSCRIPT_RISE,
+      FRAMED_TABLE_SUPERSCRIPT_SIZE,
+    ),
+    at("r", rX, FRAMED_TABLE_SUB_HEADING_Y),
+    at("x", xX, FRAMED_TABLE_SUB_HEADING_Y),
+    at("z", zX, FRAMED_TABLE_SUB_HEADING_Y),
+    ...FRAMED_TABLE_BODY_ROWS.flatMap((cells, row) =>
+      cells.map(([text, xPt]) =>
+        at(text, xPt, FRAMED_TABLE_FIRST_ROW_Y - row * FRAMED_TABLE_ROW_PITCH),
+      ),
+    ),
+  ];
+}
+
+function horizontalRule(
+  yPt: number,
+  leftPt = FRAMED_TABLE_LEFT,
+  rightPt = FRAMED_TABLE_RIGHT,
+): FramedTableRule {
+  return { x1Pt: leftPt, y1Pt: yPt, x2Pt: rightPt, y2Pt: yPt };
+}
+
+function verticalRule(
+  xPt: number,
+  topPt = FRAMED_TABLE_TOP_RULE_Y,
+  bottomPt = FRAMED_TABLE_BOTTOM_RULE_Y,
+): FramedTableRule {
+  return { x1Pt: xPt, y1Pt: topPt, x2Pt: xPt, y2Pt: bottomPt };
+}
+
+// The frame: the three horizontal rules and a vertical rule at each end, nothing between the columns.
+function framedTableRules(): FramedTableRule[] {
+  return [
+    horizontalRule(FRAMED_TABLE_TOP_RULE_Y),
+    horizontalRule(FRAMED_TABLE_HEADER_RULE_Y),
+    horizontalRule(FRAMED_TABLE_BOTTOM_RULE_Y),
+    verticalRule(FRAMED_TABLE_LEFT),
+    verticalRule(FRAMED_TABLE_RIGHT),
+  ];
+}
+
+// The same table drawn as a full grid: a rule under the group headings across the second group's sub-columns only, a rule under every body row, and a vertical rule between every two columns, the sub-columns' own dividers starting under the group heading they divide.
+function fullyRuledTableRules(): FramedTableRule[] {
+  const subColumnDividers = [330, 390];
+  const columnDividers = [170, 270];
+  const underGroupHeadingY =
+    FRAMED_TABLE_GROUP_HEADING_Y - FRAMED_TABLE_RULE_BELOW_BASELINE;
+  const underRows = FRAMED_TABLE_BODY_ROWS.map(
+    (_, row) =>
+      FRAMED_TABLE_FIRST_ROW_Y -
+      row * FRAMED_TABLE_ROW_PITCH -
+      FRAMED_TABLE_RULE_BELOW_BASELINE,
+  );
+  return [
+    horizontalRule(FRAMED_TABLE_TOP_RULE_Y),
+    horizontalRule(underGroupHeadingY, columnDividers[1]),
+    horizontalRule(FRAMED_TABLE_HEADER_RULE_Y),
+    ...underRows.map((yPt) => horizontalRule(yPt)),
+    ...[FRAMED_TABLE_LEFT, ...columnDividers, FRAMED_TABLE_RIGHT].map((xPt) =>
+      verticalRule(xPt),
+    ),
+    ...subColumnDividers.map((xPt) => verticalRule(xPt, underGroupHeadingY)),
+  ];
+}
+
+// How the table's displayed coordinates reach the content stream: as they are on an upright page, or, on a page carrying /Rotate 90 (displayed a quarter turn clockwise, ISO 32000-1 7.7.3.3), through the inverse of that turn, every line of text set running up the unrotated page so that it reads left to right once displayed.
+type FramedTableOrientation = "upright" | "sideways";
+
+function framedTablePagePdf(
+  orientation: FramedTableOrientation,
+  rules: readonly FramedTableRule[],
+): Uint8Array<ArrayBuffer> {
+  const sideways = orientation === "sideways";
+  // Displayed (X, Y) on a /Rotate 90 page of media width W is unrotated (W - Y, X).
+  const point = (xPt: number, yPt: number): string =>
+    sideways
+      ? `${String(FRAMED_TABLE_PAGE_WIDTH - yPt)} ${String(xPt)}`
+      : `${String(xPt)} ${String(yPt)}`;
+  const strokes = rules
+    .map(
+      (rule) =>
+        `${point(rule.x1Pt, rule.y1Pt)} m ${point(rule.x2Pt, rule.y2Pt)} l S`,
+    )
+    .join(" ");
+  const shown = framedTableText()
+    .map(
+      (item) =>
+        `/F1 ${String(item.sizePt)} Tf ${sideways ? "0 1 -1 0" : "1 0 0 1"} ${point(item.xPt, item.yPt)} Tm (${item.text}) Tj`,
+    )
+    .join(" ");
+  const b = new FixtureBuilder().header("1.4");
+  catalogPagesPageFontObjects(
+    b,
+    CONTENT_OBJ,
+    `[0 0 ${String(FRAMED_TABLE_PAGE_WIDTH)} ${String(FRAMED_TABLE_PAGE_HEIGHT)}]`,
+    sideways ? "/Rotate 90 " : "",
+  );
+  b.stream(CONTENT_OBJ, "<< >>", enc(`0.25 w ${strokes}\nBT ${shown} ET`));
+  b.classicXrefAndTrailer(CONTENT_OBJ, "/Root 1 0 R");
+  return b.bytes();
+}
+
+export function framedTwoLineHeaderTablePdf(
+  orientation: FramedTableOrientation,
+): Uint8Array<ArrayBuffer> {
+  return framedTablePagePdf(orientation, framedTableRules());
+}
+
+export function fullyRuledTwoLineHeaderTablePdf(
+  orientation: FramedTableOrientation,
+): Uint8Array<ArrayBuffer> {
+  return framedTablePagePdf(orientation, fullyRuledTableRules());
+}
+
 // The single highest-value fixture in the suite: Word/PowerPoint/Chrome/LibreOffice all default to PDF 1.5+ cross-reference *streams* with object streams, not the classic table our own writer emits — a reader that only handles the classic form would fail on the overwhelming majority of real-world, non-self-produced PDFs. Catalog/Pages/Page are packed into one compressed object stream (a stream object itself is never permitted inside an object stream, per ISO 32000-1 7.5.7, so the content stream, the object stream, and the xref stream itself all remain ordinary top-level objects). The xref stream is self-referential: its own entry describes its own byte offset.
 // A classic cross-reference stream row (ISO 32000-1 Table 18) is /W [1 4 2]: a 1-byte type field, a 4-byte second field, a 2-byte third field, seven bytes total.
 const XREF_STREAM_ROW_WIDTH = 7;

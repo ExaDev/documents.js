@@ -158,6 +158,26 @@ describe("detectRuledRowLattice", () => {
     ).toBeUndefined();
   });
 
+  it("finds no table when a row runs across a gap another row leaves between two places", () => {
+    // A group heading over two sub-columns, set in one band with the sub-headings under it, runs across the gutter the body leaves between those sub-columns; read as one row it would merge each body row's two figures into one cell.
+    expect(
+      detectRuledRowLattice([
+        rule(170),
+        rule(140),
+        rule(80),
+        text("Label", 22, 158, 30),
+        text("Group heading", 110, 158, 90),
+        text("a", 110, 146, 6),
+        text("b", 160, 146, 6),
+        ...[128, 116, 104, 92].flatMap((yPt) => [
+          text("1", 22, yPt, 6),
+          text("2", 110, yPt, 6),
+          text("3", 160, yPt, 6),
+        ]),
+      ]),
+    ).toBeUndefined();
+  });
+
   it("finds no table between fewer than three rules", () => {
     expect(
       detectRuledRowLattice(twoRows.filter((item) => !isRuleAt(item, 80))),

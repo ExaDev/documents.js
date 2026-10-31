@@ -20,6 +20,8 @@ import { richMarkdownText } from "../test-support/markdown";
 import {
   CHARACTER_SPACED_TABLE_PAGES,
   characterSpacedTablePdf,
+  framedTwoLineHeaderTablePdf,
+  fullyRuledTwoLineHeaderTablePdf,
   leadingTjAdjustmentWordSpacesPdf,
   loweredIndexPdf,
   raisedExponentPdf,
@@ -211,6 +213,37 @@ describe("pdfToMarkdown tables ruled only between their rows", () => {
       ].join("\n"),
     );
   });
+
+  it.each(["upright", "sideways"] as const)(
+    "reads a framed table whose group heading runs across its sub-columns as lines, every figure apart, not as a table merging two of them (%s)",
+    (orientation) => {
+      const markdown = new TextDecoder().decode(
+        pdfToMarkdown(framedTwoLineHeaderTablePdf(orientation)),
+      );
+      expect(markdown).not.toContain("|");
+      expect(markdown).toContain("25\t1\\.85\t1\\.80\t0\\.175\t1\\.85");
+      expect(markdown).toContain("35\t1\\.30\t1\\.30\t0\\.170\t1\\.35");
+    },
+  );
+
+  it.each(["upright", "sideways"] as const)(
+    "reads the same table drawn as a full grid through its lattice, every sub-column its own cell (%s)",
+    (orientation) => {
+      const markdown = new TextDecoder().decode(
+        pdfToMarkdown(fullyRuledTwoLineHeaderTablePdf(orientation)),
+      );
+      expect(markdown).toContain(
+        [
+          '<tr><td rowspan="2">Conductor<br>mm2</td><td rowspan="2">Two-core cable, DC</td><td colspan="3">Two-core cable, AC</td></tr>',
+          "<tr><td>r</td><td>x</td><td>z</td></tr>",
+          "<tr><td>1.5</td><td>31</td><td></td><td>32</td><td></td></tr>",
+          "<tr><td>2.5</td><td>19</td><td></td><td>20</td><td></td></tr>",
+          "<tr><td>25</td><td>1.85</td><td>1.80</td><td>0.175</td><td>1.85</td></tr>",
+          "<tr><td>35</td><td>1.30</td><td>1.30</td><td>0.170</td><td>1.35</td></tr>",
+        ].join("\n"),
+      );
+    },
+  );
 
   it("reads two columns of running prose between rules as columns, not as a table", () => {
     const markdown = new TextDecoder().decode(
