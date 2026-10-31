@@ -86,7 +86,7 @@
     "document-outline.js": "3.10.69",
     "document-schema.js": "7.16.2",
     "documents.js": "14.6.11",
-    "zod": "4.4.3"
+    "zod": "4.6.6"
   },
   "devDependencies": {
     "@arethetypeswrong/cli": "0.18.5",
