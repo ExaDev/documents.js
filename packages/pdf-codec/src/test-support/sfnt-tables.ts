@@ -1,4 +1,4 @@
-// Hand-built sfnt tables describing a font as a whole rather than its glyph encoding: 'name', 'hhea' and 'hmtx', for tests that assemble a synthetic font through test-support/sfnt.ts's buildSfnt. Built by literal byte layout against ISO/IEC 14496-22, importing nothing from this package's own sfnt readers, for the reason that file's header states.
+// Hand-built sfnt tables describing a font as a whole rather than its glyph encoding: 'name', 'hhea', 'hmtx' and 'maxp', for tests that assemble a synthetic font through test-support/sfnt.ts's buildSfnt. Built by literal byte layout against ISO/IEC 14496-22, importing nothing from this package's own sfnt readers, for the reason that file's header states.
 
 // A minimal, hand-built 'name' table — the same record layout font-tables.test.ts's own buildFontWithNameTable uses (clause 5.2.7), returning the bare table bytes so it can be combined with other synthetic tables via buildSfnt.
 export function buildNameTable(
@@ -61,5 +61,14 @@ export function buildHmtxTable(
   advanceWidths.forEach((width, index) => {
     view.setUint16(index * 4, width);
   });
+  return table;
+}
+
+// A version 0.5 'maxp' table (clause 5.2.6, 6 bytes): the version and the glyph count, which bounds the glyph ids a reader walks.
+export function buildMaxpTable(numGlyphs: number): Uint8Array<ArrayBuffer> {
+  const table = new Uint8Array(6);
+  const view = new DataView(table.buffer);
+  view.setUint32(0, 0x00005000);
+  view.setUint16(4, numGlyphs);
   return table;
 }

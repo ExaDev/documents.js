@@ -11,7 +11,7 @@ import {
 import type { CmapSubtable } from "./cmap-table";
 import { readCmapSubtables } from "./cmap-table";
 import { standardGlyphName } from "./encoding-standard-tables";
-import { parsePostGlyphNames } from "./font-tables";
+import { parseMaxp, parsePostGlyphNames } from "./font-tables";
 import { glyphNameToUnicode } from "./glyph-names";
 import type { SfntFont } from "./sfnt";
 import { hasBytes, parseSfnt, sfntTableBytes, u8, u16 } from "./sfnt";
@@ -30,6 +30,8 @@ export interface BuiltinEncoding {
   codeToUnicode: (code: number) => string | undefined;
   // Glyph ID -> the text the glyph draws, for a composite font whose CIDs address the program's own glyphs directly.
   glyphIdToUnicode: (glyphId: number) => string | undefined;
+  // The glyph the program itself names `name`, through its 'post' table or CFF charset: how a /Differences name the Adobe Glyph List does not know (a subsetter's "g27") still reaches a glyph whose identity the program can state another way.
+  glyphIdOfName: (name: string) => number | undefined;
 }
 
 // The private-use planes, which name no character: reversing a Unicode subtable that maps only these (what a symbol font's own (3, 1) subtable usually is) yields a code point that identifies the glyph within that one font and nothing beyond it, so it is treated as no answer rather than a wrong one.
@@ -51,19 +53,25 @@ function isPrivateUse(codePoint: number): boolean {
   );
 }
 
-// The sources a program can supply, each independently optional: a code -> glyph mapping, a glyph -> name mapping, and a glyph -> text mapping recovered from a Unicode subtable. A Type 1 program supplies a code -> name mapping directly instead, with no glyph IDs anywhere in it.
+// The sources a program can supply, each independently optional: a code -> glyph mapping, a glyph -> name mapping and its inverse, and a glyph -> text mapping recovered from a Unicode subtable. A Type 1 program supplies a code -> name mapping directly instead, with no glyph IDs anywhere in it.
 interface ProgramSources {
   readonly codeToGlyphId?: (code: number) => number | undefined;
   readonly codeToName?: (code: number) => string | undefined;
   readonly glyphIdToName?: (glyphId: number) => string | undefined;
+  readonly nameToGlyphId?: (name: string) => number | undefined;
   readonly glyphIdToUnicode?: (glyphId: number) => string | undefined;
 }
 
 function encodingFromSources(
   sources: ProgramSources,
 ): BuiltinEncoding | undefined {
-  const { codeToGlyphId, codeToName, glyphIdToName, glyphIdToUnicode } =
-    sources;
+  const {
+    codeToGlyphId,
+    codeToName,
+    glyphIdToName,
+    nameToGlyphId,
+    glyphIdToUnicode,
+  } = sources;
   const glyphUnicode = (glyphId: number): string | undefined => {
     const name = glyphIdToName?.(glyphId);
     const named = name !== undefined ? glyphNameToUnicode(name) : undefined;
@@ -86,8 +94,33 @@ function encodingFromSources(
     glyphIdToName !== undefined ||
     glyphIdToUnicode !== undefined;
   return stated
-    ? { codeToUnicode: codeUnicode, glyphIdToUnicode: glyphUnicode }
+    ? {
+        codeToUnicode: codeUnicode,
+        glyphIdToUnicode: glyphUnicode,
+        glyphIdOfName: (name) => nameToGlyphId?.(name),
+      }
     : undefined;
+}
+
+// A glyph -> name lookup turned round, built on first use over the program's glyph ids. A name given to several glyphs keeps the lowest id, the one a font tool reaches first.
+function invertGlyphNames(
+  glyphIdToName: (glyphId: number) => string | undefined,
+  glyphCount: number,
+): (name: string) => number | undefined {
+  let inverse: Map<string, number> | undefined;
+  return (name) => {
+    if (inverse === undefined) {
+      const built = new Map<string, number>();
+      for (let glyphId = 0; glyphId < glyphCount; glyphId++) {
+        const glyphName = glyphIdToName(glyphId);
+        if (glyphName !== undefined && !built.has(glyphName)) {
+          built.set(glyphName, glyphId);
+        }
+      }
+      inverse = built;
+    }
+    return inverse.get(name);
+  };
 }
 
 const SYMBOL_CMAP_CODE_BASE = 0xf000; // ISO 32000-1 9.6.6.4: a (3, 0) subtable's codes are the font's own 8-bit codes offset into the 0xF000 private-use range
@@ -163,9 +196,15 @@ function trueTypeSources(font: SfntFont): ProgramSources {
         ? (code: number): number | undefined =>
             unicode.lookup(SYMBOL_CMAP_CODE_BASE | code)
         : undefined;
+  const glyphIdToName = parsePostGlyphNames(font);
+  const glyphCount = parseMaxp(font)?.numGlyphs;
   return {
     codeToGlyphId: symbolLookup,
-    glyphIdToName: parsePostGlyphNames(font),
+    glyphIdToName,
+    nameToGlyphId:
+      glyphIdToName !== undefined && glyphCount !== undefined
+        ? invertGlyphNames(glyphIdToName, glyphCount)
+        : undefined,
     glyphIdToUnicode:
       unicode !== undefined ? invertUnicodeSubtable(unicode) : undefined,
   };
@@ -349,14 +388,18 @@ function cffSources(
             ? undefined
             : cffStringForSid(sid, stringIndex);
         };
+  const nameToGlyphId =
+    glyphIdToName === undefined
+      ? undefined
+      : invertGlyphNames(glyphIdToName, glyphCount);
 
   const encodingOffset =
     topDict.get(CFF_DICT_OP_ENCODING)?.[0] ?? CFF_PREDEFINED_ENCODING_STANDARD;
   if (encodingOffset === CFF_PREDEFINED_ENCODING_STANDARD) {
     // Predefined encoding 0 is Adobe StandardEncoding itself, which names a glyph per code with no reference to this font's own glyph order.
     return predefinedEncodingApplies
-      ? { codeToName: standardGlyphName, glyphIdToName }
-      : { glyphIdToName };
+      ? { codeToName: standardGlyphName, glyphIdToName, nameToGlyphId }
+      : { glyphIdToName, nameToGlyphId };
   }
   const glyphBySid = new Map<number, number>();
   for (const [glyphId, sid] of sidByGlyph ?? []) {
@@ -371,8 +414,12 @@ function cffSources(
     glyphBySid,
   );
   return glyphByCode === undefined
-    ? { glyphIdToName }
-    : { codeToGlyphId: (code) => glyphByCode.get(code), glyphIdToName };
+    ? { glyphIdToName, nameToGlyphId }
+    : {
+        codeToGlyphId: (code) => glyphByCode.get(code),
+        glyphIdToName,
+        nameToGlyphId,
+      };
 }
 
 function matchesAscii(
@@ -449,6 +496,7 @@ export function readFontProgramEncoding(
     return encodingFromSources({
       codeToGlyphId: container.codeToGlyphId ?? outlines?.codeToGlyphId,
       glyphIdToName: container.glyphIdToName ?? outlines?.glyphIdToName,
+      nameToGlyphId: container.nameToGlyphId ?? outlines?.nameToGlyphId,
       glyphIdToUnicode: container.glyphIdToUnicode,
     });
   }
