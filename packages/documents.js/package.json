@@ -1,6 +1,6 @@
 {
   "name": "documents.js",
-  "version": "14.6.10",
+  "version": "14.6.11",
   "description": "Converts between docx, pptx, odt, odp, ods, odg, xlsx, csv, svg, markdown, rtf, doc, xls, ppt and PDF through one shared, Zod-typed content schema (wpd read-only), plus read+write editors for OOXML and OpenDocument. Worker-isomorphic.",
   "type": "module",
   "repository": {
@@ -111,7 +111,7 @@
     "markdown-codec": "11.2.1",
     "odf.js": "11.2.3",
     "ooxml.js": "12.2.33",
-    "pdf-codec": "5.7.3",
+    "pdf-codec": "5.7.4",
     "ppt-codec": "2.2.24",
     "rtf-codec": "8.1.25",
     "temml": "0.13.4",

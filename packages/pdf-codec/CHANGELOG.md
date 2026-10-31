@@ -1,3 +1,16 @@
+## [5.7.4](https://github.com/ExaDev/documents.js/compare/pdf-codec%405.7.3...pdf-codec%405.7.4) (2026-10-31)
+
+### Bug Fixes
+
+* **pdf-codec:** reach a composite font's glyphs through its /CIDToGIDMap stream ([359b6af](https://github.com/ExaDev/documents.js/commit/359b6af5c92dd959c31e76e02c481fa2ca8cf140))
+* **pdf-codec:** read a /Differences code only through the name it gives ([86d4411](https://github.com/ExaDev/documents.js/commit/86d441197637e3ef0944e66c303b2d6a624ee80d))
+* **pdf-codec:** read a nameless core-face subset through the face's glyph order ([8a83c3c](https://github.com/ExaDev/documents.js/commit/8a83c3c555716579d597c623298595476311977b)), closes [#1742](https://github.com/ExaDev/documents.js/issues/1742)
+* **pdf-codec:** resolve glyph names by the Adobe Glyph List specification ([5b9def4](https://github.com/ExaDev/documents.js/commit/5b9def4f555e83c9d9b8e0bc98224ed600600459))
+
+### Tests
+
+* **pdf-codec:** share the name, hhea and hmtx table builders between suites ([0947766](https://github.com/ExaDev/documents.js/commit/0947766cc97f89a4724b4da96b526fb3c21230f0))
+
 ## [5.7.3](https://github.com/ExaDev/documents.js/compare/pdf-codec%405.7.2...pdf-codec%405.7.3) (2026-10-31)
 
 ### Bug Fixes
