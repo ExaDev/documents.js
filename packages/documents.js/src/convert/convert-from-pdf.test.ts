@@ -20,6 +20,7 @@ import { richMarkdownText } from "../test-support/markdown";
 import {
   CHARACTER_SPACED_TABLE_PAGES,
   characterSpacedTablePdf,
+  fractionNumeratorExponentPdf,
   framedTwoLineHeaderTablePdf,
   fullyRuledTwoLineHeaderTablePdf,
   leadingTjAdjustmentWordSpacesPdf,
@@ -197,6 +198,22 @@ describe("pdfToMarkdown superscripts and subscripts", () => {
     );
     expect(markdown.trim()).toBe("x<sub>2</sub><sup>2</sup> \\+ y");
   });
+
+  it.each([
+    [
+      "by 0.35 of its base's em, inside line clustering's tolerance",
+      0.35 * 9.16,
+    ],
+    ["by 4.3pt, past line clustering's tolerance", 4.3],
+  ])(
+    "marks an equation's exponent set at four fifths of its base's size and raised %s as a superscript on its base's line",
+    (_, raisedPt) => {
+      const markdown = new TextDecoder().decode(
+        pdfToMarkdown(fractionNumeratorExponentPdf(raisedPt)),
+      );
+      expect(markdown.trim()).toBe("1 \\+ K<sup>2</sup>R\n\nR \\+ X");
+    },
+  );
 });
 
 describe("pdfToMarkdown tables ruled only between their rows", () => {
@@ -234,7 +251,7 @@ describe("pdfToMarkdown tables ruled only between their rows", () => {
       );
       expect(markdown).toContain(
         [
-          '<tr><td rowspan="2">Conductor<br>mm2</td><td rowspan="2">Two-core cable, DC</td><td colspan="3">Two-core cable, AC</td></tr>',
+          '<tr><td rowspan="2">Conductor<br>mm<sup>2</sup></td><td rowspan="2">Two-core cable, DC</td><td colspan="3">Two-core cable, AC</td></tr>',
           "<tr><td>r</td><td>x</td><td>z</td></tr>",
           "<tr><td>1.5</td><td>31</td><td></td><td>32</td><td></td></tr>",
           "<tr><td>2.5</td><td>19</td><td></td><td>20</td><td></td></tr>",
