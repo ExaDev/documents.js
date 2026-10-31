@@ -260,7 +260,14 @@ function indexRegions(
   return regionAt;
 }
 
-function recoverTable(
+/**
+ * The table one lattice states on a page, every text item inside it placed in the cell its boundaries put it in.
+ * @param page - the page the lattice was found on, whose text items fill the cells
+ * @param pageIndex - the page's index, stamped on every frame
+ * @param lattice - a gridline lattice (lattice.ts) or the grid of a table ruled only between its rows (ruled-rows.ts)
+ * @returns the table with its frame, the text it consumed and the strokes it was drawn with; undefined when no text lies inside the lattice, since an empty lattice is decoration, not a table
+ */
+export function recoverTable(
   page: LayoutPage,
   pageIndex: number,
   lattice: GridLattice,
