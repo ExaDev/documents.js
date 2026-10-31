@@ -1,3 +1,14 @@
+## [14.6.10](https://github.com/ExaDev/documents.js/compare/documents.js%4014.6.9...documents.js%4014.6.10) (2026-10-31)
+
+### Tests
+
+* **documents.js:** pin an equation's exponent set at four fifths of its base ([ebf2eba](https://github.com/ExaDev/documents.js/commit/ebf2eba045e3c1abf0a88e05bceb49da5744476f)), references [#1738](https://github.com/ExaDev/documents.js/issues/1738)
+
+
+### Dependencies
+
+- Updated pdf-codec to 5.7.3
+
 ## [14.6.9](https://github.com/ExaDev/documents.js/compare/documents.js%4014.6.8...documents.js%4014.6.9) (2026-10-31)
 
 ### Bug Fixes
