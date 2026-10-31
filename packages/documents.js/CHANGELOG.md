@@ -1,3 +1,13 @@
+## [14.6.9](https://github.com/ExaDev/documents.js/compare/documents.js%4014.6.8...documents.js%4014.6.9) (2026-10-31)
+
+### Bug Fixes
+
+* **documents.js:** read no ruled-row grid when its rows disagree about a gutter ([011e750](https://github.com/ExaDev/documents.js/commit/011e7507640bc2bcb529590a1a390c11757f6357)), closes [#1734](https://github.com/ExaDev/documents.js/issues/1734)
+
+### Tests
+
+* **documents.js:** hold table recovery on a fully ruled page to the lattice alone ([93b8ba4](https://github.com/ExaDev/documents.js/commit/93b8ba4af37f7902a7a17a73b042a2b74b15ef35))
+
 ## [14.6.8](https://github.com/ExaDev/documents.js/compare/documents.js%4014.6.7...documents.js%4014.6.8) (2026-10-30)
 
 ### Bug Fixes
