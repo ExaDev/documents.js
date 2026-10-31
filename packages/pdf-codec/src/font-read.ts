@@ -251,7 +251,20 @@ function buildSimpleFont(fontDict: PdfDict, context: FontReadContext): PdfFont {
   );
   const programEncoding = lazyFontProgram(descriptor, context);
 
-  // What a code neither /ToUnicode nor /Differences resolves falls back to, in order. A font whose /BaseFont is literally one of the two standard-14 symbol faces, and any font flagged Symbolic, is encoded by its own font program rather than by any of the standard tables (ISO 32000-1 9.6.6.2 — WinAnsi/MacRoman/StandardEncoding are never valid for Symbol or ZapfDingbats, and 9.6.6.4 has a symbolic TrueType font's /Encoding ignored outright), so the embedded program is consulted first and the two fixed standard-14 symbol tables next. An ordinary text font is the other way round: an explicitly named base encoding is the font dictionary stating what its codes mean, and only a font that states nothing falls through to its own program, then to WinAnsi — ISO 32000-1's own default for a Type1/TrueType built-in encoding. Where every source is silent the code stays unmapped rather than being guessed at, since a plausible-looking wrong Latin letter is worse than a visible replacement character.
+  // A code /Differences names is drawn with the glyph of that name, so only the name can say what it is: through the Adobe Glyph List, or, for a name the list does not know (a subsetter's "g27"), through the embedded program's own glyph of that name and whatever the program states about that glyph. The base encoding and the program's built-in encoding describe the glyph the code reached before /Differences replaced it, so neither is consulted for such a code; reading the code through them anyway would report the character the producer overrode.
+  const unicodeForDifferencesName = (name: string): string | undefined => {
+    const named = glyphNameToUnicode(name);
+    if (named !== undefined) {
+      return named;
+    }
+    const program = programEncoding();
+    const glyphId = program?.glyphIdOfName(name);
+    return glyphId === undefined
+      ? undefined
+      : program?.glyphIdToUnicode(glyphId);
+  };
+
+  // What a code /ToUnicode does not cover and /Differences does not name falls back to, in order. A font whose /BaseFont is literally one of the two standard-14 symbol faces, and any font flagged Symbolic, is encoded by its own font program rather than by any of the standard tables (ISO 32000-1 9.6.6.2 — WinAnsi/MacRoman/StandardEncoding are never valid for Symbol or ZapfDingbats, and 9.6.6.4 has a symbolic TrueType font's /Encoding ignored outright), so the embedded program is consulted first and the two fixed standard-14 symbol tables next. An ordinary text font is the other way round: an explicitly named base encoding is the font dictionary stating what its codes mean, and only a font that states nothing falls through to its own program, then to WinAnsi — ISO 32000-1's own default for a Type1/TrueType built-in encoding. Where every source is silent the code stays unmapped rather than being guessed at, since a plausible-looking wrong Latin letter is worse than a visible replacement character.
   const symbolEncoded = symbolic || builtinGlyphName !== undefined;
   const byGlyphName =
     (source: (code: number) => string | undefined) =>
@@ -265,9 +278,8 @@ function buildSimpleFont(fontDict: PdfDict, context: FontReadContext): PdfFont {
     namedBaseGlyphName === undefined
       ? undefined
       : byGlyphName(namedBaseGlyphName);
-  const resolvers = [
-    byGlyphName((code: number) => differencesMap.get(code)),
-    ...(symbolEncoded
+  const resolvers = (
+    symbolEncoded
       ? [
           fromProgram,
           builtinGlyphName === undefined
@@ -275,10 +287,14 @@ function buildSimpleFont(fontDict: PdfDict, context: FontReadContext): PdfFont {
             : byGlyphName(builtinGlyphName),
           namedBase,
         ]
-      : [namedBase, fromProgram, byGlyphName(winAnsiGlyphName)]),
-  ].filter((resolver) => resolver !== undefined);
+      : [namedBase, fromProgram, byGlyphName(winAnsiGlyphName)]
+  ).filter((resolver) => resolver !== undefined);
 
   const unicodeForCode = (code: number): string | undefined => {
+    const differencesName = differencesMap.get(code);
+    if (differencesName !== undefined) {
+      return unicodeForDifferencesName(differencesName);
+    }
     for (const resolve of resolvers) {
       const unicode = resolve(code);
       if (unicode !== undefined) {
