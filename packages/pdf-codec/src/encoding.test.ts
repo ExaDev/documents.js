@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
   WINANSI_GLYPH_NAMES,
-  glyphNameToUnicode,
   namedEncodingGlyphName,
   winAnsiGlyphName,
 } from "./encoding";
@@ -44,49 +43,6 @@ describe("winAnsiGlyphName", () => {
 
   it("returns undefined for a code outside the table", () => {
     expect(winAnsiGlyphName(300)).toBeUndefined();
-  });
-});
-
-describe("glyphNameToUnicode", () => {
-  it("resolves an ASCII glyph name to its own code point", () => {
-    expect(glyphNameToUnicode("A")).toBe(0x41);
-  });
-
-  it("resolves a CP1252-extension glyph name to its real Unicode value", () => {
-    expect(glyphNameToUnicode("eacute")).toBe(0xe9);
-    expect(glyphNameToUnicode("Euro")).toBe(0x20ac);
-  });
-
-  it('resolves the one real "bullet" entry, unclobbered by the placeholder duplicates in WINANSI_GLYPH_NAMES', () => {
-    expect(glyphNameToUnicode("bullet")).toBe(0x2022);
-  });
-
-  it('resolves "space" to the ordinary space, not the non-breaking space that shares the same glyph name at 0xA0', () => {
-    expect(glyphNameToUnicode("space")).toBe(0x20);
-  });
-
-  it("returns undefined for a name outside the WinAnsi set", () => {
-    expect(glyphNameToUnicode("not-a-real-glyph-name")).toBeUndefined();
-  });
-
-  it("resolves the Adobe Glyph List's own constructed name forms", () => {
-    // What a subsetting tool re-emits when it strips a font's real glyph names: "uniXXXX" for a BMP code point, "uXXXX" through "uXXXXXX" for any code point.
-    expect(glyphNameToUnicode("uni2126")).toBe(0x2126);
-    expect(glyphNameToUnicode("u1D400")).toBe(0x1d400);
-    expect(glyphNameToUnicode("u0041")).toBe(0x41);
-  });
-
-  it("resolves a name carrying a variant suffix through its base name", () => {
-    // The AGL specification's own rule: everything from the first period onward names a variant of the glyph the base name identifies, not a different character.
-    expect(glyphNameToUnicode("A.sc")).toBe(0x41);
-    expect(glyphNameToUnicode("Omega.alt01")).toBe(0x2126);
-  });
-
-  it("resolves nothing for a name that only identifies a glyph's position in one font", () => {
-    // "g27" and "cid42" are glyph indices wearing a name; a code point read out of one would be invented rather than recovered.
-    expect(glyphNameToUnicode("g27")).toBeUndefined();
-    expect(glyphNameToUnicode("cid42")).toBeUndefined();
-    expect(glyphNameToUnicode("u110000")).toBeUndefined(); // past the last Unicode code point
   });
 });
 

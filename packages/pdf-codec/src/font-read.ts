@@ -5,11 +5,7 @@ import { parseToUnicodeCMap } from "./cmap";
 import type { ToUnicodeCMap } from "./cmap";
 import type { PdfDiagnosticSink } from "./diagnostics";
 import { decodeStream } from "./filters";
-import {
-  glyphNameToUnicode,
-  namedEncodingGlyphName,
-  winAnsiGlyphName,
-} from "./encoding";
+import { namedEncodingGlyphName, winAnsiGlyphName } from "./encoding";
 import {
   symbolGlyphName,
   zapfDingbatsGlyphName,
@@ -17,6 +13,7 @@ import {
 
 import { resolveStandardFont } from "./fonts";
 import { styleFromBaseFontName } from "./font-style";
+import { glyphNameToUnicode } from "./glyph-names";
 import type { FontMetricsPort, PdfObjectResolver } from "./interpret-types";
 import type { PdfDict, PdfObject } from "./objects";
 import { asArray, asName, asNumber, dictGet, isName } from "./objects";
@@ -258,11 +255,11 @@ function buildSimpleFont(fontDict: PdfDict, context: FontReadContext): PdfFont {
   const symbolEncoded = symbolic || builtinGlyphName !== undefined;
   const byGlyphName =
     (source: (code: number) => string | undefined) =>
-    (code: number): number | undefined => {
+    (code: number): string | undefined => {
       const name = source(code);
       return name === undefined ? undefined : glyphNameToUnicode(name);
     };
-  const fromProgram = (code: number): number | undefined =>
+  const fromProgram = (code: number): string | undefined =>
     programEncoding()?.codeToUnicode(code);
   const namedBase =
     namedBaseGlyphName === undefined
@@ -281,7 +278,7 @@ function buildSimpleFont(fontDict: PdfDict, context: FontReadContext): PdfFont {
       : [namedBase, fromProgram, byGlyphName(winAnsiGlyphName)]),
   ].filter((resolver) => resolver !== undefined);
 
-  const unicodeForCode = (code: number): number | undefined => {
+  const unicodeForCode = (code: number): string | undefined => {
     for (const resolve of resolvers) {
       const unicode = resolve(code);
       if (unicode !== undefined) {
@@ -302,7 +299,7 @@ function buildSimpleFont(fontDict: PdfDict, context: FontReadContext): PdfFont {
       }
       const unicode = unicodeForCode(code);
       if (unicode !== undefined) {
-        out += String.fromCodePoint(unicode);
+        out += unicode;
         continue;
       }
       unmapped++;
@@ -570,7 +567,7 @@ function buildCompositeFont(
       }
       const fromProgram = programEncoding?.()?.glyphIdToUnicode(cid);
       if (fromProgram !== undefined) {
-        out += String.fromCodePoint(fromProgram);
+        out += fromProgram;
         continue;
       }
       unmapped++;
