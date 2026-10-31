@@ -3,6 +3,7 @@ import { EMPTY_DICT, FixtureBuilder, enc } from "./pdf";
 // One-page PDFs showing glyphs from a font whose embedded program the caller supplies, with no /ToUnicode CMap, so the only route from what the page shows to text runs through the font dictionary's encoding and the program itself. Built by literal object layout through test-support/pdf.ts's FixtureBuilder, importing nothing from this package's own writer, for the reason that file's header states.
 
 const HEX_RADIX = 16;
+const CID_HEX_DIGITS = 4;
 const CODE_HEX_DIGITS = 2;
 
 const CATALOG = "<< /Type /Catalog /Pages 2 0 R >>";
@@ -14,6 +15,48 @@ function showHex(codes: readonly number[], digits: number): string {
   return codes
     .map((code) => code.toString(HEX_RADIX).padStart(digits, "0"))
     .join("");
+}
+
+// A page showing CIDs from a Type0 font with /Identity-H and a CIDFontType2 descendant whose /FontFile2 is `program`. Without `cidToGidMap` the descendant states no /CIDToGIDMap and the default /Identity applies; with it, the bytes become a /CIDToGIDMap stream.
+export function compositeFontProgramPdf(options: {
+  readonly baseFont: string;
+  readonly program: Uint8Array<ArrayBuffer>;
+  readonly cids: readonly number[];
+  readonly cidToGidMap?: Uint8Array<ArrayBuffer>;
+}): Uint8Array<ArrayBuffer> {
+  const b = new FixtureBuilder().header();
+  b.object(1, CATALOG);
+  b.object(2, PAGES);
+  b.object(3, PAGE);
+  b.object(
+    4,
+    `<< /Type /Font /Subtype /Type0 /BaseFont /${options.baseFont} /Encoding /Identity-H /DescendantFonts [6 0 R] >>`,
+  );
+  b.stream(
+    5,
+    EMPTY_DICT,
+    enc(
+      `BT /F1 12 Tf 10 50 Td <${showHex(options.cids, CID_HEX_DIGITS)}> Tj ET`,
+    ),
+  );
+  const cidToGidMap =
+    options.cidToGidMap === undefined ? "" : "/CIDToGIDMap 9 0 R";
+  b.object(
+    6,
+    `<< /Type /Font /Subtype /CIDFontType2 /BaseFont /${options.baseFont} /CIDSystemInfo << /Registry (Adobe) /Ordering (Identity) /Supplement 0 >> /FontDescriptor 7 0 R ${cidToGidMap} >>`,
+  );
+  b.object(
+    7,
+    `<< /Type /FontDescriptor /FontName /${options.baseFont} /Flags 4 /FontFile2 8 0 R >>`,
+  );
+  b.stream(8, EMPTY_DICT, options.program);
+  if (options.cidToGidMap === undefined) {
+    b.classicXrefAndTrailer(8, "/Root 1 0 R");
+    return b.bytes();
+  }
+  b.stream(9, EMPTY_DICT, options.cidToGidMap);
+  b.classicXrefAndTrailer(9, "/Root 1 0 R");
+  return b.bytes();
 }
 
 // A page showing one-byte codes from a simple TrueType font whose /Encoding is a dictionary carrying only `differences`, the /Differences array's contents as PDF source (`65 /g5`, say). Without `program` the font descriptor names no /FontFile2.

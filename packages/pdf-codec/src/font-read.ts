@@ -496,6 +496,50 @@ function readsVertically(fontDict: PdfDict, context: FontReadContext): boolean {
   return false;
 }
 
+const CID_TO_GID_ENTRY_SIZE = 2; // ISO 32000-1 Table 117: a /CIDToGIDMap stream holds one big-endian two-byte glyph index per CID, CID c at bytes 2c and 2c + 1
+
+/**
+ * How a composite font's codes reach the embedded program's glyphs, so the program itself can say what a glyph is when the font dictionary's /ToUnicode CMap is absent or incomplete: through the glyph's own name, or its program's Unicode mapping read backwards.
+ *
+ * With /Identity-H or /Identity-V a code is its CID. A /CIDToGIDMap that is absent or /Identity then makes the CID the glyph index, and a /CIDToGIDMap stream gives each CID its glyph index explicitly (ISO 32000-1 9.7.4.2). Any other /Encoding is a CMap from codes to CIDs this reader does not apply, and then the program is not consulted at all rather than being read against the wrong glyph.
+ * @param fontDict - the Type0 font dictionary
+ * @param descendantDict - its descendant CIDFont dictionary, if it has a readable one
+ * @param context - the font read whose resolver follows references and whose sink receives stream-decoding diagnostics
+ * @returns a lookup from CID to glyph index, answering undefined for a CID the map does not reach, or undefined when codes do not reach glyphs in a way this reader applies
+ */
+function cidToGlyphId(
+  fontDict: PdfDict,
+  descendantDict: PdfDict | undefined,
+  context: FontReadContext,
+): ((cid: number) => number | undefined) | undefined {
+  const encodingName = dictGet(fontDict, "Encoding");
+  if (
+    !isName(encodingName, "Identity-H") &&
+    !isName(encodingName, "Identity-V")
+  ) {
+    return undefined;
+  }
+  const map = context.resolver.resolve(
+    descendantDict !== undefined
+      ? dictGet(descendantDict, "CIDToGIDMap")
+      : undefined,
+  );
+  if (map === undefined || isName(map, "Identity")) {
+    return (cid) => cid;
+  }
+  if (map.kind !== "stream") {
+    return undefined;
+  }
+  const bytes = decodeStream(map.raw, map.dict, context.sink).bytes;
+  return (cid) => {
+    const at = cid * CID_TO_GID_ENTRY_SIZE;
+    if (at + 1 >= bytes.length) {
+      return undefined;
+    }
+    return ((bytes[at] ?? 0) << BITS_PER_BYTE) | (bytes[at + 1] ?? 0);
+  };
+}
+
 function buildCompositeFont(
   fontDict: PdfDict,
   context: FontReadContext,
@@ -555,19 +599,9 @@ function buildCompositeFont(
   };
 
   const toUnicode = readToUnicodeCMap(fontDict, context);
-  // With Identity-H and the default /CIDToGIDMap, a CID is the embedded program's own glyph ID, so the program itself can say what a glyph is when the font dictionary carries no /ToUnicode CMap (or an incomplete one) — through the glyph's own name, or by reading the program's Unicode mapping backwards. Any other /Encoding or a /CIDToGIDMap stream breaks that identity, and the program is not consulted at all rather than being read against the wrong glyph.
-  const cidToGidMap =
-    descendantDict !== undefined
-      ? dictGet(descendantDict, "CIDToGIDMap")
-      : undefined;
-  const encodingName = dictGet(fontDict, "Encoding");
-  const cidIsGlyphId =
-    (isName(encodingName, "Identity-H") ||
-      isName(encodingName, "Identity-V")) &&
-    (cidToGidMap === undefined || isName(cidToGidMap, "Identity"));
-  const programEncoding = cidIsGlyphId
-    ? lazyFontProgram(descriptor, context)
-    : undefined;
+  const glyphIdOf = cidToGlyphId(fontDict, descendantDict, context);
+  const programEncoding =
+    glyphIdOf !== undefined ? lazyFontProgram(descriptor, context) : undefined;
 
   const decodeToUnicode = (codes: Uint8Array<ArrayBuffer>): string => {
     let out = "";
@@ -581,7 +615,11 @@ function buildCompositeFont(
         out += mapped;
         continue;
       }
-      const fromProgram = programEncoding?.()?.glyphIdToUnicode(cid);
+      const glyphId = glyphIdOf?.(cid);
+      const fromProgram =
+        glyphId === undefined
+          ? undefined
+          : programEncoding?.()?.glyphIdToUnicode(glyphId);
       if (fromProgram !== undefined) {
         out += fromProgram;
         continue;

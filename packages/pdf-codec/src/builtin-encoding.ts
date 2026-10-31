@@ -28,7 +28,7 @@ import { hasBytes, parseSfnt, sfntTableBytes, u8, u16 } from "./sfnt";
 export interface BuiltinEncoding {
   // The program's own character code -> the text its glyph draws. Always undefined for a program that states no code-keyed encoding at all (a CID-keyed CFF, or a TrueType with no symbolic subtable), which is exactly the case a simple font must fall back from.
   codeToUnicode: (code: number) => string | undefined;
-  // Glyph ID -> the text the glyph draws, for a composite font whose CIDs address the program's own glyphs directly.
+  // Glyph ID -> the text the glyph draws, for a composite font whose CIDs address the program's own glyphs, directly or through a /CIDToGIDMap.
   glyphIdToUnicode: (glyphId: number) => string | undefined;
   // The glyph the program itself names `name`, through its 'post' table or CFF charset: how a /Differences name the Adobe Glyph List does not know (a subsetter's "g27") still reaches a glyph whose identity the program can state another way.
   glyphIdOfName: (name: string) => number | undefined;
