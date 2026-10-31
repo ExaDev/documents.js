@@ -183,8 +183,17 @@ export function runGapPt(
 // Where a superscript or subscript sits relative to the run it decorates.
 export type PdfScriptPosition = "superscript" | "subscript";
 
-// A script is set smaller than its base: every face whose OS/2 table this was checked against (Arial, Helvetica, Times New Roman, Georgia, Verdana, Courier New) declares its superscript and subscript size as 1331/2048, about 0.65 of the em, and word processors use between 0.58 and 0.67. An ordinary change of size inside a line never comes that close: two steps of the conventional type scale (9 against 11, 10 against 12) still differ by less than a fifth. Three quarters sits between the two.
-const SCRIPT_MAX_SIZE_RATIO = 0.75;
+// The closest two steps of the conventional type scale come to each other: 9pt against 11pt. A script is always set smaller than this fraction of its base.
+const TYPE_SCALE_SMALLER_STEP_PT = 9;
+const TYPE_SCALE_LARGER_STEP_PT = 11;
+
+// Whether a run of `candidatePt` is set too close to `basePt` to be a script of a run that size: at or above the closest type-scale ratio, 9/11 (about 0.818). A text script is set well under it: the OS/2 tables of Arial, Helvetica, Times New Roman, Georgia, Verdana, Courier New and Carlito declare a superscript and subscript size of 1331/2048 em, about 0.65, Caladea and STIX Two Text 0.6, and word processors use between 0.58 and 0.67. An equation sets its scripts larger: the OpenType MATH tables of the math fonts TeX Live ships declare a first-level ScriptPercentScaleDown of 70 to 80 (STIX Two Math and Latin Modern Math 70, Libertinus Math and TeX Gyre DejaVu Math 80), and LaTeX's default math sizes (fontdef.dtx's \DeclareMathSizes) give 0.67 to 0.75 at every text size from 7pt to 20.74pt. The bound admits all of those, a script declared at 0.8 whose producer rounded both sizes to a hundredth of a point included (7.33pt under 9.16pt is 0.8002). It does not admit the two LaTeX sizes that set a script closer still, 5pt under 6pt and 20.74pt under 24.88pt (both about 0.833): that is the ratio of 10pt to 12pt, and a run of footer or table text one step smaller than its neighbour and set off its baseline, where text overlaps, would read as that neighbour's script. The ratio is compared by cross-multiplying so that a run at exactly 9/11 of its base is rejected whatever the rounding of the quotient.
+function exceedsScriptSize(candidatePt: number, basePt: number): boolean {
+  return (
+    candidatePt * TYPE_SCALE_LARGER_STEP_PT >=
+    basePt * TYPE_SCALE_SMALLER_STEP_PT
+  );
+}
 
 // The baseline shift that marks a run as a script rather than as smaller text sharing the line, in em of the base. Positioning noise in real producers' output is under a hundredth of a point, while the smallest script offset any of the faces above declares is Georgia's subscript at 0.076 em; a twentieth of an em separates the two.
 const SCRIPT_MIN_SHIFT_EM = 0.05;
@@ -204,7 +213,7 @@ export function scriptPositionOf(
   base: PdfTextRunGeometry,
   candidate: PdfTextRunGeometry,
 ): PdfScriptPosition | undefined {
-  if (candidate.sizePt > SCRIPT_MAX_SIZE_RATIO * base.sizePt) {
+  if (exceedsScriptSize(candidate.sizePt, base.sizePt)) {
     return undefined;
   }
   const rotationDeg = advanceAngleDeg(base);
@@ -256,7 +265,7 @@ export function attachScriptRuns<TLine, TRun extends PdfTextRunGeometry>(
   runsOf: (line: TLine) => readonly TRun[],
 ): PdfLineWithScripts<TLine, TRun>[] {
   const runsByLine = lines.map((line) => runsOf(line));
-  // A script is at most three quarters of its base's size, so a run larger than that fraction of the largest run anywhere can be no line's script, and only runs at or under it are tested.
+  // A script is set smaller than the closest type-scale ratio of its base's size (exceedsScriptSize), so a run at or above that fraction of the largest run anywhere can be no line's script, and only runs under it are tested.
   const maxSizePt = Math.max(
     0,
     ...runsByLine.flatMap((runs) => runs.map((run) => run.sizePt)),
@@ -277,7 +286,7 @@ export function attachScriptRuns<TLine, TRun extends PdfTextRunGeometry>(
   const moves: { readonly run: TRun; readonly to: number }[] = [];
   runsByLine.forEach((runs, lineIndex) => {
     for (const candidate of runs) {
-      if (candidate.sizePt > SCRIPT_MAX_SIZE_RATIO * maxSizePt) {
+      if (exceedsScriptSize(candidate.sizePt, maxSizePt)) {
         continue;
       }
       const rotationDeg = advanceAngleDeg(candidate);
