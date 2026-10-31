@@ -2,7 +2,7 @@
 //
 // Three shapes such tables commonly take are part of the structure, not exceptions to it. A heading row often sits above the first rule with no rule of its own over it, so the lines directly above the first rule that keep to the columns and follow at the table's own line spacing are read as a first row. A row can run across the columns (a group heading such as "Part 2 items"); a row whose text sits in one place states nothing about the gutters, and where it crosses one it is read as a cell spanning the columns it covers. And the rule closing the table is often drawn wider than the rules between its rows, so rules belong to one table when their spans overlap almost entirely, not only when their ends coincide.
 //
-// Drawn rules alone do not make a table. Two columns of running prose between a rule above and a rule below leave a gutter too, so a grid whose every column reads as running prose (reading-order.ts's isRunningProse) is text set in columns, not a table, and is left to the reading order to split.
+// Drawn rules alone do not make a table. Two columns of running prose between a rule above and a rule below leave a gutter too, so a grid whose every column reads as running prose (reading-order.ts's isRunningProse) is text set in columns, not a table, and is left to the reading order to split. Nor do gutters that the rows disagree about: when one row leaves a gap between two places and another row's text runs across it, the columns would read both places as one cell, so no grid is read.
 import type { LayoutItem, LayoutText } from "pdf-codec";
 import type { GridLattice, HorizontalRule, TableRegion } from "./lattice";
 import {
@@ -22,7 +22,7 @@ import {
 /**
  * The grid of a table ruled between its rows and set apart by gutters between its columns, when the page holds one.
  * @param items - the page's items; rules are read from its lines, paths and thin rectangles, and text from its text items
- * @returns a lattice whose row boundaries are the rules (and the top of an unruled heading row above them) and whose column boundaries are the table's two ends and the middle of each gutter, a row that crosses a gutter spanning the columns it covers; undefined when no set of rules of one span holds two rows of text, fewer than two rows hold text in more than one place, the rows leave no gutter they all share, or every column reads as running prose
+ * @returns a lattice whose row boundaries are the rules (and the top of an unruled heading row above them) and whose column boundaries are the table's two ends and the middle of each gutter, a row that crosses a gutter spanning the columns it covers; undefined when no set of rules of one span holds two rows of text, fewer than two rows hold text in more than one place, the rows leave no gutter they all share, a row leaves a gap between two places that another row's text runs across, or every column reads as running prose
  */
 export function detectRuledRowLattice(
   items: readonly LayoutItem[],
@@ -287,7 +287,7 @@ function textRuns(row: readonly LayoutText[], widestSpacePt: number): Strip[] {
   return runs;
 }
 
-// The gutters every row holding text in more than one place leaves between its runs, left to right, found by intersecting each such row's gaps; a strip survives only while it stays wider than the widest word space. A row with its text in one place says nothing about where the columns are, so it does not narrow the gutters. Reports how many rows did, for the caller to weigh as evidence.
+// The gutters every row holding text in more than one place leaves between its runs, left to right, found by intersecting each such row's gaps; a strip survives only while it stays wider than the widest word space. A row with its text in one place says nothing about where the columns are, so it does not narrow the gutters. Reports how many rows did, for the caller to weigh as evidence. There are no gutters when a gap one such row leaves holds none of them: another such row runs across that strip, so the columns would read the text either side of the gap as one cell, and geometry cannot say whether the row running across it is a heading over two columns (a group heading over its sub-columns, set in the band holding the sub-headings) or the row leaving it splits one cell.
 function sharedGutters(
   rows: readonly (readonly LayoutText[])[],
   widestSpacePt: number,
@@ -316,7 +316,15 @@ function sharedGutters(
       ),
     first,
   );
-  return gutters.length > 0
+  // Every surviving gutter lies inside one gap of every row, so a gap holding none is one the other rows closed.
+  const everyGapHoldsAGutter = gapsByRow.every((gaps) =>
+    gaps.every((gap) =>
+      gutters.some(
+        (gutter) => gutter.loPt >= gap.loPt && gutter.hiPt <= gap.hiPt,
+      ),
+    ),
+  );
+  return gutters.length > 0 && everyGapHoldsAGutter
     ? { gutters, rowsWithColumns: gapsByRow.length }
     : undefined;
 }
