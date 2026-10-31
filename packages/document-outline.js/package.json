@@ -70,7 +70,7 @@
   "dependencies": {
     "document-schema.js": "7.16.2",
     "pdf-codec": "5.7.4",
-    "zod": "4.4.3"
+    "zod": "4.6.6"
   },
   "devDependencies": {
     "@arethetypeswrong/cli": "0.18.5",
