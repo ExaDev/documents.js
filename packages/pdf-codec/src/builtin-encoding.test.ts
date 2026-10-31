@@ -18,7 +18,7 @@ import {
 } from "./test-support/sfnt";
 import { base64ToBytes } from "byte-codec";
 
-const OHM_SIGN = 0x2126; // the Adobe Glyph List's own mapping for the glyph name "Omega"
+const OHM_SIGN = "\u2126"; // the Adobe Glyph List's own mapping for the glyph name "Omega"
 
 function textBytes(text: string): Uint8Array<ArrayBuffer> {
   return new TextEncoder().encode(text);
@@ -125,14 +125,14 @@ describe("readFontProgramEncoding: TrueType programs", () => {
   it("names a glyph through the 'post' table of a real vendored font", () => {
     // Caladea ships a version 2.0 'post' table naming every glyph; glyph 5 is "A" and glyph 35 is "e" in its own glyph order, both read out of the .ttf independently of this package.
     const encoding = readFontProgramEncoding(caladeaRegularBytes());
-    expect(encoding?.glyphIdToUnicode(5)).toBe(0x41);
-    expect(encoding?.glyphIdToUnicode(35)).toBe(0x65);
+    expect(encoding?.glyphIdToUnicode(5)).toBe(String.fromCodePoint(0x41));
+    expect(encoding?.glyphIdToUnicode(35)).toBe(String.fromCodePoint(0x65));
   });
 
   it("identifies a glyph by reversing the Unicode subtable of a real font that strips its glyph names", () => {
     // Carlito ships a version 3.0 'post' table, so it names nothing; its (3, 1) subtable still maps U+00E9 to glyph 2007.
     const encoding = readFontProgramEncoding(carlitoRegularBytes());
-    expect(encoding?.glyphIdToUnicode(2007)).toBe(0xe9);
+    expect(encoding?.glyphIdToUnicode(2007)).toBe(String.fromCodePoint(0xe9));
   });
 });
 
@@ -144,8 +144,8 @@ describe("readFontProgramEncoding: CFF programs", () => {
       charStrings: [[14], [14]], // glyph 0 (.notdef) and glyph 1, both a bare endchar
     });
     const encoding = readFontProgramEncoding(program);
-    expect(encoding?.glyphIdToUnicode(1)).toBe(0x20);
-    expect(encoding?.codeToUnicode(0x20)).toBe(0x20);
+    expect(encoding?.glyphIdToUnicode(1)).toBe(String.fromCodePoint(0x20));
+    expect(encoding?.codeToUnicode(0x20)).toBe(String.fromCodePoint(0x20));
   });
 
   it("names glyphs through a format 1 charset (ranges of consecutive SIDs)", () => {
@@ -162,8 +162,8 @@ describe("readFontProgramEncoding: CFF programs", () => {
     });
     const encoding = readFontProgramEncoding(program);
     expect(encoding?.codeToUnicode(0x57)).toBe(OHM_SIGN);
-    expect(encoding?.codeToUnicode(0x6d)).toBe(0xb5);
-    expect(encoding?.codeToUnicode(0x41)).toBe(0x41);
+    expect(encoding?.codeToUnicode(0x6d)).toBe(String.fromCodePoint(0xb5));
+    expect(encoding?.codeToUnicode(0x41)).toBe(String.fromCodePoint(0x41));
   });
 
   it("names glyphs through a format 2 charset (16-bit range counts)", () => {
@@ -179,7 +179,7 @@ describe("readFontProgramEncoding: CFF programs", () => {
     });
     const encoding = readFontProgramEncoding(program);
     expect(encoding?.codeToUnicode(0x57)).toBe(OHM_SIGN);
-    expect(encoding?.codeToUnicode(0x6d)).toBe(0xb5);
+    expect(encoding?.codeToUnicode(0x6d)).toBe(String.fromCodePoint(0xb5));
   });
 
   it("maps codes through a format 1 Encoding (ranges of consecutive codes)", () => {
@@ -195,9 +195,9 @@ describe("readFontProgramEncoding: CFF programs", () => {
       encodingFormat: 1,
     });
     const encoding = readFontProgramEncoding(program);
-    expect(encoding?.codeToUnicode(0x41)).toBe(0x41);
-    expect(encoding?.codeToUnicode(0x42)).toBe(0x42);
-    expect(encoding?.codeToUnicode(0x43)).toBe(0x43);
+    expect(encoding?.codeToUnicode(0x41)).toBe(String.fromCodePoint(0x41));
+    expect(encoding?.codeToUnicode(0x42)).toBe(String.fromCodePoint(0x42));
+    expect(encoding?.codeToUnicode(0x43)).toBe(String.fromCodePoint(0x43));
   });
 
   it("resolves a supplementary code through the Encoding's own supplement entries, addressed by SID rather than glyph index", () => {
@@ -224,7 +224,7 @@ describe("readFontProgramEncoding: CFF programs", () => {
     });
     const encoding = readFontProgramEncoding(program);
     expect(encoding?.codeToUnicode(0x57)).toBe(OHM_SIGN);
-    expect(encoding?.codeToUnicode(0x6d)).toBe(0xb5); // MICRO SIGN, the AGL's mapping for "mu"
+    expect(encoding?.codeToUnicode(0x6d)).toBe(String.fromCodePoint(0xb5)); // MICRO SIGN, the AGL's mapping for "mu"
     expect(encoding?.codeToUnicode(0x41)).toBeUndefined(); // a code this font's own encoding does not cover
   });
 
@@ -233,8 +233,8 @@ describe("readFontProgramEncoding: CFF programs", () => {
     const encoding = readFontProgramEncoding(
       base64ToBytes(STIX_TWO_MATH_FONT_BASE64),
     );
-    expect(encoding?.glyphIdToUnicode(5)).toBe(0x43);
-    expect(encoding?.glyphIdToUnicode(35)).toBe(0x1ea8);
+    expect(encoding?.glyphIdToUnicode(5)).toBe(String.fromCodePoint(0x43));
+    expect(encoding?.glyphIdToUnicode(35)).toBe(String.fromCodePoint(0x1ea8));
     // An sfnt-wrapped CFF states its encoding through the container's own 'cmap', never the CFF Encoding operator (predefinedEncodingApplies is false here) — so with no symbolic cmap subtable in this font, no code reaches any glyph at all, only glyph IDs do.
     expect(encoding?.codeToUnicode(0x43)).toBeUndefined();
   });
@@ -255,7 +255,7 @@ describe("readFontProgramEncoding: Type 1 programs", () => {
     );
     const encoding = readFontProgramEncoding(program);
     expect(encoding?.codeToUnicode(0x57)).toBe(OHM_SIGN);
-    expect(encoding?.codeToUnicode(0x6d)).toBe(0xb5);
+    expect(encoding?.codeToUnicode(0x6d)).toBe(String.fromCodePoint(0xb5));
   });
 
   it("reads a program that names StandardEncoding rather than listing its own", () => {
@@ -268,8 +268,8 @@ describe("readFontProgramEncoding: Type 1 programs", () => {
       ].join("\n"),
     );
     const encoding = readFontProgramEncoding(program);
-    expect(encoding?.codeToUnicode(0x41)).toBe(0x41);
-    expect(encoding?.codeToUnicode(0xa9)).toBe(0x27); // quotesingle in StandardEncoding, where WinAnsi has the copyright sign
+    expect(encoding?.codeToUnicode(0x41)).toBe(String.fromCodePoint(0x41));
+    expect(encoding?.codeToUnicode(0xa9)).toBe(String.fromCodePoint(0x27)); // quotesingle in StandardEncoding, where WinAnsi has the copyright sign
   });
 
   it("returns undefined for a PostScript program that states no encoding at all", () => {

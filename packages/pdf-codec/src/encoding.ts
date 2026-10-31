@@ -2,10 +2,6 @@ import {
   macRomanGlyphName,
   standardGlyphName,
 } from "./encoding-standard-tables";
-import { SYMBOL_AND_ZAPFDINGBATS_GLYPH_UNICODE } from "./encoding-glyph-unicode";
-import { winAnsiCodeToUnicode } from "./winansi";
-
-const MAX_UNICODE_CODE_POINT = 0x10ffff;
 
 // The WinAnsiEncoding table (PDF spec ISO 32000-1 Annex D.2, aka CP1252's printable range): PDF character code (0-255) -> PostScript glyph name. Used to resolve a character to its standard-14 glyph name for measurement (afm-widths.ts) and, on the read path, to decode simple-font text when no /ToUnicode CMap is present. An empty string marks an unassigned/control code. Verified against pdf.js's own WinAnsiEncoding table (src/core/encodings.js), not transcribed from memory.
 export const WINANSI_GLYPH_NAMES: readonly string[] = [
@@ -272,8 +268,7 @@ export function winAnsiGlyphName(code: number): string | undefined {
   return name === undefined || name === "" ? undefined : name;
 }
 
-// The Symbol built-in encoding (PDF spec ISO 32000-1 Annex D.5, aka the Adobe Symbol font's own native character set): PDF character code (0-255) -> PostScript glyph name. Used on the read path for a simple font whose /BaseFont resolves to the standard-14 "Symbol" face and has no /ToUnicode CMap or /Differences entry covering a given code. Verified against pdf.js's own SymbolSetEncoding table (src/core/encodings.js), not transcribed from memory.
-
+// The code -> glyph name table a simple font's /Encoding (or its /BaseEncoding) selects by name (ISO 32000-1 9.6.6.1 and Annex D.2), or undefined for a name this module has no table for. The Symbol and ZapfDingbats built-in encodings are not selectable this way and live in encoding-symbol-tables.ts.
 export function namedEncodingGlyphName(
   encodingName: string,
 ): ((code: number) => string | undefined) | undefined {
@@ -287,56 +282,4 @@ export function namedEncodingGlyphName(
     return standardGlyphName;
   }
   return undefined;
-}
-
-// PostScript glyph name -> Unicode code point, for exactly the glyph names SYMBOL_GLYPH_NAMES and ZAPFDINGBATS_GLYPH_NAMES use (Greek letters, mathematical operators, and the ZapfDingbats "aNNN" names) that WINANSI_GLYPH_NAMES' own cross-reference does not already cover. Sourced from Adobe's own published glyph-name registries (the Adobe Glyph List, https://github.com/adobe-type-tools/agl-aglfn/blob/master/glyphlist.txt, for the Symbol names; its companion https://github.com/adobe-type-tools/agl-aglfn/blob/master/zapfdingbats.txt for the ZapfDingbats "aNNN" names), not transcribed from memory. Note "Omega" resolves to U+2126 OHM SIGN rather than U+03A9 GREEK CAPITAL LETTER OMEGA: this is the AGL's own deliberate convention (Symbol's Omega glyph doubles as the Ohm electrical unit symbol), and Unicode treats the two as canonically equivalent under NFC normalisation.
-
-let glyphNameToUnicodeTable: ReadonlyMap<string, number> | undefined;
-
-// DEL (0x7F) is labelled "bullet" in WINANSI_GLYPH_NAMES, the same placeholder used for the genuinely-unassigned CP1252 positions — but unlike those, winansi.ts's own Unicode<->WinAnsi table (built for the write path, via a mechanical TextDecoder('windows-1252') sweep) happens to map 0x7F to itself rather than leaving it undefined. Left unexcluded, that spurious self-mapping would win the "bullet" name ahead of the real one at 0x95 under first-occurrence-wins iteration.
-const DEL_CONTROL_CODE = 0x7f;
-const NON_GLYPH_CODES = new Set([DEL_CONTROL_CODE]);
-
-// Derived, not transcribed: cross-references WINANSI_GLYPH_NAMES (code -> name) against winansi.ts's own code -> Unicode table by code, built once on first use, first occurrence wins. Covers every glyph name WinAnsi itself defines — the overwhelming common case for a simple font's /Encoding /Differences array, since most real-world non-embedded fonts stay within Latin-1 plus the CP1252 extensions. Two duplication patterns in WINANSI_GLYPH_NAMES are why first-wins matters: a handful of codes repeat the placeholder name "bullet" for CP1252 positions that are genuinely unassigned (see winansi.ts's own note on 0x81/0x8D/0x8F/0x90/0x9D, plus 0x7F excluded above) — those never appear in the Unicode table this cross-references (0x7F aside), so they're skipped regardless of iteration order; and "space" itself is reused for both the ordinary space (0x20) and the non-breaking space (0xA0), where ascending code order deliberately lets the far more common plain space win. A glyph name a /Differences array names that falls outside WinAnsi's own repertoire (a Greek letter, a math operator, a ZapfDingbats "aNNN" name, or the "uniXXXX" convention some producers emit directly) is resolved by this function's own further fallbacks below, not by this table.
-export function glyphNameToUnicode(name: string): number | undefined {
-  if (glyphNameToUnicodeTable === undefined) {
-    const table = new Map<string, number>();
-    for (let code = 0; code < WINANSI_GLYPH_NAMES.length; code++) {
-      if (NON_GLYPH_CODES.has(code)) {
-        continue;
-      }
-      const glyphName = WINANSI_GLYPH_NAMES[code];
-      if (glyphName === undefined || glyphName === "") {
-        continue;
-      }
-      // First occurrence wins: "space" is the one glyph name genuinely reused for two different code points in this table (0x20, the ordinary space, and 0xA0, the non-breaking space) — ascending code order means the far more common plain space wins the ambiguity.
-      if (table.has(glyphName)) {
-        continue;
-      }
-      const unicode = winAnsiCodeToUnicode(code);
-      if (unicode !== undefined) {
-        table.set(glyphName, unicode);
-      }
-    }
-    glyphNameToUnicodeTable = table;
-  }
-  const base = name.includes(".") ? name.slice(0, name.indexOf(".")) : name;
-  const known =
-    glyphNameToUnicodeTable.get(base) ??
-    SYMBOL_AND_ZAPFDINGBATS_GLYPH_UNICODE[base];
-  return known ?? algorithmicGlyphNameToUnicode(base);
-}
-
-// The two constructed glyph-name forms the Adobe Glyph List Specification defines for a glyph with no registered name — "uniXXXX" (one four-digit BMP code point; the specification also allows a sequence of them, which names a multi-character string this single-code-point mapping deliberately does not attempt) and "uXXXX" through "uXXXXXX" (one code point, four to six digits). A font subsetting tool that strips a font's real names commonly re-emits them in one of these forms, which makes them a genuine mapping rather than a guess. A name in neither form, and in no table above, resolves to nothing at all: "g27", "cid42", and "index3" name a glyph's position in a particular font, and carry no information about which character it draws.
-function algorithmicGlyphNameToUnicode(name: string): number | undefined {
-  const uniMatch = /^uni([0-9A-Fa-f]{4})$/.exec(name);
-  if (uniMatch?.[1] !== undefined) {
-    return Number.parseInt(uniMatch[1], 16);
-  }
-  const uMatch = /^u([0-9A-Fa-f]{4,6})$/.exec(name);
-  if (uMatch?.[1] === undefined) {
-    return undefined;
-  }
-  const codePoint = Number.parseInt(uMatch[1], 16);
-  return codePoint <= MAX_UNICODE_CODE_POINT ? codePoint : undefined;
 }

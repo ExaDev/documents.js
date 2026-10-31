@@ -13,10 +13,10 @@ export default tseslint.config(
     additionalIgnores: ["scripts"],
   }),
   {
-    // src/assets/ holds the vendored font binaries as generated TypeScript modules: nine files whose payload is one base64 string literal per face, the largest a single line of 1,077,633 characters. Prettier has nothing useful to do with a line like that and would spend real time deciding so, and no human edits these — they are regenerated from the font files.
+    // src/assets/ and src/glyph-data/ hold vendored data as generated TypeScript modules: the font binaries as one base64 string literal per face, the largest a single line of more than a million characters, and the read path's glyph data as one long string literal per module. Prettier has nothing useful to do with a line like that and would spend real time deciding so, and no human edits these: they are regenerated from their sources by the scripts/ generators.
     //
     // Turned off through a scoped override rather than a .prettierignore, deliberately. turbo runs `eslint .` from inside each package directory, and eslint-plugin-prettier resolves an ignore path relative to that working directory, so a .prettierignore at the workspace root would simply never be consulted here.
-    files: ["src/assets/**"],
+    files: ["src/assets/**", "src/glyph-data/**"],
     // The suite checking those modules load and declare the faces they claim is hand-written, so it stays formatted like any other source.
     ignores: ["src/assets/**/*.test.ts"],
     rules: { "prettier/prettier": "off" },

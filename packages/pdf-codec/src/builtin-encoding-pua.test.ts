@@ -8,7 +8,7 @@ import {
   buildSfnt,
 } from "./test-support/sfnt";
 
-const OHM_SIGN = 0x2126; // the Adobe Glyph List's own mapping for the glyph name "Omega"
+const OHM_SIGN = "\u2126"; // the Adobe Glyph List's own mapping for the glyph name "Omega"
 
 describe("readFontProgramEncoding: private-use boundaries", () => {
   // One format 12 subtable mapping ten glyphs, one from each private-use boundary and one from
@@ -51,10 +51,10 @@ describe("readFontProgramEncoding: private-use boundaries", () => {
 
   it("resolves a glyph mapped from just below each private-use range", () => {
     const encoding = boundaryEncoding();
-    expect(encoding?.glyphIdToUnicode(1)).toBe(0xdfff);
-    expect(encoding?.glyphIdToUnicode(4)).toBe(0xf900);
-    expect(encoding?.glyphIdToUnicode(5)).toBe(0xeffff);
-    expect(encoding?.glyphIdToUnicode(10)).toBe(0x10fffe);
+    expect(encoding?.glyphIdToUnicode(1)).toBe(String.fromCodePoint(0xdfff));
+    expect(encoding?.glyphIdToUnicode(4)).toBe(String.fromCodePoint(0xf900));
+    expect(encoding?.glyphIdToUnicode(5)).toBe(String.fromCodePoint(0xeffff));
+    expect(encoding?.glyphIdToUnicode(10)).toBe(String.fromCodePoint(0x10fffe));
   });
 
   it("leaves a glyph unmapped when it is reachable only from inside a private-use range, at either edge", () => {
@@ -120,7 +120,9 @@ describe("readFontProgramEncoding: which sources a program states", () => {
         ["post", buildPostV3Table()],
       ]),
     );
-    expect(readFontProgramEncoding(program)?.glyphIdToUnicode(2)).toBe(0xe9);
+    expect(readFontProgramEncoding(program)?.glyphIdToUnicode(2)).toBe(
+      String.fromCodePoint(0xe9),
+    );
   });
 });
 
@@ -200,7 +202,7 @@ describe("readFontProgramEncoding: cmap subtable selection", () => {
         ]),
       ),
     );
-    expect(encoding?.glyphIdToUnicode(2)).toBe(0xe9);
+    expect(encoding?.glyphIdToUnicode(2)).toBe(String.fromCodePoint(0xe9));
     expect(encoding?.glyphIdToUnicode(1)).toBeUndefined();
   });
 
@@ -229,7 +231,7 @@ describe("readFontProgramEncoding: cmap subtable selection", () => {
         ]),
       ),
     );
-    expect(encoding?.glyphIdToUnicode(1)).toBe(0xe9);
+    expect(encoding?.glyphIdToUnicode(1)).toBe(String.fromCodePoint(0xe9));
   });
 
   it("uses the platform-0 subtable when it is the only Unicode one", () => {
@@ -251,7 +253,7 @@ describe("readFontProgramEncoding: cmap subtable selection", () => {
         ]),
       ),
     );
-    expect(encoding?.glyphIdToUnicode(1)).toBe(0x2126);
+    expect(encoding?.glyphIdToUnicode(1)).toBe(String.fromCodePoint(0x2126));
   });
 
   it("reads a font with no symbol subtable through the private-use range of its Unicode subtable", () => {

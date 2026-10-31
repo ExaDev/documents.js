@@ -10,7 +10,7 @@ import {
 } from "./test-support/cff";
 import { buildPostV3Table, buildSfnt } from "./test-support/sfnt";
 
-const OHM_SIGN = 0x2126; // the Adobe Glyph List's own mapping for the glyph name "Omega"
+const OHM_SIGN = "\u2126"; // the Adobe Glyph List's own mapping for the glyph name "Omega"
 
 function textBytes(text: string): Uint8Array<ArrayBuffer> {
   return new TextEncoder().encode(text);
@@ -181,7 +181,9 @@ describe("readFontProgramEncoding: Type 1 header scanning", () => {
         "",
       ].join("\\n"),
     );
-    expect(readFontProgramEncoding(program)?.codeToUnicode(0x41)).toBe(0x41);
+    expect(readFontProgramEncoding(program)?.codeToUnicode(0x41)).toBe(
+      String.fromCodePoint(0x41),
+    );
   });
 
   it("matches dup assignments across repeated whitespace in each position", () => {
@@ -198,7 +200,7 @@ describe("readFontProgramEncoding: Type 1 header scanning", () => {
     );
     const encoding = readFontProgramEncoding(program);
     expect(encoding?.codeToUnicode(0x57)).toBe(OHM_SIGN);
-    expect(encoding?.codeToUnicode(0x6d)).toBe(0xb5);
+    expect(encoding?.codeToUnicode(0x6d)).toBe(String.fromCodePoint(0xb5));
   });
 });
 
@@ -225,7 +227,7 @@ describe("readFontProgramEncoding: CFF-flavoured OpenType programs", () => {
     );
     const encoding = readFontProgramEncoding(program);
     expect(encoding?.glyphIdToUnicode(1)).toBe(OHM_SIGN);
-    expect(encoding?.glyphIdToUnicode(2)).toBe(0xb5);
+    expect(encoding?.glyphIdToUnicode(2)).toBe(String.fromCodePoint(0xb5));
     expect(encoding?.codeToUnicode(0x57)).toBe(OHM_SIGN);
   });
 
@@ -245,7 +247,7 @@ describe("readFontProgramEncoding: CFF-flavoured OpenType programs", () => {
       ]),
     );
     const encoding = readFontProgramEncoding(program);
-    expect(encoding?.glyphIdToUnicode(1)).toBe(0x20);
+    expect(encoding?.glyphIdToUnicode(1)).toBe(String.fromCodePoint(0x20));
     expect(encoding?.codeToUnicode(0x20)).toBeUndefined();
   });
 });
@@ -340,7 +342,7 @@ describe("readFontProgramEncoding: CFF range and header edge shapes", () => {
     });
     const encoding = readFontProgramEncoding(program);
     expect(encoding?.codeToUnicode(0x41)).toBe(OHM_SIGN);
-    expect(encoding?.codeToUnicode(0x57)).toBe(0xb5);
+    expect(encoding?.codeToUnicode(0x57)).toBe(String.fromCodePoint(0xb5));
   });
 
   it("reads no supplements from an Encoding whose format byte carries no supplement flag", () => {
