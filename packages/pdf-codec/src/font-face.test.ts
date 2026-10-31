@@ -7,57 +7,15 @@ import {
   carlitoItalicBytes,
   carlitoRegularBytes,
 } from "./test-support/fonts";
+import { buildNameTable } from "./test-support/sfnt-tables";
 
 const OS2_FS_SELECTION_BOLD = 0x0020;
 const HEAD_MAC_STYLE_BOLD = 0x0001;
 const HEAD_MAC_STYLE_ITALIC = 0x0002;
 
-// A minimal, hand-built 'name' table — the same record layout font-tables.test.ts's own buildFontWithNameTable uses (clause 5.2.7), factored here to return the bare table bytes so it can be combined with other synthetic tables via buildSfnt below.
-function buildNameTableBytes(
-  records: readonly {
-    platformId: number;
-    encodingId: number;
-    nameId: number;
-    text: string;
-  }[],
-): Uint8Array<ArrayBuffer> {
-  const NAME_HEADER_SIZE = 6;
-  const NAME_RECORD_SIZE = 12;
-  const storageOffset = NAME_HEADER_SIZE + records.length * NAME_RECORD_SIZE;
-  const encoded = records.map((record) =>
-    Uint8Array.from(
-      [...record.text].flatMap((character) => [
-        character.charCodeAt(0) >> 8,
-        character.charCodeAt(0) & 0xff,
-      ]),
-    ),
-  );
-  const storageLength = encoded.reduce(
-    (total, bytes) => total + bytes.length,
-    0,
-  );
-  const table = new Uint8Array(storageOffset + storageLength);
-  const view = new DataView(table.buffer);
-  view.setUint16(2, records.length);
-  view.setUint16(4, storageOffset);
-  let stringOffset = 0;
-  records.forEach((record, index) => {
-    const recordOffset = NAME_HEADER_SIZE + index * NAME_RECORD_SIZE;
-    const encodedRecord = encoded[index]!;
-    view.setUint16(recordOffset, record.platformId);
-    view.setUint16(recordOffset + 2, record.encodingId);
-    view.setUint16(recordOffset + 6, record.nameId);
-    view.setUint16(recordOffset + 8, encodedRecord.length);
-    view.setUint16(recordOffset + 10, stringOffset);
-    table.set(encodedRecord, storageOffset + stringOffset);
-    stringOffset += encodedRecord.length;
-  });
-  return table;
-}
-
-// A Windows/Unicode nameID-1 family record, the one shape every test below needs — built through buildNameTableBytes so a synthetic font's family always resolves the same way real vendored fonts do.
+// A Windows/Unicode nameID-1 family record, the one shape every test below needs — built through buildNameTable so a synthetic font's family always resolves the same way real vendored fonts do.
 function buildFamilyNameTableBytes(family: string): Uint8Array<ArrayBuffer> {
-  return buildNameTableBytes([
+  return buildNameTable([
     { platformId: 3, encodingId: 1, nameId: 1, text: family },
   ]);
 }
