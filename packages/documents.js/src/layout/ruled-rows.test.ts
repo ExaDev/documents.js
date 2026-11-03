@@ -158,22 +158,91 @@ describe("detectRuledRowLattice", () => {
     ).toBeUndefined();
   });
 
-  it("finds no table when a row runs across a gap another row leaves between two places", () => {
-    // A group heading over two sub-columns, set in one band with the sub-headings under it, runs across the gutter the body leaves between those sub-columns; read as one row it would merge each body row's two figures into one cell.
+  it("reads a group heading over sub-headings in its band as one cell over a row of them, every other column one cell down both", () => {
+    // Columns at x 22, 110 and 160; the header band's first line sets "Label" and a group heading reaching from 110 to 200, across the gutter the body leaves at [116, 160], and its second line sets the sub-headings "a" and "b" under it. Dividers at 81 and 138.
+    const lattice = detectRuledRowLattice([
+      rule(170),
+      rule(140),
+      rule(80),
+      text("Label", 22, 158, 30),
+      text("Group heading", 110, 158, 90),
+      text("a", 110, 146, 6),
+      text("b", 160, 146, 6),
+      ...[128, 116, 104, 92].flatMap((yPt) => [
+        text("1", 22, yPt, 6),
+        text("2", 110, yPt, 6),
+        text("3", 160, yPt, 6),
+      ]),
+    ]);
+    expect(lattice?.columnBoundariesAscPt).toEqual([20, 81, 138, 380]);
+    // The heading row splits halfway between the heading's baseline and the sub-headings'.
+    expect(lattice?.rowBoundariesDescPt).toEqual([
+      170, 152, 140, 122, 110, 98, 80,
+    ]);
+    expect(lattice?.regions.filter((region) => region.rowStart < 2)).toEqual([
+      { rowStart: 0, rowEnd: 2, colStart: 0, colEnd: 1 },
+      { rowStart: 0, rowEnd: 1, colStart: 1, colEnd: 3 },
+      { rowStart: 1, rowEnd: 2, colStart: 1, colEnd: 2 },
+      { rowStart: 1, rowEnd: 2, colStart: 2, colEnd: 3 },
+    ]);
+  });
+
+  it("ends a group heading's cell at the column the heading line's next run starts in", () => {
+    const lattice = detectRuledRowLattice([
+      rule(170),
+      rule(140),
+      rule(80),
+      text("Label", 22, 158, 30),
+      text("Group heading", 110, 158, 90),
+      text("Note", 230, 158, 22),
+      text("a", 110, 146, 6),
+      text("b", 160, 146, 6),
+      ...[128, 116, 104, 92].flatMap((yPt) => [
+        text("1", 22, yPt, 6),
+        text("2", 110, yPt, 6),
+        text("3", 160, yPt, 6),
+        text("4", 230, yPt, 6),
+      ]),
+    ]);
+    expect(lattice?.regions.filter((region) => region.rowStart < 2)).toEqual([
+      { rowStart: 0, rowEnd: 2, colStart: 0, colEnd: 1 },
+      { rowStart: 0, rowEnd: 1, colStart: 1, colEnd: 3 },
+      { rowStart: 0, rowEnd: 2, colStart: 3, colEnd: 4 },
+      { rowStart: 1, rowEnd: 2, colStart: 1, colEnd: 2 },
+      { rowStart: 1, rowEnd: 2, colStart: 2, colEnd: 3 },
+    ]);
+  });
+
+  it("finds no table when a first line runs across a gap another row leaves and the line under it continues it in one place", () => {
+    // A wrapped cell, not a group heading: nothing under the wide run is set apart, so the body's gap between 110 and 160 is one the header row closes.
     expect(
       detectRuledRowLattice([
         rule(170),
         rule(140),
         rule(80),
         text("Label", 22, 158, 30),
-        text("Group heading", 110, 158, 90),
-        text("a", 110, 146, 6),
-        text("b", 160, 146, 6),
+        text("Wide wrapped cell", 110, 158, 90),
+        text("continued", 110, 146, 45),
         ...[128, 116, 104, 92].flatMap((yPt) => [
           text("1", 22, yPt, 6),
           text("2", 110, yPt, 6),
           text("3", 160, yPt, 6),
         ]),
+      ]),
+    ).toBeUndefined();
+  });
+
+  it("finds no table when a row runs across a gap another row leaves between two places, with no line under it in its band", () => {
+    expect(
+      detectRuledRowLattice([
+        rule(150),
+        rule(110),
+        rule(80),
+        text("1", 22, 138, 6),
+        text("2", 110, 138, 6),
+        text("3", 160, 138, 6),
+        text("1", 22, 92, 6),
+        text("A cell across two", 110, 92, 90),
       ]),
     ).toBeUndefined();
   });
