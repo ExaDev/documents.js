@@ -1,3 +1,9 @@
+## [5.8.0](https://github.com/ExaDev/documents.js/compare/pdf-codec%405.7.4...pdf-codec%405.8.0) (2026-11-03)
+
+### Features
+
+* **pdf-codec:** export a run's canonical angle and its position along its baseline ([d991d21](https://github.com/ExaDev/documents.js/commit/d991d210ae9cc9d3081dc654e2c9a3e6359e64b8)), references [ExaDev/documents.js#1715](https://github.com/ExaDev/documents.js/issues/1715)
+
 ## [5.7.4](https://github.com/ExaDev/documents.js/compare/pdf-codec%405.7.3...pdf-codec%405.7.4) (2026-10-31)
 
 ### Bug Fixes

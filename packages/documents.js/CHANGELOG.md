@@ -1,3 +1,19 @@
+## [14.7.0](https://github.com/ExaDev/documents.js/compare/documents.js%4014.6.11...documents.js%4014.7.0) (2026-11-03)
+
+### Features
+
+* **documents.js:** export pageReadingFrame ([521918f](https://github.com/ExaDev/documents.js/commit/521918f1b8e3e278d112330fa7e59f014fe591c4)), references [ExaDev/documents.js#1715](https://github.com/ExaDev/documents.js/issues/1715)
+
+### Bug Fixes
+
+* **documents.js:** order a line's runs along its own baseline ([a6c6136](https://github.com/ExaDev/documents.js/commit/a6c61362a0575fa30a4ac79091abc18a6439bb8b)), references [ExaDev/documents.js#1715](https://github.com/ExaDev/documents.js/issues/1715)
+* **documents.js:** read a page set sideways in the frame that turns it upright ([d4df4cb](https://github.com/ExaDev/documents.js/commit/d4df4cb98303459758aab4e3305ba692f05993ab)), references [ExaDev/documents.js#1715](https://github.com/ExaDev/documents.js/issues/1715)
+
+
+### Dependencies
+
+- Updated pdf-codec to 5.8.0
+
 ## [14.6.11](https://github.com/ExaDev/documents.js/compare/documents.js%4014.6.10...documents.js%4014.6.11) (2026-10-31)
 
 
