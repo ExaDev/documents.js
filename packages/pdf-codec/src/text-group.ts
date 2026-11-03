@@ -81,13 +81,23 @@ interface Projected<TRun extends PdfTextRunGeometry> {
 // A vertically set run advances a quarter turn clockwise of the way its glyphs face: upright glyphs, unrotated at 0 degrees, run down the page at 270.
 const VERTICAL_ADVANCE_OFFSET_DEG = -90;
 
+/**
+ * An anticlockwise rotation as one canonical number: normalised into [0, 360) and rounded to remove the last-bit noise atan2 leaves, so two runs set at one angle report the identical value and a comparison against a quarter turn is exact.
+ * @param rotationDeg - a rotation in degrees, anticlockwise from the page's x-axis; absent means zero
+ * @returns the same angle in [0, 360)
+ */
+export function normalisedRotationDeg(rotationDeg: number | undefined): number {
+  const rounded =
+    Math.round((rotationDeg ?? 0) / ROTATION_NOISE_DEG) * ROTATION_NOISE_DEG;
+  return ((rounded % DEGREES_PER_TURN) + DEGREES_PER_TURN) % DEGREES_PER_TURN;
+}
+
 // The direction a run actually advances in, which is what grouping it into lines and words is about, as opposed to the direction its glyphs face. The two differ by a quarter turn for a vertically set run and not at all for every other run.
 function advanceAngleDeg(run: PdfTextRunGeometry): number {
-  const raw =
+  return normalisedRotationDeg(
     (run.rotationDeg ?? 0) +
-    (run.writingMode === "vertical" ? VERTICAL_ADVANCE_OFFSET_DEG : 0);
-  const rounded = Math.round(raw / ROTATION_NOISE_DEG) * ROTATION_NOISE_DEG;
-  return ((rounded % DEGREES_PER_TURN) + DEGREES_PER_TURN) % DEGREES_PER_TURN;
+      (run.writingMode === "vertical" ? VERTICAL_ADVANCE_OFFSET_DEG : 0),
+  );
 }
 
 const RADIANS_PER_TURN = 2 * Math.PI;
@@ -149,6 +159,15 @@ export function runsShareBaseline(
     project(a, rotationDeg).acrossPt - project(b, rotationDeg).acrossPt,
   );
   return distancePt <= toleranceEm * Math.min(a.sizePt, b.sizePt);
+}
+
+/**
+ * Where a run starts along the direction it advances in: the coordinate that puts the runs of one line in reading order, at whatever angle the line is set. For an upright run it is the run's `xPt`; for a run turned a quarter turn anticlockwise, read upward, it is its `yPt`.
+ * @param run - a positioned run
+ * @returns the run's origin projected onto its own baseline, in points
+ */
+export function runAlongBaselinePt(run: PdfTextRunGeometry): number {
+  return project(run, advanceAngleDeg(run)).alongPt;
 }
 
 /**

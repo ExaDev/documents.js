@@ -6,6 +6,8 @@ import {
   DEFAULT_COLUMN_GAP_EM,
   DEFAULT_WORD_GAP_EM,
   groupPdfTextRuns,
+  normalisedRotationDeg,
+  runAlongBaselinePt,
   runGapPt,
   runsShareBaseline,
 } from "./text-group";
@@ -163,6 +165,57 @@ describe("runsShareBaseline", () => {
         run("b", 200, 300, 10, 20, 90),
       ),
     ).toBe(true);
+  });
+});
+
+describe("normalisedRotationDeg", () => {
+  it("reads an absent rotation as upright", () => {
+    expect(normalisedRotationDeg(undefined)).toBe(0);
+  });
+
+  it("states a clockwise turn as the anticlockwise angle it equals", () => {
+    expect(normalisedRotationDeg(-90)).toBe(270);
+  });
+
+  it("folds a whole turn and more back into one turn", () => {
+    expect(normalisedRotationDeg(450)).toBe(90);
+  });
+
+  it("gives the exact quarter turn for an angle atan2 leaves a last bit away from it", () => {
+    expect(normalisedRotationDeg(90 - Number.EPSILON * 90)).toBe(90);
+  });
+
+  it("keeps two angles a producer set apart distinct", () => {
+    expect(normalisedRotationDeg(89.9)).not.toBe(normalisedRotationDeg(90));
+  });
+});
+
+describe("runAlongBaselinePt", () => {
+  it("is the x of an upright run", () => {
+    expect(runAlongBaselinePt(run("a", 100, 50, 10, 12))).toBe(100);
+  });
+
+  it("is the y of a run read upward, a quarter turn anticlockwise", () => {
+    expect(runAlongBaselinePt(run("a", 200, 118, 10, 12, 90))).toBeCloseTo(
+      118,
+      6,
+    );
+  });
+
+  it("runs the other way for a run read downward, a quarter turn clockwise", () => {
+    expect(runAlongBaselinePt(run("a", 200, 118, 10, 12, -90))).toBeCloseTo(
+      -118,
+      6,
+    );
+  });
+
+  it("is the downward distance of a vertically set run, whose upright glyphs advance down the page", () => {
+    expect(
+      runAlongBaselinePt({
+        ...run("a", 200, 118, 10, 12),
+        writingMode: "vertical",
+      }),
+    ).toBeCloseTo(-118, 6);
   });
 });
 

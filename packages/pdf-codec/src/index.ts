@@ -112,6 +112,8 @@ export {
   DEFAULT_COLUMN_GAP_EM,
   DEFAULT_WORD_GAP_EM,
   groupPdfTextRuns,
+  normalisedRotationDeg,
+  runAlongBaselinePt,
   runGapPt,
   runsShareBaseline,
   scriptPositionOf,
