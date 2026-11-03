@@ -1,8 +1,8 @@
 // A table ruled between its rows and set apart by whitespace between its columns: a rule drawn across the table under each row, and no vertical rule at all. Many typeset tables are built this way, and their cells wrap freely over several lines. Read line by line, such a table interleaves its columns: a first column's second line ("commercial", under "Shop and") is read beside the third column's second line rather than with the rest of its own cell, and a producer that draws the table one column at a time leaves nothing in content order to say otherwise. The rules are the drawn half of the structure: they say exactly where each row begins and ends. The columns are the other half, and the geometry states them just as plainly: a vertical strip that no text touches in any row holding text in more than one place is a gutter, the same kind of strip reading-order.ts finds between columns of prose. Together they make the grid a fully ruled table's lattice states, so the table is recovered through the same path and every cell's lines are read together.
 //
-// Three shapes such tables commonly take are part of the structure, not exceptions to it. A heading row often sits above the first rule with no rule of its own over it, so the lines directly above the first rule that keep to the columns and follow at the table's own line spacing are read as a first row. A row can run across the columns (a group heading such as "Part 2 items"); a row whose text sits in one place states nothing about the gutters, and where it crosses one it is read as a cell spanning the columns it covers. And the rule closing the table is often drawn wider than the rules between its rows, so rules belong to one table when their spans overlap almost entirely, not only when their ends coincide.
+// Three shapes such tables commonly take are part of the structure, not exceptions to it. A heading row often sits above the first rule with no rule of its own over it, so the lines directly above the first rule that keep to the columns and follow at the table's own line spacing are read as a first row. A row can run across the columns (a group heading such as "Part 2 items"); a row whose text sits in one place states nothing about the gutters, and where it crosses one it is read as a cell spanning the columns it covers. A header band can set a group heading over its sub-headings (ExaDev/documents.js#1739): the first line runs across the gutters between the sub-columns and the lines under it set a sub-heading in each, so the heading states nothing about those gutters either, and the band is read as two rows, the heading spanning its sub-columns over a row of sub-headings, every other column one cell down both. And the rule closing the table is often drawn wider than the rules between its rows, so rules belong to one table when their spans overlap almost entirely, not only when their ends coincide.
 //
-// Drawn rules alone do not make a table. Two columns of running prose between a rule above and a rule below leave a gutter too, so a grid whose every column reads as running prose (reading-order.ts's isRunningProse) is text set in columns, not a table, and is left to the reading order to split. Nor do gutters that the rows disagree about: when one row leaves a gap between two places and another row's text runs across it, the columns would read both places as one cell, so no grid is read.
+// Drawn rules alone do not make a table. Two columns of running prose between a rule above and a rule below leave a gutter too, so a grid whose every column reads as running prose (reading-order.ts's isRunningProse) is text set in columns, not a table, and is left to the reading order to split. Nor do gutters that the rows disagree about: when one row leaves a gap between two places and another row's text runs across it, other than as a group heading over sub-headings set in its own band, the columns would read both places as one cell, so no grid is read.
 import type { LayoutItem, LayoutText } from "pdf-codec";
 import type { GridLattice, HorizontalRule, TableRegion } from "./lattice";
 import {
@@ -22,7 +22,7 @@ import {
 /**
  * The grid of a table ruled between its rows and set apart by gutters between its columns, when the page holds one.
  * @param items - the page's items; rules are read from its lines, paths and thin rectangles, and text from its text items
- * @returns a lattice whose row boundaries are the rules (and the top of an unruled heading row above them) and whose column boundaries are the table's two ends and the middle of each gutter, a row that crosses a gutter spanning the columns it covers; undefined when no set of rules of one span holds two rows of text, fewer than two rows hold text in more than one place, the rows leave no gutter they all share, a row leaves a gap between two places that another row's text runs across, or every column reads as running prose
+ * @returns a lattice whose row boundaries are the rules (and the top of an unruled heading row above them, and the line between a group heading and the sub-headings under it) and whose column boundaries are the table's two ends and the middle of each gutter, a row that crosses a gutter spanning the columns it covers; undefined when no set of rules of one span holds two rows of text, fewer than two rows hold text in more than one place, the rows leave no gutter they all share, a row leaves a gap between two places that another row's text runs across other than as a group heading over sub-headings in its own band, or every column reads as running prose
  */
 export function detectRuledRowLattice(
   items: readonly LayoutItem[],
@@ -58,7 +58,16 @@ export function detectRuledRowLattice(
     );
   // The word space that separates two places in a row is measured on the rows' own text, never the page's: a large heading elsewhere on the page has a word space wide enough to swallow a table's gutters.
   const widestSpacePt = Math.max(...ruledRows.flat().map(spaceAdvancePt));
-  const shared = sharedGutters(ruledRows, widestSpacePt);
+  const groupHeadings = ruledRows.map((rowItems) =>
+    groupHeadingsOf(rowItems, widestSpacePt),
+  );
+  // A group heading is a cell spanning its sub-columns, so like a row holding text in one place it says nothing about the gutters between them.
+  const shared = sharedGutters(
+    ruledRows.map((rowItems, row) =>
+      rowItems.filter((item) => groupHeadings[row]?.items.has(item) !== true),
+    ),
+    widestSpacePt,
+  );
   if (shared === undefined) {
     return undefined;
   }
@@ -103,26 +112,168 @@ export function detectRuledRowLattice(
   if (columns.every((column) => isRunningProse(column, narrowestGutterPt))) {
     return undefined;
   }
-  // Each ruled band, the heading's included, split into the rows its lines state, every row with the boundary over it.
+  // Each ruled band, the heading's included, split into the rows its lines state, every row with the boundary over it, and the cells those rows hold.
   const bands = [
-    ...(heading === undefined ? [] : [heading]),
+    ...(heading === undefined ? [] : [{ ...heading, groups: undefined }]),
     ...ruledRows.map((rowItems, row) => ({
       items: rowItems,
       topPt: rules.positionsDescPt[row]!,
+      groups: groupHeadings[row],
     })),
-  ].flatMap((band) =>
-    rowsOfBand(band.items, band.topPt, dividersPt, widestSpacePt),
+  ].map((band) =>
+    band.groups === undefined
+      ? plainBand(band.items, band.topPt, dividersPt, widestSpacePt)
+      : (groupedBand(band.groups, band.topPt, dividersPt, widestSpacePt) ??
+        plainBand(band.items, band.topPt, dividersPt, widestSpacePt)),
+  );
+  const firstRows = bands.map((_, index) =>
+    bands.slice(0, index).reduce((sum, band) => sum + band.rows.length, 0),
   );
   return {
     rowBoundariesDescPt: [
-      ...bands.map((band) => band.topPt),
+      ...bands.flatMap((band) => band.rows.map((row) => row.topPt)),
       rules.positionsDescPt.at(-1)!,
     ],
     columnBoundariesAscPt,
-    regions: bands.flatMap((band, rowIndex) =>
-      rowRegions(band.items, rowIndex, dividersPt, widestSpacePt),
-    ),
+    regions: bands
+      .flatMap((band, index) => band.regions(firstRows[index]!))
+      .sort((a, b) => a.rowStart - b.rowStart || a.colStart - b.colStart),
     sourceItems: rules.sourceItems,
+  };
+}
+
+// The rows one ruled band reads as, top to bottom, and the cells they hold given the index of the band's first row in the table.
+interface BandRows {
+  readonly rows: readonly { readonly topPt: number }[];
+  readonly regions: (firstRow: number) => TableRegion[];
+}
+
+function plainBand(
+  items: readonly LayoutText[],
+  topPt: number,
+  dividersPt: readonly number[],
+  widestSpacePt: number,
+): BandRows {
+  const rows = rowsOfBand(items, topPt, dividersPt, widestSpacePt);
+  return {
+    rows,
+    regions: (firstRow) =>
+      rows.flatMap((row, index) =>
+        spanRegions(
+          row.items,
+          firstRow + index,
+          dividersPt,
+          widestSpacePt,
+          0,
+          dividersPt.length + 1,
+        ),
+      ),
+  };
+}
+
+// A band's group headings: the runs of its first line that the lines under it subdivide, two or more runs of those lines starting inside a heading's extent, the sub-headings it sets above. A first line whose runs nothing below subdivides (a wrapped cell continuing in one place) has none.
+interface GroupHeadings {
+  readonly runs: readonly Strip[];
+  readonly items: ReadonlySet<LayoutText>;
+  // Every run of the first line, headings or not, left to right: a heading spans the columns up to where the next of them starts.
+  readonly firstLineRuns: readonly Strip[];
+  readonly laterItems: readonly LayoutText[];
+  // Halfway between the first line's baseline and the next: below anything the heading line sets on or under its baseline, and above anything the line under it raises.
+  readonly splitPt: number;
+}
+
+function groupHeadingsOf(
+  items: readonly LayoutText[],
+  widestSpacePt: number,
+): GroupHeadings | undefined {
+  const [first, ...later] = clusterIntoLines(items);
+  const next = later[0];
+  if (first === undefined || next === undefined) {
+    return undefined;
+  }
+  const laterItems = later.flatMap((line) => line.items);
+  const laterRuns = textRuns(laterItems, widestSpacePt);
+  const firstLineRuns = textRuns(first.items, widestSpacePt);
+  const runs = firstLineRuns.filter(
+    (run) =>
+      laterRuns.filter((sub) => sub.loPt >= run.loPt && sub.loPt < run.hiPt)
+        .length > 1,
+  );
+  if (runs.length === 0) {
+    return undefined;
+  }
+  return {
+    runs,
+    items: new Set(
+      first.items.filter((item) =>
+        runs.some((run) => item.xPt >= run.loPt && item.xPt < run.hiPt),
+      ),
+    ),
+    firstLineRuns,
+    laterItems,
+    splitPt: (first.baselineY + next.baselineY) / 2,
+  };
+}
+
+// A band setting group headings over sub-headings, as two rows: each heading that runs across a divider is one cell from its own column up to the column the first line's next run starts in (or the table's end), over its sub-headings, each in its own column unless one runs across a divider; every column no heading spans is one cell down both rows. Undefined when no heading runs across a divider, the band then being read as any other.
+function groupedBand(
+  groups: GroupHeadings,
+  topPt: number,
+  dividersPt: readonly number[],
+  widestSpacePt: number,
+): BandRows | undefined {
+  const columnOf = (xPt: number): number =>
+    dividersPt.filter((dividerPt) => dividerPt <= xPt).length;
+  const columnCount = dividersPt.length + 1;
+  const spans = groups.runs
+    .filter((run) =>
+      dividersPt.some(
+        (dividerPt) => run.loPt < dividerPt && run.hiPt > dividerPt,
+      ),
+    )
+    .map((run) => {
+      const following = groups.firstLineRuns.find(
+        (other) => other.loPt > run.hiPt,
+      );
+      return {
+        colStart: columnOf(run.loPt),
+        colEnd:
+          following === undefined ? columnCount : columnOf(following.loPt),
+      };
+    });
+  if (spans.length === 0) {
+    return undefined;
+  }
+  const spanned = (column: number): boolean =>
+    spans.some((span) => column >= span.colStart && column < span.colEnd);
+  return {
+    rows: [{ topPt }, { topPt: groups.splitPt }],
+    regions: (firstRow) => [
+      ...spans.flatMap((span) => [
+        {
+          rowStart: firstRow,
+          rowEnd: firstRow + 1,
+          colStart: span.colStart,
+          colEnd: span.colEnd,
+        },
+        ...spanRegions(
+          groups.laterItems,
+          firstRow + 1,
+          dividersPt,
+          widestSpacePt,
+          span.colStart,
+          span.colEnd,
+        ),
+      ]),
+      ...Array.from({ length: columnCount }, (_, column) => column)
+        .filter((column) => !spanned(column))
+        .map((column) => ({
+          rowStart: firstRow,
+          rowEnd: firstRow + 2,
+          colStart: column,
+          colEnd: column + 1,
+        })),
+    ],
   };
 }
 
@@ -287,7 +438,7 @@ function textRuns(row: readonly LayoutText[], widestSpacePt: number): Strip[] {
   return runs;
 }
 
-// The gutters every row holding text in more than one place leaves between its runs, left to right, found by intersecting each such row's gaps; a strip survives only while it stays wider than the widest word space. A row with its text in one place says nothing about where the columns are, so it does not narrow the gutters. Reports how many rows did, for the caller to weigh as evidence. There are no gutters when a gap one such row leaves holds none of them: another such row runs across that strip, so the columns would read the text either side of the gap as one cell, and geometry cannot say whether the row running across it is a heading over two columns (a group heading over its sub-columns, set in the band holding the sub-headings) or the row leaving it splits one cell.
+// The gutters every row holding text in more than one place leaves between its runs, left to right, found by intersecting each such row's gaps; a strip survives only while it stays wider than the widest word space. A row with its text in one place says nothing about where the columns are, so it does not narrow the gutters. Reports how many rows did, for the caller to weigh as evidence. There are no gutters when a gap one such row leaves holds none of them: another such row runs across that strip, so the columns would read the text either side of the gap as one cell, and geometry cannot say whether the row running across it spans the two columns or the row leaving it splits one cell. A group heading set over its sub-headings in its own band says which, so the caller leaves it out of the rows passed here (groupHeadingsOf).
 function sharedGutters(
   rows: readonly (readonly LayoutText[])[],
   widestSpacePt: number,
@@ -407,17 +558,20 @@ function rowsOfBand(
   }));
 }
 
-// One row's cells: every column its own cell, except that a run of the row's text reaching across the line dividing two columns makes one cell of every column it covers.
-function rowRegions(
+// One row's cells across the columns from colFrom up to colTo: every column its own cell, except that a run of the row's text reaching across the line dividing two of them makes one cell of every column it covers. The divider at index i stands between column i and column i + 1.
+function spanRegions(
   row: readonly LayoutText[],
   rowIndex: number,
   dividersPt: readonly number[],
   widestSpacePt: number,
+  colFrom: number,
+  colTo: number,
 ): TableRegion[] {
   const runs = textRuns(row, widestSpacePt);
   const regions: TableRegion[] = [];
-  let colStart = 0;
-  dividersPt.forEach((dividerPt, index) => {
+  let colStart = colFrom;
+  for (let divider = colFrom; divider < colTo - 1; divider++) {
+    const dividerPt = dividersPt[divider]!;
     const joins = runs.some(
       (run) => run.loPt < dividerPt && run.hiPt > dividerPt,
     );
@@ -426,16 +580,16 @@ function rowRegions(
         rowStart: rowIndex,
         rowEnd: rowIndex + 1,
         colStart,
-        colEnd: index + 1,
+        colEnd: divider + 1,
       });
-      colStart = index + 1;
+      colStart = divider + 1;
     }
-  });
+  }
   regions.push({
     rowStart: rowIndex,
     rowEnd: rowIndex + 1,
     colStart,
-    colEnd: dividersPt.length + 1,
+    colEnd: colTo,
   });
   return regions;
 }
