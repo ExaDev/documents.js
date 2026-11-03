@@ -429,14 +429,14 @@ function fullyRuledTableRules(): FramedTableRule[] {
   ];
 }
 
-// How the table's displayed coordinates reach the content stream: as they are on an upright page, or, on a page carrying /Rotate 90 (displayed a quarter turn clockwise, ISO 32000-1 7.7.3.3), through the inverse of that turn, every line of text set running up the unrotated page so that it reads left to right once displayed.
-type FramedTableOrientation = "upright" | "sideways";
+// How the table's displayed coordinates reach the content stream: as they are on an upright page, or through the inverse of a quarter turn clockwise, every line of text set running up the unrotated page. On a "sideways" page the page carries /Rotate 90 (displayed a quarter turn clockwise, ISO 32000-1 7.7.3.3), so the table reads left to right once displayed. A "sideways-text" page carries no /Rotate, the way a typesetter sets a landscape table in a portrait document: the page is displayed portrait, every run reads upward, and a reader turns the page a quarter turn clockwise to read the table (ExaDev/documents.js#1715).
+type FramedTableOrientation = "upright" | "sideways" | "sideways-text";
 
 function framedTablePagePdf(
   orientation: FramedTableOrientation,
   rules: readonly FramedTableRule[],
 ): Uint8Array<ArrayBuffer> {
-  const sideways = orientation === "sideways";
+  const sideways = orientation !== "upright";
   // Displayed (X, Y) on a /Rotate 90 page of media width W is unrotated (W - Y, X).
   const point = (xPt: number, yPt: number): string =>
     sideways
@@ -459,7 +459,7 @@ function framedTablePagePdf(
     b,
     CONTENT_OBJ,
     `[0 0 ${String(FRAMED_TABLE_PAGE_WIDTH)} ${String(FRAMED_TABLE_PAGE_HEIGHT)}]`,
-    sideways ? "/Rotate 90 " : "",
+    orientation === "sideways" ? "/Rotate 90 " : "",
   );
   b.stream(CONTENT_OBJ, "<< >>", enc(`0.25 w ${strokes}\nBT ${shown} ET`));
   b.classicXrefAndTrailer(CONTENT_OBJ, "/Root 1 0 R");
