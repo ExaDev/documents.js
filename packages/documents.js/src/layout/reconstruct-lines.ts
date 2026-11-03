@@ -11,6 +11,7 @@ import { STANDARD_METRICS } from "pdf-codec/afm-widths";
 import type { PdfScriptPosition } from "pdf-codec/text-group";
 import {
   attachScriptRuns,
+  runAlongBaselinePt,
   runGapPt,
   runsShareBaseline,
   scriptPositionOf,
@@ -20,7 +21,7 @@ import { stampFrame } from "./shared";
 // --- Shared: cluster positioned text into lines, then measure per-item vertical extent from real AFM ascent/descent (not a generic guess — afm-widths.ts already carries verified per-face metrics from the same data the write path itself uses). ---
 
 export interface TextLine {
-  readonly items: readonly LayoutText[]; // left-to-right
+  readonly items: readonly LayoutText[]; // in reading order along the line's own baseline: left to right for upright text, upward for text turned a quarter turn anticlockwise
   readonly baselineY: number;
 }
 
@@ -274,8 +275,9 @@ export function clusterIntoLines(items: readonly LayoutText[]): TextLine[] {
   const lines = attachScriptRuns(working, (line) => line.items)
     .filter(({ runs }) => runs.length > 0)
     .map(({ line, runs }) => ({ ...line, items: runs }));
+  // A line's runs share one angle (runsShareBaseline never joins two set at different angles), so ordering them along that angle's own baseline is reading order: by x for upright text, and up the page for a line turned a quarter turn anticlockwise, whose runs all share one x (ExaDev/documents.js#1715). Ordered by x, such a line's runs kept the top-down order of the sort above, every gap between them read as negative, and the line came out reversed with no separators.
   for (const line of lines) {
-    line.items.sort((a, b) => a.xPt - b.xPt);
+    line.items.sort((a, b) => runAlongBaselinePt(a) - runAlongBaselinePt(b));
     line.items = dropOverlappingRepeatsWithinLine(line.items);
   }
   lines.sort((a, b) => b.baselineY - a.baselineY);

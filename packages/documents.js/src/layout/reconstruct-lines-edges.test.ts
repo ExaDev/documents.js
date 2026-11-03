@@ -19,6 +19,7 @@ function text(overrides: {
   xPt: number;
   yPt: number;
   widthPt?: number;
+  rotationDeg?: number;
   bold?: boolean;
   italic?: boolean;
 }): LayoutText {
@@ -35,6 +36,9 @@ function text(overrides: {
     sizePt: 12,
     color: BLACK,
     ...(overrides.widthPt !== undefined ? { widthPt: overrides.widthPt } : {}),
+    ...(overrides.rotationDeg !== undefined
+      ? { rotationDeg: overrides.rotationDeg }
+      : {}),
   };
 }
 
@@ -51,6 +55,25 @@ describe("clusterIntoLines ordering", () => {
       [724, ["upper"]],
       [700, ["left", "right"]],
     ]);
+  });
+
+  it("orders a line turned a quarter turn anticlockwise up the page, the way it reads, with a space at each gap", () => {
+    // A printed row of a table set sideways: every cell on one x, read upward. Cells are 12pt apart and each 6.672pt wide (two Helvetica digits at 12pt), leaving a gap wider than a word space and narrower than a column's.
+    const lines = clusterIntoLines([
+      text({ text: "61", xPt: 300, yPt: 236, widthPt: 6.672, rotationDeg: 90 }),
+      text({ text: "44", xPt: 300, yPt: 212, widthPt: 6.672, rotationDeg: 90 }),
+      text({ text: "16", xPt: 300, yPt: 200, widthPt: 6.672, rotationDeg: 90 }),
+      text({ text: "41", xPt: 300, yPt: 224, widthPt: 6.672, rotationDeg: 90 }),
+    ]);
+    expect(lines.map((line) => line.items.map((i) => i.text))).toEqual([
+      ["16", "44", "41", "61"],
+    ]);
+    const paragraph = paragraphToContentParagraph(
+      { lines: [lines[0]!] },
+      0,
+      undefined,
+    );
+    expect(paragraph.runs.map((run) => run.text).join("")).toBe("16 44 41 61");
   });
 });
 
