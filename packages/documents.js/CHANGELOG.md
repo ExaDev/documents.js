@@ -1,3 +1,9 @@
+## [14.7.1](https://github.com/ExaDev/documents.js/compare/documents.js%4014.7.0...documents.js%4014.7.1) (2026-11-03)
+
+### Bug Fixes
+
+* **documents.js:** read a ruled-row header band setting a group heading over sub-headings ([03f3a7a](https://github.com/ExaDev/documents.js/commit/03f3a7a2aaf9d9e5b59d74da231cfb8856e653a5)), references [ExaDev/documents.js#1739](https://github.com/ExaDev/documents.js/issues/1739)
+
 ## [14.7.0](https://github.com/ExaDev/documents.js/compare/documents.js%4014.6.11...documents.js%4014.7.0) (2026-11-03)
 
 ### Features
