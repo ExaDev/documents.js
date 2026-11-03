@@ -231,7 +231,7 @@ describe("pdfToMarkdown tables ruled only between their rows", () => {
     );
   });
 
-  it.each(["upright", "sideways"] as const)(
+  it.each(["upright", "sideways", "sideways-text"] as const)(
     "reads a framed table whose group heading runs across its sub-columns as lines, every figure apart, not as a table merging two of them (%s)",
     (orientation) => {
       const markdown = new TextDecoder().decode(
@@ -243,7 +243,7 @@ describe("pdfToMarkdown tables ruled only between their rows", () => {
     },
   );
 
-  it.each(["upright", "sideways"] as const)(
+  it.each(["upright", "sideways", "sideways-text"] as const)(
     "reads the same table drawn as a full grid through its lattice, every sub-column its own cell (%s)",
     (orientation) => {
       const markdown = new TextDecoder().decode(

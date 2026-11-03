@@ -1,4 +1,5 @@
 import type {
+  Box,
   ContentBlock,
   ContentConstructStart,
   ContentDocument,
@@ -19,6 +20,7 @@ import {
   paragraphToContentParagraph,
 } from "./reconstruct-lines";
 import { recoverTables } from "./reconstruct-tables";
+import { pageReadingFrame, restoreSourceFrames } from "./reading-frame";
 import { compareReadingPosition, readingOrder } from "./reading-order";
 
 // Deep-imported from pdf-codec's asset-free read-side modules rather than its root barrel: the reconstruction path is part of this package's read-only graph (documents.js/read), and the barrel's write half would drag the vendored font assets into it. See src/read-graph.test.ts.
@@ -38,6 +40,7 @@ import type {
 import { sourcePageIndex } from "pdf-codec/layout";
 import type { Margins } from "document-schema.js";
 import { throwIfAborted } from "../ports/abort";
+import { rotatePointAboutCenter } from "../model/geometry";
 import { stampFrame } from "./shared";
 import type { CellTypeInferenceSink } from "./cell-typing";
 
@@ -359,13 +362,38 @@ function buildSection(
   };
 }
 
-// Table recovery runs FIRST, because it decides what is left for everything after it: text inside a recovered lattice belongs to the table, not to the page's paragraph flow, and the lattice's own strokes belong to the table's structure, not to the recovered vector content. Both recoveries are no-ops on a page without the geometry to support them, so a text-only page produces exactly the blocks it always did. See the shared recovery section below for the full reasoning behind each gate.
+// A page whose text is mostly set a quarter turn from upright is read in the frame that turn makes upright (reading-frame.ts), so a sideways table's printed rows group into lines and rows the way a reader turning the page sees them; every frame stamped while reading it is mapped back to the page's own space before the form fields, whose widgets are stated in that space, are anchored against the blocks.
 function reconstructPageBlocks(
   page: LayoutPage,
   pageIndex: number,
   images: Record<string, LayoutImageAsset>,
   headingLevels: ReadonlyMap<number, number>,
   form: readonly LayoutFormField[] | undefined,
+  structure: StructureIndex | undefined,
+  divisionByBlock: WeakMap<ContentBlock, readonly string[]>,
+): ContentBlock[] {
+  const readingFrame = pageReadingFrame(page);
+  const blocks = readPageBlocks(
+    readingFrame?.page ?? page,
+    pageIndex,
+    images,
+    headingLevels,
+    structure,
+    divisionByBlock,
+  );
+  if (readingFrame !== undefined) {
+    restoreSourceFrames(blocks, pageIndex, readingFrame.toSource);
+  }
+  appendFormFieldConstructs(blocks, form, pageIndex);
+  return blocks;
+}
+
+// Table recovery runs FIRST, because it decides what is left for everything after it: text inside a recovered lattice belongs to the table, not to the page's paragraph flow, and the lattice's own strokes belong to the table's structure, not to the recovered vector content. Both recoveries are no-ops on a page without the geometry to support them, so a text-only page produces exactly the blocks it always did. See the shared recovery section below for the full reasoning behind each gate.
+function readPageBlocks(
+  page: LayoutPage,
+  pageIndex: number,
+  images: Record<string, LayoutImageAsset>,
+  headingLevels: ReadonlyMap<number, number>,
   structure: StructureIndex | undefined,
   divisionByBlock: WeakMap<ContentBlock, readonly string[]>,
 ): ContentBlock[] {
@@ -435,16 +463,12 @@ function reconstructPageBlocks(
         widthPt: img.widthPt,
         heightPt: img.heightPt,
       };
-      stampFrame(block, pageIndex, {
-        xPt: img.xPt,
-        yPt: img.yPt,
-        widthPt: img.widthPt,
-        heightPt: img.heightPt,
-      });
+      const region = imageRegion(img);
+      stampFrame(block, pageIndex, region);
       recordDivisions(block, [img]);
       positioned.push({
-        path: order.locate(img.xPt + img.widthPt / 2, img.yPt),
-        yPt: img.yPt,
+        path: order.locate(region.xPt + region.widthPt / 2, region.yPt),
+        yPt: region.yPt,
         block,
       });
     }
@@ -479,8 +503,30 @@ function reconstructPageBlocks(
   const blocks = positioned.map((p) => p.block);
   reconcileLinks(blocks, page, pageIndex);
   appendAnnotationConstructs(blocks, page, pageIndex);
-  appendFormFieldConstructs(blocks, form, pageIndex);
   return blocks;
+}
+
+// The page region an image covers. pdf-codec places an image by scaling its unit square to widthPt by heightPt, turning it by rotationDeg about its anchor (xPt, yPt) and moving it there (imagePlacementFrom), so the region is the box around its four turned corners; for an unrotated image that is its own box. An upright image on a page read in its reading frame is a turned one there.
+function imageRegion(img: LayoutImage): Box {
+  const anchor = { x: img.xPt, y: img.yPt };
+  const corners = [
+    anchor,
+    { x: img.xPt + img.widthPt, y: img.yPt },
+    { x: img.xPt + img.widthPt, y: img.yPt + img.heightPt },
+    { x: img.xPt, y: img.yPt + img.heightPt },
+  ].map((corner) =>
+    rotatePointAboutCenter(corner, anchor, img.rotationDeg ?? 0),
+  );
+  const xs = corners.map((corner) => corner.x);
+  const ys = corners.map((corner) => corner.y);
+  const xPt = Math.min(...xs);
+  const yPt = Math.min(...ys);
+  return {
+    xPt,
+    yPt,
+    widthPt: Math.max(...xs) - xPt,
+    heightPt: Math.max(...ys) - yPt,
+  };
 }
 
 // A block's division chain: for each item, the /Part /Sect /Div elements enclosing it outermost-first, common-prefixed across every item in the cluster — a paragraph the geometry merged across a division boundary claims only the divisions both halves share, never the one either half alone sits in.

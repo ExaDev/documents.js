@@ -54,6 +54,7 @@ import { recoverTables } from "./reconstruct-tables";
 import { readingOrder } from "./reading-order";
 import type { CellTypingContext } from "./reconstruct-tables";
 import { detectGridLattice } from "./lattice";
+import { pageReadingFrame, restoreSourceFrames } from "./reading-frame";
 import {
   buildGridFromLattice,
   buildGridFromTextClustering,
@@ -714,20 +715,26 @@ export interface RecoveredTable {
 }
 
 // A PDF page carries no sheet name, and no trace of whether the source spreadsheet's own column/row banding split one sheet across several printed pages — there is no principled way to re-merge pages back into fewer sheets from geometry alone, so this maps one page to one sheet, exactly as reconstructPresentation maps one page to one slide.
+// A page whose text is mostly set a quarter turn from upright is read in that turn's reading frame (reading-frame.ts), so a sideways table's printed rows become the sheet's rows; the cells' frames are then mapped back to the page's own space, and the print settings state the page's own size, as every other sheet's do.
 export function reconstructSheet(
   page: LayoutPage,
   pageIndex: number,
   sink: CellTypeInferenceSink | undefined,
 ): ContentSheet {
-  const textItems = page.items.filter(
+  const readingFrame = pageReadingFrame(page);
+  const read = readingFrame?.page ?? page;
+  const textItems = read.items.filter(
     (i): i is LayoutText => i.kind === "text",
   );
-  const lattice = detectGridLattice(page.items);
+  const lattice = detectGridLattice(read.items);
   const context: CellTypingContext = { sheetIndex: pageIndex, sink };
   const grid =
     lattice !== undefined
       ? buildGridFromLattice(textItems, lattice, pageIndex, context)
       : buildGridFromTextClustering(textItems, pageIndex, context);
+  if (readingFrame !== undefined) {
+    restoreSourceFrames(grid.cells, pageIndex, readingFrame.toSource);
+  }
 
   // Margins have no PDF equivalent to recover, mirroring buildSection's own ZERO_MARGINS reasoning above. gridlines reflects whichever detection path actually ran; headers is always false — a header-gutter row-number/column-letter label has no reliable geometric signal distinguishing it from an ordinary short cell, so this makes no attempt to detect one (any such label sitting outside the detected grid lattice is simply dropped by findRowIndex/findColumnIndex returning undefined for it, rather than being misread as real cell content). No print range/scale/fit-to-page/repeat-rows/repeat-columns/manual-breaks assumption is made at all — a rendered page carries no trace of print INTENT, only what was visually printed.
   const printSettings: ContentSheetPrintSettings = {
