@@ -236,6 +236,42 @@ describe("reconstructWordprocessing recovers vectors and images as their own blo
       frames: [{ pageIndex: 0, xPt: 40, yPt: 600, widthPt: 100, heightPt: 60 }],
     });
   });
+
+  it("a rotated image's frame is the region it covers, turned about its anchor", () => {
+    // pdf-codec places an image by turning its widthPt-by-heightPt box about (xPt, yPt): a 20 by 10 image at (50, 10) turned a quarter turn anticlockwise covers x 40 to 50 and y 10 to 30.
+    const doc = reconstructWordprocessing(
+      docFrom(
+        [
+          page([
+            {
+              kind: "image",
+              imageId: "img1",
+              xPt: 50,
+              yPt: 10,
+              widthPt: 20,
+              heightPt: 10,
+              rotationDeg: 90,
+            },
+          ]),
+        ],
+        {
+          img1: {
+            format: "png",
+            widthPx: 2,
+            heightPx: 2,
+            base64: "iVBORw0KGgo",
+          },
+        },
+      ),
+    );
+    const frame = blocks(doc).find((block) => block.kind === "image")
+      ?.frames?.[0];
+    expect(frame?.pageIndex).toBe(0);
+    expect(frame?.xPt).toBeCloseTo(40, 6);
+    expect(frame?.yPt).toBeCloseTo(10, 6);
+    expect(frame?.widthPt).toBeCloseTo(10, 6);
+    expect(frame?.heightPt).toBeCloseTo(20, 6);
+  });
 });
 
 describe("reconstructWordprocessing widgets claim on their own page only", () => {
