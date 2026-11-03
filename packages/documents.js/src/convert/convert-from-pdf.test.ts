@@ -231,23 +231,25 @@ describe("pdfToMarkdown tables ruled only between their rows", () => {
     );
   });
 
-  it.each(["upright", "sideways", "sideways-text"] as const)(
-    "reads a framed table whose group heading runs across its sub-columns as lines, every figure apart, not as a table merging two of them (%s)",
-    (orientation) => {
+  it.each([
+    ["ruled only above, under and below its header and framed", "upright"],
+    ["ruled only above, under and below its header and framed", "sideways"],
+    [
+      "ruled only above, under and below its header and framed",
+      "sideways-text",
+    ],
+    ["drawn as a full grid", "upright"],
+    ["drawn as a full grid", "sideways"],
+    ["drawn as a full grid", "sideways-text"],
+  ] as const)(
+    "reads a table whose group heading runs across its sub-columns, %s, with the heading over its sub-columns and every sub-column its own cell (%s)",
+    (ruling, orientation) => {
+      const fixture =
+        ruling === "drawn as a full grid"
+          ? fullyRuledTwoLineHeaderTablePdf
+          : framedTwoLineHeaderTablePdf;
       const markdown = new TextDecoder().decode(
-        pdfToMarkdown(framedTwoLineHeaderTablePdf(orientation)),
-      );
-      expect(markdown).not.toContain("|");
-      expect(markdown).toContain("25\t1\\.85\t1\\.80\t0\\.175\t1\\.85");
-      expect(markdown).toContain("35\t1\\.30\t1\\.30\t0\\.170\t1\\.35");
-    },
-  );
-
-  it.each(["upright", "sideways", "sideways-text"] as const)(
-    "reads the same table drawn as a full grid through its lattice, every sub-column its own cell (%s)",
-    (orientation) => {
-      const markdown = new TextDecoder().decode(
-        pdfToMarkdown(fullyRuledTwoLineHeaderTablePdf(orientation)),
+        pdfToMarkdown(fixture(orientation)),
       );
       expect(markdown).toContain(
         [
