@@ -175,6 +175,31 @@ describe("readStackedFractions", () => {
     ).toHaveLength(2);
   });
 
+  it("reads two fractions whose bars differ in extent by a couple of points as two fractions, however wide the stroke is reported", () => {
+    // Equation E.1 and the next fraction of a loading guide: bars of 53.5 and 51.4 points, the strokes reported 16 wide by the file's own scale.
+    const wide = (item: LayoutItem): LayoutItem =>
+      item.kind === "line" ? { ...item, widthPt: 16 } : item;
+    const second = quotientOfDifferences().map((item) =>
+      item.kind === "text"
+        ? { ...item, xPt: item.xPt + 2.5, yPt: item.yPt - 100 }
+        : item.kind === "line"
+          ? {
+              ...item,
+              x1Pt: item.x1Pt + 2.5,
+              x2Pt: item.x2Pt + 0.4,
+              y1Pt: item.y1Pt - 100,
+              y2Pt: item.y2Pt - 100,
+            }
+          : item,
+    );
+
+    expect(
+      markdownOf([...quotientOfDifferences().map(wide), ...second.map(wide)])
+        .split("\n")
+        .filter((line) => line.includes("/(")),
+    ).toHaveLength(2);
+  });
+
   it("leaves rules alone that share an extent, as the row rules of a table's column do", () => {
     const rows = [0, 100].flatMap((drop) =>
       quotientOfDifferences().map((item) =>
