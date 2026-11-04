@@ -1,3 +1,9 @@
+## [4.14.219](https://github.com/ExaDev/documents.js/compare/document-mcp%404.14.218...document-mcp%404.14.219) (2026-11-04)
+
+### Build System
+
+* **deps-dev:** bump @modelcontextprotocol/client from 2.0.0 to 2.3.0 ([abb7020](https://github.com/ExaDev/documents.js/commit/abb70200bd958ca97a9c27dcd4cd95d2c5adc4c0))
+
 ## [4.14.218](https://github.com/ExaDev/documents.js/compare/document-mcp%404.14.217...document-mcp%404.14.218) (2026-11-04)
 
 

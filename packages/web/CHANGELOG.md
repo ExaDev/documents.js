@@ -1,3 +1,9 @@
+## [2.18.96](https://github.com/ExaDev/documents.js/compare/web%402.18.95...web%402.18.96) (2026-11-04)
+
+### Build System
+
+* **deps-dev:** bump vite from 8.2.1 to 8.2.4 ([c3c6371](https://github.com/ExaDev/documents.js/commit/c3c63714ec0d839f09a34b497014b3ef975b6e94))
+
 ## [2.18.95](https://github.com/ExaDev/documents.js/compare/web%402.18.94...web%402.18.95) (2026-11-04)
 
 
