@@ -87,3 +87,101 @@ export function coreFaceGlyphOrder(
   return (glyphId, advanceWidth) =>
     face.advances[glyphId] === advanceWidth ? face.texts[glyphId] : undefined;
 }
+
+/** The PostScript names of the core faces, by the family and style a font name spells with its punctuation, subset tag and Distiller size suffix taken off. */
+const CORE_FACE_BY_SPELLING: ReadonlyMap<string, string> = new Map([
+  ["arial", "ArialMT"],
+  ["arialmt", "ArialMT"],
+  ["arialbold", "Arial-BoldMT"],
+  ["arialboldmt", "Arial-BoldMT"],
+  ["arialitalic", "Arial-ItalicMT"],
+  ["arialitalicmt", "Arial-ItalicMT"],
+  ["arialbolditalic", "Arial-BoldItalicMT"],
+  ["arialbolditalicmt", "Arial-BoldItalicMT"],
+  ["timesnewroman", "TimesNewRomanPSMT"],
+  ["timesnewromanpsmt", "TimesNewRomanPSMT"],
+  ["timesnewromanbold", "TimesNewRomanPS-BoldMT"],
+  ["timesnewromanpsboldmt", "TimesNewRomanPS-BoldMT"],
+  ["timesnewromanitalic", "TimesNewRomanPS-ItalicMT"],
+  ["timesnewromanpsitalicmt", "TimesNewRomanPS-ItalicMT"],
+  ["timesnewromanbolditalic", "TimesNewRomanPS-BoldItalicMT"],
+  ["timesnewromanpsbolditalicmt", "TimesNewRomanPS-BoldItalicMT"],
+  ["couriernew", "CourierNewPSMT"],
+  ["couriernewpsmt", "CourierNewPSMT"],
+  ["couriernewbold", "CourierNewPS-BoldMT"],
+  ["couriernewpsboldmt", "CourierNewPS-BoldMT"],
+  ["couriernewitalic", "CourierNewPS-ItalicMT"],
+  ["couriernewpsitalicmt", "CourierNewPS-ItalicMT"],
+  ["couriernewbolditalic", "CourierNewPS-BoldItalicMT"],
+  ["couriernewpsbolditalicmt", "CourierNewPS-BoldItalicMT"],
+]);
+
+// A trailing size or version number a producer appends to a font name ("Arial.Bold0133", "Arial086.75"): digits, optionally a fraction.
+const TRAILING_NUMBER = /\d+(?:\.\d+)?$/u;
+
+/**
+ * The PostScript name of the core face a font name spells, or `undefined` when it spells none: `TimesNewRoman` and `Times.New.Roman.Bold092` are `TimesNewRomanPSMT` and `TimesNewRomanPS-BoldMT`. A spelling is only a candidate: the glyph order is accepted per glyph, against the font dictionary's own widths (`coreFaceTextOfNumberedGlyph`).
+ * @param fontName - A `/BaseFont` name, with or without its subset tag.
+ * @returns The face's PostScript name, or `undefined`.
+ */
+export function coreFaceNameOfFontName(fontName: string): string | undefined {
+  const spelled = fontName
+    .replace(/^[A-Z]{6}\+/u, "")
+    .replace(TRAILING_NUMBER, "")
+    .replace(/[^A-Za-z]/gu, "")
+    .toLowerCase();
+  return CORE_FACE_BY_SPELLING.get(spelled);
+}
+
+// Adobe Acrobat's optimiser converts a TrueType face to a CFF subset and names each glyph G followed by its glyph id in the face: G36 is the glyph the face numbers 36.
+const NUMBERED_GLYPH_NAME = /^G(\d+)$/u;
+
+// How far, in thousandths of an em, a font dictionary's width for a glyph may be from the face's advance for it and still agree: the dictionary's widths are the converted program's, which this producer rounds and hints, and measured against the face they differ by up to 22 (a 489 for a 500, a 507 for a 500); two core faces differ by far more on most letters (a capital G is 722 in Times New Roman and 778 in Arial).
+const WIDTH_AGREEMENT_TOLERANCE = 25;
+const THOUSANDTHS_PER_EM = 1000;
+// A font is taken for a core face only when at least this share of its numbered glyphs agree in width, over at least `MIN_NUMBERED_GLYPHS` glyphs: a share, because a glyph or two (a ligature, a width the producer rounded the other way) may disagree, and a count, because one or two widths cannot tell one face from another.
+const MIN_AGREEING_SHARE = 0.9;
+const MIN_NUMBERED_GLYPHS = 5;
+
+/**
+ * What a core face draws at the glyphs of a CFF subset that names each `G<id>`, accepted for the whole font only when the font dictionary's widths agree with the face's advances over at least `MIN_NUMBERED_GLYPHS` glyphs and `MIN_AGREEING_SHARE` of them, so a subset of any other face, or of another release of this one, is read as before.
+ * @param fontName - The font's `/BaseFont`.
+ * @param glyphs - Each glyph of the font a `/Differences` array names, with the width, in thousandths of an em, the dictionary gives its code.
+ * @returns The character each numbered glyph name draws, or `undefined` when the font is not taken for a core face.
+ */
+export function coreFaceTextsOfNumberedGlyphs(
+  fontName: string,
+  glyphs: readonly { readonly name: string; readonly width: number }[],
+): ReadonlyMap<string, string> | undefined {
+  const faceName = coreFaceNameOfFontName(fontName);
+  const face = faceName === undefined ? undefined : readFaces().get(faceName);
+  if (face === undefined) {
+    return undefined;
+  }
+  const texts = new Map<string, string>();
+  let numbered = 0;
+  let agreeing = 0;
+  for (const { name, width } of glyphs) {
+    const id = NUMBERED_GLYPH_NAME.exec(name)?.[1];
+    const advance =
+      id === undefined ? undefined : face.advances[Number.parseInt(id, 10)];
+    if (id === undefined || advance === undefined) {
+      continue;
+    }
+    numbered++;
+    const text = face.texts[Number.parseInt(id, 10)];
+    if (
+      Math.abs((advance * THOUSANDTHS_PER_EM) / face.unitsPerEm - width) <=
+      WIDTH_AGREEMENT_TOLERANCE
+    ) {
+      agreeing++;
+      if (text !== undefined) {
+        texts.set(name, text);
+      }
+    }
+  }
+  return numbered >= MIN_NUMBERED_GLYPHS &&
+    agreeing >= numbered * MIN_AGREEING_SHARE
+    ? texts
+    : undefined;
+}
