@@ -14,6 +14,10 @@ import {
 import { resolveStandardFont } from "./fonts";
 import { styleFromBaseFontName } from "./font-style";
 import { glyphNameToUnicode } from "./glyph-names";
+import {
+  symbolFontOf,
+  withSymbolFontCharacters,
+} from "./symbol-font-private-use";
 import type { FontMetricsPort, PdfObjectResolver } from "./interpret-types";
 import type { PdfDict, PdfObject } from "./objects";
 import { asArray, asName, asNumber, dictGet, isName } from "./objects";
@@ -188,6 +192,7 @@ function buildSimpleFont(fontDict: PdfDict, context: FontReadContext): PdfFont {
   );
   const symbolic = styleFlags.symbolic ?? false;
   const builtinGlyphName = builtinSymbolGlyphNameLookup(baseFamily);
+  const symbolFont = symbolFontOf(baseFamily);
 
   const widthsArr = resolvedArray(dictGet(fontDict, "Widths"), context);
   const firstChar = asNumber(dictGet(fontDict, "FirstChar")) ?? 0;
@@ -312,7 +317,7 @@ function buildSimpleFont(fontDict: PdfDict, context: FontReadContext): PdfFont {
     for (const code of codes) {
       const viaToUnicode = toUnicode?.lookup(code);
       if (viaToUnicode !== undefined) {
-        out += viaToUnicode;
+        out += withSymbolFontCharacters(symbolFont, viaToUnicode);
         continue;
       }
       const unicode = unicodeForCode(code);
@@ -601,6 +606,7 @@ function buildCompositeFont(
   };
 
   const toUnicode = readToUnicodeCMap(fontDict, context);
+  const symbolFont = symbolFontOf(baseFamily);
   const glyphIdOf = cidToGlyphId(fontDict, descendantDict, context);
   const programEncoding =
     glyphIdOf !== undefined
@@ -616,7 +622,7 @@ function buildCompositeFont(
       const cid = ((codes[i] ?? 0) << BITS_PER_BYTE) | (codes[i + 1] ?? 0);
       const mapped = toUnicode?.lookup(cid);
       if (mapped !== undefined) {
-        out += mapped;
+        out += withSymbolFontCharacters(symbolFont, mapped);
         continue;
       }
       const glyphId = glyphIdOf?.(cid);
