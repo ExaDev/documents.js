@@ -1,3 +1,9 @@
+## [14.10.1](https://github.com/ExaDev/documents.js/compare/documents.js%4014.10.0...documents.js%4014.10.1) (2026-11-04)
+
+### Bug Fixes
+
+* **documents.js:** vote the columns of a page's sub-tables one table at a time ([e1cd5db](https://github.com/ExaDev/documents.js/commit/e1cd5dbc7ccbdae5ac7d9de7f5c0e6ac7148117b))
+
 ## [14.10.0](https://github.com/ExaDev/documents.js/compare/documents.js%4014.9.0...documents.js%4014.10.0) (2026-11-04)
 
 ### Features
