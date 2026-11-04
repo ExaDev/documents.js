@@ -241,6 +241,7 @@ describe("isFlatColourPng", () => {
 
   it.each([
     ["greyscale", 0, [[10], [200]]],
+    ["palette index", 3, [[0], [2]]],
     [
       "truecolour",
       2,
@@ -289,6 +290,28 @@ describe("isFlatColourPng", () => {
       expect(
         isFlatColourPng(
           png({ width: 2, height: 2, colourType: 2, pixels: [...pixels] }),
+        ),
+      ).toBe(flat);
+      expect(decodePng).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([
+    ["flat", [[1], [1], [1], [1]], true],
+    ["differing only after its first scanline", [[1], [1], [1], [2]], false],
+  ] as const)(
+    "reads an eight-bit palette image %s by its indices, without decoding it into pixels",
+    (_name, pixels, flat) => {
+      vi.mocked(decodePng).mockClear();
+
+      expect(
+        isFlatColourPng(
+          png({
+            width: 2,
+            height: 2,
+            colourType: 3,
+            pixels: pixels.map((pixel) => [...pixel]),
+          }),
         ),
       ).toBe(flat);
       expect(decodePng).not.toHaveBeenCalled();
