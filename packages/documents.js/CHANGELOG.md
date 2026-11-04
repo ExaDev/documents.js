@@ -1,3 +1,14 @@
+## [14.10.0](https://github.com/ExaDev/documents.js/compare/documents.js%4014.9.0...documents.js%4014.10.0) (2026-11-04)
+
+### Features
+
+* **documents.js:** read a list of tables or an index as neither captions nor a table ([be6310f](https://github.com/ExaDev/documents.js/commit/be6310fd933c715458fa96402ea459797eed8828))
+* **documents.js:** read a stacked fraction in place as (numerator)/(denominator) ([6d77a93](https://github.com/ExaDev/documents.js/commit/6d77a93759f61c46a480f53e55ee3e361ac1e9ce))
+
+### Bug Fixes
+
+* **documents.js:** drop the images of a PDF page that are a single flat colour ([532a7fa](https://github.com/ExaDev/documents.js/commit/532a7fada0b625948c4c10b0ca85f8d801fecf18))
+
 ## [14.9.0](https://github.com/ExaDev/documents.js/compare/documents.js%4014.8.0...documents.js%4014.9.0) (2026-11-04)
 
 ### Features
