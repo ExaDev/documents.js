@@ -19,6 +19,12 @@ import {
   symbolFontOf,
   withSymbolFontCharacters,
 } from "./symbol-font-private-use";
+import {
+  VERIFIED_GLYPH_FAMILIES,
+  verifiedGlyphTableFor,
+  type VerifiedGlyphTable,
+  type VerifiedGlyphTableSource,
+} from "./verified-glyph-tables";
 import type { FontMetricsPort, PdfObjectResolver } from "./interpret-types";
 import type { PdfDict, PdfObject } from "./objects";
 import { asArray, asName, asNumber, dictGet, isName } from "./objects";
@@ -46,6 +52,8 @@ export interface PdfFont {
 export interface FontReadContext {
   readonly resolver: PdfObjectResolver;
   readonly sink: PdfDiagnosticSink;
+  /** The verified font subsets to read a font through, by the SHA-256 of its decoded program; the subsets `verified-glyph-tables.ts` holds when absent. Supplied by a test that builds its own. */
+  readonly verifiedGlyphTables?: ReadonlyMap<string, VerifiedGlyphTableSource>;
 }
 
 const BITS_PER_BYTE = 8; // For combining two big-endian bytes into one two-byte CID/code.
@@ -132,6 +140,42 @@ function lazyFontProgram(
   };
 }
 
+// The verified glyph table of the font's embedded program (`verified-glyph-tables.ts`), looked up once, and only for a font of a family that has one: hashing a program decodes its stream, which no other font pays for.
+function lazyVerifiedGlyphTable(
+  descriptor: PdfDict | undefined,
+  family: string,
+  context: FontReadContext,
+): () => VerifiedGlyphTable | undefined {
+  let read: { readonly table: VerifiedGlyphTable | undefined } | undefined;
+  return () => {
+    if (descriptor === undefined || !VERIFIED_GLYPH_FAMILIES.has(family)) {
+      return undefined;
+    }
+    read ??= {
+      table: verifiedGlyphTableOfProgram(descriptor, family, context),
+    };
+    return read.table;
+  };
+}
+
+function verifiedGlyphTableOfProgram(
+  descriptor: PdfDict,
+  family: string,
+  context: FontReadContext,
+): VerifiedGlyphTable | undefined {
+  for (const key of ["FontFile3", "FontFile2", "FontFile"]) {
+    const stream = context.resolver.resolve(dictGet(descriptor, key));
+    if (stream?.kind === "stream") {
+      return verifiedGlyphTableFor(
+        family,
+        decodeStream(stream.raw, stream.dict, context.sink).bytes,
+        context.verifiedGlyphTables,
+      );
+    }
+  }
+  return undefined;
+}
+
 // A simple font's /Encoding /Differences array: a code number followed by a run of glyph names, each assigned to consecutive codes starting there, until the next number resets the position (ISO 32000-1 9.6.6.2).
 function readDifferencesMap(
   differences: readonly PdfObject[] | undefined,
@@ -194,6 +238,11 @@ function buildSimpleFont(fontDict: PdfDict, context: FontReadContext): PdfFont {
   const symbolic = styleFlags.symbolic ?? false;
   const builtinGlyphName = builtinSymbolGlyphNameLookup(baseFamily);
   const symbolFont = symbolFontOf(baseFamily);
+  const verifiedGlyphs = lazyVerifiedGlyphTable(
+    descriptor,
+    baseFamily,
+    context,
+  );
 
   const widthsArr = resolvedArray(dictGet(fontDict, "Widths"), context);
   const firstChar = asNumber(dictGet(fontDict, "FirstChar")) ?? 0;
@@ -333,6 +382,16 @@ function buildSimpleFont(fontDict: PdfDict, context: FontReadContext): PdfFont {
     let out = "";
     let unmapped = 0;
     for (const code of codes) {
+      // A glyph of a subset checked against its outlines is read as what it draws, by the name /Differences, or else the named base encoding, gives its code, before the font dictionary's own tables, which that subset's producer wrote wrong.
+      const glyphName = differencesMap.get(code) ?? namedBaseGlyphName?.(code);
+      const verified =
+        glyphName === undefined
+          ? undefined
+          : verifiedGlyphs()?.glyphs.get(glyphName);
+      if (verified !== undefined) {
+        out += verified;
+        continue;
+      }
       const viaToUnicode = toUnicode?.lookup(code);
       if (viaToUnicode !== undefined) {
         out += withSymbolFontCharacters(symbolFont, viaToUnicode);
