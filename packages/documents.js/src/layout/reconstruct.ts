@@ -41,6 +41,7 @@ import { sourcePageIndex } from "pdf-codec/layout";
 import type { Margins } from "document-schema.js";
 import { throwIfAborted } from "../ports/abort";
 import { rotatePointAboutCenter } from "../model/geometry";
+import { dropHiddenLineNumbers } from "./hidden-line-numbers";
 import { stampFrame } from "./shared";
 import type { CellTypeInferenceSink } from "./cell-typing";
 
@@ -75,6 +76,7 @@ export function reconstructWordprocessing(
   options?: ReconstructOptions,
 ): ContentDocument {
   const signal = options?.signal;
+  doc = dropHiddenLineNumbers(doc);
   doc = dropHiddenLayerContent(doc);
   const headingLevels = headingSizeLevels(doc);
   const structure = indexStructure(doc);
