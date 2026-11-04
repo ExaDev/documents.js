@@ -211,7 +211,7 @@ describe("pdfToMarkdown superscripts and subscripts", () => {
       const markdown = new TextDecoder().decode(
         pdfToMarkdown(fractionNumeratorExponentPdf(raisedPt)),
       );
-      expect(markdown.trim()).toBe("1 \\+ K<sup>2</sup>R\n\nR \\+ X");
+      expect(markdown.trim()).toBe("(1 \\+ K<sup>2</sup>R)\\/(R \\+ X)");
     },
   );
 });
