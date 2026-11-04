@@ -29,9 +29,10 @@ const INTERLACE_OFFSET =
 const EIGHT_BITS_A_SAMPLE = 8;
 const NOT_INTERLACED = 0;
 
-/** The colour types whose samples are one byte each at eight bits and which carry no palette, with the samples to a pixel: greyscale, truecolour, greyscale with alpha and truecolour with alpha. */
+/** The colour types whose samples are one byte each at eight bits, with the samples to a pixel: greyscale, truecolour, a palette index, greyscale with alpha and truecolour with alpha. A palette image is compared by index: two indices that name the same colour are two values, so an image is removed only when it is provably one value. */
 const GREYSCALE = 0;
 const TRUECOLOUR = 2;
+const PALETTE_INDEX = 3;
 const GREYSCALE_WITH_ALPHA = 4;
 const TRUECOLOUR_WITH_ALPHA = 6;
 const ONE_SAMPLE = 1;
@@ -41,6 +42,7 @@ const FOUR_SAMPLES = 4;
 const SAMPLES_TO_A_PIXEL = new Map([
   [GREYSCALE, ONE_SAMPLE],
   [TRUECOLOUR, THREE_SAMPLES],
+  [PALETTE_INDEX, ONE_SAMPLE],
   [GREYSCALE_WITH_ALPHA, TWO_SAMPLES],
   [TRUECOLOUR_WITH_ALPHA, FOUR_SAMPLES],
 ]);
@@ -88,7 +90,7 @@ function isUniform(plane: Uint8Array | undefined, stride: number): boolean {
 }
 
 /**
- * Whether the first scanline of the eight-bit, non-interlaced, palette-free `png` already holds two different pixels, which proves the image is not flat without inflating the rest of it. False when the image is of another kind or its first line is uniform, so the caller decodes it whole.
+ * Whether the first scanline of the eight-bit, non-interlaced `png` already holds two different pixels, which proves the image is not flat without inflating the rest of it. False when the image is of another kind or its first line is uniform, so the caller decodes it whole.
  */
 function firstScanlineVaries(png: Uint8Array): boolean {
   const view = new DataView(png.buffer, png.byteOffset, png.byteLength);
