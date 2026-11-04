@@ -12,6 +12,7 @@ import {
   type LayoutItem,
 } from "pdf-codec";
 import { setApart } from "./page-caption";
+import { readTableCaptions, type TableCaption } from "./table-caption";
 import { isMeasurement, statesValue } from "./table-cell-values";
 
 /** Minimum rows sharing a column structure before this is called a table rather than coincidence. Two lines that happen to align prove nothing -- a heading above a paragraph aligns. Four is high enough that a real table's own header plus three data rows still qualifies, while a title block sitting above a caption does not. */
@@ -459,6 +460,45 @@ function tableFrom(
 }
 
 /**
+ * `rows`, the rows of one page's table top to bottom, as the tables the page's captions say they are: a new table starts at each row that a caption sits directly above, and is captioned with it, and the rows above the first such row are a table of their own, without a label unless a caption sits above them too.
+ *
+ * A caption belongs to the first row below it, so a caption below the last row, which has no row beneath it, names nothing and splits nothing. Every row lands in exactly one table, in order, so a split never loses a row. A caption is a structural fact (`readTableCaptions`: a standalone line, never a mention of a table in running text or an index), which is what makes it safe to cut a table at: two tables stacked on one page share columns, and the rows alone cannot say where one ends (novus-power/hive#4091).
+ */
+function tablesAtCaptions(
+  rows: readonly PlacedRow[],
+  starts: readonly number[],
+  captions: readonly TableCaption[],
+): ColumnAlignedTable[] {
+  const tables: { label: string | undefined; rows: PlacedRow[] }[] = [];
+  rows.forEach((row, index) => {
+    const above = rows[index - 1]?.yPt ?? Infinity;
+    // Captions come top to bottom, so the last one between the two rows is the nearest the row has.
+    const caption = captions.findLast(
+      (candidate) => candidate.yPt > row.yPt && candidate.yPt <= above,
+    );
+    const open = tables[tables.length - 1];
+    if (open === undefined || caption !== undefined) {
+      tables.push({ label: caption?.text, rows: [row] });
+    } else {
+      open.rows.push(row);
+    }
+  });
+  // A run of rows above the first caption too short to be a table by this module's own bar (MIN_TABLE_ROWS) is not one: it stays with the captioned table below it, as it would on a page the captions did not cut, so a stray line or two of text is not set apart as a table of its own and no row is lost.
+  const [lead, next, ...later] = tables;
+  const parts =
+    lead !== undefined &&
+    next !== undefined &&
+    lead.label === undefined &&
+    lead.rows.length < MIN_TABLE_ROWS
+      ? [{ label: next.label, rows: [...lead.rows, ...next.rows] }, ...later]
+      : tables;
+  return parts.map((part) => ({
+    table: tableFrom(part.rows, starts),
+    ...(part.label === undefined ? {} : { caption: part.label }),
+  }));
+}
+
+/**
  * Where each of `rows`' lines that holds a single run of text starts: the lines of a block set beside a table, which `findColumns` tells from a column by.
  *
  * A line is one run, or one run with white space set before it: a note set with a hanging indent starts its first line with a space run, a typesetter's indent, and the line holds nothing else (the notes under BS 7671's Table 4E4A, novus-power/hive#4222). White space set after a run is not counted as nothing, since a writer that closes every run with a space (a Word export) would then make every line of a page one run and every column of it a block beside a table.
@@ -478,7 +518,7 @@ function lineStartsOf(rows: readonly TextItem[][]): number[] {
   });
 }
 
-/** Every page whose text positions form a whitespace-aligned table, keyed by the page's 0-based index in the source document (`sourcePageIndex`, which is its position for a whole-document read), each carrying the recovered tables (`ColumnAlignedTable`; never the page's prose, unlike the full-page reconstruction of `reconstructWordprocessing`, since this detector infers a table from positions and has no business also deciding which of the page's remaining text is a paragraph). One table per page, and a page with none is absent. `skipPages` names the pages the lattice path already claimed, which are left entirely alone. Never throws: a page whose items this cannot make sense of is simply absent from the result. */
+/** Every page whose text positions form a whitespace-aligned table, keyed by the page's 0-based index in the source document (`sourcePageIndex`, which is its position for a whole-document read), each carrying the recovered tables (`ColumnAlignedTable`; never the page's prose, unlike the full-page reconstruction of `reconstructWordprocessing`, since this detector infers a table from positions and has no business also deciding which of the page's remaining text is a paragraph). One table per page unless the page prints captions between its rows, which cut it into one table per caption (`tablesAtCaptions`), each captioned by the caption above it; a page with no table is absent. `skipPages` names the pages the lattice path already claimed, which are left entirely alone. Never throws: a page whose items this cannot make sense of is simply absent from the result. */
 export function detectColumnAlignedTables(
   layoutDoc: LayoutDocument,
   skipPages: ReadonlySet<number>,
@@ -549,7 +589,10 @@ export function detectColumnAlignedTables(
     ) {
       return;
     }
-    result.set(pageIndex, [{ table: tableFrom(keptRows, columns.starts) }]);
+    result.set(
+      pageIndex,
+      tablesAtCaptions(keptRows, columns.starts, readTableCaptions(page)),
+    );
   });
   return result;
 }
