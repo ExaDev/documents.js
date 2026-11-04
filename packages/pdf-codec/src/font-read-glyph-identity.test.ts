@@ -107,6 +107,16 @@ describe("a composite font whose embedded TrueType program has neither 'cmap' no
     expect(pageText(pdf)).toBe(ARIAL_TEXT);
   });
 
+  it("reads a program that names the face the way Windows does (no PS suffix) as that face", () => {
+    // A TrueType face is named `Arial` by older producers and `ArialMT` by its own 'name' table; the glyph widths still have to agree glyph by glyph.
+    const pdf = compositeFontProgramPdf({
+      baseFont: "ABCDEF+Arial",
+      program: namelessProgram({ postScriptName: "ABCDEF+Arial" }),
+      cids: ARIAL_GLYPH_IDS,
+    });
+    expect(pageText(pdf)).toBe(ARIAL_TEXT);
+  });
+
   it("leaves unmapped a glyph whose advance width in the program is not the face's", () => {
     // Glyph 20 is the digit one in the face; a program drawing something else there, as a renumbered subset or another release would, gives itself away by its width.
     const pdf = compositeFontProgramPdf({

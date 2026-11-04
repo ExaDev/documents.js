@@ -13,6 +13,7 @@ import {
 
 import { resolveStandardFont } from "./fonts";
 import { styleFromBaseFontName } from "./font-style";
+import { coreFaceTextsOfNumberedGlyphs } from "./core-font-glyph-orders";
 import { glyphNameToUnicode } from "./glyph-names";
 import {
   symbolFontOf,
@@ -259,10 +260,27 @@ function buildSimpleFont(fontDict: PdfDict, context: FontReadContext): PdfFont {
   const programEncoding = lazyFontProgram(descriptor, baseFont, context);
 
   // A code /Differences names is drawn with the glyph of that name, so only the name can say what it is: through the Adobe Glyph List, or, for a name the list does not know (a subsetter's "g27"), through the embedded program's own glyph of that name and whatever the program states about that glyph. The base encoding and the program's built-in encoding describe the glyph the code reached before /Differences replaced it, so neither is consulted for such a code; reading the code through them anyway would report the character the producer overrode.
+  // What the core face a CFF subset numbers its glyphs after draws at each of them, read once and only for a font that names glyphs `G<id>`.
+  let numberedTexts: ReadonlyMap<string, string> | undefined;
+  const numberedCoreFaceTexts = (): ReadonlyMap<string, string> => {
+    numberedTexts ??=
+      coreFaceTextsOfNumberedGlyphs(
+        baseFont,
+        [...differencesMap].map(([code, name]) => ({
+          name,
+          width: widthOf(code),
+        })),
+      ) ?? new Map<string, string>();
+    return numberedTexts;
+  };
   const unicodeForDifferencesName = (name: string): string | undefined => {
     const named = glyphNameToUnicode(name);
     if (named !== undefined) {
       return named;
+    }
+    const ofCoreFace = numberedCoreFaceTexts().get(name);
+    if (ofCoreFace !== undefined) {
+      return ofCoreFace;
     }
     const program = programEncoding();
     const glyphId = program?.glyphIdOfName(name);
