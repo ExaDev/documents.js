@@ -696,6 +696,14 @@ export { pageReadingFrame } from "./layout/reading-frame";
 // The line numbers a page sets down its margin in white, which the rendered page does not show: dropped by reconstructWordprocessing, and exported so a caller reading a page's runs by position itself (its own table or furniture detection) reads the page without them as the reconstruction does.
 export { dropHiddenLineNumbers } from "./layout/hidden-line-numbers";
 
+// Column-aligned table detection: the tables a page sets by whitespace alignment with no rules drawn (datasheets, rating tables), recovered from the positions of the page's own text runs as `ContentTable`s. The counterpart to the gridline-lattice recovery `reconstructWordprocessing` applies, for the pages that path does not claim, exported so a caller that reads a PDF's tables itself (its own table store, its own captions) gets the same ones the conversions would.
+export {
+  detectColumnAlignedTables,
+  MIN_TABLE_ROWS,
+} from "./layout/column-aligned-tables";
+// The heading a page carries above its own table (what the table is of), read from font size.
+export { readPageCaption } from "./layout/page-caption";
+
 // --- The ergonomic X <-> PDF conversions (docx/pptx/odt/odp/ods/odg/xlsx/markdown/csv/svg/rtf/doc/xls/ppt/epub <-> PDF, all round-trip both ways). xlsx<->pdf and csv<->pdf each compose their same-variant ods bridge with the ods<->pdf layout pair internally — neither xlsx nor csv has a layout engine of its own — but both are real, direct, single-call conversion pairs from a caller's own point of view. rtf<->pdf, doc<->pdf, and epub<->pdf compose a same-variant docx bridge with the docx<->pdf layout pair the identical way, xls<->pdf composes an ods bridge the same way xlsx does, and ppt<->pdf composes a pptx bridge the same way again — none of the five legacy/plain-text formats has a layout engine of its own. The csv pairs intersect convert.ts's own CsvReadOptions (delimiter, onCellTypeInference) / CsvWriteOptions (delimiter, sheet) into the shared options type each already uses — the two option groups every csv-sourced/csv-targeted conversion consumes — and the svg pairs intersect SvgReadOptions (onSvgDiagnostic) / SvgWriteOptions (page, onSvgDiagnostic) the same way. markdown<->pdf (markdownToPdf/pdfToMarkdown) DOES lay markdown out directly, reusing convertWordprocessingToLayout/reconstructWordprocessing completely unmodified — but pdfToMarkdown is the single lossiest conversion in the whole package (see convert.ts's own top-of-file comment and the README's Fidelity section). svg<->pdf lays out directly too (the same convertDrawingToLayout/reconstructDrawing pair odg feeds), with the reader's scope limits as its only lossiness. ---
 export type {
   CsvReadOptions,
