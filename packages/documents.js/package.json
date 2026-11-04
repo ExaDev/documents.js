@@ -117,7 +117,7 @@
     "temml": "0.13.4",
     "wpd-codec": "5.1.23",
     "xls-codec": "4.16.6",
-    "zod": "4.4.3"
+    "zod": "4.6.6"
   },
   "devDependencies": {
     "@arethetypeswrong/cli": "0.18.5",
