@@ -1,3 +1,9 @@
+## [14.8.0](https://github.com/ExaDev/documents.js/compare/documents.js%4014.7.2...documents.js%4014.8.0) (2026-11-04)
+
+### Features
+
+* **documents.js:** recover tables set by column alignment alone ([0d8a3d7](https://github.com/ExaDev/documents.js/commit/0d8a3d7b57c791c332dce586e8bb9e56d7483711))
+
 ## [14.7.2](https://github.com/ExaDev/documents.js/compare/documents.js%4014.7.1...documents.js%4014.7.2) (2026-11-04)
 
 ### Bug Fixes
