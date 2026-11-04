@@ -1,3 +1,9 @@
+## [5.8.1](https://github.com/ExaDev/documents.js/compare/pdf-codec%405.8.0...pdf-codec%405.8.1) (2026-11-04)
+
+### Bug Fixes
+
+* **pdf-codec:** read a Symbol or Wingdings private-use code point as the font's own glyph ([ee80632](https://github.com/ExaDev/documents.js/commit/ee806327115a583d62ae981e968a39168f5e4726))
+
 ## [5.8.0](https://github.com/ExaDev/documents.js/compare/pdf-codec%405.7.4...pdf-codec%405.8.0) (2026-11-03)
 
 ### Features
