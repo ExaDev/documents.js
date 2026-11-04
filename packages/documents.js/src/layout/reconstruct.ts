@@ -44,6 +44,7 @@ import { rotatePointAboutCenter } from "../model/geometry";
 import { dropFlatColourImages } from "./flat-colour-images";
 import { dropHiddenLineNumbers } from "./hidden-line-numbers";
 import { stampFrame } from "./shared";
+import { readStackedFractions } from "./stacked-fractions";
 import type { CellTypeInferenceSink } from "./cell-typing";
 
 // A modest, deliberately nominal fallback for the rare edge case where even the widest measured text extent in the last recovered column is zero (e.g. a LayoutText item carrying no widthPt at all) — not claimed as a real recovered value, just enough to keep the resulting ContentSheetColumn structurally sane.
@@ -81,6 +82,7 @@ export function reconstructWordprocessing(
   // After the hidden line numbers: an image is what shows a white number over it to be set on a coloured band, and the drop below removes such a band.
   doc = dropFlatColourImages(doc);
   doc = dropHiddenLayerContent(doc);
+  doc = readStackedFractions(doc);
   const headingLevels = headingSizeLevels(doc);
   const structure = indexStructure(doc);
   const sections: ContentSection[] = [];

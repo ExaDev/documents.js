@@ -57,9 +57,6 @@ const MIN_PROSE_MEASURE_CHARS = 20;
 const ROW_BASELINE_TOLERANCE_DENOMINATOR = 10;
 const ROW_BASELINE_TOLERANCE_EM = 1 / ROW_BASELINE_TOLERANCE_DENOMINATOR;
 
-// The space character's code, whose advance in the item's own font is the natural word space that a gutter must be wider than.
-const SPACE_CHAR_CODE = 0x20;
-
 // AFM widths are stated in thousandths of an em.
 const AFM_UNITS_PER_EM = 1000;
 
@@ -263,14 +260,22 @@ function rightEdge(item: LayoutText): number {
 }
 
 export function spaceAdvancePt(item: LayoutText): number {
+  return glyphAdvancePt(item, " ");
+}
+
+/** The advance of the character `char` set in `item`'s font and size, from the standard font's AFM widths. Throws when the font has no width for that character. */
+export function glyphAdvancePt(item: LayoutText, char: string): number {
   const { standardName } = resolveStandardFont(
     item.font.family,
     item.font.weight === "bold",
     item.font.style === "italic",
   );
-  const advance = afmWidthOfCode(standardName, SPACE_CHAR_CODE);
+  const code = char.charCodeAt(0);
+  const advance = afmWidthOfCode(standardName, code);
   if (advance === undefined) {
-    throw new Error(`${standardName} has no AFM width for the space glyph`);
+    throw new Error(
+      `${standardName} has no AFM width for code ${String(code)}`,
+    );
   }
   return (advance / AFM_UNITS_PER_EM) * item.sizePt;
 }
