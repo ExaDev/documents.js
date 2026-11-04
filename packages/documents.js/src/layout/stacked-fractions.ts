@@ -268,10 +268,20 @@ function shifted(
   return item;
 }
 
-// Whether `rule` is one stroke of a table's ruling and not a fraction's bar: another horizontal rule on the page covers the same extent (a column's row rules, drawn one under each row) or abuts one of its ends (a row rule drawn in a segment per cell). A fraction's bar stands alone, and ruling is drawn in families. Two rules are the same extent, or abut, when they differ by no more than the thicker stroke of the two.
+// How closely, in the em of the page's text, two rules must agree to be strokes of one ruling: a table's rules are drawn from the same coordinates, so their edges coincide to a fraction of a point, where the bars of two fractions on a page differ by a point or more as their parts differ in width. The stroke width is no measure, since a PDF's own scale makes the reported width of a stroke several times its drawn width.
+const SAME_EDGE_EM = 0.1;
+
+// The size most text on the page is set in (the median of its runs'), which is the em the page's rules are drawn against.
+function bodySizeOf(texts: readonly LayoutText[]): number {
+  const sizes = texts.map((run) => run.sizePt).toSorted((a, b) => a - b);
+  return sizes[Math.floor(sizes.length / 2)] ?? 0;
+}
+
+// Whether `rule` is one stroke of a table's ruling and not a fraction's bar: another horizontal rule on the page covers the same extent (a column's row rules, drawn one under each row) or abuts one of its ends (a row rule drawn in a segment per cell). A fraction's bar stands alone, and ruling is drawn in families.
 function isPartOfRuling(
   rule: LayoutLine,
   rules: readonly LayoutLine[],
+  tolerance: number,
 ): boolean {
   const { from, to } = ruleSpan(rule);
   return rules.some((other) => {
@@ -279,7 +289,6 @@ function isPartOfRuling(
       return false;
     }
     const span = ruleSpan(other);
-    const tolerance = Math.max(rule.widthPt, other.widthPt);
     const sameHeight = Math.abs(other.y1Pt - rule.y1Pt) <= tolerance;
     const sameExtent =
       !sameHeight &&
@@ -297,8 +306,9 @@ function readFractionsOf(page: LayoutPage): LayoutPage {
   const claimed = new Set<LayoutText>();
   const fractions: Fraction[] = [];
   const rules = page.items.filter(isHorizontalRule);
+  const tolerance = SAME_EDGE_EM * bodySizeOf(page.items.filter(isText));
   for (const rule of rules) {
-    if (isPartOfRuling(rule, rules)) {
+    if (isPartOfRuling(rule, rules, tolerance)) {
       continue;
     }
     const fraction = fractionOf(
