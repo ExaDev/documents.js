@@ -43,6 +43,7 @@ import { throwIfAborted } from "../ports/abort";
 import { rotatePointAboutCenter } from "../model/geometry";
 import { dropHiddenLineNumbers } from "./hidden-line-numbers";
 import { stampFrame } from "./shared";
+import { readStackedFractions } from "./stacked-fractions";
 import type { CellTypeInferenceSink } from "./cell-typing";
 
 // A modest, deliberately nominal fallback for the rare edge case where even the widest measured text extent in the last recovered column is zero (e.g. a LayoutText item carrying no widthPt at all) — not claimed as a real recovered value, just enough to keep the resulting ContentSheetColumn structurally sane.
@@ -78,6 +79,7 @@ export function reconstructWordprocessing(
   const signal = options?.signal;
   doc = dropHiddenLineNumbers(doc);
   doc = dropHiddenLayerContent(doc);
+  doc = readStackedFractions(doc);
   const headingLevels = headingSizeLevels(doc);
   const structure = indexStructure(doc);
   const sections: ContentSection[] = [];
