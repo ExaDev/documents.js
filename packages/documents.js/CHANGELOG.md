@@ -1,3 +1,9 @@
+## [14.10.6](https://github.com/ExaDev/documents.js/compare/documents.js%4014.10.5...documents.js%4014.10.6) (2026-11-04)
+
+### Performance Improvements
+
+* **documents.js:** check a palette image from its indices like the other eight-bit kinds ([6e31230](https://github.com/ExaDev/documents.js/commit/6e3123025a2ea677e57f5b3acd161d6b524cdd63))
+
 ## [14.10.5](https://github.com/ExaDev/documents.js/compare/documents.js%4014.10.4...documents.js%4014.10.5) (2026-11-04)
 
 ### Performance Improvements
