@@ -597,10 +597,10 @@ importers:
     dependencies:
       '@modelcontextprotocol/node':
         specifier: 2.0.0
-        version: 2.0.0(@modelcontextprotocol/server@2.0.0)(hono@4.13.7)
+        version: 2.0.0(@modelcontextprotocol/server@2.3.0)(hono@4.13.7)
       '@modelcontextprotocol/server':
-        specifier: 2.0.0
-        version: 2.0.0
+        specifier: 2.3.0
+        version: 2.3.0
       document-operations:
         specifier: 1.1.215
         version: link:../document-operations
@@ -3643,10 +3643,6 @@ packages:
     resolution: {integrity: sha512-pbHtGj6EeFCHngFE8gtNPaKrsj8Mb1IMw45BLcaPML/m2WTxI7pyYmeNQvaux88Lw8BSO5r7nyRbUyIkICmGrg==}
     engines: {node: '>=20'}
 
-  '@modelcontextprotocol/core@2.0.0':
-    resolution: {integrity: sha512-pJCEwGG7Lfr/+PQp9ZTwKXNeO5wzbfKL7H3MYpCorM4oFBoQrdjnBgEoqG+RjhsvS1FKrDbKux+M1HhlnGWqcA==}
-    engines: {node: '>=20'}
-
   '@modelcontextprotocol/core@2.3.0':
     resolution: {integrity: sha512-09BHFaNVBe5pB2AhzCfLj0cqmsKLERvZQ4FblzP90UMGLaXVqdZPByFjURwsUYCmxonUW2yAwgTTvle+8O2/8w==}
     engines: {node: '>=20'}
@@ -3661,8 +3657,8 @@ packages:
       hono:
         optional: true
 
-  '@modelcontextprotocol/server@2.0.0':
-    resolution: {integrity: sha512-YhHWdHfpFMQfd0prsEnxKeS3Qz3ytIGmsS0sth4KDjnacIT7hxk6hXHkJ9KysxlkvTM+WZAtQbbcUhdoP4Hvtw==}
+  '@modelcontextprotocol/server@2.3.0':
+    resolution: {integrity: sha512-+6b0LdsQLmHsvS7J6sQJ4weTpzUn61fU1JKS+321/+IyDYoHW5CR2Tgqcs6GgAAQvlesCo6yX3xttgmx+XGtJw==}
     engines: {node: '>=20'}
 
   '@napi-rs/lzma-linux-x64-gnu@1.5.1':
@@ -10618,24 +10614,20 @@ snapshots:
       pkce-challenge: 5.0.1
       zod: 4.4.3
 
-  '@modelcontextprotocol/core@2.0.0':
-    dependencies:
-      zod: 4.4.3
-
   '@modelcontextprotocol/core@2.3.0':
     dependencies:
       zod: 4.4.3
 
-  '@modelcontextprotocol/node@2.0.0(@modelcontextprotocol/server@2.0.0)(hono@4.13.7)':
+  '@modelcontextprotocol/node@2.0.0(@modelcontextprotocol/server@2.3.0)(hono@4.13.7)':
     dependencies:
       '@hono/node-server': 1.19.17(hono@4.13.7)
-      '@modelcontextprotocol/server': 2.0.0
+      '@modelcontextprotocol/server': 2.3.0
     optionalDependencies:
       hono: 4.13.7
 
-  '@modelcontextprotocol/server@2.0.0':
+  '@modelcontextprotocol/server@2.3.0':
     dependencies:
-      '@modelcontextprotocol/core': 2.0.0
+      '@modelcontextprotocol/core': 2.3.0
       zod: 4.4.3
 
   '@napi-rs/lzma-linux-x64-gnu@1.5.1':
