@@ -20,6 +20,12 @@ const BELOW_EM = 1.5;
 // How far above a rule a numerator's baseline may sit, in the largest size of the glyphs read: a numerator's baseline is about a descent above the rule and a superscript stands on that, so one and a half em reaches the superscripts and stops short of the line above.
 const ABOVE_EM = 1.5;
 
+// The widest gap, in the largest size of the glyphs read, between two neighbouring runs of one part: a fraction's numerator or denominator is typeset as a unit, its operators and terms at most a space or two apart, where the cells of a table row are set columns apart.
+const MAX_GAP_EM = 1;
+
+// How far, in the largest size of the glyphs read, a part's middle may sit from the bar's: a fraction sets each part over its bar, where a line of a table cell, a heading or a paragraph set against a rule is flush to one side of it and so off its middle by half the difference in their widths.
+const MAX_OFF_CENTRE_EM = 1;
+
 // The extent of a text run along the line, to the end of its advance (the start alone when the run reports no width).
 function endOf(item: LayoutText): number {
   return item.xPt + (item.widthPt ?? 0);
@@ -60,6 +66,21 @@ function ruleSpan(rule: LayoutLine): { from: number; to: number } {
   };
 }
 
+// Whether the gaps between neighbouring runs of `runs`, left to right, are all at most MAX_GAP_EM of `size`. A run that reports no width gives no gap to judge, so a group holding one is not tight.
+function isTightGroup(runs: readonly LayoutText[], size: number): boolean {
+  const ordered = runs.toSorted((a, b) => a.xPt - b.xPt);
+  return ordered.every((run, index) => {
+    const previous = ordered[index - 1];
+    if (previous === undefined) {
+      return true;
+    }
+    return (
+      previous.widthPt !== undefined &&
+      run.xPt - endOf(previous) <= MAX_GAP_EM * size
+    );
+  });
+}
+
 function fractionOf(
   rule: LayoutLine,
   texts: readonly LayoutText[],
@@ -82,14 +103,25 @@ function fractionOf(
   if (numerator.length === 0 || denominator.length === 0) {
     return undefined;
   }
-  const spans = [numerator, denominator].map(spanOf);
+  const parts = [numerator, denominator];
+  const spans = parts.map(spanOf);
   const left = Math.min(...spans.map((part) => part.from));
   const right = Math.max(...spans.map((part) => part.to));
   // The rule is set just wider than its widest part: more bare rule than an em either side is a ruled line across something else.
   if (left - from > size || to - right > size) {
     return undefined;
   }
-  return { rule, numerator, denominator };
+  // Each part is one tight group centred over the bar: a table's header rule has rows of cells above and below it, set apart and flush to their columns, and a heading's underline has a paragraph under it flush to the left.
+  const barCentre = (from + to) / 2;
+  const isFraction = parts.every(
+    (part, index) =>
+      isTightGroup(part, size) &&
+      Math.abs(
+        ((spans[index]?.from ?? 0) + (spans[index]?.to ?? 0)) / 2 - barCentre,
+      ) <=
+        MAX_OFF_CENTRE_EM * size,
+  );
+  return isFraction ? { rule, numerator, denominator } : undefined;
 }
 
 // The baseline of a part: where the runs of its largest size sit, which leaves a superscript or subscript (set smaller) out of it. The first such run along the line, so a part reads the same however its runs are ordered.
@@ -236,10 +268,39 @@ function shifted(
   return item;
 }
 
+// Whether `rule` is one stroke of a table's ruling and not a fraction's bar: another horizontal rule on the page covers the same extent (a column's row rules, drawn one under each row) or abuts one of its ends (a row rule drawn in a segment per cell). A fraction's bar stands alone, and ruling is drawn in families. Two rules are the same extent, or abut, when they differ by no more than the thicker stroke of the two.
+function isPartOfRuling(
+  rule: LayoutLine,
+  rules: readonly LayoutLine[],
+): boolean {
+  const { from, to } = ruleSpan(rule);
+  return rules.some((other) => {
+    if (other === rule) {
+      return false;
+    }
+    const span = ruleSpan(other);
+    const tolerance = Math.max(rule.widthPt, other.widthPt);
+    const sameHeight = Math.abs(other.y1Pt - rule.y1Pt) <= tolerance;
+    const sameExtent =
+      !sameHeight &&
+      Math.abs(span.from - from) <= tolerance &&
+      Math.abs(span.to - to) <= tolerance;
+    const abuts =
+      sameHeight &&
+      (Math.abs(span.from - to) <= tolerance ||
+        Math.abs(span.to - from) <= tolerance);
+    return sameExtent || abuts;
+  });
+}
+
 function readFractionsOf(page: LayoutPage): LayoutPage {
   const claimed = new Set<LayoutText>();
   const fractions: Fraction[] = [];
-  for (const rule of page.items.filter(isHorizontalRule)) {
+  const rules = page.items.filter(isHorizontalRule);
+  for (const rule of rules) {
+    if (isPartOfRuling(rule, rules)) {
+      continue;
+    }
     const fraction = fractionOf(
       rule,
       page.items.filter(isText).filter((run) => !claimed.has(run)),
