@@ -539,6 +539,105 @@ function listsTables(rows: readonly (readonly string[])[]): boolean {
   );
 }
 
+// A line that opens a sub-table of a page that sets several under one caption: its leftmost run opens with a letter in parentheses (`(a) General purpose fuses`) and sits at the page's left margin, within an em of it. A sub-list in a note (`(a) the line conductor`) is indented past the margin and is not one.
+const SUB_CAPTION = /^\(\p{L}\)(?:\s|$)/u;
+
+function opensASubTable(row: readonly TextItem[], marginPt: number): boolean {
+  const [first] = row;
+  return (
+    first !== undefined &&
+    SUB_CAPTION.test(first.text.trim()) &&
+    first.xPt - marginPt <= first.sizePt
+  );
+}
+
+/**
+ * `rows` cut into the stretches each sub-table of the page owns: a new stretch opens at each line that opens a sub-table (`opensASubTable`), and the rows above the first are a stretch of their own. A page with no such line is one stretch, so its columns are voted over the whole page as they always were; a page that sets several tables under sub-captions gets its columns voted per table, because the columns one of them uses are not evidence for another's, and a table too short to clear \`MIN_TABLE_ROWS\` on its own is not carried as one by the columns its neighbours vote.
+ */
+function stretchesOf(rows: readonly TextItem[][]): TextItem[][][] {
+  const marginPt = Math.min(
+    ...rows.flatMap((row) => row.map((item) => item.xPt)),
+  );
+  const stretches: TextItem[][][] = [[]];
+  for (const row of rows) {
+    if (opensASubTable(row, marginPt)) {
+      stretches.push([]);
+    }
+    stretches[stretches.length - 1]?.push(row);
+  }
+  return stretches.filter((stretch) => stretch.length > 0);
+}
+
+/** The tables of one stretch of a page's rows (see `stretchesOf`): the whole page's rows when it has no sub-captions. */
+function tablesOfStretch(
+  rows: readonly TextItem[][],
+  page: Parameters<typeof readTableCaptions>[0],
+): ColumnAlignedTable[] {
+  // Only rows that could be a table row at all are evidence of a column structure: a run of prose lines carrying one item each would otherwise dominate the x-frequency count and drown out the real table's own columns.
+  const candidateRows = rows.filter((row) => row.length >= MIN_TABLE_COLUMNS);
+  if (candidateRows.length < MIN_TABLE_ROWS) {
+    return [];
+  }
+  const columns = findColumns(candidateRows, lineStartsOf(rows));
+  if (columns.starts.length < MIN_TABLE_COLUMNS) {
+    return [];
+  }
+  // Voting on the columns and being a row are two different bars (see MIN_ROW_COLUMN_SHARE). Applied after findColumns deliberately: a sparse row still legitimately evidences where a column sits, it just isn't itself tabular unless it states sparse data (see `statesSparseData`). The measurement columns that test uses are read over every candidate row, not only the full ones, because a sparse table can have too few full rows to establish them at all. That lets a stray figure on a dropped row (a folio, an axis label) count toward a column's measurement share here, which is why the final measurement check below reads the kept rows instead, and why a readmitted row must also state MIN_TABLE_COLUMNS values: a noise row with one figure never qualifies whatever the column shares say.
+  const placedRows: PlacedRow[] = candidateRows.map((row) => ({
+    cells: rowCellsFrom(row, columns),
+    yPt: Math.max(...row.map((item) => item.yPt)),
+  }));
+  const cellRows = placedRows.map((row) => [...row.cells]);
+  const measurementColumns = measurementColumnsOf(
+    cellRows,
+    columns.starts.length,
+  );
+  const keptRows = placedRows.filter(
+    (row) =>
+      row.cells.filter((cell) => cell.length > 0).length >=
+        columns.starts.length * MIN_ROW_COLUMN_SHARE ||
+      statesSparseData(row.cells, measurementColumns),
+  );
+  const tableRows = keptRows.map((row) => [...row.cells]);
+  // Re-checked against the row count, not the candidate count: whatever survives that bar is the real table, and if only a line or two does then this page never had one.
+  if (tableRows.length < MIN_TABLE_ROWS) {
+    return [];
+  }
+  const cells = tableRows.flatMap((row) =>
+    row.filter((content) => content !== ""),
+  );
+  // Per-glyph text, not a table -- see MAX_GLYPH_CELL_SHARE.
+  if (
+    cells.filter(
+      (cell) => cell.length <= GLYPH_CELL_LENGTH && !statesValue(cell),
+    ).length >
+    cells.length * MAX_GLYPH_CELL_SHARE
+  ) {
+    return [];
+  }
+  // A contents page, whose folio column would otherwise pass as measurements (see MAX_LEADER_ROW_SHARE).
+  if (
+    tableRows.filter((row) => row.some((cell) => LEADER_DOTS.test(cell)))
+      .length >=
+    tableRows.length * MAX_LEADER_ROW_SHARE
+  ) {
+    return [];
+  }
+  // And it must actually state measurements somewhere (see MIN_NUMERIC_COLUMNS). Re-read over the kept rows alone, not the candidates the fill bar was deciding between.
+  if (
+    measurementColumnsOf(tableRows, columns.starts.length).length <
+    MIN_NUMERIC_COLUMNS
+  ) {
+    return [];
+  }
+  return tablesAtCaptions(
+    keptRows,
+    columns.starts,
+    // A list of tables is not cut at its entries: the first line of a wrapped entry stands alone as a caption does, and the rows after it would be indexed as that table (see `readsAsContentsList`).
+    listsTables(tableRows) ? [] : readTableCaptions(page),
+  );
+}
+
 /** Every page whose text positions form a whitespace-aligned table, keyed by the page's 0-based index in the source document (`sourcePageIndex`, which is its position for a whole-document read), each carrying the recovered tables (`ColumnAlignedTable`; never the page's prose, unlike the full-page reconstruction of `reconstructWordprocessing`, since this detector infers a table from positions and has no business also deciding which of the page's remaining text is a paragraph). One table per page unless the page prints captions between its rows, which cut it into one table per caption (`tablesAtCaptions`), each captioned by the caption above it; an uncaptioned table that reads as an index is left out, and a page left with no table is absent. `skipPages` names the pages the lattice path already claimed, which are left entirely alone. Never throws: a page whose items this cannot make sense of is simply absent from the result. */
 export function detectColumnAlignedTables(
   layoutDoc: LayoutDocument,
@@ -553,70 +652,10 @@ export function detectColumnAlignedTables(
     const rows = groupIntoRows(
       page.items.filter((item): item is TextItem => item.kind === "text"),
     );
-    // Only rows that could be a table row at all are evidence of a column structure: a run of prose lines carrying one item each would otherwise dominate the x-frequency count and drown out the real table's own columns.
-    const candidateRows = rows.filter((row) => row.length >= MIN_TABLE_COLUMNS);
-    if (candidateRows.length < MIN_TABLE_ROWS) {
-      return;
-    }
-    const columns = findColumns(candidateRows, lineStartsOf(rows));
-    if (columns.starts.length < MIN_TABLE_COLUMNS) {
-      return;
-    }
-    // Voting on the columns and being a row are two different bars (see MIN_ROW_COLUMN_SHARE). Applied after findColumns deliberately: a sparse row still legitimately evidences where a column sits, it just isn't itself tabular unless it states sparse data (see `statesSparseData`). The measurement columns that test uses are read over every candidate row, not only the full ones, because a sparse table can have too few full rows to establish them at all. That lets a stray figure on a dropped row (a folio, an axis label) count toward a column's measurement share here, which is why the final measurement check below reads the kept rows instead, and why a readmitted row must also state MIN_TABLE_COLUMNS values: a noise row with one figure never qualifies whatever the column shares say.
-    const placedRows: PlacedRow[] = candidateRows.map((row) => ({
-      cells: rowCellsFrom(row, columns),
-      yPt: Math.max(...row.map((item) => item.yPt)),
-    }));
-    const cellRows = placedRows.map((row) => [...row.cells]);
-    const measurementColumns = measurementColumnsOf(
-      cellRows,
-      columns.starts.length,
+    // A page whose only rows were an index's, or that sets no table, has none to carry.
+    const tables = stretchesOf(rows).flatMap((stretch) =>
+      tablesOfStretch(stretch, page),
     );
-    const keptRows = placedRows.filter(
-      (row) =>
-        row.cells.filter((cell) => cell.length > 0).length >=
-          columns.starts.length * MIN_ROW_COLUMN_SHARE ||
-        statesSparseData(row.cells, measurementColumns),
-    );
-    const tableRows = keptRows.map((row) => [...row.cells]);
-    // Re-checked against the row count, not the candidate count: whatever survives that bar is the real table, and if only a line or two does then this page never had one.
-    if (tableRows.length < MIN_TABLE_ROWS) {
-      return;
-    }
-    const cells = tableRows.flatMap((row) =>
-      row.filter((content) => content !== ""),
-    );
-    // Per-glyph text, not a table -- see MAX_GLYPH_CELL_SHARE.
-    if (
-      cells.filter(
-        (cell) => cell.length <= GLYPH_CELL_LENGTH && !statesValue(cell),
-      ).length >
-      cells.length * MAX_GLYPH_CELL_SHARE
-    ) {
-      return;
-    }
-    // A contents page, whose folio column would otherwise pass as measurements (see MAX_LEADER_ROW_SHARE).
-    if (
-      tableRows.filter((row) => row.some((cell) => LEADER_DOTS.test(cell)))
-        .length >=
-      tableRows.length * MAX_LEADER_ROW_SHARE
-    ) {
-      return;
-    }
-    // And it must actually state measurements somewhere (see MIN_NUMERIC_COLUMNS). Re-read over the kept rows alone, not the candidates the fill bar was deciding between.
-    if (
-      measurementColumnsOf(tableRows, columns.starts.length).length <
-      MIN_NUMERIC_COLUMNS
-    ) {
-      return;
-    }
-    const tables = tablesAtCaptions(
-      keptRows,
-      columns.starts,
-      // A list of tables is not cut at its entries: the first line of a wrapped entry stands alone as a caption does, and the rows after it would be indexed as that table (see `readsAsContentsList`).
-      listsTables(tableRows) ? [] : readTableCaptions(page),
-    );
-    // A page whose only rows were an index's has no table at all.
     if (tables.length > 0) {
       result.set(pageIndex, tables);
     }
