@@ -9,7 +9,12 @@ import { sha256 } from "./crypto/sha2";
 const HEX_RADIX = 16;
 const HEX_DIGITS_PER_BYTE = 2;
 
-function sha256Hex(bytes: Uint8Array<ArrayBuffer>): string {
+/**
+ * The SHA-256 of a decoded font program as lower-case hex, the key the verified subsets are filed under.
+ * @param bytes - The decoded bytes of the embedded font program.
+ * @returns The digest.
+ */
+export function programDigest(bytes: Uint8Array<ArrayBuffer>): string {
   return Array.from(sha256(bytes), (byte) =>
     byte.toString(HEX_RADIX).padStart(HEX_DIGITS_PER_BYTE, "0"),
   ).join("");
@@ -433,6 +438,22 @@ export const VERIFIED_GLYPH_FAMILIES: ReadonlySet<string> = new Set(
 );
 
 /**
+ * The verified table for an embedded font program given its digest, or `undefined` for any program that is not exactly one that was checked.
+ * @param family - The font's family as `styleFromBaseFontName` reads it: the table is used only for a font whose family is the one it was checked for.
+ * @param digest - The SHA-256 of the decoded font program (`programDigest`).
+ * @param tables - The verified subsets to look in, by program SHA-256; the checked ones unless a test supplies its own.
+ * @returns The table for that subset, or `undefined`.
+ */
+export function verifiedGlyphTableOfDigest(
+  family: string,
+  digest: string,
+  tables: ReadonlyMap<string, VerifiedGlyphTableSource> = VERIFIED_SOURCES,
+): VerifiedGlyphTable | undefined {
+  const source = tables.get(digest);
+  return source?.family === family ? tableOf(source) : undefined;
+}
+
+/**
  * The verified table for an embedded font program, or `undefined` for any program that is not exactly one that was checked.
  * @param family - The font's family as `styleFromBaseFontName` reads it: the table is used only for a font whose family is the one it was checked for.
  * @param program - The decoded bytes of the embedded font program.
@@ -444,6 +465,5 @@ export function verifiedGlyphTableFor(
   program: Uint8Array<ArrayBuffer>,
   tables: ReadonlyMap<string, VerifiedGlyphTableSource> = VERIFIED_SOURCES,
 ): VerifiedGlyphTable | undefined {
-  const source = tables.get(sha256Hex(program));
-  return source?.family === family ? tableOf(source) : undefined;
+  return verifiedGlyphTableOfDigest(family, programDigest(program), tables);
 }
