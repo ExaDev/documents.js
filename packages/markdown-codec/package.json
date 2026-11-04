@@ -85,7 +85,7 @@
   "dependencies": {
     "byte-codec": "2.0.2",
     "document-schema.js": "7.16.2",
-    "zod": "4.4.3"
+    "zod": "4.6.6"
   },
   "devDependencies": {
     "@arethetypeswrong/cli": "0.18.5",
