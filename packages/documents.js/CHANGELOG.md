@@ -1,3 +1,9 @@
+## [14.7.2](https://github.com/ExaDev/documents.js/compare/documents.js%4014.7.1...documents.js%4014.7.2) (2026-11-04)
+
+### Bug Fixes
+
+* **documents.js:** drop the line numbers a page sets down its margin in white ([d236e9a](https://github.com/ExaDev/documents.js/commit/d236e9aa649a2efb6ab7c94a8da15878ea901784))
+
 ## [14.7.1](https://github.com/ExaDev/documents.js/compare/documents.js%4014.7.0...documents.js%4014.7.1) (2026-11-03)
 
 ### Bug Fixes
