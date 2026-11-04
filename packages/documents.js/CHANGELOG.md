@@ -1,3 +1,9 @@
+## [14.10.2](https://github.com/ExaDev/documents.js/compare/documents.js%4014.10.1...documents.js%4014.10.2) (2026-11-04)
+
+### Bug Fixes
+
+* **documents.js:** open a sub-table at a captioned run, and split sub-captions set side by side ([3cf0bf2](https://github.com/ExaDev/documents.js/commit/3cf0bf2d422e01bd6b1eaa96a1330e2a8613ca96))
+
 ## [14.10.1](https://github.com/ExaDev/documents.js/compare/documents.js%4014.10.0...documents.js%4014.10.1) (2026-11-04)
 
 ### Bug Fixes
