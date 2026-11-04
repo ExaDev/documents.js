@@ -10,7 +10,10 @@ import {
 } from "./cff";
 import type { CmapSubtable } from "./cmap-table";
 import { readCmapSubtables } from "./cmap-table";
-import { coreFaceGlyphOrder } from "./core-font-glyph-orders";
+import {
+  coreFaceGlyphOrder,
+  coreFaceNameOfFontName,
+} from "./core-font-glyph-orders";
 import { standardGlyphName } from "./encoding-standard-tables";
 import { withoutSubsetTag } from "./font-style";
 import {
@@ -233,7 +236,10 @@ function coreFaceSource(
   ) {
     return undefined;
   }
-  const order = coreFaceGlyphOrder(withoutSubsetTag(name), unitsPerEm);
+  const order = coreFaceGlyphOrder(
+    coreFaceNameOfFontName(name) ?? withoutSubsetTag(name),
+    unitsPerEm,
+  );
   if (order === undefined) {
     return undefined;
   }
