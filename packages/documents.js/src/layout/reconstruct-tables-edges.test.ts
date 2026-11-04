@@ -263,3 +263,72 @@ describe("reconstructWordprocessing: table frames and order", () => {
     ]);
   });
 });
+
+describe("reconstructWordprocessing: a page that draws several tables", () => {
+  /** A ruled table of one header row and one data row in two columns, its top-left corner at (20, topPt). */
+  function ruledTable(topPt: number, cells: readonly string[]): LayoutItem[] {
+    const [a, b, c, d] = cells;
+    const middle = topPt - 20;
+    const bottom = topPt - 40;
+    return [
+      line(20, topPt, 220, topPt),
+      line(20, middle, 220, middle),
+      line(20, bottom, 220, bottom),
+      line(20, topPt, 20, bottom),
+      line(120, topPt, 120, bottom),
+      line(220, topPt, 220, bottom),
+      text({ text: a ?? "", xPt: 24, yPt: topPt - 14, widthPt: 60 }),
+      text({ text: b ?? "", xPt: 124, yPt: topPt - 14, widthPt: 60 }),
+      text({ text: c ?? "", xPt: 24, yPt: middle - 14, widthPt: 60 }),
+      text({ text: d ?? "", xPt: 124, yPt: middle - 14, widthPt: 60 }),
+    ];
+  }
+
+  it("recovers every drawn table of the page as a table of its own, with each cell's text in it", () => {
+    const doc = reconstructWordprocessing({
+      formatVersion: 1,
+      metadata: {},
+      images: {},
+      pages: [
+        {
+          widthPt: 300,
+          heightPt: 400,
+          items: [
+            ...ruledTable(360, ["Code", "Name", "AB100", "First"]),
+            ...ruledTable(200, ["Code", "Name", "CD200", "Second"]),
+          ],
+        },
+      ],
+    });
+
+    const tables = (doc.kind === "wordprocessing" ? doc.sections : []).flatMap(
+      (section) =>
+        section.blocks.flatMap((block) =>
+          block.kind === "table" ? [block] : [],
+        ),
+    );
+    const cellTexts = tables.map((table) =>
+      table.rows.map((row) =>
+        row.cells.map((cell) =>
+          cell.blocks
+            .flatMap((block) =>
+              block.kind === "paragraph"
+                ? block.runs.map((run) => run.text)
+                : [],
+            )
+            .join(""),
+        ),
+      ),
+    );
+    expect(cellTexts).toEqual([
+      [
+        ["Code", "Name"],
+        ["AB100", "First"],
+      ],
+      [
+        ["Code", "Name"],
+        ["CD200", "Second"],
+      ],
+    ]);
+  });
+});
