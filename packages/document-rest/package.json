@@ -89,7 +89,7 @@
   "dependencies": {
     "document-operations": "1.1.205",
     "documents.js": "14.9.0",
-    "zod": "4.4.3"
+    "zod": "4.6.6"
   },
   "devDependencies": {
     "@arethetypeswrong/cli": "0.18.5",
