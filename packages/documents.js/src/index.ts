@@ -700,6 +700,7 @@ export { dropHiddenLineNumbers } from "./layout/hidden-line-numbers";
 export { dropFlatColourImages } from "./layout/flat-colour-images";
 
 // Column-aligned table detection: the tables a page sets by whitespace alignment with no rules drawn (datasheets, rating tables), recovered from the positions of the page's own text runs as `ContentTable`s. The counterpart to the gridline-lattice recovery `reconstructWordprocessing` applies, for the pages that path does not claim, exported so a caller that reads a PDF's tables itself (its own table store, its own captions) gets the same ones the conversions would.
+export type { ColumnAlignedTable } from "./layout/column-aligned-tables";
 export {
   detectColumnAlignedTables,
   MIN_TABLE_ROWS,
