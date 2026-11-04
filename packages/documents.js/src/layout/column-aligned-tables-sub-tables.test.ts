@@ -44,7 +44,7 @@ function twoRows(
   ];
 }
 
-/** The page: a caption, then sub-tables (a) of eleven ratings, (b) of six, (c) of six, each of two rows, each opened by a line `(x) ...` at the left margin, and a NOTE with an indented `(a)` sub-list that opens nothing. */
+/** The page: a caption, sub-tables (a) of eleven ratings and (b) of six, each of two rows and each opened by a line `(x) ...`; then (c) and (d) set side by side under one line holding both of their captions; a NOTE with an indented `(a)` sub-list that opens nothing; and the page number at the far left, further left than any caption, as a printed page has it. */
 function earthFaultLoopImpedancePage() {
   return page([
     ...row(710, [[269, "TABLE 41.2 - Maximum earth fault loop impedance"]]),
@@ -72,12 +72,36 @@ function earthFaultLoopImpedancePage() {
       ["5", "16", "20", "32", "45", "63"],
       ["9.93", "2.30", "1.93", "0.91", "0.57", "0.36"],
     ),
-    ...row(549, [[75, "(c) Fuses to BS 3036"]]),
-    ...twoRows(
-      535,
-      ["5", "15", "20", "30", "45", "60"],
-      ["9.10", "2.43", "1.68", "1.04", "0.56", "0.40"],
-    ),
+    ...row(549, [
+      [75, "(c) Fuses to BS 3036"],
+      [379, "(d) Fuses to BS 1362"],
+    ]),
+    ...row(535, [
+      [85, "Rating"],
+      [386, "Rating"],
+    ]),
+    ...row(534, [
+      [141, "5"],
+      [176, "15"],
+      [211, "20"],
+      [246, "30"],
+      [282, "45"],
+      [318, "60"],
+      [437, "3"],
+      [468, "13"],
+    ]),
+    ...row(510, [
+      [78, "Zs (ohms)"],
+      [134, "9.10"],
+      [171, "2.43"],
+      [206, "1.68"],
+      [242, "1.04"],
+      [278, "0.56"],
+      [314, "0.40"],
+      [380, "Zs (ohms)"],
+      [430, "15.6"],
+      [463, "2.30"],
+    ]),
     ...row(494, [[71, "NOTE 1: The Zs values have been determined"]]),
     ...row(467, [
       [115, "(a)"],
@@ -87,11 +111,12 @@ function earthFaultLoopImpedancePage() {
       [115, "(b)"],
       [131, "the circuit protective conductor"],
     ]),
+    ...row(22, [[48, "74"]]),
   ]);
 }
 
 describe("detectColumnAlignedTables on a page of sub-tables", () => {
-  it("does not carry a sub-table of two rows as a table, nor read its figures through the columns another sub-table votes", () => {
+  it("does not carry a sub-table of two rows as a table, nor read its figures through the columns another sub-table votes, with two sub-tables set side by side and the page number left of every caption", () => {
     const tables = detectColumnAlignedTables(
       earthFaultLoopImpedancePage(),
       new Set(),
