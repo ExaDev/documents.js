@@ -1,11 +1,9 @@
 version: 2
 
-# GitHub reads only the repository root's dependabot.yml, so the per-package copies this replaces could never have run here. `directories` (plural, glob-capable) covers the workspace root's own manifest plus every package's, in one entry rather than one per manifest.
+# GitHub reads only the repository root's dependabot.yml, so the per-package copies this replaces could never have run here. The npm entry points at the workspace root alone: this is a pnpm workspace with one lockfile at the root, and an entry for a package directory edits only that package's package.json, leaving the root pnpm-lock.yaml out of date so every CI job fails its frozen-lockfile install. The root entry updates the root manifest and the lockfile together.
 updates:
   - package-ecosystem: "npm"
-    directories:
-      - "/"
-      - "/packages/*"
+    directory: "/"
     schedule:
       interval: "daily"
     cooldown:
