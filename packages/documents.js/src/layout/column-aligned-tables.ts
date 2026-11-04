@@ -539,33 +539,55 @@ function listsTables(rows: readonly (readonly string[])[]): boolean {
   );
 }
 
-// A line that opens a sub-table of a page that sets several under one caption: its leftmost run opens with a letter in parentheses (`(a) General purpose fuses`) and sits at the page's left margin, within an em of it. A sub-list in a note (`(a) the line conductor`) is indented past the margin and is not one.
-const SUB_CAPTION = /^\(\p{L}\)(?:\s|$)/u;
+// A run that opens a sub-table of a page that sets several under one caption: a letter in parentheses, one space and a capitalised title in the same run (`(a) General purpose fuses`). A sub-list in a note sets its marker as a run of its own (`(a)`, then `the line conductor` further right) or runs it into a sentence that carries on in lower case (`(d)    the common public network`), and a caption starts a title: neither is matched.
+const SUB_CAPTION = /^\(\p{L}\) [\p{Lu}\p{N}]/u;
 
-function opensASubTable(row: readonly TextItem[], marginPt: number): boolean {
-  const [first] = row;
-  return (
-    first !== undefined &&
-    SUB_CAPTION.test(first.text.trim()) &&
-    first.xPt - marginPt <= first.sizePt
-  );
+/** The runs of `row` that open a sub-table (`SUB_CAPTION`), left to right. */
+function subCaptionsOf(row: readonly TextItem[]): TextItem[] {
+  return row.filter((item) => SUB_CAPTION.test(item.text.trim()));
+}
+
+/** `rows` keeping, from each, the runs that start in `[fromXPt, toXPt)`; a row left with none is dropped. */
+function slicedTo(
+  rows: readonly TextItem[][],
+  fromXPt: number,
+  toXPt: number,
+): TextItem[][] {
+  return rows
+    .map((row) => row.filter((item) => item.xPt >= fromXPt && item.xPt < toXPt))
+    .filter((row) => row.length > 0);
 }
 
 /**
- * `rows` cut into the stretches each sub-table of the page owns: a new stretch opens at each line that opens a sub-table (`opensASubTable`), and the rows above the first are a stretch of their own. A page with no such line is one stretch, so its columns are voted over the whole page as they always were; a page that sets several tables under sub-captions gets its columns voted per table, because the columns one of them uses are not evidence for another's, and a table too short to clear \`MIN_TABLE_ROWS\` on its own is not carried as one by the columns its neighbours vote.
+ * `rows` cut into the stretches each sub-table of the page owns: a new stretch opens at each line holding a sub-caption (`subCaptionsOf`), and the rows above the first are a stretch of their own. A line that holds several sub-captions side by side (`(c) Fuses to BS 30` at the left, `(d) Fuses to BS 13` further right) opens one stretch per caption, each keeping the runs from its caption's start to the next caption's, so two tables set beside each other do not share columns either. A page with no such line is one stretch, so its columns are voted over the whole page as they always were; a page that sets several tables under sub-captions gets its columns voted per table, because the columns one of them uses are not evidence for another's, and a table too short to clear \`MIN_TABLE_ROWS\` on its own is not carried as one by the columns its neighbours vote.
  */
 function stretchesOf(rows: readonly TextItem[][]): TextItem[][][] {
-  const marginPt = Math.min(
-    ...rows.flatMap((row) => row.map((item) => item.xPt)),
-  );
-  const stretches: TextItem[][][] = [[]];
+  const segments: { rows: TextItem[][]; captionXs: number[] }[] = [
+    { rows: [], captionXs: [] },
+  ];
   for (const row of rows) {
-    if (opensASubTable(row, marginPt)) {
-      stretches.push([]);
+    const captions = subCaptionsOf(row);
+    if (captions.length > 0) {
+      segments.push({
+        rows: [],
+        captionXs: captions.map((caption) => caption.xPt),
+      });
     }
-    stretches[stretches.length - 1]?.push(row);
+    segments[segments.length - 1]?.rows.push(row);
   }
-  return stretches.filter((stretch) => stretch.length > 0);
+  return segments
+    .flatMap(({ rows: segmentRows, captionXs }) =>
+      captionXs.length < 2
+        ? [segmentRows]
+        : captionXs.map((fromXPt, index) =>
+            slicedTo(
+              segmentRows,
+              index === 0 ? Number.NEGATIVE_INFINITY : fromXPt,
+              captionXs[index + 1] ?? Number.POSITIVE_INFINITY,
+            ),
+          ),
+    )
+    .filter((stretch) => stretch.length > 0);
 }
 
 /** The tables of one stretch of a page's rows (see `stretchesOf`): the whole page's rows when it has no sub-captions. */
