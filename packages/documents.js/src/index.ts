@@ -686,9 +686,9 @@ export type {
   CellTypeRule,
 } from "./layout/cell-typing";
 export { inferCellValue } from "./layout/cell-typing";
-// Gridline-lattice detection: the shared gate reconstructSpreadsheet uses for cell boundaries and reconstructWordprocessing/reconstructPresentation use as the ONLY evidence permitted to synthesize a table. Exported so a caller can ask the same question of a LayoutDocument directly.
+// Gridline-lattice detection: the shared gate reconstructSpreadsheet uses for cell boundaries and reconstructWordprocessing/reconstructPresentation use as the ONLY evidence permitted to synthesize a table. Exported so a caller can ask the same question of a LayoutDocument directly: `detectGridLattice` answers with the largest grid a page draws, `detectGridLattices` with every one.
 export type { GridLattice } from "./layout/lattice";
-export { detectGridLattice } from "./layout/lattice";
+export { detectGridLattice, detectGridLattices } from "./layout/lattice";
 
 // A page's reading frame: the quarter turn a reader gives a page whose text is mostly set sideways, which every reconstruction direction that groups text into lines and rows applies before reading the page. Exported so a caller reading a page's geometry itself (its own table or furniture detection) reads it in the same frame the reconstruction does.
 export type { PageReadingFrame, QuarterTurn } from "./layout/reading-frame";
