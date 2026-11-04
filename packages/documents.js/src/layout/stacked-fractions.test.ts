@@ -153,12 +153,18 @@ describe("readStackedFractions", () => {
     expect(markdownOf(fraction).trim()).toBe("(1 + K<sup>2</sup>R)/R");
   });
 
-  it("reads two fractions on one page each with its own parts", () => {
+  it("reads two fractions on one page each with its own parts, when their bars do not share an extent", () => {
     const second = quotientOfDifferences().map((item) =>
       item.kind === "text"
-        ? { ...item, yPt: item.yPt - 100 }
+        ? { ...item, xPt: item.xPt + 150, yPt: item.yPt - 100 }
         : item.kind === "line"
-          ? { ...item, y1Pt: item.y1Pt - 100, y2Pt: item.y2Pt - 100 }
+          ? {
+              ...item,
+              x1Pt: item.x1Pt + 150,
+              x2Pt: item.x2Pt + 150,
+              y1Pt: item.y1Pt - 100,
+              y2Pt: item.y2Pt - 100,
+            }
           : item,
     );
 
@@ -167,6 +173,29 @@ describe("readStackedFractions", () => {
         .split("\n")
         .filter((line) => line.includes("/(")),
     ).toHaveLength(2);
+  });
+
+  it("leaves rules alone that share an extent, as the row rules of a table's column do", () => {
+    const rows = [0, 100].flatMap((drop) =>
+      quotientOfDifferences().map((item) =>
+        item.kind === "text"
+          ? { ...item, yPt: item.yPt - drop }
+          : item.kind === "line"
+            ? { ...item, y1Pt: item.y1Pt - drop, y2Pt: item.y2Pt - drop }
+            : item,
+      ),
+    );
+    const doc = documentOf(rows);
+
+    expect(readStackedFractions(doc)).toBe(doc);
+  });
+
+  it("leaves a rule alone that abuts another at its end, as a row rule drawn in a segment per cell does", () => {
+    const [first, ...rest] = quotientOfDifferences();
+    const segment: LayoutItem = rule(302.0, 340.0, 677.0);
+    const doc = documentOf([...(first ? [first] : []), ...rest, segment]);
+
+    expect(readStackedFractions(doc)).toBe(doc);
   });
 
   it("leaves an underline alone, which has glyphs above it and none below", () => {
@@ -186,6 +215,46 @@ describe("readStackedFractions", () => {
       rule(50, 500, 690),
       run("1.5", 60, 675, SIZE_PT, 14),
       run("21", 260, 675, SIZE_PT, 10),
+    ];
+    const doc = documentOf(table);
+
+    expect(readStackedFractions(doc)).toBe(doc);
+  });
+
+  it("leaves a ruled table alone: the rule between a row of cells and the row below it has cells above and below, set columns apart", () => {
+    // The header band of a ruled table, as a standards table sets it: a row of column headings, the rule under it, a row of figures.
+    const cells = [141, 176, 211, 246, 282, 318];
+    const table = [
+      ...cells.map((x, index) => run(String(index + 2), x, 641, 9, 4)),
+      rule(78, 340, 635),
+      ...cells.map((x, index) => run(`${String(index + 1)}.5`, x, 620, 9, 12)),
+    ];
+    const doc = documentOf(table);
+
+    expect(readStackedFractions(doc)).toBe(doc);
+  });
+
+  it("leaves a heading's underline alone when a paragraph set flush left runs under it", () => {
+    const heading = [
+      run("Maximum earth fault loop impedance", 72, 700, 12, 150),
+      rule(72, 222, 696),
+      run("Table", 72, 684, 10, 24),
+      run("sets out the values", 100, 684, 10, 90),
+    ];
+    const doc = documentOf(heading);
+
+    expect(readStackedFractions(doc)).toBe(doc);
+  });
+
+  it("leaves a one-row table's rule alone when its cells are set apart", () => {
+    const table = [
+      run("Rating", 85, 641, 9, 28),
+      run("2", 141, 641, 9, 4),
+      run("4", 178, 641, 9, 4),
+      rule(78, 200, 635),
+      run("Zs", 79, 622, 9, 10),
+      run("33.1", 136, 622, 9, 18),
+      run("15.6", 172, 622, 9, 18),
     ];
     const doc = documentOf(table);
 
