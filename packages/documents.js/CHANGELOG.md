@@ -1,3 +1,9 @@
+## [14.10.4](https://github.com/ExaDev/documents.js/compare/documents.js%4014.10.3...documents.js%4014.10.4) (2026-11-04)
+
+### Performance Improvements
+
+* **documents.js:** answer a picture that is not one colour from its first scanline ([16cd3e6](https://github.com/ExaDev/documents.js/commit/16cd3e6bb82b8887685ff8bd1fa9ef9742f6d2ba))
+
 ## [14.10.3](https://github.com/ExaDev/documents.js/compare/documents.js%4014.10.2...documents.js%4014.10.3) (2026-11-04)
 
 ### Bug Fixes
