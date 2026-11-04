@@ -1,3 +1,9 @@
+## [14.10.8](https://github.com/ExaDev/documents.js/compare/documents.js%4014.10.7...documents.js%4014.10.8) (2026-11-04)
+
+### Bug Fixes
+
+* **documents.js:** judge a ruling family by the page's em, not the stroke width ([bcf6072](https://github.com/ExaDev/documents.js/commit/bcf60724b0231b5203681bf78aa02e0d94660ec8))
+
 ## [14.10.7](https://github.com/ExaDev/documents.js/compare/documents.js%4014.10.6...documents.js%4014.10.7) (2026-11-04)
 
 ### Bug Fixes
