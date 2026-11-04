@@ -1,13 +1,20 @@
 /**
  * Unit tests for `isFlatColourPng` and `dropFlatColourImages`, and the same removal end to end through `DocumentsJsTextExtractionAdapter` on a real PDF built with `writePdf`, so a flat-colour image is proved to be gone from the extracted text while a picture stays.
  */
-import { describe, expect, it } from "vitest";
-import { bytesToBase64 } from "byte-codec";
+import { describe, expect, it, vi } from "vitest";
+import { bytesToBase64, decodePng } from "byte-codec";
 import type { LayoutDocument, LayoutItem } from "pdf-codec";
 import { zlibSync } from "fflate";
 import { renderContentDocumentToMarkdown } from "../markdown/render";
 import { reconstructWordprocessing } from "./reconstruct";
 import { isFlatColourPng, dropFlatColourImages } from "./flat-colour-images";
+
+// Wraps the real decoder so a test can say whether an image was decoded whole.
+vi.mock("byte-codec", async (importOriginal) => {
+  const actual = await importOriginal<Record<string, unknown>>();
+  const realDecodePng = actual.decodePng as typeof decodePng;
+  return { ...actual, decodePng: vi.fn(realDecodePng) };
+});
 
 const PNG_SIGNATURE = Uint8Array.of(137, 80, 78, 71, 13, 10, 26, 10);
 
@@ -230,6 +237,55 @@ describe("isFlatColourPng", () => {
         }),
       ),
     ).toBe(false);
+  });
+
+  it.each([
+    ["greyscale", 0, [[10], [200]]],
+    [
+      "truecolour",
+      2,
+      [
+        [1, 2, 3],
+        [1, 2, 4],
+      ],
+    ],
+    [
+      "greyscale with alpha",
+      4,
+      [
+        [10, 255],
+        [10, 0],
+      ],
+    ],
+    [
+      "truecolour with alpha",
+      6,
+      [
+        [1, 2, 3, 255],
+        [1, 2, 3, 0],
+      ],
+    ],
+  ] as const)(
+    "answers a %s image whose first scanline varies without decoding the rest of it",
+    (_name, colourType, [first, second]) => {
+      vi.mocked(decodePng).mockClear();
+      const pixels = [[...first], [...second], [...first], [...first]];
+
+      expect(
+        isFlatColourPng(png({ width: 2, height: 2, colourType, pixels })),
+      ).toBe(false);
+      expect(decodePng).not.toHaveBeenCalled();
+    },
+  );
+
+  it("decodes an image whose first scanline is uniform, since a later one may differ", () => {
+    vi.mocked(decodePng).mockClear();
+    const pixels = [RED, RED, RED, BLUE];
+
+    expect(
+      isFlatColourPng(png({ width: 2, height: 2, colourType: 2, pixels })),
+    ).toBe(false);
+    expect(decodePng).toHaveBeenCalledTimes(1);
   });
 
   it("is false for what it cannot read, so the image is kept", () => {
