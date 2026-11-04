@@ -6,7 +6,12 @@
  * Only an image that is provably flat is removed: anything this cannot decode (an interlaced PNG, a format other than PNG, an asset that does not inflate) is kept. Works on the parsed layout, so every reader of it agrees on which images exist; `reconstructWordprocessing` applies it after `dropHiddenLineNumbers`, because an image is what shows a white number over it to be set on a coloured band.
  */
 import { Unzlib } from "fflate";
-import { base64ToBytes, decodePng, unfilterScanlines } from "byte-codec";
+import {
+  base64ToBytes,
+  decodePng,
+  inflate,
+  unfilterScanlines,
+} from "byte-codec";
 import type { LayoutDocument, LayoutItem } from "pdf-codec";
 
 // The PNG signature, then each chunk as a four-byte length, a four-byte type, its data and a four-byte checksum (ISO/IEC 15948 section 5.2 and 5.3).
@@ -118,24 +123,163 @@ function firstScanlineVaries(png: Uint8Array): boolean {
   if (inflated.length < wanted) {
     return false;
   }
-  const row = unfilterScanlines(
-    new Uint8Array(inflated.subarray(0, wanted)),
-    1,
-    bytesInARow,
-    samples,
-  );
+  let row: Uint8Array;
+  try {
+    row = unfilterScanlines(
+      new Uint8Array(inflated.subarray(0, wanted)),
+      1,
+      bytesInARow,
+      samples,
+    );
+  } catch {
+    // A first line that names a filter the format does not define proves nothing: the whole image is read next and refused there.
+    return false;
+  }
   return !isUniform(row, samples);
 }
 
+// The scanline filter types (ISO/IEC 15948 section 9.2): the byte before each scanline says how its bytes were predicted from the bytes to their left (`a`), above (`b`) and above-left (`c`).
+const FILTER_NONE = 0;
+const FILTER_SUB = 1;
+const FILTER_UP = 2;
+const FILTER_AVERAGE = 3;
+const FILTER_PAETH = 4;
+const BYTE_MASK = 0xff;
+
+/** The Paeth predictor of the left, above and above-left bytes (section 9.4). */
+function paeth(a: number, b: number, c: number): number {
+  const estimate = a + b - c;
+  const distanceA = Math.abs(estimate - a);
+  const distanceB = Math.abs(estimate - b);
+  const distanceC = Math.abs(estimate - c);
+  if (distanceA <= distanceB && distanceA <= distanceC) {
+    return a;
+  }
+  return distanceB <= distanceC ? b : c;
+}
+
+/** Reverses `filter` on the scanline `filtered` into `row`, given the row above it in `above` (all zeros for the first row), `bytesToAPixel` bytes to a pixel. Returns false for a filter type the format does not define. */
+function unfilterRow(
+  filter: number,
+  filtered: Uint8Array,
+  above: Uint8Array,
+  row: Uint8Array,
+  bytesToAPixel: number,
+): boolean {
+  for (let x = 0; x < row.length; x++) {
+    const left = x >= bytesToAPixel ? (row[x - bytesToAPixel] ?? 0) : 0;
+    const up = above[x] ?? 0;
+    const upperLeft = x >= bytesToAPixel ? (above[x - bytesToAPixel] ?? 0) : 0;
+    const raw = filtered[x] ?? 0;
+    switch (filter) {
+      case FILTER_NONE:
+        row[x] = raw;
+        break;
+      case FILTER_SUB:
+        row[x] = (raw + left) & BYTE_MASK;
+        break;
+      case FILTER_UP:
+        row[x] = (raw + up) & BYTE_MASK;
+        break;
+      case FILTER_AVERAGE:
+        row[x] = (raw + Math.floor((left + up) / 2)) & BYTE_MASK;
+        break;
+      case FILTER_PAETH:
+        row[x] = (raw + paeth(left, up, upperLeft)) & BYTE_MASK;
+        break;
+      default:
+        return false;
+    }
+  }
+  return true;
+}
+
+/** Whether `row` is its first pixel repeated, `samples` bytes to a pixel. */
+function isOnePixelRepeated(row: Uint8Array, samples: number): boolean {
+  for (let x = samples; x < row.length; x++) {
+    if (row[x] !== row[x - samples]) {
+      return false;
+    }
+  }
+  return true;
+}
+
 /**
- * Whether `base64` is a PNG every pixel of which is the same value: its decoded colour channels, and its alpha channel where it has one, are constant. False for anything `decodePng` cannot read (an interlaced or malformed PNG), so such an image is kept rather than removed on a guess.
+ * Whether the eight-bit, non-interlaced `png` is flat, read without decoding it into pixels: the scanlines are unfiltered one at a time and each compared with the first as soon as it is out, so an image that varies stops at the first row that differs and a flat one is read once through. `undefined` when the image is of another kind (another bit depth, interlaced), so the caller decodes it.
+ */
+function isFlatWithoutDecoding(png: Uint8Array): boolean | undefined {
+  const samples = SAMPLES_TO_A_PIXEL.get(png[COLOUR_TYPE_OFFSET] ?? -1);
+  if (
+    samples === undefined ||
+    png.length <= INTERLACE_OFFSET ||
+    png[BIT_DEPTH_OFFSET] !== EIGHT_BITS_A_SAMPLE ||
+    png[INTERLACE_OFFSET] !== NOT_INTERLACED
+  ) {
+    return undefined;
+  }
+  const view = new DataView(png.buffer, png.byteOffset, png.byteLength);
+  const bytesInARow = view.getUint32(HEADER_DATA_OFFSET) * samples;
+  const height = view.getUint32(HEIGHT_OFFSET);
+  let inflated: Uint8Array;
+  try {
+    inflated = inflate(new Uint8Array(imageData(png)));
+  } catch {
+    // An asset that does not inflate is not provably flat, so it stays in the conversion.
+    return false;
+  }
+  const stride = bytesInARow + 1;
+  if (inflated.length < height * stride) {
+    return false;
+  }
+  let above: Uint8Array = new Uint8Array(bytesInARow);
+  let row: Uint8Array = new Uint8Array(bytesInARow);
+  const first = new Uint8Array(bytesInARow);
+  for (let y = 0; y < height; y++) {
+    const start = y * stride;
+    const unfiltered = unfilterRow(
+      inflated[start] ?? -1,
+      inflated.subarray(start + 1, start + stride),
+      above,
+      row,
+      samples,
+    );
+    if (!unfiltered) {
+      return false;
+    }
+    if (y === 0 ? !isOnePixelRepeated(row, samples) : !sameBytes(row, first)) {
+      return false;
+    }
+    if (y === 0) {
+      first.set(row);
+    }
+    [above, row] = [row, above];
+  }
+  return true;
+}
+
+/** Whether `a` and `b` hold the same bytes. */
+function sameBytes(a: Uint8Array, b: Uint8Array): boolean {
+  for (let x = 0; x < a.length; x++) {
+    if (a[x] !== b[x]) {
+      return false;
+    }
+  }
+  return true;
+}
+
+/**
+ * Whether `base64` is a PNG every pixel of which is the same value: its colour channels, and its alpha channel where it has one, are constant. False for anything that cannot be read (a malformed PNG), so such an image is kept rather than removed on a guess.
  *
- * An image whose first scanline already varies is not flat, and is answered from that line alone: a page-sized picture or scan would otherwise be inflated and decoded whole to learn what its first row shows, once for every read of its page.
+ * An image whose first scanline already varies is not flat, and is answered from that line alone: a page-sized picture or scan would otherwise be inflated whole to learn what its first row shows, once for every read of its page. An eight-bit image is checked from its filtered scanlines without being decoded into pixels, which is several times cheaper than `decodePng` on a page-sized image; any other kind (another bit depth, interlaced) is decoded.
  */
 export function isFlatColourPng(base64: string): boolean {
   const png = base64ToBytes(base64);
   if (firstScanlineVaries(png)) {
     return false;
+  }
+  const direct = isFlatWithoutDecoding(png);
+  if (direct !== undefined) {
+    return direct;
   }
   let decoded: ReturnType<typeof decodePng>;
   try {
