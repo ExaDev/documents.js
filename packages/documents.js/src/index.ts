@@ -696,6 +696,9 @@ export { pageReadingFrame } from "./layout/reading-frame";
 // The line numbers a page sets down its margin in white, which the rendered page does not show: dropped by reconstructWordprocessing, and exported so a caller reading a page's runs by position itself (its own table or furniture detection) reads the page without them as the reconstruction does.
 export { dropHiddenLineNumbers } from "./layout/hidden-line-numbers";
 
+// Images of a page that are a single flat colour dropped: Word writes some text and shapes as a flat-colour image under a soft mask, which reads as a swatch that depicts nothing. Exported for a caller that reads a page's runs and images by position itself.
+export { dropFlatColourImages } from "./layout/flat-colour-images";
+
 // Column-aligned table detection: the tables a page sets by whitespace alignment with no rules drawn (datasheets, rating tables), recovered from the positions of the page's own text runs as `ContentTable`s. The counterpart to the gridline-lattice recovery `reconstructWordprocessing` applies, for the pages that path does not claim, exported so a caller that reads a PDF's tables itself (its own table store, its own captions) gets the same ones the conversions would.
 export {
   detectColumnAlignedTables,
