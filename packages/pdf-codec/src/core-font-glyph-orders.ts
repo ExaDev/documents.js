@@ -116,8 +116,43 @@ const CORE_FACE_BY_SPELLING: ReadonlyMap<string, string> = new Map([
   ["couriernewpsbolditalicmt", "CourierNewPS-BoldItalicMT"],
 ]);
 
-// A trailing size or version number a producer appends to a font name ("Arial.Bold0133", "Arial086.75"): digits, optionally a fraction.
-const TRAILING_NUMBER = /\d+(?:\.\d+)?$/u;
+const ZERO_CODE = 48; // "0"
+const NINE_CODE = 57; // "9"
+const FULL_STOP_CODE = 46; // "."
+
+function isDigitAt(name: string, index: number): boolean {
+  const code = name.charCodeAt(index);
+  return code >= ZERO_CODE && code <= NINE_CODE;
+}
+
+// The index the run of digits ending just before `end` starts at, or `end` when no digit precedes it.
+function digitRunStart(name: string, end: number): number {
+  let start = end;
+  while (start > 0 && isDigitAt(name, start - 1)) {
+    start -= 1;
+  }
+  return start;
+}
+
+/**
+ * `name` without a trailing size or version number a producer appends to a font name ("Arial.Bold0133", "Arial086.75"): digits, optionally a fraction. Found by one scan back from the end, so the work is the length of the number and not of the name: the end-anchored pattern this replaces (a digit run followed by an optional fraction, then the end) is retried from every offset of a long digit run that a letter follows, which takes time quadratic in its length.
+ * @param name - A `/BaseFont` name.
+ * @returns The name with its trailing number cut off, or the name itself when it does not end in one.
+ */
+export function withoutTrailingNumber(name: string): string {
+  const fractionStart = digitRunStart(name, name.length);
+  if (fractionStart === name.length) {
+    return name;
+  }
+  const point = fractionStart - 1;
+  if (point > 0 && name.charCodeAt(point) === FULL_STOP_CODE) {
+    const wholeStart = digitRunStart(name, point);
+    if (wholeStart < point) {
+      return name.slice(0, wholeStart);
+    }
+  }
+  return name.slice(0, fractionStart);
+}
 
 /**
  * The PostScript name of the core face a font name spells, or `undefined` when it spells none: `TimesNewRoman` and `Times.New.Roman.Bold092` are `TimesNewRomanPSMT` and `TimesNewRomanPS-BoldMT`. A spelling is only a candidate: the glyph order is accepted per glyph, against the font dictionary's own widths (`coreFaceTextOfNumberedGlyph`).
@@ -125,9 +160,7 @@ const TRAILING_NUMBER = /\d+(?:\.\d+)?$/u;
  * @returns The face's PostScript name, or `undefined`.
  */
 export function coreFaceNameOfFontName(fontName: string): string | undefined {
-  const spelled = fontName
-    .replace(/^[A-Z]{6}\+/u, "")
-    .replace(TRAILING_NUMBER, "")
+  const spelled = withoutTrailingNumber(fontName.replace(/^[A-Z]{6}\+/u, ""))
     .replace(/[^A-Za-z]/gu, "")
     .toLowerCase();
   return CORE_FACE_BY_SPELLING.get(spelled);
