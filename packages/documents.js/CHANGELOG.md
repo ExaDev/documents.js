@@ -1,3 +1,9 @@
+## [14.10.5](https://github.com/ExaDev/documents.js/compare/documents.js%4014.10.4...documents.js%4014.10.5) (2026-11-04)
+
+### Performance Improvements
+
+* **documents.js:** check a flat eight-bit image from its scanlines instead of decoding it ([f069d98](https://github.com/ExaDev/documents.js/commit/f069d986ba4114022605a09bb08d9c12eff4c2fe))
+
 ## [14.10.4](https://github.com/ExaDev/documents.js/compare/documents.js%4014.10.3...documents.js%4014.10.4) (2026-11-04)
 
 ### Performance Improvements
