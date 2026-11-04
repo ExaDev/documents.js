@@ -1,3 +1,9 @@
+## [14.9.0](https://github.com/ExaDev/documents.js/compare/documents.js%4014.8.0...documents.js%4014.9.0) (2026-11-04)
+
+### Features
+
+* **documents.js:** cut a column-aligned page at the table captions it prints ([ef3fbe2](https://github.com/ExaDev/documents.js/commit/ef3fbe2c79b2f7c4ec6b0a8351e37d03f7651349))
+
 ## [14.8.0](https://github.com/ExaDev/documents.js/compare/documents.js%4014.7.2...documents.js%4014.8.0) (2026-11-04)
 
 ### Features
