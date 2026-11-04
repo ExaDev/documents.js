@@ -41,6 +41,7 @@ import { sourcePageIndex } from "pdf-codec/layout";
 import type { Margins } from "document-schema.js";
 import { throwIfAborted } from "../ports/abort";
 import { rotatePointAboutCenter } from "../model/geometry";
+import { dropFlatColourImages } from "./flat-colour-images";
 import { dropHiddenLineNumbers } from "./hidden-line-numbers";
 import { stampFrame } from "./shared";
 import type { CellTypeInferenceSink } from "./cell-typing";
@@ -77,6 +78,8 @@ export function reconstructWordprocessing(
 ): ContentDocument {
   const signal = options?.signal;
   doc = dropHiddenLineNumbers(doc);
+  // After the hidden line numbers: an image is what shows a white number over it to be set on a coloured band, and the drop below removes such a band.
+  doc = dropFlatColourImages(doc);
   doc = dropHiddenLayerContent(doc);
   const headingLevels = headingSizeLevels(doc);
   const structure = indexStructure(doc);
