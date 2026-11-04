@@ -163,6 +163,72 @@ describe("a font subset with a verified glyph table", () => {
   });
 });
 
+describe("many font dictionaries sharing one embedded program", () => {
+  const SHARING_FONTS = 30;
+
+  it("decodes and hashes the program once, however many dictionaries name it", () => {
+    let programReads = 0;
+    const stream: PdfObject = {
+      kind: "stream",
+      dict: pdfDict({ Subtype: pdfName("Type1C") }),
+      get raw(): Uint8Array<ArrayBuffer> {
+        programReads += 1;
+        return CHECKED_PROGRAM;
+      },
+    };
+    const objects = new Map<number, PdfObject>([
+      [
+        9,
+        pdfStream(
+          pdfDict({}),
+          new TextEncoder().encode("beginbfchar\n<BC> <00BC>\nendbfchar"),
+        ),
+      ],
+      [
+        10,
+        pdfDict({
+          Type: pdfName("FontDescriptor"),
+          FontName: pdfName("ABCDEF+AdvMT_SY"),
+          Flags: pdfNum(4),
+          FontFile3: pdfRef(11, 0),
+        }),
+      ],
+      [11, stream],
+    ]);
+    const fonts = new Map(
+      Array.from({ length: SHARING_FONTS }, (_, index) => [
+        `F${String(index)}`,
+        pdfDict({
+          Type: pdfName("Font"),
+          Subtype: pdfName("Type1"),
+          BaseFont: pdfName("ABCDEF+AdvMT_SY"),
+          FirstChar: pdfNum(1),
+          LastChar: pdfNum(255),
+          Widths: pdfArray(Array.from({ length: 255 }, () => pdfNum(500))),
+          FontDescriptor: pdfRef(10, 0),
+          ToUnicode: pdfRef(9, 0),
+          Encoding: pdfDict({
+            Differences: pdfArray([pdfNum(0xbc), pdfName("onequarter")]),
+          }),
+        }),
+      ]),
+    );
+    const { resolve } = createFontResolver({
+      resolver: makeResolver(objects),
+      sink: NO_DIAGNOSTICS,
+      verifiedGlyphTables: CHECKED_TABLES,
+    });
+    const resources = pdfDict({ Font: pdfDict(fonts) });
+
+    const read = [...fonts.keys()].map((name) =>
+      resolve(name, resources)?.decodeToUnicode(new Uint8Array([0xbc])),
+    );
+
+    expect(read).toEqual(Array.from({ length: SHARING_FONTS }, () => "="));
+    expect(programReads).toBe(1);
+  });
+});
+
 describe("the verified glyph tables", () => {
   it("name the families they were checked for", () => {
     expect([...VERIFIED_GLYPH_FAMILIES].sort()).toEqual([

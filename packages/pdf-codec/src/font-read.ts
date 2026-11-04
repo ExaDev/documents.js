@@ -20,8 +20,9 @@ import {
   withSymbolFontCharacters,
 } from "./symbol-font-private-use";
 import {
+  programDigest,
   VERIFIED_GLYPH_FAMILIES,
-  verifiedGlyphTableFor,
+  verifiedGlyphTableOfDigest,
   type VerifiedGlyphTable,
   type VerifiedGlyphTableSource,
 } from "./verified-glyph-tables";
@@ -118,8 +119,10 @@ function readFontProgram(
     if (stream?.kind !== "stream") {
       continue;
     }
-    const decoded = decodeStream(stream.raw, stream.dict, context.sink);
-    const encoding = readFontProgramEncoding(decoded.bytes, baseFont);
+    const encoding = readFontProgramEncoding(
+      decodedProgramOf(stream, context),
+      baseFont,
+    );
     if (encoding !== undefined) {
       return encoding;
     }
@@ -158,6 +161,34 @@ function lazyVerifiedGlyphTable(
   };
 }
 
+// The decoded program and its digest for each embedded font stream, by the stream object the resolver hands out (one per indirect object). Many font dictionaries can name one stream, and a hostile file can make that stream large and the dictionaries many: decoding and hashing it for each would repeat the same work, so both are done once per stream, however many fonts share it. Held weakly, so they live as long as the document's objects do.
+const DECODED_PROGRAMS = new WeakMap<object, Uint8Array<ArrayBuffer>>();
+const PROGRAM_DIGESTS = new WeakMap<object, string>();
+
+function decodedProgramOf(
+  stream: Extract<PdfObject, { kind: "stream" }>,
+  context: FontReadContext,
+): Uint8Array<ArrayBuffer> {
+  let bytes = DECODED_PROGRAMS.get(stream);
+  if (bytes === undefined) {
+    bytes = decodeStream(stream.raw, stream.dict, context.sink).bytes;
+    DECODED_PROGRAMS.set(stream, bytes);
+  }
+  return bytes;
+}
+
+function digestOfFontStream(
+  stream: Extract<PdfObject, { kind: "stream" }>,
+  context: FontReadContext,
+): string {
+  let digest = PROGRAM_DIGESTS.get(stream);
+  if (digest === undefined) {
+    digest = programDigest(decodedProgramOf(stream, context));
+    PROGRAM_DIGESTS.set(stream, digest);
+  }
+  return digest;
+}
+
 function verifiedGlyphTableOfProgram(
   descriptor: PdfDict,
   family: string,
@@ -166,9 +197,9 @@ function verifiedGlyphTableOfProgram(
   for (const key of ["FontFile3", "FontFile2", "FontFile"]) {
     const stream = context.resolver.resolve(dictGet(descriptor, key));
     if (stream?.kind === "stream") {
-      return verifiedGlyphTableFor(
+      return verifiedGlyphTableOfDigest(
         family,
-        decodeStream(stream.raw, stream.dict, context.sink).bytes,
+        digestOfFontStream(stream, context),
         context.verifiedGlyphTables,
       );
     }
