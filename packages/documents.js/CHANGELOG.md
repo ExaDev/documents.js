@@ -1,3 +1,9 @@
+## [14.10.7](https://github.com/ExaDev/documents.js/compare/documents.js%4014.10.6...documents.js%4014.10.7) (2026-11-04)
+
+### Bug Fixes
+
+* **documents.js:** do not read a table's ruling as the bars of fractions ([295a749](https://github.com/ExaDev/documents.js/commit/295a7498fb6e9838764b724bef18a49aeb503098))
+
 ## [14.10.6](https://github.com/ExaDev/documents.js/compare/documents.js%4014.10.5...documents.js%4014.10.6) (2026-11-04)
 
 ### Performance Improvements
