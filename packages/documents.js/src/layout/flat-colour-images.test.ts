@@ -278,14 +278,53 @@ describe("isFlatColourPng", () => {
     },
   );
 
-  it("decodes an image whose first scanline is uniform, since a later one may differ", () => {
-    vi.mocked(decodePng).mockClear();
-    const pixels = [RED, RED, RED, BLUE];
+  it.each([
+    ["flat", [RED, RED, RED, RED], true],
+    ["differing only after its first scanline", [RED, RED, RED, BLUE], false],
+  ] as const)(
+    "reads an eight-bit image %s from its scanlines, without decoding it into pixels",
+    (_name, pixels, flat) => {
+      vi.mocked(decodePng).mockClear();
+
+      expect(
+        isFlatColourPng(
+          png({ width: 2, height: 2, colourType: 2, pixels: [...pixels] }),
+        ),
+      ).toBe(flat);
+      expect(decodePng).not.toHaveBeenCalled();
+    },
+  );
+
+  it("is false for an image whose scanline names a filter the format does not define", () => {
+    const unknownFilter = zlibSync(Uint8Array.of(9, 255, 0, 0, 255, 0, 0));
 
     expect(
-      isFlatColourPng(png({ width: 2, height: 2, colourType: 2, pixels })),
+      isFlatColourPng(
+        png({
+          width: 2,
+          height: 1,
+          colourType: 2,
+          pixels: [RED, RED],
+          idat: unknownFilter,
+        }),
+      ),
     ).toBe(false);
-    expect(decodePng).toHaveBeenCalledTimes(1);
+  });
+
+  it("is false for an image whose inflated data is shorter than its scanlines need", () => {
+    const short = zlibSync(Uint8Array.of(0, 255, 0, 0));
+
+    expect(
+      isFlatColourPng(
+        png({
+          width: 2,
+          height: 2,
+          colourType: 2,
+          pixels: [RED, RED, RED, RED],
+          idat: short,
+        }),
+      ),
+    ).toBe(false);
   });
 
   it("is false for what it cannot read, so the image is kept", () => {
