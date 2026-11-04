@@ -1,3 +1,9 @@
+## [14.10.3](https://github.com/ExaDev/documents.js/compare/documents.js%4014.10.2...documents.js%4014.10.3) (2026-11-04)
+
+### Bug Fixes
+
+* **documents.js:** export the ColumnAlignedTable type that detectColumnAlignedTables returns ([b791e33](https://github.com/ExaDev/documents.js/commit/b791e33d51e871556554226eb6271d08869a2d2a))
+
 ## [14.10.2](https://github.com/ExaDev/documents.js/compare/documents.js%4014.10.1...documents.js%4014.10.2) (2026-11-04)
 
 ### Bug Fixes
