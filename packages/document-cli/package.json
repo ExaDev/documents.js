@@ -95,7 +95,7 @@
     "document-outline.js": "3.10.73",
     "document-schema.js": "7.16.2",
     "documents.js": "14.10.11",
-    "ink": "7.1.1",
+    "ink": "8.0.0",
     "ink-text-input": "6.0.0",
     "react": "19.2.8"
   },
