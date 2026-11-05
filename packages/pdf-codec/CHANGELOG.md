@@ -1,3 +1,11 @@
+## [5.8.3](https://github.com/ExaDev/documents.js/compare/pdf-codec%405.8.2...pdf-codec%405.8.3) (2026-11-05)
+
+### Bug Fixes
+
+* **pdf-codec:** decode and hash a shared font program once ([aed687c](https://github.com/ExaDev/documents.js/commit/aed687ccd9d5acbc78fb7fed09f9b4e63b5268f3))
+* **pdf-codec:** keep a font program's digest, not its decoded bytes ([01fa853](https://github.com/ExaDev/documents.js/commit/01fa853aae64e21dcb67ea7bf64250cac3c02efa))
+* **pdf-codec:** read a glyph of a checked font subset as what its outline draws ([7175e47](https://github.com/ExaDev/documents.js/commit/7175e471138280b9eaf73605579c579bb4731407))
+
 ## [5.8.2](https://github.com/ExaDev/documents.js/compare/pdf-codec%405.8.1...pdf-codec%405.8.2) (2026-11-05)
 
 ### Bug Fixes
