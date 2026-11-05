@@ -83,7 +83,7 @@
     "entities": "8.0.0",
     "fast-xml-parser": "5.10.1",
     "fflate": "0.8.3",
-    "zod": "4.4.3"
+    "zod": "4.6.6"
   },
   "devDependencies": {
     "@arethetypeswrong/cli": "0.18.5",
