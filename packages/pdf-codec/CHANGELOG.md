@@ -1,3 +1,10 @@
+## [5.8.2](https://github.com/ExaDev/documents.js/compare/pdf-codec%405.8.1...pdf-codec%405.8.2) (2026-11-05)
+
+### Bug Fixes
+
+* **pdf-codec:** read a core face named the Windows way, and the glyphs Acrobat numbers G<id> ([fdba71c](https://github.com/ExaDev/documents.js/commit/fdba71c5a503fbfe4eab4dfcf6e883741564a01e))
+* **pdf-codec:** strip a trailing font number in one pass back from the end ([1afae11](https://github.com/ExaDev/documents.js/commit/1afae119903f2a38696bdf530780217fabe5ad4e))
+
 ## [5.8.1](https://github.com/ExaDev/documents.js/compare/pdf-codec%405.8.0...pdf-codec%405.8.1) (2026-11-04)
 
 ### Bug Fixes
