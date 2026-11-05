@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import type { LayoutItem } from "pdf-codec";
-import { detectGridLattice, detectGridLattices } from "./lattice";
+import {
+  MAX_STROKES_PER_AXIS,
+  detectGridLattice,
+  detectGridLattices,
+} from "./lattice";
 
 const BLACK = { r: 0, g: 0, b: 0 };
 
@@ -92,5 +96,24 @@ describe("detectGridLattices: a boundary drawn in pieces", () => {
     );
 
     expect(detectGridLattices(gapped)).toHaveLength(0);
+  });
+});
+
+describe("a page drawing more strokes on one axis than clustering reads", () => {
+  it("is read as having no lattice, rather than spending a pair test on every pair of its strokes", () => {
+    const grid: LayoutItem[] = [
+      line(20, 700, 320, 700),
+      line(20, 600, 320, 600),
+      line(20, 500, 320, 500),
+      line(20, 700, 20, 500),
+      line(170, 700, 170, 500),
+      line(320, 700, 320, 500),
+    ];
+    const flood = Array.from({ length: MAX_STROKES_PER_AXIS + 1 }, (_, index) =>
+      line(20 + index * 0.01, 300, 40 + index * 0.01, 300),
+    );
+
+    expect(detectGridLattices(grid)).toHaveLength(1);
+    expect(detectGridLattices([...grid, ...flood])).toEqual([]);
   });
 });
