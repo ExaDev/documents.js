@@ -119,10 +119,8 @@ function readFontProgram(
     if (stream?.kind !== "stream") {
       continue;
     }
-    const encoding = readFontProgramEncoding(
-      decodedProgramOf(stream, context),
-      baseFont,
-    );
+    const decoded = decodeStream(stream.raw, stream.dict, context.sink);
+    const encoding = readFontProgramEncoding(decoded.bytes, baseFont);
     if (encoding !== undefined) {
       return encoding;
     }
@@ -161,21 +159,8 @@ function lazyVerifiedGlyphTable(
   };
 }
 
-// The decoded program and its digest for each embedded font stream, by the stream object the resolver hands out (one per indirect object). Many font dictionaries can name one stream, and a hostile file can make that stream large and the dictionaries many: decoding and hashing it for each would repeat the same work, so both are done once per stream, however many fonts share it. Held weakly, so they live as long as the document's objects do.
-const DECODED_PROGRAMS = new WeakMap<object, Uint8Array<ArrayBuffer>>();
+// The digest of each embedded font stream's decoded program, by the stream object the resolver hands out (one per indirect object). Many font dictionaries can name one stream, and a hostile file can make that stream large and the dictionaries many: decoding and hashing it for each would repeat the same work, so it is done once per stream, however many fonts share it. Only the digest is kept (64 characters), never the decoded bytes: a file of many distinct streams would otherwise hold every one of them decoded for as long as the document's objects live. Held weakly, so the digests go with the objects.
 const PROGRAM_DIGESTS = new WeakMap<object, string>();
-
-function decodedProgramOf(
-  stream: Extract<PdfObject, { kind: "stream" }>,
-  context: FontReadContext,
-): Uint8Array<ArrayBuffer> {
-  let bytes = DECODED_PROGRAMS.get(stream);
-  if (bytes === undefined) {
-    bytes = decodeStream(stream.raw, stream.dict, context.sink).bytes;
-    DECODED_PROGRAMS.set(stream, bytes);
-  }
-  return bytes;
-}
 
 function digestOfFontStream(
   stream: Extract<PdfObject, { kind: "stream" }>,
@@ -183,7 +168,9 @@ function digestOfFontStream(
 ): string {
   let digest = PROGRAM_DIGESTS.get(stream);
   if (digest === undefined) {
-    digest = programDigest(decodedProgramOf(stream, context));
+    digest = programDigest(
+      decodeStream(stream.raw, stream.dict, context.sink).bytes,
+    );
     PROGRAM_DIGESTS.set(stream, digest);
   }
   return digest;
