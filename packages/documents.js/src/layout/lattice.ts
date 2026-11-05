@@ -366,11 +366,21 @@ function segmentsTouchCollinearly(a: AxisSegment, b: AxisSegment): boolean {
   );
 }
 
+// The most strokes of one axis a page may draw for clustering to read it: at most this squared crossing tests, and half that many collinear-pair tests per axis, which a page costs in milliseconds. A ruled table of this many rows or columns on one page is far beyond what a page prints legibly; a page past it is built to cost the reader time, not to be read as a table.
+export const MAX_STROKES_PER_AXIS = 5_000;
+
 // Partitions every classified line candidate on the page into the connected components its own crossings define (via the same union-find findCellRegions above already uses for atomic-cell merging), so detectGridLattice can test closure per cluster's own extent rather than the whole page's at once. A page routinely carries more than one genuinely unrelated set of ruled lines — a real table plus a page-wide header/footer rule, a real table plus a caption underline immediately above it that never actually reaches any of the table's own column lines — and merging every candidate on the page into one shared rowLines/columnLines set (the pre-#1077 behaviour) let page furniture define, or a caption line corrupt, the one real table's own outer rectangle. Clustering first is what keeps them apart.
 function clusterSegments(
   horizontal: readonly AxisSegment[],
   vertical: readonly AxisSegment[],
 ): AxisSegment[][] {
+  // Clustering tests every crossing and every pair on one axis, so its work grows with the square of the strokes a page draws, and a page built to draw tens of thousands of them would hold the thread. A page past the bound on either axis is read as having no lattice, as one with no ruled lines is.
+  if (
+    horizontal.length > MAX_STROKES_PER_AXIS ||
+    vertical.length > MAX_STROKES_PER_AXIS
+  ) {
+    return [];
+  }
   const all: AxisSegment[] = [...horizontal, ...vertical];
   const parents = unionFind(all.length);
   for (let i = 0; i < horizontal.length; i++) {
