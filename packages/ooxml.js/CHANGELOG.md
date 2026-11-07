@@ -1,3 +1,9 @@
+## [12.2.35](https://github.com/ExaDev/documents.js/compare/ooxml.js%4012.2.34...ooxml.js%4012.2.35) (2026-11-07)
+
+### Bug Fixes
+
+* **ooxml.js:** decode entity references in xlsx sheet and object names ([29baf2e](https://github.com/ExaDev/documents.js/commit/29baf2ea8cf6b1e0b02d9b9ff0589d4f60e7e69a))
+
 ## [12.2.34](https://github.com/ExaDev/documents.js/compare/ooxml.js%4012.2.33...ooxml.js%4012.2.34) (2026-11-07)
 
 ### Bug Fixes
