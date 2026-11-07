@@ -18,7 +18,9 @@ import {
   textContent,
 } from "../util";
 import { readCoreProperties } from "../shared/metadata";
-import { parseCellReference, parseRangeReference } from "document-schema.js";
+import type { PositionedCell } from "./sheet-data";
+import { positionedCells, positionedRows } from "./sheet-data";
+import { parseRangeReference } from "document-schema.js";
 import type { SheetDefinedNames } from "./defined-names";
 import { readDefinedNamesBySheet, readWorkbookNames } from "./defined-names";
 import type { NumberFormatClass } from "excel-number-format";
@@ -120,7 +122,7 @@ function readColumns(worksheet: XmlElement): ContentSheetColumn[] {
   return columns;
 }
 
-// One ContentSheetRow per real <row> XML element — xlsx has no repeat-compression mechanism for rows the way ODF's table:number-rows-repeated does (a real producer simply omits <row> entirely for a genuinely blank row), so there is no equivalent repeat hazard to guard against here.
+// One ContentSheetRow per real <row> XML element whose position resolves (an absent r follows the previous row, see sheet-data.ts) — xlsx has no repeat-compression mechanism for rows the way ODF's table:number-rows-repeated does (a real producer simply omits <row> entirely for a genuinely blank row), so there is no equivalent repeat hazard to guard against here.
 function readRows(worksheet: XmlElement): ContentSheetRow[] {
   const sheetData = childrenWithTag(worksheet, "sheetData")[0];
   if (sheetData === undefined) {
@@ -128,22 +130,15 @@ function readRows(worksheet: XmlElement): ContentSheetRow[] {
   }
   const fallbackHeightPt = sheetFormatDefaultRowHeightPt(worksheet);
   const rows: ContentSheetRow[] = [];
-  for (const row of childrenWithTag(sheetData, "row")) {
-    const rRaw = attr(row, "r");
-    const rowNumber =
-      rRaw === undefined ? undefined : Number.parseInt(rRaw, 10);
-    if (
-      rowNumber === undefined ||
-      !Number.isInteger(rowNumber) ||
-      rowNumber < 1
-    ) {
+  for (const { element: row, index } of positionedRows(sheetData)) {
+    if (index === undefined) {
       continue;
     }
     // No "htRaw === undefined" guard: Number(undefined) is NaN, so an absent ht already falls through the Number.isFinite check below to the same fallbackHeightPt result this guard would have selected directly.
     const htRaw = attr(row, "ht");
     const heightPt = Number(htRaw);
     const contentRow: ContentSheetRow = {
-      index: rowNumber - 1,
+      index,
       heightPt: Number.isFinite(heightPt) ? heightPt : fallbackHeightPt,
     };
     if (readXmlBool(attr(row, "hidden"))) {
@@ -338,16 +333,11 @@ function readCellValue(
 }
 
 function readCell(
-  cell: XmlElement,
+  position: PositionedCell,
   sharedStrings: readonly string[],
   context: CellFormatContext,
 ): ContentSheetCell | undefined {
-  const reference = attr(cell, "r");
-  const position =
-    reference === undefined ? undefined : parseCellReference(reference);
-  if (position === undefined) {
-    return undefined;
-  }
+  const cell = position.element;
   const formulaEl = childrenWithTag(cell, "f")[0];
   const formula = formulaEl === undefined ? undefined : textContent(formulaEl);
   const resolved = readCellValue(cell, sharedStrings, context);
@@ -447,8 +437,8 @@ function readCells(
     return [];
   }
   const cells: ContentSheetCell[] = [];
-  for (const row of childrenWithTag(sheetData, "row")) {
-    for (const cell of childrenWithTag(row, "c")) {
+  for (const row of positionedRows(sheetData)) {
+    for (const cell of positionedCells(row)) {
       const read = readCell(cell, sharedStrings, context);
       if (read !== undefined) {
         cells.push(read);
