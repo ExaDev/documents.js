@@ -82,7 +82,19 @@ describe("symbolFontOf", () => {
     expect(symbolFontOf(family)).toBe(font);
   });
 
-  it.each(["Arial", "Wingdings2", "Wingdings3", "Webdings", "ZapfDingbats"])(
+  it.each([
+    ["Wingdings 2", "wingdings2"],
+    ["Wingdings2", "wingdings2"],
+    ["Wingdings-2", "wingdings2"],
+    ["Wingdings 3", "wingdings3"],
+    ["Wingdings3", "wingdings3"],
+    ["Webdings", "webdings"],
+    ["AbcdefWingdings3", "wingdings3"],
+  ])("reads %s as the %s font", (family, font) => {
+    expect(symbolFontOf(family)).toBe(font);
+  });
+
+  it.each(["Arial", "ZapfDingbats", "Wingdings4", "Wingdings 23"])(
     "leaves %s alone",
     (family) => {
       expect(symbolFontOf(family)).toBeUndefined();
@@ -360,5 +372,36 @@ describe("the pieces of Symbol's tall brackets and braces, by every route a page
       toUnicode: new Map([[0x01, 0xf8eb]]),
     });
     expect(pageText(pdf)).toBe("\uF8EB");
+  });
+});
+
+describe("Wingdings 2, Wingdings 3 and Webdings, read through a /ToUnicode CMap", () => {
+  it.each([
+    ["Wingdings2", 0xf050, "\u{1F5F8}"],
+    ["Wingdings3", 0xf0ea, "\u{1F892}"],
+    ["Webdings", 0xf03d, "\u23FA"],
+  ])(
+    "reads /BaseFont %s's private-use code point as the font's own glyph",
+    (baseFont, codePoint, text) => {
+      const pdf = simpleSymbolFontPdf({
+        subtype: "TrueType",
+        baseFont,
+        codes: [0x01],
+        toUnicode: new Map([[0x01, codePoint]]),
+      });
+      expect(pageText(pdf)).toBe(text);
+    },
+  );
+
+  it("reads the same code differently in each font, as each font draws it", () => {
+    expect(withSymbolFontCharacters("wingdings", "\uF050")).toBe("\u{1F3F1}");
+    expect(withSymbolFontCharacters("wingdings2", "\uF050")).toBe("\u{1F5F8}");
+    expect(withSymbolFontCharacters("wingdings2", "\uF06C")).toBe("\u2462");
+  });
+
+  it("leaves a code the source references give no character as it was written", () => {
+    expect(withSymbolFontCharacters("wingdings2", "\uF0FA")).toBe("\uF0FA");
+    expect(withSymbolFontCharacters("wingdings3", "\uF0F1")).toBe("\uF0F1");
+    expect(withSymbolFontCharacters("webdings", "\uF07F")).toBe("\uF07F");
   });
 });
