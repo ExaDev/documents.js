@@ -793,6 +793,25 @@ const { formula } = latexToFormula("x^2", {
 const warnings = lintMathCoherence(pkg); // [{ code: 'math/coherence-divergence', severity: 'warning', provenance, detail }]
 ```
 
+### Verifying that a rewrite kept its content
+
+A same-format rewrite is never byte-identical to its original, so hashes cannot show that content survived. `projectDocxContent` and `projectXlsxContent` reduce a package to what it says, and `compareProjections` tells loss from writer noise, using the projection of the rewrite's own rewrite as a control:
+
+```ts
+import { compareProjections, projectDocxContent } from "documents.js";
+
+const options = { memoryBudgetBytes: 512 * 1024 * 1024 };
+const original = await projectDocxContent(originalBytes, options);
+const rewrite = await projectDocxContent(rewrittenBytes, options);
+const control = await projectDocxContent(rewrittenTwiceBytes, options);
+
+const comparison = compareProjections(original, rewrite, control);
+comparison.verdict; // "loss" | "unstable" | "incomplete" | "writer-differences" | "equivalent"
+comparison.findings; // each difference, its category and its class
+```
+
+`canonicalizeOpcPackage` and `comparePartDigests` report, part by part, what still differs once zip order, timestamps, compression, attribute order, prefixes and entity spelling are removed. See [docs/content-projection/README.md](docs/content-projection/README.md) for the rules.
+
 ## Fonts
 
 Every X → PDF conversion resolves each typeface through a real `FontRegistry`, in this order:
@@ -847,6 +866,7 @@ The package is layered from generic primitives outward to the two conversion dir
 - **`pdf-codec`** (external) — the hand-written PDF codec, plus generic byte/image primitives (now in `byte-codec`). See that package's own README.
 - **`src/ports/`** — injectable ports: `throwIfAborted` (signal check at long-loop boundaries) and `ClockPort`/`systemClock`/`fixedClock` (injectable "now" for deterministic output — exported but not yet consumed by any conversion path).
 - **`src/xml/`** and **`src/opc/`** — parent-aware XML query/mutation and OPC package mechanics over `ooxml.js`'s `Package`/`XmlNode`. `src/xml/odf-text.ts` holds `encodeOdfText`/`decodeOdfText` — see the ODF text gotcha below.
+- **`src/content-projection/`**: round-trip content verification for docx and xlsx: a streaming XML scanner (`xml-scan.ts`, no tree is built, a document type declaration is refused), the closed-list canonical XML form (`xml-canonical.ts`), per-part package digests that ignore container details (`opc-package.ts`, `compare-parts.ts`), the content projections (`project-docx.ts`, `project-xlsx.ts`: words per category, an element census, cells keyed by sheet position and resolved reference, media by hash) and the comparison with its verdict rules (`compare-projections.ts`). The design, the verdict rules and the bounded-memory strategy are in [docs/content-projection/README.md](docs/content-projection/README.md).
 - **`src/odf-package/`** — ODF-side counterpart to `src/opc/`: manifest sync, media insertion (`addImageMedia`), and embedded formula sub-documents (`addFormulaObject`).
 - **`src/edit/`** — the read-and-write editable model: live-view classes for all six editable formats, plus `buildXPackage` functions bridging `ContentDocument` to fresh packages. Key reuse patterns: `src/edit/odp/*` reuses `src/edit/odt/*` wholesale (identical `text:p`/`text:span` model); `src/edit/odg/*` reuses `OdpShape` for `draw:frame` content; `src/edit/drawingml/vector.ts` is the shared OOXML vector writer for docx and pptx; `src/edit/odg/vector.ts` is the shared ODF vector writer for odt/odp/odg. `src/edit/ods/*` is built from scratch (cell addressing) but reuses odt's style interning.
 - **`src/fonts/`** — source-embedded font extraction (`obfuscation.ts` implements ECMA-376 Part 4, 2.8.1; `ooxml.ts`/`odf.ts` resolve font references) and `registry.ts`'s `createDocumentFontRegistry` composing the precedence chain as data.
