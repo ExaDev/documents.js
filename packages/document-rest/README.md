@@ -64,7 +64,7 @@ Two operations enrich their `400` body beyond a bare `{ error }`, mirroring `doc
 
 ## Getting started (development)
 
-Requires Node.js `>=20` and pnpm `11.6.0` (pinned via `packageManager` in `package.json`).
+Requires Node.js `>=20` and pnpm (the version pinned as `packageManager` in `package.json`).
 
 ```sh
 pnpm install

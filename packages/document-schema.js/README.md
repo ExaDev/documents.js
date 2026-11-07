@@ -520,7 +520,7 @@ None depend on each other for this vocabulary — each depends on `document-sche
 
 ## Build, test, and lint
 
-Requires Node.js `>=20` and pnpm `11.6.0` (pinned via `packageManager` in `package.json`).
+Requires Node.js `>=20` and pnpm (the version pinned as `packageManager` in `package.json`).
 
 ```sh
 pnpm install

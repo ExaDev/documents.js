@@ -56,7 +56,7 @@ The scanner, block parser, and inline parser are complete hand-written implement
 
 ## Getting started
 
-Requires Node.js `>=20` and pnpm `11.6.0` (pinned via `packageManager` in `package.json`).
+Requires Node.js `>=20` and pnpm (the version pinned as `packageManager` in `package.json`).
 
 ```sh
 pnpm install
