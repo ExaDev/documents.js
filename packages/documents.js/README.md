@@ -80,7 +80,7 @@ The PDF side hand-writes every layer of the format against ISO 32000-1 rather th
 
 ## Getting started
 
-Requires Node.js `>=20` and pnpm `11.6.0` (pinned via `packageManager` in `package.json`).
+Requires Node.js `>=20` and pnpm (the version pinned as `packageManager` in `package.json`).
 
 ```sh
 pnpm install
