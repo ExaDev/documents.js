@@ -20,6 +20,7 @@ import type { ImageFormat } from "../../image/sniff";
 import { sniffImageFormat } from "../../image/sniff";
 import { base64ToBytes } from "byte-codec";
 import { readPrintSettings } from "./print-settings";
+import { positionedRows } from "./sheet-data";
 import {
   columnWidthCharsToPt,
   DEFAULT_COLUMN_WIDTH_CHARS,
@@ -83,12 +84,11 @@ class SheetGridGeometry {
       : DEFAULT_ROW_HEIGHT_PT;
     const sheetData = childrenWithTag(worksheet, "sheetData")[0];
     if (sheetData !== undefined) {
-      for (const row of childrenWithTag(sheetData, "row")) {
-        const r = parseIntAttr(row, "r");
+      for (const { element: row, index } of positionedRows(sheetData)) {
         const ht = Number(attr(row, "ht"));
-        // No "r >= 1" guard is needed, unlike the column read above's "min >= 1": rowHeightPt's own lookup is a direct Map.get(index) on the exact key a real anchor row supplies, never a range test, and every call site (xPt/yPt's own loops, locateRow) only ever queries a non-negative integer index. A malformed r below 1 (or the NaN parseIntAttr already returns for an unparseable one) still lands at some key <= -1 or NaN, which can never equal any index a legitimate query supplies — so admitting it here is exactly as inert as rejecting it.
-        if (Number.isFinite(ht)) {
-          this.rowHeights.set(r - 1, ht);
+        // A row resolves its 0-based index through sheet-data.ts, so a row written without r takes the index after the previous one, as its cells do; a row whose r does not parse names no index and contributes no height.
+        if (index !== undefined && Number.isFinite(ht)) {
+          this.rowHeights.set(index, ht);
         }
       }
     }
