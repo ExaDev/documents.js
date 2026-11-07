@@ -17,8 +17,11 @@ import {
 } from "./symbol-font-private-use";
 import { styleFromBaseFontName } from "./font-style";
 import { pageText } from "./test-support/page-text";
+import type { PdfDiagnostic } from "./diagnostics";
+import { readPdf } from "./read";
 import {
   compositeSymbolFontPdf,
+  sharedProgramFontsPdf,
   simpleSymbolFontPdf,
 } from "./test-support/pdf-symbol-fonts";
 import { buildSfnt } from "./test-support/sfnt";
@@ -198,6 +201,32 @@ describe("a Symbol-encoded font under another name, read through its /ToUnicode 
       program: namedProgram("Wingdings-Regular"),
     });
     expect(pageText(pdf)).toBe("\u2713");
+  });
+
+  it("reads the name of a program many font dictionaries share once, however many of them need it", () => {
+    const fontCount = 5;
+    const diagnostics: PdfDiagnostic[] = [];
+    // A filter this reader does not know reports itself each time the stream is decoded and leaves the bytes as they are, so the program is still read and every decode shows.
+    const pdf = sharedProgramFontsPdf({
+      fontCount,
+      program: namedProgram("SymbolMT"),
+      codePoint: 0xf03d,
+      filter: "UnknownDecode",
+    });
+    const document = readPdf(pdf, {
+      sink: (diagnostic) => {
+        diagnostics.push(diagnostic);
+      },
+    });
+    const text = document.pages[0]?.items.flatMap((item) =>
+      item.kind === "text" ? [item.text] : [],
+    );
+    expect(text).toEqual(Array.from({ length: fontCount }, () => "="));
+    expect(
+      diagnostics.filter(
+        (diagnostic) => diagnostic.code === "pdf/unsupported-filter",
+      ),
+    ).toHaveLength(1);
   });
 
   it("leaves the private-use text of a font whose program names an ordinary face as written", () => {
