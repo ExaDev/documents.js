@@ -1,4 +1,4 @@
-// Wingdings 2, Wingdings 3 and Webdings: the character Unicode gives the glyph at each of the font's 8-bit codes, from the source-reference list (section 7) of the document wingdings-characters.ts takes the Wingdings table from (WG2 N4384, UTC L2/12-368, 2012-11-06, https://www.unicode.org/wg2/docs/n4384.pdf, archived at https://web.archive.org/web/20261010172215/http://www.unicode.org/wg2/docs/n4384.pdf), which gives each encoded glyph's code point against its identifier: a Wingdings 2 glyph is the code plus 2000, a Wingdings 3 glyph the code plus 3000 and a Webdings glyph the code itself, so Wingdings 2 code 0x50 is 2080, U+1F5F8, LIGHT CHECK MARK. The list is vendored as assets/unicode-wingdings/source-references.txt, and wingdings-characters.test.ts checks every entry of these tables, and of the Wingdings one, against it. A code the list gives no code point stays empty: 0x20 and below, which the list does not cover (unlike the Wingdings table, these hold no space at 0x20, since nothing read here says what each font draws there), 0x7F in each font (which the list's own header excepts), and Wingdings 2 from 0xFA and Wingdings 3 from 0xF1, past the last identifier the list gives each. No entry is a Private Use Area code point.
+// Wingdings 2, Wingdings 3 and Webdings: the character Unicode gives the glyph at each of the font's 8-bit codes, from the source-reference list (section 7) of the document wingdings-characters.ts takes the Wingdings table from (WG2 N4384, UTC L2/12-368, 2012-11-06, https://www.unicode.org/wg2/docs/n4384.pdf, archived at https://web.archive.org/web/20261010172215/http://www.unicode.org/wg2/docs/n4384.pdf), which gives each encoded glyph's code point against its identifier: a Wingdings 2 glyph is the code plus 2000, a Wingdings 3 glyph the code plus 3000 and a Webdings glyph the code itself, so Wingdings 2 code 0x50 is 2080, U+1F5F8, LIGHT CHECK MARK. The list is vendored as assets/unicode-wingdings/source-references.txt, and wingdings-characters.test.ts checks every entry of these tables, and of the Wingdings one, against it. Each table holds a space at 0x20, which the list does not cover, since each font maps its 0xF020 code to a glyph with an advance and no outline (read from the fonts' own 'cmap', 'hmtx' and 'glyf' tables), as the Wingdings table does. A code the list gives no code point stays empty: below 0x20, 0x7F in each font (which the list's own header excepts), and Wingdings 2 from 0xFA and Wingdings 3 from 0xF1, past the last identifier the list gives each. No entry is a Private Use Area code point.
 //
 // Indexed by code, each entry the character as a Unicode escape. An empty string where the font has no character.
 export const WINGDINGS_2_CHARACTERS: readonly string[] = [
@@ -34,7 +34,7 @@ export const WINGDINGS_2_CHARACTERS: readonly string[] = [
   "",
   "",
   "",
-  "", // 0x20
+  "\u0020", // 0x20
   "\u{1f58a}",
   "\u{1f58b}",
   "\u{1f58c}",
@@ -293,7 +293,7 @@ export const WINGDINGS_3_CHARACTERS: readonly string[] = [
   "",
   "",
   "",
-  "", // 0x20
+  "\u0020", // 0x20
   "\u2b60",
   "\u2b62",
   "\u2b61",
@@ -552,7 +552,7 @@ export const WEBDINGS_CHARACTERS: readonly string[] = [
   "",
   "",
   "",
-  "", // 0x20
+  "\u0020", // 0x20
   "\u{1f577}",
   "\u{1f578}",
   "\u{1f572}",
