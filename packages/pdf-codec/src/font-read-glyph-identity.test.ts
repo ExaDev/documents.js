@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { readPdf } from "./read";
+import { pageText } from "./test-support/page-text";
 import {
   compositeFontProgramPdf,
   simpleFontDifferencesPdf,
@@ -20,16 +20,6 @@ import {
 // What a page reads as when nothing in the font dictionary maps its codes to text: no /ToUnicode CMap, so whatever comes out was recovered from the encoding and the embedded program, or is U+FFFD.
 
 const REPLACEMENT = "�";
-
-function pageText(pdf: Uint8Array<ArrayBuffer>): string {
-  return (
-    readPdf(pdf)
-      .pages[0]?.items.flatMap((item) =>
-        item.kind === "text" ? [item.text] : [],
-      )
-      .join("") ?? ""
-  );
-}
 
 // Glyph ids and advance widths of the Arial face (ArialMT), on its 2048-unit grid: the face's own order numbers the space 3, the full stop 17, the digits 19 to 28, capital A 36 and the Greek capital omega 525. The widths are the face's own; they equal Helvetica's AFM widths (278, 556, 667) scaled to the grid and rounded, since Arial was drawn metric-compatible with Helvetica.
 const ARIAL_UNITS_PER_EM = 2048;

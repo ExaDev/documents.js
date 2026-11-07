@@ -22,18 +22,70 @@ function vendoredList(file: string): [string, string][] {
     });
 }
 
+// The Symbol glyphs the Adobe Glyph List gives a code point of Adobe's own Private Use Area although Unicode encodes the same glyph, each with the character Unicode gives it (Miscellaneous Technical, U+2300 to U+23FF, and the Latin-1 and Letterlike Symbols signs).
+const SYMBOL_PIECE_CHARACTERS: ReadonlyMap<string, number> = new Map([
+  ["arrowvertex", 0x23d0],
+  ["arrowhorizex", 0x23af],
+  ["registersans", 0xae],
+  ["copyrightsans", 0xa9],
+  ["trademarksans", 0x2122],
+  ["parenlefttp", 0x239b],
+  ["parenleftex", 0x239c],
+  ["parenleftbt", 0x239d],
+  ["bracketlefttp", 0x23a1],
+  ["bracketleftex", 0x23a2],
+  ["bracketleftbt", 0x23a3],
+  ["bracelefttp", 0x23a7],
+  ["braceleftmid", 0x23a8],
+  ["braceleftbt", 0x23a9],
+  ["braceex", 0x23aa],
+  ["integralex", 0x23ae],
+  ["parenrighttp", 0x239e],
+  ["parenrightex", 0x239f],
+  ["parenrightbt", 0x23a0],
+  ["bracketrighttp", 0x23a4],
+  ["bracketrightex", 0x23a5],
+  ["bracketrightbt", 0x23a6],
+  ["bracerighttp", 0x23ab],
+  ["bracerightmid", 0x23ac],
+  ["bracerightbt", 0x23ad],
+  ["registerserif", 0xae],
+  ["copyrightserif", 0xa9],
+  ["trademarkserif", 0x2122],
+]);
+
 describe("glyphNameToUnicode: every listed name", () => {
   it.each([["glyphlist.txt"], ["zapfdingbats.txt"]])(
-    "resolves every entry of %s to the characters it lists",
+    "resolves every entry of %s to the characters it lists, except a Symbol piece Unicode encodes",
     (file) => {
       const entries = vendoredList(file);
       expect(entries.length).toBeGreaterThan(0);
       const mismatches = entries.filter(
-        ([name, text]) => glyphNameToUnicode(name) !== text,
+        ([name, text]) =>
+          !SYMBOL_PIECE_CHARACTERS.has(name) &&
+          glyphNameToUnicode(name) !== text,
       );
       expect(mismatches).toEqual([]);
     },
   );
+
+  it("lists every Symbol piece at a code point of Adobe's Private Use Area", () => {
+    const listed = new Map(vendoredList("glyphlist.txt"));
+    for (const name of SYMBOL_PIECE_CHARACTERS.keys()) {
+      expect(listed.get(name)).toMatch(/^\p{Co}$/u);
+    }
+  });
+
+  it("resolves the glyph name of each Symbol piece to the Unicode character of the same glyph", () => {
+    for (const [name, codePoint] of SYMBOL_PIECE_CHARACTERS) {
+      expect(glyphNameToUnicode(name)).toBe(String.fromCodePoint(codePoint));
+    }
+    expect(glyphNameToUnicode("parenlefttp.alt")).toBe("\u239B");
+  });
+
+  it("resolves radicalex, the radical extension Unicode does not encode, to the private-use code point the list gives it", () => {
+    expect(glyphNameToUnicode("radicalex")).toBe("\uF8E5");
+  });
 });
 
 describe("glyphNameToUnicode: the Adobe Glyph List Specification's algorithm", () => {
