@@ -132,6 +132,13 @@ describe("symbolFontOf", () => {
       "six letters that are not one capital and five small ones",
     ],
     ["Symbol-OV-JQGJHA-Extra", "an -OV- tag that is not at the end"],
+    ["Lucida Symbol", "a family word and a space before the name"],
+    ["Tahoma-Symbol", "a family word and a hyphen before the name"],
+    ["Abcdef_Symbol", "six letters and an underscore before the name"],
+    [
+      "Impact Webdings",
+      "a family word and a space before a dingbat font's name",
+    ],
   ])("leaves %s (%s) alone", (baseFont) => {
     expect(
       symbolFontOf(styleFromBaseFontName(baseFont).baseFamily),
