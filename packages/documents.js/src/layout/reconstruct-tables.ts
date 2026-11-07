@@ -10,11 +10,7 @@ import type {
   PositionedTableCell,
   PositionedTableRow,
 } from "document-schema.js";
-import {
-  DEFAULT_COLUMN_WIDTH_FALLBACK_PT,
-  nearestOfType,
-  NO_ITEMS,
-} from "./reconstruct";
+import { DEFAULT_COLUMN_WIDTH_FALLBACK_PT, nearestOfType } from "./reconstruct";
 import {
   bucketCounts,
   clusterIntoLines,
@@ -42,7 +38,7 @@ import type { LayoutItem, LayoutPage, LayoutText } from "pdf-codec";
 import { stampFrame } from "./shared";
 import { flipY } from "../model/geometry";
 import { findColumnIndex } from "./lattice";
-import { detectGridLattice, findRowIndex } from "./lattice";
+import { detectGridLattices, findRowIndex, latticesCross } from "./lattice";
 import { detectRuledRowLattice } from "./ruled-rows";
 import type { GridLattice } from "./lattice";
 import { inferCellValue } from "./cell-typing";
@@ -58,34 +54,24 @@ export function recoverTables(
       return tagged;
     }
   }
-  // A fully ruled table first; then a table ruled only between its rows (ruled-rows.ts), read from what the first leaves: its strokes are not rules of a second table, and a grid lying across its area is not one either.
-  const grid = detectGridLattice(page.items);
-  const gridItems = grid?.sourceItems ?? NO_ITEMS;
+  // Every fully ruled table first, each page carrying as many as it draws; then a table ruled only between its rows (ruled-rows.ts), read from what those leave: its strokes are not rules of a second table, and a grid lying across its area is not one either.
+  const grids = detectGridLattices(page.items);
+  const gridItems = new Set(grids.flatMap((grid) => [...grid.sourceItems]));
   const ruled = detectRuledRowLattice(
     page.items.filter((item) => !gridItems.has(item)),
   );
-  return [grid, ruled]
-    .filter((lattice) => lattice !== undefined)
+  return [...grids, ...(ruled === undefined ? [] : [ruled])]
     .filter(
       (lattice, index, lattices) =>
-        index === 0 || !latticesOverlap(lattices[0]!, lattice),
+        index < grids.length ||
+        !lattices
+          .slice(0, grids.length)
+          .some((grid) => latticesCross(grid, lattice)),
     )
     .flatMap((lattice) => {
       const table = recoverTable(page, pageIndex, lattice);
       return table === undefined ? [] : [table];
     });
-}
-
-function latticesOverlap(a: GridLattice, b: GridLattice): boolean {
-  const aLeft = a.columnBoundariesAscPt[0]!;
-  const aRight = a.columnBoundariesAscPt.at(-1)!;
-  const aTop = a.rowBoundariesDescPt[0]!;
-  const aBottom = a.rowBoundariesDescPt.at(-1)!;
-  const bLeft = b.columnBoundariesAscPt[0]!;
-  const bRight = b.columnBoundariesAscPt.at(-1)!;
-  const bTop = b.rowBoundariesDescPt[0]!;
-  const bBottom = b.rowBoundariesDescPt.at(-1)!;
-  return aLeft < bRight && bLeft < aRight && aBottom < bTop && bBottom < aTop;
 }
 
 // One tagged table: rows are the /TR descendants of its /Table element in document order, cells positional by their TD/TH order within the row, every cell's blocks built from exactly the text items its owning cell element claims. A /TH degrades to an ordinary cell — the content vocabulary has no header-cell spelling to state one with (the same honest narrowing radio fields took), while the structure table the reader emitted still carries the fact. Column widths are the only geometry-derived values, measured from the cells' own item extents.
@@ -132,8 +118,9 @@ function recoverTaggedTables(
     return [];
   }
   // A tagged table with drawn rules claims them as its own structure exactly as the lattice path does, so the same strokes never recover twice (once as a table's gridlines, once as free vectors).
-  const latticeItems: ReadonlySet<LayoutItem> =
-    detectGridLattice(page.items)?.sourceItems ?? NO_ITEMS;
+  const latticeItems: ReadonlySet<LayoutItem> = new Set(
+    detectGridLattices(page.items).flatMap((grid) => [...grid.sourceItems]),
+  );
   const recovered: RecoveredTable[] = [];
   for (const { cellsById } of cellsByTable.values()) {
     const cells = [...cellsById.values()];

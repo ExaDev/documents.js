@@ -347,7 +347,7 @@ export function findCellRegions(
   return regions;
 }
 
-// A horizontal and a vertical candidate belong to the same printed grid only if they actually meet — the vertical's own fixed x sits within the horizontal's drawn x-extent, and the horizontal's own fixed y sits within the vertical's drawn y-extent, both within the same rounding tolerance dedupeAxisLines/mergedRanges already use for "this is the same drawn boundary". That is exactly a real grid corner: two segments that cross or touch. Two segments on the SAME axis are never joined directly here; a table's own rows tie together only via a shared column line crossing both, which is also exactly why a rule that no column line ever reaches — a page-wide header/footer rule, a caption underline sitting above a table's own top edge — ends up with no crossing at all (ExaDev/documents.js#1077).
+// A horizontal and a vertical candidate belong to the same printed grid only if they actually meet — the vertical's own fixed x sits within the horizontal's drawn x-extent, and the horizontal's own fixed y sits within the vertical's drawn y-extent, both within the same rounding tolerance dedupeAxisLines/mergedRanges already use for "this is the same drawn boundary". That is exactly a real grid corner: two segments that cross or touch. Two segments on the SAME axis are joined only when they are pieces of one boundary (`segmentsTouchCollinearly`), never for being near each other; a table's own rows tie together only via a shared column line crossing both, which is also exactly why a rule that no column line ever reaches — a page-wide header/footer rule, a caption underline sitting above a table's own top edge — ends up with no crossing at all (ExaDev/documents.js#1077).
 function segmentsCross(h: AxisSegment, v: AxisSegment): boolean {
   return (
     v.position >= h.startPt - POSITION_DEDUPE_TOLERANCE_PT &&
@@ -357,17 +357,49 @@ function segmentsCross(h: AxisSegment, v: AxisSegment): boolean {
   );
 }
 
+// Whether two candidates on one axis are pieces of one drawn boundary: at the same position, and overlapping or touching along it, by the tolerance `mergedRanges` fuses collinear strokes by.
+function segmentsTouchCollinearly(a: AxisSegment, b: AxisSegment): boolean {
+  return (
+    Math.abs(a.position - b.position) <= POSITION_DEDUPE_TOLERANCE_PT &&
+    a.startPt <= b.endPt + POSITION_DEDUPE_TOLERANCE_PT &&
+    b.startPt <= a.endPt + POSITION_DEDUPE_TOLERANCE_PT
+  );
+}
+
+// The most strokes of one axis a page may draw for clustering to read it: at most this squared crossing tests, and half that many collinear-pair tests per axis, which a page costs in milliseconds. A ruled table of this many rows or columns on one page is far beyond what a page prints legibly; a page past it is built to cost the reader time, not to be read as a table.
+export const MAX_STROKES_PER_AXIS = 5_000;
+
 // Partitions every classified line candidate on the page into the connected components its own crossings define (via the same union-find findCellRegions above already uses for atomic-cell merging), so detectGridLattice can test closure per cluster's own extent rather than the whole page's at once. A page routinely carries more than one genuinely unrelated set of ruled lines — a real table plus a page-wide header/footer rule, a real table plus a caption underline immediately above it that never actually reaches any of the table's own column lines — and merging every candidate on the page into one shared rowLines/columnLines set (the pre-#1077 behaviour) let page furniture define, or a caption line corrupt, the one real table's own outer rectangle. Clustering first is what keeps them apart.
 function clusterSegments(
   horizontal: readonly AxisSegment[],
   vertical: readonly AxisSegment[],
 ): AxisSegment[][] {
+  // Clustering tests every crossing and every pair on one axis, so its work grows with the square of the strokes a page draws, and a page built to draw tens of thousands of them would hold the thread. A page past the bound on either axis is read as having no lattice, as one with no ruled lines is.
+  if (
+    horizontal.length > MAX_STROKES_PER_AXIS ||
+    vertical.length > MAX_STROKES_PER_AXIS
+  ) {
+    return [];
+  }
   const all: AxisSegment[] = [...horizontal, ...vertical];
   const parents = unionFind(all.length);
   for (let i = 0; i < horizontal.length; i++) {
     for (let j = 0; j < vertical.length; j++) {
       if (segmentsCross(horizontal[i]!, vertical[j]!)) {
         union(parents, i, horizontal.length + j);
+      }
+    }
+  }
+  // Pieces of one drawn boundary belong together: a border drawn cell by cell leaves a piece that no crossing rule reaches where its neighbours' rules stop short (the side of a cell that spans several rows), and left alone that piece would form a cluster of its own and open the table's outer edge.
+  for (const [offset, group] of [
+    [0, horizontal],
+    [horizontal.length, vertical],
+  ] as const) {
+    for (let i = 0; i < group.length; i++) {
+      for (let j = i + 1; j < group.length; j++) {
+        if (segmentsTouchCollinearly(group[i]!, group[j]!)) {
+          union(parents, offset + i, offset + j);
+        }
       }
     }
   }
@@ -427,10 +459,22 @@ export function horizontalRules(
   });
 }
 
-// A page can carry more than one geometrically valid lattice at once (see clusterSegments above) — every caller here wants exactly one, the way a single detected grid always has, so this keeps whichever valid cluster spans the largest area (width x height of its own outer rectangle) and discards the rest. A real printed table dwarfs the kind of incidental clusters page furniture can otherwise form, so the largest valid cluster is reliably the genuine one.
-export function detectGridLattice(
+// A page can carry several geometrically valid lattices at once (see clusterSegments above): a document that sets one table after another on a page draws each as its own grid. Every one that closes into a rectangle is returned, top to bottom; two clusters whose rectangles cross are not both tables, so the larger keeps its place and the other is dropped.
+export function detectGridLattices(
   items: readonly LayoutItem[],
-): GridLattice | undefined {
+): GridLattice[] {
+  return disjointLargestFirst(latticeCandidates(items))
+    .map(({ lattice }) => lattice)
+    .sort((a, b) => b.rowBoundariesDescPt[0]! - a.rowBoundariesDescPt[0]!);
+}
+
+interface LatticeCandidate {
+  readonly lattice: GridLattice;
+  readonly areaPt2: number;
+}
+
+/** Every cluster of the page's strokes that closes into a grid, in the order the clusters were met, with the area each outlines. */
+function latticeCandidates(items: readonly LayoutItem[]): LatticeCandidate[] {
   const horizontal: AxisSegment[] = [];
   const vertical: AxisSegment[] = [];
   for (const seg of extractLineCandidates(items)) {
@@ -440,8 +484,7 @@ export function detectGridLattice(
     }
     (classified.axis === "horizontal" ? horizontal : vertical).push(classified);
   }
-  let best: GridLattice | undefined;
-  let bestAreaPt2 = 0;
+  const candidates: LatticeCandidate[] = [];
   for (const cluster of clusterSegments(horizontal, vertical)) {
     const clusterHorizontal = cluster.filter((s) => s.axis === "horizontal");
     const clusterVertical = cluster.filter((s) => s.axis === "vertical");
@@ -464,25 +507,57 @@ export function detectGridLattice(
       columnLines[columnLines.length - 1]!.position - columnLines[0]!.position;
     const heightPt =
       rowLines[0]!.position - rowLines[rowLines.length - 1]!.position;
-    const areaPt2 = widthPt * heightPt;
-    if (best !== undefined && areaPt2 <= bestAreaPt2) {
-      continue;
-    }
     const sourceItems = new Set<LayoutItem>();
     for (const line of [...rowLines, ...columnLines]) {
       for (const item of line.items) {
         sourceItems.add(item);
       }
     }
-    best = {
-      rowBoundariesDescPt: rowLines.map((l) => l.position),
-      columnBoundariesAscPt: columnLines.map((l) => l.position),
-      regions,
-      sourceItems,
-    };
-    bestAreaPt2 = areaPt2;
+    candidates.push({
+      areaPt2: widthPt * heightPt,
+      lattice: {
+        rowBoundariesDescPt: rowLines.map((l) => l.position),
+        columnBoundariesAscPt: columnLines.map((l) => l.position),
+        regions,
+        sourceItems,
+      },
+    });
   }
-  return best;
+  return candidates;
+}
+
+/** The candidates that cross no larger one, largest first (a tie keeping the one met first). */
+function disjointLargestFirst(
+  candidates: readonly LatticeCandidate[],
+): LatticeCandidate[] {
+  const kept: LatticeCandidate[] = [];
+  for (const candidate of [...candidates].sort(
+    (a, b) => b.areaPt2 - a.areaPt2,
+  )) {
+    if (
+      !kept.some((other) => latticesCross(other.lattice, candidate.lattice))
+    ) {
+      kept.push(candidate);
+    }
+  }
+  return kept;
+}
+
+/** Whether the rectangles two lattices outline overlap. */
+export function latticesCross(a: GridLattice, b: GridLattice): boolean {
+  return (
+    a.columnBoundariesAscPt[0]! < b.columnBoundariesAscPt.at(-1)! &&
+    b.columnBoundariesAscPt[0]! < a.columnBoundariesAscPt.at(-1)! &&
+    a.rowBoundariesDescPt.at(-1)! < b.rowBoundariesDescPt[0]! &&
+    b.rowBoundariesDescPt.at(-1)! < a.rowBoundariesDescPt[0]!
+  );
+}
+
+// Every caller that reads one grid for a whole page (a worksheet, a slide) wants exactly one, so this keeps whichever valid cluster spans the largest area (width x height of its own outer rectangle) and discards the rest.
+export function detectGridLattice(
+  items: readonly LayoutItem[],
+): GridLattice | undefined {
+  return disjointLargestFirst(latticeCandidates(items))[0]?.lattice;
 }
 
 // Only the OUTER edge of the whole lattice gets any tolerance — generous enough to keep an item sitting just past the grid's own outermost boundary (sub-point PDF-round-trip rounding) inside it. An INTERIOR boundary gets none at all: giving one would open an ambiguous zone straddling two adjacent bands (a real, caught bug — a column narrow enough that cell-padding-scale tolerance on both sides of its own shared boundary let a neighbouring column's own text match the WRONG band first). A cell's own text sits comfortably away from its own band's far edge under ordinary conditions (near the bottom of its own row, near the left of its own column, per sheets.ts's own vertical-bottom alignment and per-cell inset), so a bare half-open partition at every interior boundary is both correct and unambiguous.
