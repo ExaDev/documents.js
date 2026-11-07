@@ -1,3 +1,4 @@
+import { cellReference } from "document-schema.js";
 import { z } from "zod";
 import type { Package } from "../model/package";
 import type { XmlElement } from "../model/node";
@@ -11,6 +12,8 @@ import {
 } from "./util";
 import { workbookPartPath } from "./xlsx/parts";
 import { loadSharedStrings } from "./xlsx/shared-strings";
+import type { PositionedCell } from "./xlsx/sheet-data";
+import { positionedCells, positionedRows } from "./xlsx/sheet-data";
 
 // Lossy ergonomic projection of a SpreadsheetML (xlsx) package into a reading view. This is a one-way read view over the generic Package model: it keeps sheet names, cell references, resolved string and numeric values, cell formulas, merged-cell ranges, and defined names, and discards everything else (formats, styles, charts, and all other markup). It is not a round-trip path — encoding this view back to OOXML is not supported.
 //
@@ -91,15 +94,14 @@ function sheetNumberOf(path: string): number | undefined {
   return Number.parseInt(digits, 10);
 }
 
-// A cell is projected only when it has a reference (r) and a resolvable value: t="s" dereferences <v> through the shared-strings table, otherwise <v> is the literal (numeric) value coerced to string. When the cell carries an <f> child, its text becomes the projected formula, carried alongside the value. Cells without <v> (styling-only, or formula cells with no cached value) and unresolvable shared-string references are dropped — that is the defined scope of this lossy projection.
+// A cell is projected only when it has a position (its own r, or the one its place in the row implies, see xlsx/sheet-data.ts; an implied position is projected as the A1 reference it names) and a resolvable value: t="s" dereferences <v> through the shared-strings table, otherwise <v> is the literal (numeric) value coerced to string. When the cell carries an <f> child, its text becomes the projected formula, carried alongside the value. Cells without <v> (styling-only, or formula cells with no cached value) and unresolvable shared-string references are dropped — that is the defined scope of this lossy projection.
 function readCell(
-  cell: XmlElement,
+  position: PositionedCell,
   sharedStrings: readonly string[],
 ): XlsxCell | undefined {
-  const reference = attr(cell, "r");
-  if (reference === undefined) {
-    return undefined;
-  }
+  const cell = position.element;
+  const reference =
+    attr(cell, "r") ?? cellReference(position.row, position.column);
   const valueEl = childrenWithTag(cell, "v")[0];
   if (valueEl === undefined) {
     return undefined;
@@ -128,8 +130,12 @@ function readCells(
   sharedStrings: readonly string[],
 ): XlsxCell[] {
   const cells: XlsxCell[] = [];
-  for (const row of elementsWithTag(worksheet.children, "row")) {
-    for (const cell of childrenWithTag(row, "c")) {
+  const sheetData = childrenWithTag(worksheet, "sheetData")[0];
+  if (sheetData === undefined) {
+    return cells;
+  }
+  for (const row of positionedRows(sheetData)) {
+    for (const cell of positionedCells(row)) {
       const projected = readCell(cell, sharedStrings);
       if (projected !== undefined) {
         cells.push(projected);
