@@ -4,6 +4,7 @@ import type { XmlElement } from "../model/node";
 import {
   attr,
   childrenWithTag,
+  decodeEntities,
   elementsWithTag,
   resolveRelationships,
   rootElement,
@@ -57,7 +58,7 @@ function resolveSheetNames(pkg: Package): Map<string, string> {
     const rid = attr(sheet, "r:id");
     const rel = rid === undefined ? undefined : rels.get(rid);
     if (name !== undefined && rel !== undefined) {
-      names.set(rel.target, name);
+      names.set(rel.target, decodeEntities(name));
     }
   }
   return names;
@@ -76,7 +77,10 @@ function readDefinedNames(pkg: Package): DefinedName[] {
       if (name === undefined) {
         continue;
       }
-      names.push({ name, refersTo: textContent(definedName) });
+      names.push({
+        name: decodeEntities(name),
+        refersTo: textContent(definedName),
+      });
     }
   }
   return names;

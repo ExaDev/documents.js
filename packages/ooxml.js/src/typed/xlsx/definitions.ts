@@ -3,6 +3,7 @@ import type { Package } from "../../model/package";
 import {
   attr,
   childrenWithTag,
+  decodeEntities,
   resolveRelationships,
   rootElement,
 } from "../util";
@@ -19,11 +20,12 @@ function readTableEntries(pkg: Package, out: DefinitionsTable): void {
         continue;
       }
       const table = rootElement(pkg.parts[rel.target]);
-      const name = table === undefined ? undefined : attr(table, "name");
+      const nameRaw = table === undefined ? undefined : attr(table, "name");
       const ref = table === undefined ? undefined : attr(table, "ref");
-      if (table === undefined || name === undefined || ref === undefined) {
+      if (table === undefined || nameRaw === undefined || ref === undefined) {
         continue;
       }
+      const name = decodeEntities(nameRaw);
       // CT_Table's columns sit inside a tableColumns container (beside autoFilter/sortState/tableStyleInfo), never as direct children of table itself — read through the wrapper the grammar every real producer emits.
       const columns: string[] = [];
       const tableColumns = childrenWithTag(table, "tableColumns")[0];
@@ -32,7 +34,7 @@ function readTableEntries(pkg: Package, out: DefinitionsTable): void {
         : childrenWithTag(tableColumns, "tableColumn")) {
         const columnName = attr(column, "name");
         if (columnName !== undefined) {
-          columns.push(columnName);
+          columns.push(decodeEntities(columnName));
         }
       }
       out[`table:${name}`] = {

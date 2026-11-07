@@ -92,6 +92,12 @@ function readFontUnderline(u: XmlElement | undefined): boolean {
   return attr(u, "val") !== "none";
 }
 
+// A <font>'s <name val>, decoded: the writer encodes the family name, so a raw reference ("Arial &amp; Co") would be encoded twice on the next write.
+function fontFamilyOf(name: XmlElement | undefined): string | undefined {
+  const val = name === undefined ? undefined : attr(name, "val");
+  return val === undefined ? undefined : decodeEntities(val);
+}
+
 function readFontTableEntry(font: XmlElement): FontTableEntry {
   const name = childrenWithTag(font, "name")[0];
   const sz = childrenWithTag(font, "sz")[0];
@@ -103,7 +109,7 @@ function readFontTableEntry(font: XmlElement): FontTableEntry {
     italic: readFontToggle(childrenWithTag(font, "i")[0]),
     underline: readFontUnderline(childrenWithTag(font, "u")[0]),
     strike: readFontToggle(childrenWithTag(font, "strike")[0]),
-    fontFamily: name === undefined ? undefined : attr(name, "val"),
+    fontFamily: fontFamilyOf(name),
     sizePt: Number.isFinite(szNum) ? szNum : undefined,
     color: readColorRgb(font, "color"),
   };
