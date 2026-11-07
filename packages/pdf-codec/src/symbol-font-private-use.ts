@@ -44,14 +44,15 @@ function symbolFontOfSpelling(name: string): SymbolFont | undefined {
 /**
  * The symbol font a font family name stands for, whichever way the producer spells it ("Symbol", "SymbolMT", "SymbolOOEnc", "EuclidSymbol", "Wingdings", "Wingdings 2" or "Wingdings2", "Wingdings 3", "Webdings"), or `undefined` for any other font.
  *
- * Two decorations some producers add to a name are looked past. A variant tag of `-OV-` and six capital letters at the end (`SymbolMT-OV-JQGJHA`). And a pseudo subset tag of one capital and five small letters run straight onto the name, with no `+` (`SmmfqrSymbol`), which is read off only when what follows it is itself one of the spellings above, so a family that merely contains one of them (`SymbolicSans`, `SegoeUISymbol`, `OpenSymbol`) is never taken for it.
+ * Two decorations some producers add to a name are looked past. A variant tag of `-OV-` and six capital letters at the end (`SymbolMT-OV-JQGJHA`). And a pseudo subset tag of one capital and five small letters run straight onto the name, with no `+` (`SmmfqrSymbol`), which is read off only when a capital follows it directly and what follows is itself one of the spellings above, so a family that merely contains one of them (`SymbolicSans`, `SegoeUISymbol`, `OpenSymbol`, `Lucida Symbol`) is never taken for it.
  * @param family - The font's family as `styleFromBaseFontName` reads it from `/BaseFont` or from an embedded program's PostScript name: the subset tag and style suffix already removed.
  * @returns The symbol font the family names, or `undefined`.
  */
 export function symbolFontOf(family: string): SymbolFont | undefined {
   // Declared here rather than at module scope so each is ordinary executable code a test of this function distinguishes (see `ignoreStatic` in ../../stryker.shared.ts).
   const variantTag = /-OV-[A-Z]{6}$/u;
-  const pseudoSubsetTag = /^[A-Z][a-z]{5}/u;
+  // The name follows the tag directly, so a capital comes next: a separator there (`Lucida Symbol`, `Tahoma-Symbol`) marks a family word, not a tag, and the spelling comparison below would otherwise drop it.
+  const pseudoSubsetTag = /^[A-Z][a-z]{5}(?=[A-Z])/u;
   const untagged = family.replace(variantTag, "");
   return (
     symbolFontOfSpelling(untagged) ??
