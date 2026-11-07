@@ -14,17 +14,37 @@ const LAST_SYMBOL_FONT_CODE = 0xff;
 /** The symbol fonts whose 8-bit codes are mapped: the two a Word document uses for bullets, ticks, arrows and mathematical signs. Wingdings 2 and 3, Webdings and ZapfDingbats are different fonts with their own tables and are left as the producer wrote them. */
 export type SymbolFont = "symbol" | "wingdings";
 
+// The symbol font each family spelling stands for, compared with spaces, underscores and hyphens removed and case folded. `SymbolOOEnc` is a name producers give the Symbol font itself. `EuclidSymbol` is MathType's Euclid Symbol, which is read in Symbol's encoding on the evidence of three glyphs whose codes were checked against Symbol's (the equals sign, the bullet and a bracket extension); the rest of its layout is assumed to follow Symbol's, not checked.
+function symbolFontOfSpelling(name: string): SymbolFont | undefined {
+  switch (name.replace(/[\s_-]/gu, "").toLowerCase()) {
+    case "symbol":
+    case "symbolmt":
+    case "symbolooenc":
+    case "euclidsymbol":
+      return "symbol";
+    case "wingdings":
+      return "wingdings";
+    default:
+      return undefined;
+  }
+}
+
 /**
- * The symbol font a font family name stands for, whichever way the producer spells it ("Symbol", "SymbolMT", "Wingdings"), or `undefined` for any other font.
- * @param family - The font's family as `styleFromBaseFontName` reads it from `/BaseFont`: the subset tag and style suffix already removed.
+ * The symbol font a font family name stands for, whichever way the producer spells it ("Symbol", "SymbolMT", "SymbolOOEnc", "EuclidSymbol", "Wingdings"), or `undefined` for any other font.
+ *
+ * Two decorations some producers add to a name are looked past. A variant tag of `-OV-` and six capital letters at the end (`SymbolMT-OV-JQGJHA`). And a pseudo subset tag of one capital and five small letters run straight onto the name, with no `+` (`SmmfqrSymbol`), which is read off only when what follows it is itself one of the spellings above, so a family that merely contains one of them (`SymbolicSans`, `SegoeUISymbol`, `OpenSymbol`) is never taken for it.
+ * @param family - The font's family as `styleFromBaseFontName` reads it from `/BaseFont` or from an embedded program's PostScript name: the subset tag and style suffix already removed.
  * @returns The symbol font the family names, or `undefined`.
  */
 export function symbolFontOf(family: string): SymbolFont | undefined {
-  const name = family.replace(/[\s_-]/gu, "").toLowerCase();
-  if (name === "symbol" || name === "symbolmt") {
-    return "symbol";
-  }
-  return name === "wingdings" ? "wingdings" : undefined;
+  // Declared here rather than at module scope so each is ordinary executable code a test of this function distinguishes (see `ignoreStatic` in ../../stryker.shared.ts).
+  const variantTag = /-OV-[A-Z]{6}$/u;
+  const pseudoSubsetTag = /^[A-Z][a-z]{5}/u;
+  const untagged = family.replace(variantTag, "");
+  return (
+    symbolFontOfSpelling(untagged) ??
+    symbolFontOfSpelling(untagged.replace(pseudoSubsetTag, ""))
+  );
 }
 
 function isSymbolFontCode(codePoint: number): boolean {
@@ -85,4 +105,36 @@ export function withSymbolFontCharacters(
       (codePoint === undefined ? undefined : replacement(codePoint)) ?? char;
   }
   return out;
+}
+
+function hasPrivateUse(text: string): boolean {
+  return /\p{Co}/u.test(text);
+}
+
+/**
+ * A reader of the text a font's /ToUnicode CMap gives, through `withSymbolFontCharacters`, for the symbol font the font is: the one its family names, else the one its embedded program's own PostScript name names (a producer can give `/BaseFont` a placeholder such as `CIDFont+F1` and leave the real name only in the program). The program's name is read only for text holding a private-use code point, and at most once, since reading it decodes the program.
+ * @param family - The font's family as `styleFromBaseFontName` reads it from `/BaseFont`.
+ * @param programFamily - The family `styleFromBaseFontName` reads from the embedded program's PostScript name, `undefined` for a font with no program or a program that states no name.
+ * @returns The reader.
+ */
+export function symbolFontTextReader(
+  family: string,
+  programFamily: () => string | undefined,
+): (text: string) => string {
+  const resolve = (): SymbolFont | undefined => {
+    const named = symbolFontOf(family);
+    if (named !== undefined) {
+      return named;
+    }
+    const fromProgram = programFamily();
+    return fromProgram === undefined ? undefined : symbolFontOf(fromProgram);
+  };
+  let font: { readonly symbolFont: SymbolFont | undefined } | undefined;
+  return (text) => {
+    if (!hasPrivateUse(text)) {
+      return text;
+    }
+    font ??= { symbolFont: resolve() };
+    return withSymbolFontCharacters(font.symbolFont, text);
+  };
 }
