@@ -8,7 +8,7 @@ Created for [ExaDev/documents.js#573](https://github.com/ExaDev/documents.js/iss
 
 ## Getting started
 
-Requires Node.js `>=20` and pnpm `11.6.0`.
+Requires Node.js `>=20` and pnpm (the version pinned as `packageManager` in the root `package.json`).
 
 ```sh
 pnpm install

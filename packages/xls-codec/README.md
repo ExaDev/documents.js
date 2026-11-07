@@ -190,7 +190,7 @@ Only the fixed SummaryInformation property set is read or written — the siblin
 
 ## Getting started
 
-Requires Node.js `>=20` and pnpm `11.6.0`.
+Requires Node.js `>=20` and pnpm (the version pinned as `packageManager` in the root `package.json`).
 
 ```sh
 pnpm install
