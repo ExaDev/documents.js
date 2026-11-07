@@ -15,6 +15,11 @@ import {
   symbolFontOf,
   withSymbolFontCharacters,
 } from "./symbol-font-private-use";
+import { pageText } from "./test-support/page-text";
+import {
+  compositeSymbolFontPdf,
+  simpleSymbolFontPdf,
+} from "./test-support/pdf-symbol-fonts";
 import { WINGDINGS_CHARACTERS } from "./wingdings-characters";
 
 const NO_DIAGNOSTICS: PdfDiagnosticSink = () => undefined;
@@ -142,5 +147,73 @@ describe("a composite symbol font read through its /ToUnicode CMap", () => {
 
   it("leaves another font's private-use text as the producer wrote it", () => {
     expect(compositeSymbolText("VJEZJC+Calibri", 0xfc)).toBe("");
+  });
+});
+
+describe("the pieces of Symbol's tall brackets and braces, by every route a page reaches them", () => {
+  it("reads the Symbol font's own encoding of a tall parenthesis as its Unicode pieces", () => {
+    const pdf = simpleSymbolFontPdf({
+      baseFont: "Symbol",
+      codes: [0xe6, 0xe7, 0xe8],
+    });
+    expect(pageText(pdf)).toBe("\u239B\u239C\u239D");
+  });
+
+  it("reads the Adobe private-use code point a /ToUnicode CMap gives a Symbol piece as the piece", () => {
+    const pdf = simpleSymbolFontPdf({
+      baseFont: "Symbol",
+      codes: [0x01, 0x02, 0x03],
+      toUnicode: new Map([
+        [0x01, 0xf8eb],
+        [0x02, 0xf8fe],
+        [0x03, 0xf6d9],
+      ]),
+    });
+    expect(pageText(pdf)).toBe("\u239B\u23AD\u00A9");
+  });
+
+  it("leaves the radical extension, which Unicode does not encode, as the CMap wrote it", () => {
+    const pdf = simpleSymbolFontPdf({
+      baseFont: "Symbol",
+      codes: [0x01],
+      toUnicode: new Map([[0x01, 0xf8e5]]),
+    });
+    expect(pageText(pdf)).toBe("\uF8E5");
+  });
+
+  it("reads a piece /Differences names, in any font, as the piece", () => {
+    const pdf = simpleSymbolFontPdf({
+      baseFont: "Times-Roman",
+      codes: [0x01, 0x02],
+      encoding: "<< /Differences [1 /parenlefttp /bracerighttp] >>",
+    });
+    expect(pageText(pdf)).toBe("\u239B\u23AB");
+  });
+
+  it("reads the Adobe private-use code point of a piece in a composite SymbolMT subset as the piece", () => {
+    const pdf = compositeSymbolFontPdf({
+      baseFont: "ABCDEF+SymbolMT",
+      cids: [0xa7],
+      toUnicode: new Map([[0xa7, 0xf8eb]]),
+    });
+    expect(pageText(pdf)).toBe("\u239B");
+  });
+
+  it("reads the piece Word writes at the font's own code in the 0xF000 range", () => {
+    const pdf = simpleSymbolFontPdf({
+      baseFont: "Symbol",
+      codes: [0x01],
+      toUnicode: new Map([[0x01, 0xf0e6]]),
+    });
+    expect(pageText(pdf)).toBe("\u239B");
+  });
+
+  it("leaves an Adobe private-use code point another font's CMap gives as it was written", () => {
+    const pdf = simpleSymbolFontPdf({
+      baseFont: "Calibri",
+      codes: [0x01],
+      toUnicode: new Map([[0x01, 0xf8eb]]),
+    });
+    expect(pageText(pdf)).toBe("\uF8EB");
   });
 });

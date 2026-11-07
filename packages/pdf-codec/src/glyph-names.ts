@@ -5,7 +5,7 @@ import {
 
 // PostScript glyph name -> Unicode, by the algorithm the Adobe Glyph List Specification itself defines (https://github.com/adobe-type-tools/agl-specification, section 2): drop any variant suffix from the first period, split what remains into ligature components at each underscore, and map each component through the Adobe Glyph List, the ITC Zapf Dingbats Glyph List, or one of the two constructed forms ("uniXXXX..." and "uXXXX" to "uXXXXXX"). Both lists are vendored verbatim under assets/agl/ and embedded as src/glyph-data/adobe-glyph-list.ts.
 //
-// Two deliberate departures from the specification, both refusing an answer the specification would give rather than giving one it would refuse. A component that maps to nothing makes the whole name map to nothing, where the specification maps it to an empty string: "f_xyz" names a ligature whose second half is unknown, and reporting it as "f" would be a plausible wrong reading. And the Zapf Dingbats list is consulted for every font rather than only for a font that is ZapfDingbats itself, since its "aNNN" names collide with no name in the Adobe Glyph List and so cannot misname a glyph from any other font. Hexadecimal digits in the constructed forms are accepted in either case, which can only recover a character, never substitute another.
+// Three deliberate departures from the specification. The first replaces an answer: a glyph of the Symbol font that the list gives a code point of Adobe's own Private Use Area, although Unicode encodes the same glyph, resolves to the Unicode character (SYMBOL_ASSEMBLY_PIECES below), since a private-use code point names no character outside Adobe's own software. The other two refuse an answer the specification would give rather than giving one it would refuse. A component that maps to nothing makes the whole name map to nothing, where the specification maps it to an empty string: "f_xyz" names a ligature whose second half is unknown, and reporting it as "f" would be a plausible wrong reading. And the Zapf Dingbats list is consulted for every font rather than only for a font that is ZapfDingbats itself, since its "aNNN" names collide with no name in the Adobe Glyph List and so cannot misname a glyph from any other font. Hexadecimal digits in the constructed forms are accepted in either case, which can only recover a character, never substitute another.
 //
 // A name in no list and neither constructed form, such as "g27", "cid42" or "index3", is a glyph's position in one particular font wearing a name. It carries no information about the character drawn, and this function maps it to nothing; a caller holding that font's program can still identify the glyph through it (see builtin-encoding.ts).
 
@@ -22,6 +22,40 @@ function isScalarValue(codePoint: number): boolean {
     (codePoint < SURROGATE_FIRST || codePoint > SURROGATE_LAST)
   );
 }
+
+/**
+ * The Symbol glyphs that the Adobe Glyph List gives code points of Adobe's own Private Use Area (U+F6xx and U+F8xx), which name no character, and the Unicode characters that are the same glyphs: the pieces a tall bracket, parenthesis or brace is assembled from, the extensions of the integral, vertical-arrow and horizontal-arrow signs, and the serif and sans-serif registered, copyright and trade mark signs. Keyed by the glyph's PostScript name in the Symbol font's built-in encoding (Adobe's `symbol.txt`, https://www.unicode.org/Public/MAPPINGS/VENDORS/ADOBE/symbol.txt, archived at https://web.archive.org/web/20261011050748/http://www.unicode.org/Public/MAPPINGS/VENDORS/ADOBE/symbol.txt, which gives each of these names the same private-use code point the Adobe Glyph List does), valued by the character of the Unicode Miscellaneous Technical block (https://www.unicode.org/charts/PDF/U2300.pdf, archived at https://web.archive.org/web/2026/https://www.unicode.org/charts/PDF/U2300.pdf) or Latin-1 and Letterlike Symbols block the glyph is. `radicalex`, the extension of the radical sign, is the one such glyph with no Unicode character, and resolves to the private-use code point the list gives it.
+ */
+const SYMBOL_ASSEMBLY_PIECES: ReadonlyMap<string, string> = new Map([
+  ["parenlefttp", "\u239b"],
+  ["parenleftex", "\u239c"],
+  ["parenleftbt", "\u239d"],
+  ["parenrighttp", "\u239e"],
+  ["parenrightex", "\u239f"],
+  ["parenrightbt", "\u23a0"],
+  ["bracketlefttp", "\u23a1"],
+  ["bracketleftex", "\u23a2"],
+  ["bracketleftbt", "\u23a3"],
+  ["bracketrighttp", "\u23a4"],
+  ["bracketrightex", "\u23a5"],
+  ["bracketrightbt", "\u23a6"],
+  ["bracelefttp", "\u23a7"],
+  ["braceleftmid", "\u23a8"],
+  ["braceleftbt", "\u23a9"],
+  ["braceex", "\u23aa"],
+  ["bracerighttp", "\u23ab"],
+  ["bracerightmid", "\u23ac"],
+  ["bracerightbt", "\u23ad"],
+  ["integralex", "\u23ae"],
+  ["arrowhorizex", "\u23af"],
+  ["arrowvertex", "\u23d0"],
+  ["registerserif", "\u00ae"],
+  ["registersans", "\u00ae"],
+  ["copyrightserif", "\u00a9"],
+  ["copyrightsans", "\u00a9"],
+  ["trademarkserif", "\u2122"],
+  ["trademarksans", "\u2122"],
+]);
 
 let listTable: ReadonlyMap<string, string> | undefined;
 
@@ -80,8 +114,34 @@ function uForm(component: string): string | undefined {
 
 function componentToUnicode(component: string): string | undefined {
   return (
-    listedGlyphs().get(component) ?? uniForm(component) ?? uForm(component)
+    SYMBOL_ASSEMBLY_PIECES.get(component) ??
+    listedGlyphs().get(component) ??
+    uniForm(component) ??
+    uForm(component)
   );
+}
+
+let pieceOfPrivateUse: ReadonlyMap<string, string> | undefined;
+
+/**
+ * The Unicode character of the Symbol glyph the Adobe Glyph List and Adobe's `symbol.txt` give `codePoint`, a code point of Adobe's own Private Use Area: U+F8EB, the private-use code point of `parenlefttp`, is U+239B. The inverse of the list for the glyphs SYMBOL_ASSEMBLY_PIECES covers, read from the list itself so the two cannot disagree.
+ * @param codePoint - A code point a font's /ToUnicode CMap gave one of its glyphs.
+ * @returns The character, or `undefined` for a code point that is no such glyph's (U+F8E5, the radical extension Unicode does not encode, among them).
+ */
+export function symbolPieceOfAdobePrivateUse(
+  codePoint: number,
+): string | undefined {
+  if (pieceOfPrivateUse === undefined) {
+    const table = new Map<string, string>();
+    for (const [name, character] of SYMBOL_ASSEMBLY_PIECES) {
+      const listed = listedGlyphs().get(name);
+      if (listed !== undefined) {
+        table.set(listed, character);
+      }
+    }
+    pieceOfPrivateUse = table;
+  }
+  return pieceOfPrivateUse.get(String.fromCodePoint(codePoint));
 }
 
 /**
