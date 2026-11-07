@@ -14,6 +14,7 @@ import {
   coreFaceGlyphOrder,
   coreFaceNameOfFontName,
 } from "./core-font-glyph-orders";
+import { probeCff } from "./cff-probe";
 import { standardGlyphName } from "./encoding-standard-tables";
 import { withoutSubsetTag } from "./font-style";
 import {
@@ -510,13 +511,11 @@ function matchesAscii(
 const PFB_SEGMENT_MARKER = 0x80;
 const PFB_SEGMENT_HEADER_SIZE = 6;
 
-// A Type 1 program's own /Encoding array, read out of the cleartext header: either the literal name StandardEncoding, or a run of `dup <code> /<name> put` assignments into a 256-element array (Type 1 Font Format, section 5.3). The encrypted portion after `eexec` holds only the charstrings, never the encoding, so no decryption is needed to read this.
-function type1Sources(
-  bytes: Uint8Array<ArrayBuffer>,
-): ProgramSources | undefined {
+// A Type 1 program's cleartext header: everything before `eexec`, after which the rest is encrypted (Type 1 Font Format, chapter 7), or `undefined` for bytes that are not a Type 1 program.
+function type1Cleartext(bytes: Uint8Array<ArrayBuffer>): string | undefined {
   // Declared inside the function rather than at module scope so each is ordinary executable code
   // a direct test of this reader distinguishes, rather than load-time constants no test observes.
-  const cleartextTerminator = "eexec"; // the keyword ending the cleartext header, after which the rest is encrypted (Type 1 Font Format, chapter 7)
+  const cleartextTerminator = "eexec"; // the keyword ending the cleartext header
   const postScriptMagic = "%!"; // every Type 1 program opens with this document-structuring comment
   // A PFB-segmented program, if a producer embedded one rather than the bare PFA form a PDF /FontFile normally carries, opens with a six-byte binary segment header before the same ASCII text.
   const start = bytes[0] === PFB_SEGMENT_MARKER ? PFB_SEGMENT_HEADER_SIZE : 0;
@@ -533,6 +532,17 @@ function type1Sources(
   let header = "";
   for (let i = start; i < cleartextEnd; i++) {
     header += String.fromCharCode(bytes[i] ?? 0);
+  }
+  return header;
+}
+
+// A Type 1 program's own /Encoding array, read out of the cleartext header: either the literal name StandardEncoding, or a run of `dup <code> /<name> put` assignments into a 256-element array (Type 1 Font Format, section 5.3). The encrypted portion after `eexec` holds only the charstrings, never the encoding, so no decryption is needed to read this.
+function type1Sources(
+  bytes: Uint8Array<ArrayBuffer>,
+): ProgramSources | undefined {
+  const header = type1Cleartext(bytes);
+  if (header === undefined) {
+    return undefined;
   }
   if (!header.includes("/Encoding")) {
     return undefined;
@@ -584,4 +594,30 @@ export function readFontProgramEncoding(
   }
   const type1 = type1Sources(program);
   return type1 === undefined ? undefined : encodingFromSources(type1);
+}
+
+/**
+ * The PostScript name an embedded font program gives itself: a TrueType or OpenType program's 'name' table entry (name ID 6), else the font name in its CFF table's Name INDEX; a bare CFF program's Name INDEX; or a Type 1 program's `/FontName` in its cleartext header. Any subset tag is part of the name as the program states it.
+ * @param program - the decoded bytes of a /FontFile, /FontFile2 or /FontFile3 stream
+ * @returns the name, or undefined when the program states none this codec can read
+ */
+export function readFontProgramName(
+  program: Uint8Array<ArrayBuffer>,
+): string | undefined {
+  const font = parseSfnt(program);
+  if (font !== undefined) {
+    const cff = sfntTableBytes(font, "CFF ");
+    return (
+      parseName(font)?.postScriptName ??
+      (cff === undefined ? undefined : probeCff(cff)?.name)
+    );
+  }
+  const cffName = probeCff(program)?.name;
+  if (cffName !== undefined) {
+    return cffName;
+  }
+  const header = type1Cleartext(program);
+  return header === undefined
+    ? undefined
+    : /\/FontName\s*\/([^\s/[\]{}<>()%]+)/.exec(header)?.[1];
 }
