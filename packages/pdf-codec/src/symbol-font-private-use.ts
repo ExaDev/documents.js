@@ -3,6 +3,11 @@ import {
   glyphNameToUnicode,
   symbolPieceOfAdobePrivateUse,
 } from "./glyph-names";
+import {
+  WEBDINGS_CHARACTERS,
+  WINGDINGS_2_CHARACTERS,
+  WINGDINGS_3_CHARACTERS,
+} from "./dingbat-characters";
 import { WINGDINGS_CHARACTERS } from "./wingdings-characters";
 
 // A symbol font's glyphs have no Unicode of their own, so a producer that writes a /ToUnicode CMap for one (Word does, when it embeds Symbol or Wingdings as a CID font) gives each glyph the font's 8-bit code added to 0xF000, the Private Use Area code point the OpenType recommendations for symbol fonts derive from a code (https://learn.microsoft.com/en-us/typography/opentype/spec/recom, "Non-Standard (Symbol) Fonts", archived at https://web.archive.org/web/20261011050748/https://learn.microsoft.com/en-us/typography/opentype/spec/recom). That code point names the glyph only within its font: 0xFC is a check mark in Wingdings (U+2713) and a piece of a right brace in Symbol, and text that has left the font cannot say which. So the mapping is made here, where the font is known, and is keyed by it.
@@ -11,8 +16,9 @@ const SYMBOL_FONT_PRIVATE_USE_BASE = 0xf000;
 const FIRST_SYMBOL_FONT_CODE = 0x20;
 const LAST_SYMBOL_FONT_CODE = 0xff;
 
-/** The symbol fonts whose 8-bit codes are mapped: the two a Word document uses for bullets, ticks, arrows and mathematical signs. Wingdings 2 and 3, Webdings and ZapfDingbats are different fonts with their own tables and are left as the producer wrote them. */
-export type SymbolFont = "symbol" | "wingdings";
+/** The symbol fonts whose 8-bit codes are mapped: Symbol, and the four Windows dingbat fonts Unicode's Wingdings document covers (Wingdings, Wingdings 2, Wingdings 3 and Webdings). ZapfDingbats is read through its own standard encoding (ISO 32000-1 Annex D.6) instead, and any other font's text is left as the producer wrote it. */
+export type SymbolFont =
+  "symbol" | "wingdings" | "wingdings2" | "wingdings3" | "webdings";
 
 // The symbol font each family spelling stands for, compared with spaces, underscores and hyphens removed and case folded. `SymbolOOEnc` is a name producers give the Symbol font itself. `EuclidSymbol` is MathType's Euclid Symbol, which is read in Symbol's encoding on the evidence of three glyphs whose codes were checked against Symbol's (the equals sign, the bullet and a bracket extension); the rest of its layout is assumed to follow Symbol's, not checked.
 function symbolFontOfSpelling(name: string): SymbolFont | undefined {
@@ -24,13 +30,19 @@ function symbolFontOfSpelling(name: string): SymbolFont | undefined {
       return "symbol";
     case "wingdings":
       return "wingdings";
+    case "wingdings2":
+      return "wingdings2";
+    case "wingdings3":
+      return "wingdings3";
+    case "webdings":
+      return "webdings";
     default:
       return undefined;
   }
 }
 
 /**
- * The symbol font a font family name stands for, whichever way the producer spells it ("Symbol", "SymbolMT", "SymbolOOEnc", "EuclidSymbol", "Wingdings"), or `undefined` for any other font.
+ * The symbol font a font family name stands for, whichever way the producer spells it ("Symbol", "SymbolMT", "SymbolOOEnc", "EuclidSymbol", "Wingdings", "Wingdings 2" or "Wingdings2", "Wingdings 3", "Webdings"), or `undefined` for any other font.
  *
  * Two decorations some producers add to a name are looked past. A variant tag of `-OV-` and six capital letters at the end (`SymbolMT-OV-JQGJHA`). And a pseudo subset tag of one capital and five small letters run straight onto the name, with no `+` (`SmmfqrSymbol`), which is read off only when what follows it is itself one of the spellings above, so a family that merely contains one of them (`SymbolicSans`, `SegoeUISymbol`, `OpenSymbol`) is never taken for it.
  * @param family - The font's family as `styleFromBaseFontName` reads it from `/BaseFont` or from an embedded program's PostScript name: the subset tag and style suffix already removed.
@@ -70,9 +82,25 @@ function symbolCharacter(code: number): string | undefined {
     : undefined;
 }
 
-function wingdingsCharacter(code: number): string | undefined {
-  const character = WINGDINGS_CHARACTERS[code];
-  return character === undefined || character === "" ? undefined : character;
+// Each dingbat font's table of the character its glyph at each code is: wingdings-characters.ts and dingbat-characters.ts.
+const DINGBAT_TABLES: Readonly<
+  Record<Exclude<SymbolFont, "symbol">, readonly string[]>
+> = {
+  wingdings: WINGDINGS_CHARACTERS,
+  wingdings2: WINGDINGS_2_CHARACTERS,
+  wingdings3: WINGDINGS_3_CHARACTERS,
+  webdings: WEBDINGS_CHARACTERS,
+};
+
+function fontCharacter(font: SymbolFont): (code: number) => string | undefined {
+  if (font === "symbol") {
+    return symbolCharacter;
+  }
+  const table = DINGBAT_TABLES[font];
+  return (code) => {
+    const character = table[code];
+    return character === undefined || character === "" ? undefined : character;
+  };
 }
 
 /**
@@ -88,7 +116,7 @@ export function withSymbolFontCharacters(
   if (font === undefined) {
     return text;
   }
-  const character = font === "symbol" ? symbolCharacter : wingdingsCharacter;
+  const character = fontCharacter(font);
   const replacement = (codePoint: number): string | undefined => {
     if (isSymbolFontCode(codePoint)) {
       return character(codePoint - SYMBOL_FONT_PRIVATE_USE_BASE);
