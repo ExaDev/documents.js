@@ -12,6 +12,7 @@ import { emuToPt } from "../shared/units";
 import {
   attr,
   childrenWithTag,
+  decodeEntities,
   elementsWithTag,
   resolveRelationships,
   rootElement,
@@ -500,9 +501,10 @@ function readChartFrame(
     return undefined;
   }
   const cNvPr = elementsWithTag([frame], "xdr:cNvPr")[0];
+  const name = cNvPr === undefined ? undefined : attr(cNvPr, "name");
   return {
     root: chartRoot,
-    name: cNvPr === undefined ? "Chart" : (attr(cNvPr, "name") ?? "Chart"),
+    name: name === undefined ? "Chart" : decodeEntities(name),
   };
 }
 

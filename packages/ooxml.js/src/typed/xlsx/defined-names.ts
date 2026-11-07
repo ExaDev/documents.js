@@ -4,7 +4,13 @@ import type {
   ContentSheetRepeatRange,
 } from "document-schema.js";
 import type { Package } from "../../model/package";
-import { attr, childrenWithTag, rootElement, textContent } from "../util";
+import {
+  attr,
+  childrenWithTag,
+  decodeEntities,
+  rootElement,
+  textContent,
+} from "../util";
 import { workbookPartPath } from "./parts";
 import {
   columnIndexToLetters,
@@ -41,7 +47,8 @@ export function readDefinedNamesBySheet(
       continue;
     }
     // A definedName with no name at all can never equal either reserved name below, so it is already excluded by that check alone — no separate `name === undefined` guard is needed first.
-    const name = attr(definedName, "name");
+    const nameRaw = attr(definedName, "name");
+    const name = nameRaw === undefined ? undefined : decodeEntities(nameRaw);
     if (name !== XLNM_PRINT_AREA && name !== XLNM_PRINT_TITLES) {
       continue;
     }
@@ -73,10 +80,12 @@ export function readWorkbookNames(pkg: Package): ContentDefinedName[] {
   }
   const names: ContentDefinedName[] = [];
   for (const definedName of childrenWithTag(container, "definedName")) {
-    const name = attr(definedName, "name");
-    if (name === undefined) {
+    const nameRaw = attr(definedName, "name");
+    if (nameRaw === undefined) {
       continue;
     }
+    // Decoded, as every text attribute this reader keeps: the writer encodes the name again, so a raw reference would be encoded twice.
+    const name = decodeEntities(nameRaw);
     const localSheetIdRaw = attr(definedName, "localSheetId");
     const localSheetId =
       localSheetIdRaw === undefined

@@ -12,6 +12,7 @@ import { buildXml } from "../../xml/build";
 import {
   attr,
   childrenWithTag,
+  decodeEntities,
   elementsWithTag,
   resolveRelationships,
   rootElement,
@@ -76,7 +77,8 @@ export function resolveSheetEntries(pkg: Package): SheetEntry[] {
     const rId = attr(sheet, "r:id");
     const rel = rId === undefined ? undefined : rels.get(rId);
     if (name !== undefined && rel !== undefined) {
-      entries.push({ name, path: rel.target });
+      // The attribute value as written keeps its entity and character references (the lossless layer never decodes), and the writer encodes the name again, so an undecoded "A &amp; B" would grow by one "amp;" per round trip.
+      entries.push({ name: decodeEntities(name), path: rel.target });
     }
   }
   return entries;
