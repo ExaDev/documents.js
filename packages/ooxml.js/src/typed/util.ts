@@ -61,10 +61,40 @@ export function rootElement(part: Part | undefined): XmlElement | undefined {
   return undefined;
 }
 
-// The lossless layer keeps XML entities raw (e.g. &amp;) for fidelity; this typed reading view decodes the five standard entities so projected text is human-readable.
+// XML 1.0's Char production (https://www.w3.org/TR/xml/#charsets): the code points a character reference may name. A reference to anything else (NUL, a C0 control other than tab, line feed and carriage return, a surrogate, U+FFFE, U+FFFF, or past U+10FFFF) is a well-formedness error (https://www.w3.org/TR/xml/#wf-Legalchar).
+const TAB = 0x9;
+const LINE_FEED = 0xa;
+const CARRIAGE_RETURN = 0xd;
+const SPACE = 0x20;
+const LAST_BEFORE_SURROGATES = 0xd7ff;
+const FIRST_AFTER_SURROGATES = 0xe000;
+const LAST_BEFORE_FFFE = 0xfffd;
+const FIRST_SUPPLEMENTARY = 0x10000;
+const LAST_CODE_POINT = 0x10ffff;
+
+function isXmlChar(codePoint: number): boolean {
+  return (
+    codePoint === TAB ||
+    codePoint === LINE_FEED ||
+    codePoint === CARRIAGE_RETURN ||
+    (codePoint >= SPACE && codePoint <= LAST_BEFORE_SURROGATES) ||
+    (codePoint >= FIRST_AFTER_SURROGATES && codePoint <= LAST_BEFORE_FFFE) ||
+    (codePoint >= FIRST_SUPPLEMENTARY && codePoint <= LAST_CODE_POINT)
+  );
+}
+
+// One alternative per reference XML itself defines without a DTD: the five predefined entities, a decimal character reference (&#NNN;) and a hexadecimal one (&#xHHH;, lower-case x only, as XML's CharRef production spells it: https://www.w3.org/TR/xml/#NT-CharRef).
+const REFERENCE_RE = /&(?:amp|lt|gt|quot|apos|#[0-9]+|#x[0-9A-Fa-f]+);/g;
+
+const HEX_REFERENCE_PREFIX = "&#x";
+const DECIMAL_REFERENCE_PREFIX = "&#";
+const HEX_RADIX = 16;
+const DECIMAL_RADIX = 10;
+
+// The lossless layer keeps XML entities raw (e.g. &amp;) for fidelity; this typed reading view decodes them so projected text is human-readable: the five predefined entities and every decimal or hexadecimal character reference. Decoding is one left-to-right pass, so the text a reference produces is never itself read as markup: "&amp;#101;" decodes to the literal "&#101;", not to "e". A character reference naming a code point outside XML's Char production is left exactly as written rather than replaced, since a conforming parser would have refused the document and there is no character it could stand for; any other "&" sequence (an undeclared entity, "&#;", "&#X41;") is likewise left as written.
 export function decodeEntities(value: string): string {
-  return value.replace(/&(?:amp|lt|gt|quot|apos);/g, (entity) => {
-    switch (entity) {
+  return value.replace(REFERENCE_RE, (reference) => {
+    switch (reference) {
       case "&amp;":
         return "&";
       case "&lt;":
@@ -75,9 +105,17 @@ export function decodeEntities(value: string): string {
         return '"';
       case "&apos;":
         return "'";
-      default:
-        return entity;
     }
+    // Every other match of REFERENCE_RE is a character reference: its digits sit between the prefix and the closing ";".
+    const hex = reference.startsWith(HEX_REFERENCE_PREFIX);
+    const codePoint = Number.parseInt(
+      reference.slice(
+        hex ? HEX_REFERENCE_PREFIX.length : DECIMAL_REFERENCE_PREFIX.length,
+        -1,
+      ),
+      hex ? HEX_RADIX : DECIMAL_RADIX,
+    );
+    return isXmlChar(codePoint) ? String.fromCodePoint(codePoint) : reference;
   });
 }
 
