@@ -26,7 +26,7 @@ Scope: **ZIP containers** (read and write over [`fflate`](https://github.com/101
 
 ## Getting started
 
-Requires Node.js `>=20` and pnpm `11.6.0`.
+Requires Node.js `>=20` and pnpm (the version pinned as `packageManager` in the root `package.json`).
 
 ```sh
 pnpm install
