@@ -1,3 +1,23 @@
+## [14.11.0](https://github.com/ExaDev/documents.js/compare/documents.js%4014.10.14...documents.js%4014.11.0) (2026-11-07)
+
+### Features
+
+* **documents.js:** canonicalise XML by a closed list of lexical transformations ([68a2cf7](https://github.com/ExaDev/documents.js/commit/68a2cf726cd105873b529051cfe929d55b57e4e5))
+* **documents.js:** compare content projections and classify loss against writer noise ([0922785](https://github.com/ExaDev/documents.js/commit/09227853338a06214e9472603e9a931353950edb))
+* **documents.js:** digest an OPC package independently of its container ([e6428e3](https://github.com/ExaDev/documents.js/commit/e6428e39c07ec269cf9f3f8447f40b395a768779))
+* **documents.js:** export the content projection API and document its design ([df3ed5c](https://github.com/ExaDev/documents.js/commit/df3ed5c12036da790544ead609c5062e4e6db3b5))
+* **documents.js:** project docx content into words, element census and media ([c812656](https://github.com/ExaDev/documents.js/commit/c81265637150383446e3d3cabad7754ec48bc6cc))
+* **documents.js:** project xlsx content into resolved cells, names and text ([82cf796](https://github.com/ExaDev/documents.js/commit/82cf796c87ac3259de82d210dc6732e24a860002))
+* **documents.js:** scan XML as a stream and refuse document type declarations ([225210b](https://github.com/ExaDev/documents.js/commit/225210bc5d3daf3bf9a013d453fec7c097201f77))
+
+### Documentation
+
+* **documents.js:** name the pnpm version by its source, not its number ([cfa7839](https://github.com/ExaDev/documents.js/commit/cfa7839b1fc42da005a8e1758e71f98f6689c45d))
+
+### Tests
+
+* **documents.js:** run the content projection under workerd ([329c60b](https://github.com/ExaDev/documents.js/commit/329c60bfd9c98f33a02f39fae0ee4965fb9075a0))
+
 ## [14.10.14](https://github.com/ExaDev/documents.js/compare/documents.js%4014.10.13...documents.js%4014.10.14) (2026-11-07)
 
 
