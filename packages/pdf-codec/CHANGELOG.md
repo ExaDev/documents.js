@@ -1,3 +1,17 @@
+## [5.8.4](https://github.com/ExaDev/documents.js/compare/pdf-codec%405.8.3...pdf-codec%405.8.4) (2026-11-07)
+
+### Bug Fixes
+
+* **pdf-codec:** read a pseudo subset tag only when the font name follows it directly ([e8ec551](https://github.com/ExaDev/documents.js/commit/e8ec5514283b01a63446b20b94e178119dc76871))
+* **pdf-codec:** read Symbol's bracket and brace pieces as Unicode on every glyph-name route ([f63e78d](https://github.com/ExaDev/documents.js/commit/f63e78dac068730a9f722b9b4b4a5c914976a256))
+* **pdf-codec:** read the space Wingdings 2, Wingdings 3 and Webdings draw at 0x20 ([eb27f49](https://github.com/ExaDev/documents.js/commit/eb27f4921c293044232cba600e7fb5cccd7d9b6c))
+* **pdf-codec:** read Wingdings 2, Wingdings 3 and Webdings private-use code points as their glyphs ([21108af](https://github.com/ExaDev/documents.js/commit/21108afa8b952e4fd3e6bc42919ff38eb30ca80f))
+* **pdf-codec:** recognise Symbol and Wingdings under the other names producers give them ([adb8677](https://github.com/ExaDev/documents.js/commit/adb8677dd46b4715c63c932e267b4ef54abb8b68))
+
+### Performance Improvements
+
+* **pdf-codec:** read a shared font program's name once per stream ([8562e59](https://github.com/ExaDev/documents.js/commit/8562e59fe15a1557ab3f4da1617b806d647aeeda))
+
 ## [5.8.3](https://github.com/ExaDev/documents.js/compare/pdf-codec%405.8.2...pdf-codec%405.8.3) (2026-11-05)
 
 ### Bug Fixes
