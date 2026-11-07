@@ -1,6 +1,9 @@
 import { afmWidthOfCode } from "./afm-widths";
 import type { BuiltinEncoding } from "./builtin-encoding";
-import { readFontProgramEncoding } from "./builtin-encoding";
+import {
+  readFontProgramEncoding,
+  readFontProgramName,
+} from "./builtin-encoding";
 import { parseToUnicodeCMap } from "./cmap";
 import type { ToUnicodeCMap } from "./cmap";
 import type { PdfDiagnosticSink } from "./diagnostics";
@@ -15,10 +18,7 @@ import { resolveStandardFont } from "./fonts";
 import { styleFromBaseFontName } from "./font-style";
 import { coreFaceTextsOfNumberedGlyphs } from "./core-font-glyph-orders";
 import { glyphNameToUnicode } from "./glyph-names";
-import {
-  symbolFontOf,
-  withSymbolFontCharacters,
-} from "./symbol-font-private-use";
+import { symbolFontOf, symbolFontTextReader } from "./symbol-font-private-use";
 import {
   programDigest,
   VERIFIED_GLYPH_FAMILIES,
@@ -92,11 +92,11 @@ function styleFlagsFromDescriptor(descriptor: PdfDict | undefined): {
   };
 }
 
-// A simple font's own built-in encoding is knowable to a reader without parsing its embedded font program only for the two standard-14 symbol faces, whose code -> glyph mapping the PDF spec fixes (ISO 32000-1 Annex D.5/D.6): Symbol and ZapfDingbats. /BaseFont is matched after stripping a subset tag the same way styleFromBaseFontName does, since a subsetted symbol font (e.g. "ABCDEF+Symbol") is still that same standard face.
+// A simple font's own built-in encoding is knowable to a reader without parsing its embedded font program only for the two standard-14 symbol faces, whose code -> glyph mapping the PDF spec fixes (ISO 32000-1 Annex D.5/D.6): Symbol and ZapfDingbats. The family is the one styleFromBaseFontName reads from /BaseFont, with a subset tag and style suffix removed, since a subsetted symbol font (e.g. "ABCDEF+Symbol") is still that same standard face; Symbol is recognised under every spelling symbolFontOf reads as Symbol (SymbolMT, the Windows face, among them).
 function builtinSymbolGlyphNameLookup(
   baseFamily: string,
 ): ((code: number) => string | undefined) | undefined {
-  if (baseFamily === "Symbol") {
+  if (symbolFontOf(baseFamily) === "symbol") {
     return symbolGlyphName;
   }
   if (baseFamily === "ZapfDingbats") {
@@ -139,6 +139,40 @@ function lazyFontProgram(
     read ??= { encoding: readFontProgram(descriptor, baseFont, context) };
     return read.encoding;
   };
+}
+
+// The family the embedded program's own PostScript name spells, read through styleFromBaseFontName as /BaseFont is, the first time it is asked for: reading it decodes the program, which only a font whose /ToUnicode text needs it pays for.
+function lazyProgramFamily(
+  descriptor: PdfDict | undefined,
+  context: FontReadContext,
+): () => string | undefined {
+  let read: { readonly family: string | undefined } | undefined;
+  return () => {
+    read ??= { family: programFamily(descriptor, context) };
+    return read.family;
+  };
+}
+
+function programFamily(
+  descriptor: PdfDict | undefined,
+  context: FontReadContext,
+): string | undefined {
+  if (descriptor === undefined) {
+    return undefined;
+  }
+  for (const key of ["FontFile2", "FontFile3", "FontFile"]) {
+    const stream = context.resolver.resolve(dictGet(descriptor, key));
+    if (stream?.kind !== "stream") {
+      continue;
+    }
+    const name = readFontProgramName(
+      decodeStream(stream.raw, stream.dict, context.sink).bytes,
+    );
+    if (name !== undefined) {
+      return styleFromBaseFontName(name).baseFamily;
+    }
+  }
+  return undefined;
 }
 
 // The verified glyph table of the font's embedded program (`verified-glyph-tables.ts`), looked up once, and only for a font of a family that has one: hashing a program decodes its stream, which no other font pays for.
@@ -255,7 +289,10 @@ function buildSimpleFont(fontDict: PdfDict, context: FontReadContext): PdfFont {
   );
   const symbolic = styleFlags.symbolic ?? false;
   const builtinGlyphName = builtinSymbolGlyphNameLookup(baseFamily);
-  const symbolFont = symbolFontOf(baseFamily);
+  const symbolFontText = symbolFontTextReader(
+    baseFamily,
+    lazyProgramFamily(descriptor, context),
+  );
   const verifiedGlyphs = lazyVerifiedGlyphTable(
     descriptor,
     baseFamily,
@@ -412,7 +449,7 @@ function buildSimpleFont(fontDict: PdfDict, context: FontReadContext): PdfFont {
       }
       const viaToUnicode = toUnicode?.lookup(code);
       if (viaToUnicode !== undefined) {
-        out += withSymbolFontCharacters(symbolFont, viaToUnicode);
+        out += symbolFontText(viaToUnicode);
         continue;
       }
       const unicode = unicodeForCode(code);
@@ -701,7 +738,10 @@ function buildCompositeFont(
   };
 
   const toUnicode = readToUnicodeCMap(fontDict, context);
-  const symbolFont = symbolFontOf(baseFamily);
+  const symbolFontText = symbolFontTextReader(
+    baseFamily,
+    lazyProgramFamily(descriptor, context),
+  );
   const glyphIdOf = cidToGlyphId(fontDict, descendantDict, context);
   const programEncoding =
     glyphIdOf !== undefined
@@ -717,7 +757,7 @@ function buildCompositeFont(
       const cid = ((codes[i] ?? 0) << BITS_PER_BYTE) | (codes[i + 1] ?? 0);
       const mapped = toUnicode?.lookup(cid);
       if (mapped !== undefined) {
-        out += withSymbolFontCharacters(symbolFont, mapped);
+        out += symbolFontText(mapped);
         continue;
       }
       const glyphId = glyphIdOf?.(cid);
