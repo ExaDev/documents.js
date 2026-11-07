@@ -139,3 +139,66 @@ export function compositeSymbolFontPdf(options: {
   b.classicXrefAndTrailer(descendant, "/Root 1 0 R");
   return b.bytes();
 }
+
+// A page showing code 0x01 from each of `fontCount` simple TrueType fonts, /F1 to /F<n>, each its own font dictionary and font descriptor with a placeholder /BaseFont and a /ToUnicode CMap sending the code to `codePoint`, every descriptor naming one shared /FontFile2 stream holding `program` under `filter` (no /Filter when absent).
+export function sharedProgramFontsPdf(options: {
+  readonly fontCount: number;
+  readonly program: Uint8Array<ArrayBuffer>;
+  readonly codePoint: number;
+  readonly filter?: string;
+}): Uint8Array<ArrayBuffer> {
+  const b = new FixtureBuilder().header();
+  const fontNumbers = Array.from(
+    { length: options.fontCount },
+    (_, index) => index + 1,
+  );
+  // Objects 1 to 5 as every fixture here numbers them, then the shared /ToUnicode and /FontFile2, then a font dictionary and a font descriptor per font.
+  const TO_UNICODE_OBJ = 6;
+  const FONT_FILE_OBJ = 7;
+  const fontObj = (n: number): number => FONT_FILE_OBJ + 2 * n - 1;
+  const descriptorObj = (n: number): number => FONT_FILE_OBJ + 2 * n;
+  b.object(1, CATALOG);
+  b.object(2, PAGES);
+  const fontResources = fontNumbers
+    .map((n) => `/F${String(n)} ${String(fontObj(n))} 0 R`)
+    .join(" ");
+  b.object(
+    3,
+    `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 400 100] /Resources << /Font << ${fontResources} >> >> /Contents 5 0 R >>`,
+  );
+  // Object 4 is the font every other fixture here shows; this one names its fonts from object 8 on, so 4 holds an unused placeholder to keep the cross-reference table gapless.
+  b.object(4, "<< >>");
+  b.stream(
+    5,
+    EMPTY_DICT,
+    enc(
+      fontNumbers
+        .map((n) => `BT /F${String(n)} 12 Tf 10 50 Td <01> Tj ET`)
+        .join("\n"),
+    ),
+  );
+  b.stream(
+    TO_UNICODE_OBJ,
+    EMPTY_DICT,
+    enc(toUnicodeCMap(new Map([[0x01, options.codePoint]]), CODE_HEX_DIGITS)),
+  );
+  b.stream(
+    FONT_FILE_OBJ,
+    options.filter === undefined
+      ? EMPTY_DICT
+      : `<< /Filter /${options.filter} >>`,
+    options.program,
+  );
+  for (const n of fontNumbers) {
+    b.object(
+      fontObj(n),
+      `<< /Type /Font /Subtype /TrueType /BaseFont /F${String(n)} /ToUnicode ${String(TO_UNICODE_OBJ)} 0 R /FontDescriptor ${String(descriptorObj(n))} 0 R >>`,
+    );
+    b.object(
+      descriptorObj(n),
+      `<< /Type /FontDescriptor /FontName /F${String(n)} /Flags 4 /FontFile2 ${String(FONT_FILE_OBJ)} 0 R >>`,
+    );
+  }
+  b.classicXrefAndTrailer(descriptorObj(options.fontCount), "/Root 1 0 R");
+  return b.bytes();
+}

@@ -153,6 +153,28 @@ function lazyProgramFamily(
   };
 }
 
+// The PostScript name each embedded font stream's decoded program states, by the stream object the resolver hands out, for the reason PROGRAM_DIGESTS below keeps digests that way: many font dictionaries can name one large stream, and decoding it once per dictionary repeats the work and its diagnostics. The entry is boxed so a program that states no name is remembered too. Only the name is kept, never the decoded bytes, and held weakly, so it goes with the objects.
+const PROGRAM_NAMES = new WeakMap<
+  object,
+  { readonly name: string | undefined }
+>();
+
+function nameOfFontStream(
+  stream: Extract<PdfObject, { kind: "stream" }>,
+  context: FontReadContext,
+): string | undefined {
+  let read = PROGRAM_NAMES.get(stream);
+  if (read === undefined) {
+    read = {
+      name: readFontProgramName(
+        decodeStream(stream.raw, stream.dict, context.sink).bytes,
+      ),
+    };
+    PROGRAM_NAMES.set(stream, read);
+  }
+  return read.name;
+}
+
 function programFamily(
   descriptor: PdfDict | undefined,
   context: FontReadContext,
@@ -165,9 +187,7 @@ function programFamily(
     if (stream?.kind !== "stream") {
       continue;
     }
-    const name = readFontProgramName(
-      decodeStream(stream.raw, stream.dict, context.sink).bytes,
-    );
+    const name = nameOfFontStream(stream, context);
     if (name !== undefined) {
       return styleFromBaseFontName(name).baseFamily;
     }
