@@ -42,14 +42,14 @@ describe("the symbol font tables against Unicode's source references", () => {
     ["Wingdings 2", WINGDINGS_2_CHARACTERS, 2000],
     ["Wingdings 3", WINGDINGS_3_CHARACTERS, 3000],
   ] as const)(
-    "gives every %s code the character the list gives its identifier, and nothing where the list gives none",
+    "gives every %s code the character the list gives its identifier, a space at 0x20, and nothing where the list gives none",
     (_, table, identifierBase) => {
       const references = sourceReferences();
       expect(table).toHaveLength(CODE_COUNT);
       const mismatches = table.flatMap((character, code) => {
-        // The Wingdings table alone holds a space at 0x20, outside the list's identifiers.
+        // Every table holds a space at 0x20, outside the list's identifiers, since each font draws one there.
         const expected =
-          table === WINGDINGS_CHARACTERS && code === SPACE_CODE
+          code === SPACE_CODE
             ? " "
             : (references.get(identifierBase + code) ?? "");
         return character === expected ? [] : [{ code, character, expected }];

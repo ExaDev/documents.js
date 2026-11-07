@@ -435,6 +435,12 @@ describe("Wingdings 2, Wingdings 3 and Webdings, read through a /ToUnicode CMap"
     expect(withSymbolFontCharacters("wingdings2", "\uF06C")).toBe("\u2462");
   });
 
+  it("reads the space each font draws at 0x20 as a space", () => {
+    for (const font of ["wingdings2", "wingdings3", "webdings"] as const) {
+      expect(withSymbolFontCharacters(font, "\uF020")).toBe(" ");
+    }
+  });
+
   it("leaves a code the source references give no character as it was written", () => {
     expect(withSymbolFontCharacters("wingdings2", "\uF0FA")).toBe("\uF0FA");
     expect(withSymbolFontCharacters("wingdings3", "\uF0F1")).toBe("\uF0F1");
