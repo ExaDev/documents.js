@@ -15,6 +15,14 @@ import {
   symbolFontOf,
   withSymbolFontCharacters,
 } from "./symbol-font-private-use";
+import { styleFromBaseFontName } from "./font-style";
+import { pageText } from "./test-support/page-text";
+import {
+  compositeSymbolFontPdf,
+  simpleSymbolFontPdf,
+} from "./test-support/pdf-symbol-fonts";
+import { buildSfnt } from "./test-support/sfnt";
+import { buildNameTable } from "./test-support/sfnt-tables";
 import { WINGDINGS_CHARACTERS } from "./wingdings-characters";
 
 const NO_DIAGNOSTICS: PdfDiagnosticSink = () => undefined;
@@ -74,12 +82,166 @@ describe("symbolFontOf", () => {
     expect(symbolFontOf(family)).toBe(font);
   });
 
-  it.each(["Arial", "Wingdings2", "Wingdings3", "Webdings", "ZapfDingbats"])(
+  it.each([
+    ["Wingdings 2", "wingdings2"],
+    ["Wingdings2", "wingdings2"],
+    ["Wingdings-2", "wingdings2"],
+    ["Wingdings 3", "wingdings3"],
+    ["Wingdings3", "wingdings3"],
+    ["Webdings", "webdings"],
+    ["AbcdefWingdings3", "wingdings3"],
+  ])("reads %s as the %s font", (family, font) => {
+    expect(symbolFontOf(family)).toBe(font);
+  });
+
+  it.each(["Arial", "ZapfDingbats", "Wingdings4", "Wingdings 23"])(
     "leaves %s alone",
     (family) => {
       expect(symbolFontOf(family)).toBeUndefined();
     },
   );
+
+  // Each /BaseFont as a producer writes it, read through styleFromBaseFontName first as the font reader does.
+  it.each([
+    ["SymbolOOEnc", "the name some producers give Symbol re-encoded"],
+    ["EuclidSymbol", "MathType's Euclid Symbol, laid out in Symbol's order"],
+    ["SymbolMT-OV-JQGJHA", "a font name carrying an -OV- variant tag"],
+    ["Symbol-OV-UQGJHA", "Symbol with an -OV- variant tag"],
+    ["SmmfqrSymbol", "a mixed-case pseudo subset tag with no plus sign"],
+    ["GycxflSymbol", "another such pseudo tag"],
+    ["JFTKML+VvdtfySymbolMT", "a subset tag before a pseudo tag"],
+    ["Symbol,Bold", "a style suffix"],
+  ])("reads %s (%s) as the Symbol font", (baseFont) => {
+    expect(symbolFontOf(styleFromBaseFontName(baseFont).baseFamily)).toBe(
+      "symbol",
+    );
+  });
+
+  it.each([
+    ["SymbolicSans", "a family that only begins with the word"],
+    ["SegoeUISymbol", "a Unicode-encoded font whose name ends in it"],
+    ["OpenSymbol", "a font with its own private-use layout"],
+    ["SYMBOLS+Symbol", "nothing but its six letters can be a tag"],
+    ["Symbol-OV-JQGJ", "an -OV- tag of other than six capitals"],
+    ["SmmfqrSymbolic", "a pseudo tag before a name that is not Symbol's"],
+    [
+      "SmmFqrSymbol",
+      "six letters that are not one capital and five small ones",
+    ],
+    ["Symbol-OV-JQGJHA-Extra", "an -OV- tag that is not at the end"],
+  ])("leaves %s (%s) alone", (baseFont) => {
+    expect(
+      symbolFontOf(styleFromBaseFontName(baseFont).baseFamily),
+    ).toBeUndefined();
+  });
+
+  it("reads a Wingdings name carrying a pseudo tag or an -OV- tag as Wingdings", () => {
+    expect(symbolFontOf("AbcdefWingdings")).toBe("wingdings");
+    expect(symbolFontOf("Wingdings-OV-ABCDEF")).toBe("wingdings");
+  });
+});
+
+describe("a Symbol-encoded font under another name, read through its /ToUnicode CMap", () => {
+  const symbolCodes = new Map([
+    [0x01, 0xf03d],
+    [0x02, 0xf0b7],
+    [0x03, 0xf0ea],
+  ]);
+
+  it.each([
+    "SymbolOOEnc",
+    "EuclidSymbol",
+    "SymbolMT-OV-JQGJHA",
+    "VvdtfySymbolMT",
+  ])(
+    "reads the 0xF000 code points of /BaseFont %s as Symbol's glyphs",
+    (baseFont) => {
+      const pdf = simpleSymbolFontPdf({
+        baseFont,
+        codes: [0x01, 0x02, 0x03],
+        toUnicode: symbolCodes,
+      });
+      expect(pageText(pdf)).toBe("=\u2022\u23A2");
+    },
+  );
+
+  // A TrueType program with nothing but a 'name' table stating `postScriptName`.
+  function namedProgram(postScriptName: string): Uint8Array<ArrayBuffer> {
+    return buildSfnt(
+      new Map([
+        [
+          "name",
+          buildNameTable([
+            { platformId: 3, encodingId: 1, nameId: 6, text: postScriptName },
+          ]),
+        ],
+      ]),
+    );
+  }
+
+  it("reads a font whose /BaseFont names no family through the PostScript name of its embedded program", () => {
+    const pdf = simpleSymbolFontPdf({
+      subtype: "TrueType",
+      baseFont: "CIDFont+F1",
+      codes: [0x01, 0x02, 0x03],
+      toUnicode: symbolCodes,
+      program: namedProgram("ABCDEF+SymbolMT"),
+    });
+    expect(pageText(pdf)).toBe("=\u2022\u23A2");
+  });
+
+  it("reads a composite font whose /BaseFont names no family through the PostScript name of its embedded program", () => {
+    const pdf = compositeSymbolFontPdf({
+      baseFont: "CIDFont+F2",
+      cids: [0x01],
+      toUnicode: new Map([[0x01, 0xf0fc]]),
+      program: namedProgram("Wingdings-Regular"),
+    });
+    expect(pageText(pdf)).toBe("\u2713");
+  });
+
+  it("leaves the private-use text of a font whose program names an ordinary face as written", () => {
+    const pdf = simpleSymbolFontPdf({
+      subtype: "TrueType",
+      baseFont: "CIDFont+F1",
+      codes: [0x01],
+      toUnicode: new Map([[0x01, 0xf03d]]),
+      program: namedProgram("ArialMT"),
+    });
+    expect(pageText(pdf)).toBe("\uF03D");
+  });
+
+  it("reads a font through its program's name when /BaseFont names an ordinary face, since the program states what it is", () => {
+    const pdf = simpleSymbolFontPdf({
+      subtype: "TrueType",
+      baseFont: "Calibri",
+      codes: [0x01],
+      toUnicode: new Map([[0x01, 0xf03d]]),
+      program: namedProgram("SymbolMT"),
+    });
+    expect(pageText(pdf)).toBe("=");
+  });
+
+  it("reads /BaseFont's symbol font over another one the program names", () => {
+    const pdf = simpleSymbolFontPdf({
+      subtype: "TrueType",
+      baseFont: "Wingdings",
+      codes: [0x01],
+      toUnicode: new Map([[0x01, 0xf0fc]]),
+      program: namedProgram("SymbolMT"),
+    });
+    expect(pageText(pdf)).toBe("\u2713");
+  });
+});
+
+describe("SymbolMT's own encoding, with no /ToUnicode", () => {
+  it("reads a code of a SymbolMT font through Symbol's built-in encoding, as it does for Symbol", () => {
+    const pdf = simpleSymbolFontPdf({
+      baseFont: "SymbolMT",
+      codes: [0xe6, 0x61],
+    });
+    expect(pageText(pdf)).toBe("\u239B\u03B1");
+  });
 });
 
 describe("withSymbolFontCharacters", () => {
@@ -142,5 +304,104 @@ describe("a composite symbol font read through its /ToUnicode CMap", () => {
 
   it("leaves another font's private-use text as the producer wrote it", () => {
     expect(compositeSymbolText("VJEZJC+Calibri", 0xfc)).toBe("");
+  });
+});
+
+describe("the pieces of Symbol's tall brackets and braces, by every route a page reaches them", () => {
+  it("reads the Symbol font's own encoding of a tall parenthesis as its Unicode pieces", () => {
+    const pdf = simpleSymbolFontPdf({
+      baseFont: "Symbol",
+      codes: [0xe6, 0xe7, 0xe8],
+    });
+    expect(pageText(pdf)).toBe("\u239B\u239C\u239D");
+  });
+
+  it("reads the Adobe private-use code point a /ToUnicode CMap gives a Symbol piece as the piece", () => {
+    const pdf = simpleSymbolFontPdf({
+      baseFont: "Symbol",
+      codes: [0x01, 0x02, 0x03],
+      toUnicode: new Map([
+        [0x01, 0xf8eb],
+        [0x02, 0xf8fe],
+        [0x03, 0xf6d9],
+      ]),
+    });
+    expect(pageText(pdf)).toBe("\u239B\u23AD\u00A9");
+  });
+
+  it("leaves the radical extension, which Unicode does not encode, as the CMap wrote it", () => {
+    const pdf = simpleSymbolFontPdf({
+      baseFont: "Symbol",
+      codes: [0x01],
+      toUnicode: new Map([[0x01, 0xf8e5]]),
+    });
+    expect(pageText(pdf)).toBe("\uF8E5");
+  });
+
+  it("reads a piece /Differences names, in any font, as the piece", () => {
+    const pdf = simpleSymbolFontPdf({
+      baseFont: "Times-Roman",
+      codes: [0x01, 0x02],
+      encoding: "<< /Differences [1 /parenlefttp /bracerighttp] >>",
+    });
+    expect(pageText(pdf)).toBe("\u239B\u23AB");
+  });
+
+  it("reads the Adobe private-use code point of a piece in a composite SymbolMT subset as the piece", () => {
+    const pdf = compositeSymbolFontPdf({
+      baseFont: "ABCDEF+SymbolMT",
+      cids: [0xa7],
+      toUnicode: new Map([[0xa7, 0xf8eb]]),
+    });
+    expect(pageText(pdf)).toBe("\u239B");
+  });
+
+  it("reads the piece Word writes at the font's own code in the 0xF000 range", () => {
+    const pdf = simpleSymbolFontPdf({
+      baseFont: "Symbol",
+      codes: [0x01],
+      toUnicode: new Map([[0x01, 0xf0e6]]),
+    });
+    expect(pageText(pdf)).toBe("\u239B");
+  });
+
+  it("leaves an Adobe private-use code point another font's CMap gives as it was written", () => {
+    const pdf = simpleSymbolFontPdf({
+      baseFont: "Calibri",
+      codes: [0x01],
+      toUnicode: new Map([[0x01, 0xf8eb]]),
+    });
+    expect(pageText(pdf)).toBe("\uF8EB");
+  });
+});
+
+describe("Wingdings 2, Wingdings 3 and Webdings, read through a /ToUnicode CMap", () => {
+  it.each([
+    ["Wingdings2", 0xf050, "\u{1F5F8}"],
+    ["Wingdings3", 0xf0ea, "\u{1F892}"],
+    ["Webdings", 0xf03d, "\u23FA"],
+  ])(
+    "reads /BaseFont %s's private-use code point as the font's own glyph",
+    (baseFont, codePoint, text) => {
+      const pdf = simpleSymbolFontPdf({
+        subtype: "TrueType",
+        baseFont,
+        codes: [0x01],
+        toUnicode: new Map([[0x01, codePoint]]),
+      });
+      expect(pageText(pdf)).toBe(text);
+    },
+  );
+
+  it("reads the same code differently in each font, as each font draws it", () => {
+    expect(withSymbolFontCharacters("wingdings", "\uF050")).toBe("\u{1F3F1}");
+    expect(withSymbolFontCharacters("wingdings2", "\uF050")).toBe("\u{1F5F8}");
+    expect(withSymbolFontCharacters("wingdings2", "\uF06C")).toBe("\u2462");
+  });
+
+  it("leaves a code the source references give no character as it was written", () => {
+    expect(withSymbolFontCharacters("wingdings2", "\uF0FA")).toBe("\uF0FA");
+    expect(withSymbolFontCharacters("wingdings3", "\uF0F1")).toBe("\uF0F1");
+    expect(withSymbolFontCharacters("webdings", "\uF07F")).toBe("\uF07F");
   });
 });
