@@ -1,3 +1,10 @@
+## [12.2.34](https://github.com/ExaDev/documents.js/compare/ooxml.js%4012.2.33...ooxml.js%4012.2.34) (2026-11-07)
+
+### Bug Fixes
+
+* **ooxml.js:** decode numeric character references in typed text ([a63d23d](https://github.com/ExaDev/documents.js/commit/a63d23d159d6215b6d74784b503146fa73b3c207)), references [#38](https://github.com/ExaDev/documents.js/issues/38) [#xE9](https://github.com/ExaDev/documents.js/issues/xE9) [#101](https://github.com/ExaDev/documents.js/issues/101) [#101](https://github.com/ExaDev/documents.js/issues/101)
+* **ooxml.js:** read xlsx rows and cells that omit their r reference ([d00d3ab](https://github.com/ExaDev/documents.js/commit/d00d3ab51529686f4a51f2c9109ca17a9fc11440))
+
 ## [12.2.33](https://github.com/ExaDev/documents.js/compare/ooxml.js%4012.2.32...ooxml.js%4012.2.33) (2026-10-29)
 
 
