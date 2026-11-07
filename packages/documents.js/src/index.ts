@@ -1047,3 +1047,38 @@ export type { MetadataOverrides } from "./metadata/core-patch";
 export type { ClockPort } from "./ports/clock";
 export { fixedClock, systemClock } from "./ports/clock";
 export { throwIfAborted } from "./ports/abort";
+
+// --- Round-trip content verification: a canonical form of an OPC package that ignores lexical difference, a content projection of a docx or xlsx (words, element census, cells, media), and the comparison that tells loss from writer noise. A same-format rewrite is never byte-identical to its original, so equality of hashes cannot show that content survived; these can. See docs/content-projection/README.md. ---
+export type {
+  CanonicalPart,
+  CanonicalizeOptions,
+  OpcCanonicalForm,
+} from "./content-projection/opc-package";
+export { canonicalizeOpcPackage } from "./content-projection/opc-package";
+export type { CanonicalXml } from "./content-projection/xml-canonical";
+export { canonicalizeXml } from "./content-projection/xml-canonical";
+export { XmlDoctypeError, XmlScanError } from "./content-projection/xml-scan";
+export type {
+  ContentProjection,
+  ProjectedCell,
+  ProjectionCategory,
+  ProjectionFormat,
+  ProjectionOptions,
+  SkippedPart,
+} from "./content-projection/projection";
+export { SHARED_FORMULA } from "./content-projection/projection";
+export { projectDocxContent } from "./content-projection/project-docx";
+export { projectXlsxContent } from "./content-projection/project-xlsx";
+export type {
+  CellDelta,
+  Finding,
+  FindingClass,
+  FamilyDelta,
+  MediaDelta,
+  ProjectionComparison,
+  UnitDelta,
+  Verdict,
+} from "./content-projection/compare-projections";
+export { compareProjections } from "./content-projection/compare-projections";
+export type { PartDifferences } from "./content-projection/compare-parts";
+export { comparePartDigests } from "./content-projection/compare-parts";
