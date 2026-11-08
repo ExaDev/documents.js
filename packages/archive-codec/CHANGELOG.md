@@ -1,3 +1,14 @@
+## [1.11.28](https://github.com/ExaDev/documents.js/compare/archive-codec%401.11.27...archive-codec%401.11.28) (2026-11-08)
+
+### Documentation
+
+* name the pnpm version by its source, not its number ([0be21b9](https://github.com/ExaDev/documents.js/commit/0be21b9f6b6a54c7781a8cd6928ce3667d7a5f56))
+
+
+### Dependencies
+
+- Updated document-schema.js to 7.16.3
+
 ## [1.11.27](https://github.com/ExaDev/documents.js/compare/archive-codec%401.11.26...archive-codec%401.11.27) (2026-10-29)
 
 

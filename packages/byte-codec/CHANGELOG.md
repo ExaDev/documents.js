@@ -1,3 +1,9 @@
+## [2.0.3](https://github.com/ExaDev/documents.js/compare/byte-codec%402.0.2...byte-codec%402.0.3) (2026-11-08)
+
+### Documentation
+
+* name the pnpm version by its source, not its number ([0be21b9](https://github.com/ExaDev/documents.js/commit/0be21b9f6b6a54c7781a8cd6928ce3667d7a5f56))
+
 ## [2.0.2](https://github.com/ExaDev/documents.js/compare/byte-codec%402.0.1...byte-codec%402.0.2) (2026-09-25)
 
 ### Bug Fixes

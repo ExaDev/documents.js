@@ -1,3 +1,15 @@
+## [1.0.108](https://github.com/ExaDev/documents.js/compare/pdf-raster-cpu%401.0.107...pdf-raster-cpu%401.0.108) (2026-11-08)
+
+### Documentation
+
+* name the pnpm version by its source, not its number ([0be21b9](https://github.com/ExaDev/documents.js/commit/0be21b9f6b6a54c7781a8cd6928ce3667d7a5f56))
+
+
+### Dependencies
+
+- Updated byte-codec to 2.0.3
+- Updated pdf-codec to 5.8.5
+
 ## [1.0.107](https://github.com/ExaDev/documents.js/compare/pdf-raster-cpu%401.0.106...pdf-raster-cpu%401.0.107) (2026-11-07)
 
 

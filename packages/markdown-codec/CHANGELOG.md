@@ -1,3 +1,15 @@
+## [11.2.2](https://github.com/ExaDev/documents.js/compare/markdown-codec%4011.2.1...markdown-codec%4011.2.2) (2026-11-08)
+
+### Documentation
+
+* name the pnpm version by its source, not its number ([0be21b9](https://github.com/ExaDev/documents.js/commit/0be21b9f6b6a54c7781a8cd6928ce3667d7a5f56))
+
+
+### Dependencies
+
+- Updated byte-codec to 2.0.3
+- Updated document-schema.js to 7.16.3
+
 ## [11.2.1](https://github.com/ExaDev/documents.js/compare/markdown-codec%4011.2.0...markdown-codec%4011.2.1) (2026-10-30)
 
 ### Bug Fixes

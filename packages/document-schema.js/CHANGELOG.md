@@ -1,3 +1,9 @@
+## [7.16.3](https://github.com/ExaDev/documents.js/compare/document-schema.js%407.16.2...document-schema.js%407.16.3) (2026-11-08)
+
+### Documentation
+
+* name the pnpm version by its source, not its number ([0be21b9](https://github.com/ExaDev/documents.js/commit/0be21b9f6b6a54c7781a8cd6928ce3667d7a5f56))
+
 ## [7.16.2](https://github.com/ExaDev/documents.js/compare/document-schema.js%407.16.1...document-schema.js%407.16.2) (2026-10-29)
 
 ### Performance Improvements

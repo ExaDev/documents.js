@@ -1,3 +1,9 @@
+## [1.2.11](https://github.com/ExaDev/documents.js/compare/excel-number-format%401.2.10...excel-number-format%401.2.11) (2026-11-08)
+
+### Documentation
+
+* name the pnpm version by its source, not its number ([0be21b9](https://github.com/ExaDev/documents.js/commit/0be21b9f6b6a54c7781a8cd6928ce3667d7a5f56))
+
 ## [1.2.10](https://github.com/ExaDev/documents.js/compare/excel-number-format%401.2.9...excel-number-format%401.2.10) (2026-09-25)
 
 ### Miscellaneous Chores

@@ -1,3 +1,18 @@
+## [4.14.227](https://github.com/ExaDev/documents.js/compare/document-mcp%404.14.226...document-mcp%404.14.227) (2026-11-08)
+
+### Documentation
+
+* name the pnpm version by its source, not its number ([0be21b9](https://github.com/ExaDev/documents.js/commit/0be21b9f6b6a54c7781a8cd6928ce3667d7a5f56))
+
+
+### Dependencies
+
+- Updated document-schema.js to 7.16.3
+- Updated odf.js to 11.2.4
+- Updated wpd-codec to 5.1.24
+- Updated documents.js to 14.11.1
+- Updated document-operations to 1.1.222
+
 ## [4.14.226](https://github.com/ExaDev/documents.js/compare/document-mcp%404.14.225...document-mcp%404.14.226) (2026-11-07)
 
 

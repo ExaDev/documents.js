@@ -1,3 +1,16 @@
+## [6.1.25](https://github.com/ExaDev/documents.js/compare/doc-codec%406.1.24...doc-codec%406.1.25) (2026-11-08)
+
+### Documentation
+
+* name the pnpm version by its source, not its number ([0be21b9](https://github.com/ExaDev/documents.js/commit/0be21b9f6b6a54c7781a8cd6928ce3667d7a5f56))
+
+
+### Dependencies
+
+- Updated byte-codec to 2.0.3
+- Updated document-schema.js to 7.16.3
+- Updated archive-codec to 1.11.28
+
 ## [6.1.24](https://github.com/ExaDev/documents.js/compare/doc-codec%406.1.23...doc-codec%406.1.24) (2026-10-29)
 
 

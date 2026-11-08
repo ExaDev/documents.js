@@ -1,3 +1,16 @@
+## [1.4.225](https://github.com/ExaDev/documents.js/compare/document-rest%401.4.224...document-rest%401.4.225) (2026-11-08)
+
+### Documentation
+
+* name the pnpm version by its source, not its number ([0be21b9](https://github.com/ExaDev/documents.js/commit/0be21b9f6b6a54c7781a8cd6928ce3667d7a5f56))
+
+
+### Dependencies
+
+- Updated odf.js to 11.2.4
+- Updated documents.js to 14.11.1
+- Updated document-operations to 1.1.222
+
 ## [1.4.224](https://github.com/ExaDev/documents.js/compare/document-rest%401.4.223...document-rest%401.4.224) (2026-11-07)
 
 
