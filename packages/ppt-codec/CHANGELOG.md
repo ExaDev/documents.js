@@ -1,3 +1,16 @@
+## [2.2.25](https://github.com/ExaDev/documents.js/compare/ppt-codec%402.2.24...ppt-codec%402.2.25) (2026-11-08)
+
+### Documentation
+
+* name the pnpm version by its source, not its number ([0be21b9](https://github.com/ExaDev/documents.js/commit/0be21b9f6b6a54c7781a8cd6928ce3667d7a5f56))
+
+
+### Dependencies
+
+- Updated byte-codec to 2.0.3
+- Updated document-schema.js to 7.16.3
+- Updated archive-codec to 1.11.28
+
 ## [2.2.24](https://github.com/ExaDev/documents.js/compare/ppt-codec%402.2.23...ppt-codec%402.2.24) (2026-10-29)
 
 

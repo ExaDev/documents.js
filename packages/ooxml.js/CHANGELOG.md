@@ -1,3 +1,17 @@
+## [12.2.36](https://github.com/ExaDev/documents.js/compare/ooxml.js%4012.2.35...ooxml.js%4012.2.36) (2026-11-08)
+
+### Documentation
+
+* name the pnpm version by its source, not its number ([0be21b9](https://github.com/ExaDev/documents.js/commit/0be21b9f6b6a54c7781a8cd6928ce3667d7a5f56))
+
+
+### Dependencies
+
+- Updated byte-codec to 2.0.3
+- Updated document-schema.js to 7.16.3
+- Updated excel-number-format to 1.2.11
+- Updated archive-codec to 1.11.28
+
 ## [12.2.35](https://github.com/ExaDev/documents.js/compare/ooxml.js%4012.2.34...ooxml.js%4012.2.35) (2026-11-07)
 
 ### Bug Fixes

@@ -1,3 +1,16 @@
+## [1.6.169](https://github.com/ExaDev/documents.js/compare/document-compute.js%401.6.168...document-compute.js%401.6.169) (2026-11-08)
+
+### Documentation
+
+* name the pnpm version by its source, not its number ([0be21b9](https://github.com/ExaDev/documents.js/commit/0be21b9f6b6a54c7781a8cd6928ce3667d7a5f56))
+
+
+### Dependencies
+
+- Updated document-schema.js to 7.16.3
+- Updated markdown-codec to 11.2.2
+- Updated documents.js to 14.11.1
+
 ## [1.6.168](https://github.com/ExaDev/documents.js/compare/document-compute.js%401.6.167...document-compute.js%401.6.168) (2026-11-07)
 
 
