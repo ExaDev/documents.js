@@ -1,3 +1,10 @@
+## [14.11.2](https://github.com/ExaDev/documents.js/compare/documents.js%4014.11.1...documents.js%4014.11.2) (2026-11-10)
+
+### Bug Fixes
+
+* **documents.js:** read a page drawing thousands of strokes on one axis as having no lattice ([5d370c8](https://github.com/ExaDev/documents.js/commit/5d370c8c9e7d1f1198b0b1d872927f8e9704eae3))
+* **documents.js:** read every ruled table a page draws, and a border drawn in pieces as one border ([969abc1](https://github.com/ExaDev/documents.js/commit/969abc159427a3df0666b8d7ef421a3a4d821e18))
+
 ## [14.11.1](https://github.com/ExaDev/documents.js/compare/documents.js%4014.11.0...documents.js%4014.11.1) (2026-11-08)
 
 
