@@ -89,19 +89,19 @@
   "dependencies": {
     "document-operations": "1.1.224",
     "documents.js": "14.11.3",
-    "zod": "4.4.3"
+    "zod": "4.6.7"
   },
   "devDependencies": {
     "@arethetypeswrong/cli": "0.18.5",
-    "@types/node": "26.2.0",
+    "@types/node": "26.6.6",
     "@vitest/coverage-v8": "4.1.11",
-    "eslint": "10.8.1",
+    "eslint": "10.14.0",
     "husky": "9.1.7",
     "odf.js": "11.2.5",
-    "publint": "0.3.22",
+    "publint": "0.3.25",
     "semantic-release": "25.0.9",
-    "tsdown": "0.22.14",
-    "turbo": "2.10.8",
+    "tsdown": "0.23.5",
+    "turbo": "2.11.10",
     "typescript": "6.0.3",
     "vitest": "4.1.11"
   }
