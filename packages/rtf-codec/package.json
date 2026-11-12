@@ -85,7 +85,7 @@
     "archive-codec": "1.11.28",
     "byte-codec": "2.0.3",
     "document-schema.js": "7.16.3",
-    "zod": "4.4.3"
+    "zod": "4.6.6"
   },
   "devDependencies": {
     "@arethetypeswrong/cli": "0.18.5",
