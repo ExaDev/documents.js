@@ -1,3 +1,9 @@
+## [12.2.37](https://github.com/ExaDev/documents.js/compare/ooxml.js%4012.2.36...ooxml.js%4012.2.37) (2026-11-12)
+
+### Build System
+
+* **deps:** bump fast-xml-parser from 5.10.1 to 5.12.0 ([dcb6320](https://github.com/ExaDev/documents.js/commit/dcb632050f2e787fe0e8c910a555982d8444ad02))
+
 ## [12.2.36](https://github.com/ExaDev/documents.js/compare/ooxml.js%4012.2.35...ooxml.js%4012.2.36) (2026-11-08)
 
 ### Documentation
