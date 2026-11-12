@@ -1,3 +1,9 @@
+## [5.1.19](https://github.com/ExaDev/documents.js/compare/epub-codec%405.1.18...epub-codec%405.1.19) (2026-11-12)
+
+### Build System
+
+* **deps:** bump fast-xml-parser from 5.10.1 to 5.12.0 ([dcb6320](https://github.com/ExaDev/documents.js/commit/dcb632050f2e787fe0e8c910a555982d8444ad02))
+
 ## [5.1.18](https://github.com/ExaDev/documents.js/compare/epub-codec%405.1.17...epub-codec%405.1.18) (2026-11-08)
 
 ### Documentation

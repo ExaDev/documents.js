@@ -1,3 +1,9 @@
+## [11.2.5](https://github.com/ExaDev/documents.js/compare/odf.js%4011.2.4...odf.js%4011.2.5) (2026-11-12)
+
+### Build System
+
+* **deps:** bump fast-xml-parser from 5.10.1 to 5.12.0 ([dcb6320](https://github.com/ExaDev/documents.js/commit/dcb632050f2e787fe0e8c910a555982d8444ad02))
+
 ## [11.2.4](https://github.com/ExaDev/documents.js/compare/odf.js%4011.2.3...odf.js%4011.2.4) (2026-11-08)
 
 ### Documentation
