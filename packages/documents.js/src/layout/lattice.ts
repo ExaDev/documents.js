@@ -237,6 +237,51 @@ function hasClosedOuterRectangle(
   );
 }
 
+interface ClosedGrid {
+  readonly rowLines: readonly AxisLine[];
+  readonly columnLines: readonly AxisLine[];
+}
+
+/**
+ * The closed grid a cluster of boundaries draws: the cluster itself when its outer rectangle closes, else the grid without its top or its bottom row boundary, or both, when that one closes, or undefined.
+ *
+ * A table breaking across pages leaves a row open at the page's edge: its last row at the foot of a page is closed by a rule drawn under some of its columns or none, the side borders running down to it, and its first row at the head of the next is opened the same way. Joined to the borders as one boundary (`segmentsTouchCollinearly`), that open row would otherwise leave the whole table unclosed and read as prose, every row of it. So an outer row boundary that does not span the grid is taken off, once at the top and once at the bottom, and the grid tested again; nothing else is, so a grid with a gap in a side border, or a drawing whose strokes close no rectangle, stays unclosed.
+ * @param rowLines - the cluster's row boundaries, top first
+ * @param columnLines - the cluster's column boundaries, left first
+ * @returns the boundaries of the closed grid, or undefined
+ */
+function closedGrid(
+  rowLines: readonly AxisLine[],
+  columnLines: readonly AxisLine[],
+): ClosedGrid | undefined {
+  if (columnLines.length < MIN_GRIDLINE_COUNT_PER_AXIS) {
+    return undefined;
+  }
+  const leftXPt = columnLines[0]!.position;
+  const rightXPt = columnLines[columnLines.length - 1]!.position;
+  const spans = (line: AxisLine): boolean =>
+    unionCoverageRatio(line.ranges, leftXPt, rightXPt) >= EDGE_COVERAGE_RATIO;
+  const openTop = rowLines[0] !== undefined && !spans(rowLines[0]);
+  const openBottom =
+    rowLines[rowLines.length - 1] !== undefined &&
+    !spans(rowLines[rowLines.length - 1]!);
+  const candidates = [
+    rowLines,
+    ...(openTop ? [rowLines.slice(1)] : []),
+    ...(openBottom ? [rowLines.slice(0, -1)] : []),
+    ...(openTop && openBottom ? [rowLines.slice(1, -1)] : []),
+  ];
+  for (const rows of candidates) {
+    if (
+      rows.length >= MIN_GRIDLINE_COUNT_PER_AXIS &&
+      hasClosedOuterRectangle(rows, columnLines)
+    ) {
+      return { rowLines: rows, columnLines };
+    }
+  }
+  return undefined;
+}
+
 // A rectangular region of the atomic grid (the finest grid the detected boundaries admit) that drawn strokes never actually divided — one real ContentTableCell, spanning more than one atomic row/column exactly when colSpan/rowSpan would (see reconstruct.ts's own recoverTable, which anchors one real cell at [rowStart, colStart] and a rowSpan continuation placeholder at the same column position in every row up to rowEnd, matching how ooxml.js's own docx/pptx table writers already expect a ContentTable to be shaped).
 export interface TableRegion {
   readonly rowStart: number;
@@ -488,17 +533,14 @@ function latticeCandidates(items: readonly LayoutItem[]): LatticeCandidate[] {
   for (const cluster of clusterSegments(horizontal, vertical)) {
     const clusterHorizontal = cluster.filter((s) => s.axis === "horizontal");
     const clusterVertical = cluster.filter((s) => s.axis === "vertical");
-    const rowLines = dedupeAxisLines(clusterHorizontal, true);
-    const columnLines = dedupeAxisLines(clusterVertical, false);
-    if (
-      rowLines.length < MIN_GRIDLINE_COUNT_PER_AXIS ||
-      columnLines.length < MIN_GRIDLINE_COUNT_PER_AXIS
-    ) {
+    const grid = closedGrid(
+      dedupeAxisLines(clusterHorizontal, true),
+      dedupeAxisLines(clusterVertical, false),
+    );
+    if (grid === undefined) {
       continue;
     }
-    if (!hasClosedOuterRectangle(rowLines, columnLines)) {
-      continue;
-    }
+    const { rowLines, columnLines } = grid;
     const regions = findCellRegions(rowLines, columnLines);
     if (regions === undefined) {
       continue;
