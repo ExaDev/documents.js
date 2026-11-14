@@ -20,7 +20,7 @@ const { readCmapSubtables } = await load('cmap-table');
 const { parseHmtx } = await load('hmtx-table');
 const { parseHead, parseName } = await load('font-tables');
 
-// The faces producers commonly embed as composite subsets that keep the face's own glyph numbering while dropping 'cmap' and 'post'. A reader applies a face's order to a glyph only where the embedded program's advance width for that glyph equals the one recorded here (see src/core-font-glyph-orders.ts).
+// The faces producers commonly embed as composite subsets that keep the face's own glyph numbering while dropping 'cmap' and 'post', or convert to CFF subsets naming each glyph by its id in the face (Century Schoolbook, the face of many standards documents distilled from Word). A reader applies a face's order to a glyph only where the embedded program's advance width for that glyph equals the one recorded here (see src/core-font-glyph-orders.ts).
 const FACES = [
   'ArialMT',
   'Arial-BoldMT',
@@ -34,6 +34,10 @@ const FACES = [
   'CourierNewPS-BoldMT',
   'CourierNewPS-ItalicMT',
   'CourierNewPS-BoldItalicMT',
+  'CenturySchoolbook',
+  'CenturySchoolbook-Bold',
+  'CenturySchoolbook-Italic',
+  'CenturySchoolbook-BoldItalic',
 ];
 
 const directories = process.argv.slice(2);
