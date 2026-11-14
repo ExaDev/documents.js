@@ -453,16 +453,26 @@ function buildSimpleFont(fontDict: PdfDict, context: FontReadContext): PdfFont {
     return undefined;
   };
 
+  // The glyph a code selects, by name, in a font whose subset has a verified table: the name /Differences gives the code, else the name the named base encoding gives it, else, where the dictionary names no base encoding, the name the embedded program's own built-in encoding gives it, which is then the base encoding (ISO 32000-1 9.6.6.1). Asked only once the table exists, so no other font opens its program for this.
+  const verifiedTextOf = (code: number): string | undefined => {
+    const table = verifiedGlyphs();
+    if (table === undefined) {
+      return undefined;
+    }
+    const glyphName =
+      differencesMap.get(code) ??
+      (namedBaseGlyphName === undefined
+        ? programEncoding()?.codeToGlyphName(code)
+        : namedBaseGlyphName(code));
+    return glyphName === undefined ? undefined : table.glyphs.get(glyphName);
+  };
+
   const decodeToUnicode = (codes: Uint8Array<ArrayBuffer>): string => {
     let out = "";
     let unmapped = 0;
     for (const code of codes) {
-      // A glyph of a subset checked against its outlines is read as what it draws, by the name /Differences, or else the named base encoding, gives its code, before the font dictionary's own tables, which that subset's producer wrote wrong.
-      const glyphName = differencesMap.get(code) ?? namedBaseGlyphName?.(code);
-      const verified =
-        glyphName === undefined
-          ? undefined
-          : verifiedGlyphs()?.glyphs.get(glyphName);
+      // A glyph of a subset checked against its outlines is read as what it draws, before the font dictionary's own tables, which that subset's producer wrote wrong.
+      const verified = verifiedTextOf(code);
       if (verified !== undefined) {
         out += verified;
         continue;

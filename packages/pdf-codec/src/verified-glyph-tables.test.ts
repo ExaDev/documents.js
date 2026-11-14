@@ -13,6 +13,7 @@ import {
   pdfRef,
   pdfStream,
 } from "./objects";
+import { cffFontWithBuiltinEncoding } from "./test-support/cff";
 import {
   VERIFIED_GLYPH_FAMILIES,
   VERIFIED_SOURCES,
@@ -160,6 +161,78 @@ describe("a font subset with a verified glyph table", () => {
     expect(
       verifiedGlyphTableFor("Arial", CHECKED_PROGRAM, CHECKED_TABLES),
     ).toBe(undefined);
+  });
+});
+
+describe("a verified subset whose font dictionary names no encoding", () => {
+  // The math italic subset's shape: the program's own encoding puts its glyphs `colon` and `semicolon` at 0x3A and 0x3B, where they draw a full stop and a comma, the font dictionary carries no /Encoding, and /ToUnicode reads each code as the character the glyph's name spells.
+  const MATH_ITALIC = cffFontWithBuiltinEncoding({
+    name: "ABCDEF+AdvP4C4E51",
+    glyphNames: ["colon", "semicolon"],
+    encoding: new Map([
+      [0x3a, 1],
+      [0x3b, 2],
+    ]),
+  });
+  const COLON_AND_SEMICOLON = [0x3a, 0x3b];
+
+  function readThroughBuiltinEncoding(
+    tables: ReadonlyMap<string, VerifiedGlyphTableSource>,
+  ): string | undefined {
+    const objects = new Map<number, PdfObject>([
+      [
+        9,
+        pdfStream(
+          pdfDict({}),
+          new TextEncoder().encode(
+            "beginbfchar\n<3A> <003A>\n<3B> <003B>\nendbfchar",
+          ),
+        ),
+      ],
+      [
+        10,
+        pdfDict({
+          Type: pdfName("FontDescriptor"),
+          FontName: pdfName("ABCDEF+AdvP4C4E51"),
+          Flags: pdfNum(4),
+          FontFile3: pdfRef(11, 0),
+        }),
+      ],
+      [11, pdfStream(pdfDict({ Subtype: pdfName("Type1C") }), MATH_ITALIC)],
+    ]);
+    const fontDict = pdfDict({
+      Type: pdfName("Font"),
+      Subtype: pdfName("Type1"),
+      BaseFont: pdfName("ABCDEF+AdvP4C4E51"),
+      FirstChar: pdfNum(0x3a),
+      LastChar: pdfNum(0x3b),
+      Widths: pdfArray([pdfNum(278), pdfNum(278)]),
+      FontDescriptor: pdfRef(10, 0),
+      ToUnicode: pdfRef(9, 0),
+    });
+    const { resolve } = createFontResolver({
+      resolver: makeResolver(objects),
+      sink: NO_DIAGNOSTICS,
+      verifiedGlyphTables: tables,
+    });
+    return resolve(
+      "F1",
+      pdfDict({ Font: pdfDict({ F1: fontDict }) }),
+    )?.decodeToUnicode(new Uint8Array(COLON_AND_SEMICOLON));
+  }
+
+  it("selects the glyph by the name the program's own encoding gives the code", () => {
+    const tables = new Map([
+      [
+        sha256Of(MATH_ITALIC),
+        { family: "AdvP4C4E51", glyphs: { colon: ".", semicolon: "," } },
+      ],
+    ]);
+    expect(readThroughBuiltinEncoding(tables)).toBe(".,");
+  });
+
+  it("reads the same program through /ToUnicode when no table lists it", () => {
+    expect(readThroughBuiltinEncoding(new Map())).toBe(":;");
   });
 });
 
