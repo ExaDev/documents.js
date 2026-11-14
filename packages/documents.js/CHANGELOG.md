@@ -1,3 +1,14 @@
+## [14.11.4](https://github.com/ExaDev/documents.js/compare/documents.js%4014.11.3...documents.js%4014.11.4) (2026-11-14)
+
+### Bug Fixes
+
+* **documents.js:** read a ruled table whose row is left open at a page break ([8e61479](https://github.com/ExaDev/documents.js/commit/8e61479be0b60df7ad05e06dffcc98ad0db332ce))
+
+
+### Dependencies
+
+- Updated pdf-codec to 5.8.6
+
 ## [14.11.3](https://github.com/ExaDev/documents.js/compare/documents.js%4014.11.2...documents.js%4014.11.3) (2026-11-12)
 
 
