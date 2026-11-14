@@ -99,6 +99,75 @@ describe("detectGridLattices: a boundary drawn in pieces", () => {
   });
 });
 
+describe("detectGridLattices: a table continuing onto the next page", () => {
+  // Three rows by three columns drawn cell by cell, the side borders one piece per row. The table's next row starts at the foot of the page: its first cell's top is the grid's bottom rule, its left border runs on below the grid as one more piece, and a rule under that first cell alone closes it there.
+  const table: LayoutItem[] = [100, 70, 40, 10].flatMap((y) => [
+    line(0, y, 100, y),
+    line(100, y, 200, y),
+    line(200, y, 300, y),
+  ]);
+  for (const x of [0, 100, 200, 300]) {
+    for (const [low, high] of [
+      [70, 100],
+      [40, 70],
+      [10, 40],
+    ] as const) {
+      table.push(line(x, low, x, high));
+    }
+  }
+  const stub = [line(0, -5, 0, 10), line(0, -5, 100, -5)];
+
+  it("reads the grid the table closes, leaving out the stub under one cell", () => {
+    const [lattice] = detectGridLattices([...table, ...stub]);
+
+    expect(lattice?.rowBoundariesDescPt).toEqual([100, 70, 40, 10]);
+    expect(lattice?.columnBoundariesAscPt).toEqual([0, 100, 200, 300]);
+  });
+
+  it("reads the stub's rule as no boundary of the table", () => {
+    const [lattice] = detectGridLattices([...table, ...stub]);
+
+    expect(lattice?.sourceItems.has(stub[1]!)).toBe(false);
+  });
+
+  it("reads the grid above an open last row whose rule is drawn under its last cell alone", () => {
+    // Every border runs on down to the foot of the page and a rule closes only the last column there, as a table whose last column ends on this page and whose other cells continue on the next.
+    const open = [
+      line(0, -5, 0, 10),
+      line(100, -5, 100, 10),
+      line(200, -5, 200, 10),
+      line(300, -5, 300, 10),
+      line(200, -5, 300, -5),
+    ];
+
+    const [lattice] = detectGridLattices([...table, ...open]);
+
+    expect(lattice?.rowBoundariesDescPt).toEqual([100, 70, 40, 10]);
+    expect(lattice?.columnBoundariesAscPt).toEqual([0, 100, 200, 300]);
+  });
+
+  it("reads the grid below a first row the previous page opened, its rule drawn over one cell alone", () => {
+    const opened = [
+      line(0, 100, 0, 115),
+      line(200, 100, 200, 115),
+      line(0, 115, 100, 115),
+    ];
+
+    const [lattice] = detectGridLattices([...table, ...opened]);
+
+    expect(lattice?.rowBoundariesDescPt).toEqual([100, 70, 40, 10]);
+  });
+
+  it("takes off no column boundary, so a side border that stops short leaves the grid unclosed", () => {
+    const shortRight = table.filter(
+      (item) =>
+        !(item.kind === "line" && item.x1Pt === 300 && item.y1Pt === 10),
+    );
+
+    expect(detectGridLattices(shortRight)).toHaveLength(0);
+  });
+});
+
 describe("a page drawing more strokes on one axis than clustering reads", () => {
   it("is read as having no lattice, rather than spending a pair test on every pair of its strokes", () => {
     const grid: LayoutItem[] = [
