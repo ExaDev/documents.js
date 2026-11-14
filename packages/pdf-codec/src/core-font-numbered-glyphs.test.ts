@@ -32,6 +32,8 @@ describe("coreFaceNameOfFontName", () => {
     ["EBLKKG+Arial086.75", "ArialMT"],
     ["ArialMT", "ArialMT"],
     ["CourierNewPS-BoldItalicMT", "CourierNewPS-BoldItalicMT"],
+    ["LHMEIK+CenturySchoolbook-Bold", "CenturySchoolbook-Bold"],
+    ["CenturySchoolbook,Italic", "CenturySchoolbook-Italic"],
   ])("reads %s as %s", (fontName, face) => {
     expect(coreFaceNameOfFontName(fontName)).toBe(face);
   });
@@ -114,6 +116,62 @@ describe("a CFF subset that numbers its glyphs after a core face", () => {
     // Codes 4, 5, 6 and 7 are G36 (A), G72 (e), G82 (o) and G85 (r).
     expect(font?.decodeToUnicode(new Uint8Array([4, 5, 6, 7, 1, 2]))).toBe(
       "Aeor 1",
+    );
+  });
+});
+
+describe("a CFF subset Acrobat Distiller numbers after Century Schoolbook", () => {
+  // Distiller names each glyph g<glyph id in the face>, lower case. The glyphs of a made-up line in Century Schoolbook Bold, with the widths the face gives them: B, R, I, D, G, E, the space, T and S.
+  const DISTILLED = [
+    { name: "g37", width: 778 },
+    { name: "g53", width: 815 },
+    { name: "g44", width: 444 },
+    { name: "g39", width: 833 },
+    { name: "g42", width: 833 },
+    { name: "g40", width: 759 },
+    { name: "g3", width: 287 },
+    { name: "g55", width: 722 },
+    { name: "g54", width: 667 },
+  ] as const;
+
+  function read(
+    baseFont: string,
+    codes: readonly number[],
+  ): string | undefined {
+    const fontDict = pdfDict({
+      Type: pdfName("Font"),
+      Subtype: pdfName("Type1"),
+      BaseFont: pdfName(baseFont),
+      FirstChar: pdfNum(1),
+      LastChar: pdfNum(DISTILLED.length),
+      Widths: pdfArray(DISTILLED.map(({ width }) => pdfNum(width))),
+      Encoding: pdfDict({
+        Differences: pdfArray([
+          pdfNum(1),
+          ...DISTILLED.map(({ name }) => pdfName(name)),
+        ]),
+      }),
+    });
+    const { resolve } = createFontResolver({
+      resolver: makeResolver(new Map()),
+      sink: NO_DIAGNOSTICS,
+    });
+    return resolve(
+      "F1",
+      pdfDict({ Font: pdfDict({ F1: fontDict }) }),
+    )?.decodeToUnicode(new Uint8Array(codes));
+  }
+
+  // Codes 1 to 9 are the glyphs in the order above.
+  const LINE = [1, 2, 3, 4, 5, 6, 7, 8, 6, 9, 8];
+
+  it("is read through the face's glyph order", () => {
+    expect(read("LHMEIK+CenturySchoolbook-Bold", LINE)).toBe("BRIDGE TEST");
+  });
+
+  it("is refused under another face's name, whose advances disagree", () => {
+    expect(read("LHMEIK+CenturySchoolbook-Italic", LINE)).toBe(
+      "\uFFFD".repeat(LINE.length),
     );
   });
 });

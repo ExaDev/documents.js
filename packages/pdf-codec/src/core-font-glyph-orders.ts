@@ -2,7 +2,7 @@ import { inflateSync } from "fflate";
 import { base64ToBytes } from "byte-codec";
 import { CORE_FONT_GLYPH_ORDERS_DEFLATED_BASE64 } from "./glyph-data/core-font-glyph-orders";
 
-// The glyph order of the core faces producers most often embed (the Arial, Times New Roman and Courier New families), for a program that keeps a face's own glyph numbering but carries nothing that says what any glyph draws: no 'cmap', no glyph names. A composite font's CIDs then address glyphs whose characters only the face's published order states, and readers such as Acrobat carry the same knowledge for the same reason.
+// The glyph order of the core faces producers most often embed (the Arial, Times New Roman and Courier New families, and Century Schoolbook), for a program that keeps a face's own glyph numbering but carries nothing that says what any glyph draws: no 'cmap', no glyph names. A composite font's CIDs then address glyphs whose characters only the face's published order states, and readers such as Acrobat carry the same knowledge for the same reason.
 //
 // Knowing the order by the face's name alone would be a guess the first time a subsetter renumbered the glyphs, a producer embedded another face under that name, or a release of the face moved one glyph. So each glyph is accepted only where the program's own advance width for it equals the face's (in the same units per em), which every one of those cases breaks: a renumbered or foreign program puts other widths at those glyph ids, and a glyph a release redrew to a different width stops matching. Compared across two releases of each of these faces, a few glyph ids per face changed advance width and every other glyph kept both its id and its width, so the check refuses those few and costs nothing else.
 //
@@ -114,6 +114,10 @@ const CORE_FACE_BY_SPELLING: ReadonlyMap<string, string> = new Map([
   ["couriernewpsitalicmt", "CourierNewPS-ItalicMT"],
   ["couriernewbolditalic", "CourierNewPS-BoldItalicMT"],
   ["couriernewpsbolditalicmt", "CourierNewPS-BoldItalicMT"],
+  ["centuryschoolbook", "CenturySchoolbook"],
+  ["centuryschoolbookbold", "CenturySchoolbook-Bold"],
+  ["centuryschoolbookitalic", "CenturySchoolbook-Italic"],
+  ["centuryschoolbookbolditalic", "CenturySchoolbook-BoldItalic"],
 ]);
 
 const ZERO_CODE = 48; // "0"
@@ -166,8 +170,8 @@ export function coreFaceNameOfFontName(fontName: string): string | undefined {
   return CORE_FACE_BY_SPELLING.get(spelled);
 }
 
-// Adobe Acrobat's optimiser converts a TrueType face to a CFF subset and names each glyph G followed by its glyph id in the face: G36 is the glyph the face numbers 36.
-const NUMBERED_GLYPH_NAME = /^G(\d+)$/u;
+// Adobe Acrobat's optimiser converts a TrueType face to a CFF subset and names each glyph G followed by its glyph id in the face: G36 is the glyph the face numbers 36. Acrobat Distiller does the same with a lower-case g (g36).
+const NUMBERED_GLYPH_NAME = /^[Gg](\d+)$/u;
 
 // How far, in thousandths of an em, a font dictionary's width for a glyph may be from the face's advance for it and still agree: the dictionary's widths are the converted program's, which this producer rounds and hints, and measured against the face they differ by up to 22 (a 489 for a 500, a 507 for a 500); two core faces differ by far more on most letters (a capital G is 722 in Times New Roman and 778 in Arial).
 const WIDTH_AGREEMENT_TOLERANCE = 25;
@@ -177,7 +181,7 @@ const MIN_AGREEING_SHARE = 0.9;
 const MIN_NUMBERED_GLYPHS = 5;
 
 /**
- * What a core face draws at the glyphs of a CFF subset that names each `G<id>`, accepted for the whole font only when the font dictionary's widths agree with the face's advances over at least `MIN_NUMBERED_GLYPHS` glyphs and `MIN_AGREEING_SHARE` of them, so a subset of any other face, or of another release of this one, is read as before.
+ * What a core face draws at the glyphs of a CFF subset that names each `G<id>` or `g<id>`, accepted for the whole font only when the font dictionary's widths agree with the face's advances over at least `MIN_NUMBERED_GLYPHS` glyphs and `MIN_AGREEING_SHARE` of them, so a subset of any other face, or of another release of this one, is read as before.
  * @param fontName - The font's `/BaseFont`.
  * @param glyphs - Each glyph of the font a `/Differences` array names, with the width, in thousandths of an em, the dictionary gives its code.
  * @returns The character each numbered glyph name draws, or `undefined` when the font is not taken for a core face.
