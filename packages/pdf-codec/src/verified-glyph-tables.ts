@@ -269,6 +269,19 @@ export const VERIFIED_SOURCES: ReadonlyMap<string, VerifiedGlyphTableSource> =
       },
     ],
     [
+      "78448cb71772342dba968e5467a55b5df184815aabe509ccf2f4ec7b923aebe4",
+      {
+        family: "AdvP4C4E51",
+        glyphs: {
+          colon: ".",
+          equal: "/",
+          greater: ">",
+          less: "<",
+          semicolon: ",",
+        },
+      },
+    ],
+    [
       "967c167a737966cddc29a62e6f0601efc797d1f9453d0f3df558306b2d8b91e2",
       {
         family: "AdvP4C4E59",

@@ -43,6 +43,8 @@ export interface BuiltinEncoding {
   glyphIdToUnicode: (glyphId: number) => string | undefined;
   // The glyph the program itself names `name`, through its 'post' table or CFF charset: how a /Differences name the Adobe Glyph List does not know (a subsetter's "g27") still reaches a glyph whose identity the program can state another way.
   glyphIdOfName: (name: string) => number | undefined;
+  // The program's own name for the glyph its built-in encoding draws at a code: the name a CFF or Type 1 encoding states for the code, or the charset's or 'post' table's name for the glyph the code reaches. How a font dictionary that names no encoding of its own still selects a glyph by name.
+  codeToGlyphName: (code: number) => string | undefined;
 }
 
 // The private-use planes, which name no character: reversing a Unicode subtable that maps only these (what a symbol font's own (3, 1) subtable usually is) yields a code point that identifies the glyph within that one font and nothing beyond it, so it is treated as no answer rather than a wrong one.
@@ -109,6 +111,14 @@ function encodingFromSources(
         codeToUnicode: codeUnicode,
         glyphIdToUnicode: glyphUnicode,
         glyphIdOfName: (name) => nameToGlyphId?.(name),
+        codeToGlyphName: (code) => {
+          const name = codeToName?.(code);
+          if (name !== undefined) {
+            return name;
+          }
+          const glyphId = codeToGlyphId?.(code);
+          return glyphId === undefined ? undefined : glyphIdToName?.(glyphId);
+        },
       }
     : undefined;
 }
