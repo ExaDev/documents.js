@@ -1,3 +1,10 @@
+## [5.8.6](https://github.com/ExaDev/documents.js/compare/pdf-codec%405.8.5...pdf-codec%405.8.6) (2026-11-14)
+
+### Bug Fixes
+
+* **pdf-codec:** read a Century Schoolbook subset Distiller numbers g<id> ([c1efae3](https://github.com/ExaDev/documents.js/commit/c1efae3df23ef9ea8fa4da57f1ba483460f5619b))
+* **pdf-codec:** read a verified subset whose font dictionary names no encoding ([fe1e828](https://github.com/ExaDev/documents.js/commit/fe1e8288853b1299455010f1df321b740db3e1f6))
+
 ## [5.8.5](https://github.com/ExaDev/documents.js/compare/pdf-codec%405.8.4...pdf-codec%405.8.5) (2026-11-08)
 
 ### Documentation
