@@ -34,6 +34,8 @@ const METADATA_SURFACES: Required<ReadPdfSurfaces> = {
 
 export interface ReadDocumentMetadataOptions {
   readonly signal?: AbortSignal;
+  // The decode budget for a pdf source, as UnifiedConversionOptions.maxDecodedBytes describes it; consulted only for a pdf source.
+  readonly maxDecodedBytes?: number;
 }
 
 // Pulls a LayoutMetadata out of any DocumentFormat's bytes. Both dispatch halves already carry each format's own cancellation policy (a one-time throwIfAborted for the synchronous single-pass readers, straight signal-forwarding for pdf, matching odtToDocx's own reasoning in convert.ts for the identical shape of read).
@@ -48,6 +50,7 @@ export function readDocumentMetadata(
       signal: options?.signal,
       pages: [],
       surfaces: METADATA_SURFACES,
+      maxDecodedBytes: options?.maxDecodedBytes,
     }).metadata;
   }
   return CONTENT_READERS[format](bytes, { signal: options?.signal }).metadata;
@@ -67,6 +70,10 @@ export interface ReadNativeDocumentTreeOptions {
    * The document-level surfaces of a pdf source to read, exactly as UnifiedConversionOptions.surfaces describes them: one boolean per surface, each read unless set to `false`, independent of `pages`. Consulted only for a pdf source. A skipped surface is absent from the read, so the tree carries nothing built from it (see UnifiedConversionOptions.surfaces for exactly what: `outline-N` entries in `destinations`, destinations and internal link constructs, form `contentControl` constructs, the layers table, structure entries in `definitions`, residue, images), and reconstruction loses what it took from it: without `structure` a tagged PDF's headings, table cells and divisions are inferred from geometry, and without `layers` hidden-layer content is kept as if visible.
    */
   readonly surfaces?: ReadPdfSurfaces;
+  /**
+   * The decode budget for a pdf source, exactly as UnifiedConversionOptions.maxDecodedBytes describes it: the first decode that would pass it throws `PdfDecodeBudgetError`. Consulted only for a pdf source.
+   */
+  readonly maxDecodedBytes?: number;
 }
 
 // readContentDocument's own options are the identical shape — one options type for both, so a caller forwarding {signal, images, sink} through either entry point never needs to know which fields the OTHER one ignores.
@@ -84,6 +91,7 @@ function readNativeContent(
       sink: options?.sink,
       pages: options?.pages,
       surfaces: options?.surfaces,
+      maxDecodedBytes: options?.maxDecodedBytes,
     });
     const content = reconstructWordprocessing(layout, {
       signal: options?.signal,
@@ -142,6 +150,10 @@ export interface PdfToDocumentOptions {
    * The document-level surfaces to read, exactly as UnifiedConversionOptions.surfaces describes them: one boolean per surface (`outline`, `destinations`, `form`, `layers`, `structure`, `residue`, `images`), each read unless set to `false`, independent of `pages`. A skipped surface is never parsed, and the conversion carries nothing built from it. Without `structure` a tagged PDF's headings, table cells and divisions are inferred from geometry as for an untagged file, and without `layers` content the default view hides is kept as if visible.
    */
   readonly surfaces?: ReadPdfSurfaces;
+  /**
+   * The decode budget for the pdf source, exactly as UnifiedConversionOptions.maxDecodedBytes describes it: the first decode that would pass it throws `PdfDecodeBudgetError`.
+   */
+  readonly maxDecodedBytes?: number;
   // Called exactly once, synchronously, with the DocumentTree (the readPdf-produced layout, and the reconstructed content built from it) this conversion built internally, before the function returns its bytes — see convert.ts's DocumentToPdfOptions.onDocument for the mirrored X-to-PDF side of this same side channel.
   readonly onDocument?: (pkg: DocumentTree) => void;
 }
