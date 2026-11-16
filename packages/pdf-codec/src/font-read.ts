@@ -7,7 +7,6 @@ import {
 import { parseToUnicodeCMap } from "./cmap";
 import type { ToUnicodeCMap } from "./cmap";
 import type { PdfDiagnosticSink } from "./diagnostics";
-import { decodeStream } from "./filters";
 import { namedEncodingGlyphName, winAnsiGlyphName } from "./encoding";
 import {
   symbolGlyphName,
@@ -119,7 +118,7 @@ function readFontProgram(
     if (stream?.kind !== "stream") {
       continue;
     }
-    const decoded = decodeStream(stream.raw, stream.dict, context.sink);
+    const decoded = context.resolver.decodeStream(stream, context.sink);
     const encoding = readFontProgramEncoding(decoded.bytes, baseFont);
     if (encoding !== undefined) {
       return encoding;
@@ -167,7 +166,7 @@ function nameOfFontStream(
   if (read === undefined) {
     read = {
       name: readFontProgramName(
-        decodeStream(stream.raw, stream.dict, context.sink).bytes,
+        context.resolver.decodeStream(stream, context.sink).bytes,
       ),
     };
     PROGRAM_NAMES.set(stream, read);
@@ -223,7 +222,7 @@ function digestOfFontStream(
   let digest = PROGRAM_DIGESTS.get(stream);
   if (digest === undefined) {
     digest = programDigest(
-      decodeStream(stream.raw, stream.dict, context.sink).bytes,
+      context.resolver.decodeStream(stream, context.sink).bytes,
     );
     PROGRAM_DIGESTS.set(stream, digest);
   }
@@ -276,7 +275,7 @@ function readToUnicodeCMap(
   if (stream?.kind !== "stream") {
     return undefined;
   }
-  const decoded = decodeStream(stream.raw, stream.dict, context.sink);
+  const decoded = context.resolver.decodeStream(stream, context.sink);
   return parseToUnicodeCMap(decoded.bytes, context.sink);
 }
 
@@ -699,7 +698,7 @@ function cidToGlyphId(
   if (map.kind !== "stream") {
     return undefined;
   }
-  const bytes = decodeStream(map.raw, map.dict, context.sink).bytes;
+  const bytes = context.resolver.decodeStream(map, context.sink).bytes;
   return (cid) => {
     const at = cid * CID_TO_GID_ENTRY_SIZE;
     if (at + 1 >= bytes.length) {

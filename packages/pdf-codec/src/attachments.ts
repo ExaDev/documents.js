@@ -1,6 +1,5 @@
 import type { PdfDiagnosticSink } from "./diagnostics";
 import type { PdfObjectResolver } from "./interpret-types";
-import { decodeStream } from "./filters";
 import type { LayoutAttachment } from "./layout";
 import { walkNameTree } from "./names";
 import type { PdfDict, PdfObject } from "./objects";
@@ -100,7 +99,7 @@ function readFilespec(
     if (streamObj?.kind !== "stream") {
       continue;
     }
-    const decoded = decodeStream(streamObj.raw, streamObj.dict, sink);
+    const decoded = resolver.decodeStream(streamObj, sink);
     const descObj = dictGet(filespec, "Desc");
     const subtype = asName(dictGet(streamObj.dict, "Subtype"));
     return {

@@ -24,7 +24,6 @@ import type { PdfDocument } from "./document";
 import type { PdfDiagnosticSink } from "./diagnostics";
 import { NOOP_DIAGNOSTIC_SINK, PdfParseError } from "./diagnostics";
 import { hasPdfHeader, resolvePageSelection } from "./read-open";
-import { decodeStream } from "./filters";
 import { throwIfAborted } from "./util/abort";
 import type { FontResolverService } from "./font-read";
 import { createFontResolver } from "./font-read";
@@ -89,6 +88,12 @@ export interface ReadPdfOptions {
    * Apart from those stated losses and the renumbering a skipped outline causes, every page item is exactly what a read with the surface on produces.
    */
   readonly surfaces?: ReadPdfSurfaces;
+  /**
+   * The most bytes stream decoding may produce over the whole read, a non-negative safe integer (anything else throws `RangeError`). Every decode the read reaches is charged against it: cross-reference and object streams while opening the document, then page content streams, form XObjects, font programs (each time one is decoded, so a program two fonts share is charged twice), `/ToUnicode` CMaps, `/CIDToGIDMap` streams, image XObjects and inline images, soft masks, `/Indexed` lookup streams, the `/Metadata` packet and embedded files. Each filter stage's output counts, so a stream under two filters pays for both.
+   *
+   * The first decode that would pass the budget throws `PdfDecodeBudgetError` (a `PdfParseError` with code `pdf/decode-budget-exceeded`, carrying `maxDecodedBytes`, the bytes already `decodedBytes`, the stream's `objectNumber` and its `filters`), and stops as soon as its output crosses what is left rather than after materialising it: Flate, LZW, RunLength and ASCII85 stop incrementally, ASCIIHex is refused from its exact size before allocating it, and CCITTFax, JBIG2 and JPEG 2000 are charged their declared output (a CCITTFax stream with no row count its worst case, a JBIG2 stream with no `/Width` and `/Height` refused) before they decode. A JPEG is passed through undecoded and costs nothing. Absent, the read decodes without a bound, exactly as it always has.
+   */
+  readonly maxDecodedBytes?: number;
 }
 
 /**
@@ -127,7 +132,9 @@ export function readPdf(
   }
   // Checked before openPdfDocument rather than relying solely on the page loop's per-iteration check below: the document-open phase (xref resolution, object parsing) runs before any page, and a document with an empty page tree never enters the loop at all — without this check, an already-aborted signal on such a file would return a parsed document instead of throwing.
   throwIfAborted(signal);
-  const doc = openPdfDocument(bytes, sink);
+  const doc = openPdfDocument(bytes, sink, {
+    maxDecodedBytes: options?.maxDecodedBytes,
+  });
   const fontResolver = createFontResolver({ resolver: doc, sink });
   const images: Record<string, LayoutImageAsset> = {};
 
@@ -454,7 +461,7 @@ function xmpPacket(
   if (metadataObj?.kind !== "stream") {
     return undefined;
   }
-  const decoded = decodeStream(metadataObj.raw, metadataObj.dict, sink);
+  const decoded = resolver.decodeStream(metadataObj, sink);
   return new TextDecoder().decode(decoded.bytes);
 }
 

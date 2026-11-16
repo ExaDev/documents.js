@@ -511,12 +511,9 @@ describe("decodeStream: JBIG2Decode", () => {
       BitsPerComponent: pdfNum(1),
       ColorSpace: pdfName("DeviceGray"),
     });
-    const result = decodeStream(
-      jbig2FixtureBytes(symbols.stream),
-      dict,
-      sink,
+    const result = decodeStream(jbig2FixtureBytes(symbols.stream), dict, sink, {
       resolve,
-    );
+    });
     expect(diagnostics).toEqual([]);
     expect(Array.from(result.bytes)).toEqual(expectedFilterBytes(symbols));
   });

@@ -3,9 +3,12 @@ import { PdfEncryptedError, PdfParseError } from "./diagnostics";
 import type { PdfDiagnosticSink } from "./diagnostics";
 import type { PdfDecryptor } from "./encrypt";
 import { createStandardDecryptor } from "./encrypt";
-import { decodeStream } from "./filters";
+import { PdfDecodeBudget } from "./decode-budget";
+import type { DecodedStream } from "./filters";
+import { decodeStream, filterNames } from "./filters";
+import type { PdfObjectResolver } from "./interpret-types";
 import { nextToken } from "./lexer";
-import type { PdfDict, PdfObject } from "./objects";
+import type { PdfDict, PdfObject, PdfStream } from "./objects";
 import { asArray, asDict, asNumber, dictGet, isName, pdfNull } from "./objects";
 import { parseIndirectObject, parseValue } from "./parse";
 import type { XrefEntry } from "./xref";
@@ -13,12 +16,12 @@ import { readXref } from "./xref";
 
 // The object store: resolves references (direct offset or ObjStm-compressed) against the cross-reference table xref.ts built, and walks the page tree with ISO 32000-1 7.7.3.4 inheritance (a Page node's /Resources, /MediaBox, /CropBox, /Rotate fall back to the nearest ancestor Pages node that defines them). Every fetched object is cached by object number; every decoded object stream is cached whole, since a single ObjStm is very often referenced by several of its own contained objects in short order.
 
-export interface PdfDocument {
+export interface PdfDocument extends PdfObjectResolver {
   readonly trailer: PdfDict;
   // The validated /Root catalog, exposed because every document-level reader (destinations, outline, embedded files, optional content, AcroForm) walks catalog keys — re-resolving trailer /Root at each call site would re-narrow a fact openPdfDocument already established.
   readonly catalog: PdfDict;
-  resolve: (obj: PdfObject | undefined) => PdfObject | undefined;
-  resolveDict: (obj: PdfObject | undefined) => PdfDict | undefined;
+  // The budget every decode reached through this document is charged against, when openPdfDocument was given maxDecodedBytes.
+  readonly decodeBudget: PdfDecodeBudget | undefined;
   pages: () => PdfDict[];
   // The 0-based position of a page object in pages()' own order — identity-matched against the tree's resolved leaf objects (NOT the inheritance-merged copies pages() returns, which are fresh objects). This is what a destination array's page reference resolves against.
   pageIndex: (obj: PdfObject | undefined) => number | undefined;
@@ -95,11 +98,29 @@ function decryptObject(
   return value;
 }
 
+/**
+ * What opening a document may do beyond reading it.
+ */
+export interface OpenPdfDocumentOptions {
+  /**
+   * The most bytes stream decoding may produce over the document's whole life, charged by every decode reached through it: the cross-reference and object streams read while opening it, then every content stream, form, font program, CMap, image, soft mask, colour lookup, metadata packet and embedded file a reader decodes through `decodeStream`. The first decode that would pass it throws `PdfDecodeBudgetError` as soon as its output crosses what is left, before materialising the rest. Absent, decoding is unbounded. A non-negative safe integer; anything else throws `RangeError`.
+   */
+  readonly maxDecodedBytes?: number;
+}
+
 export function openPdfDocument(
   bytes: Uint8Array<ArrayBuffer>,
   sink: PdfDiagnosticSink,
+  options?: OpenPdfDocumentOptions,
 ): PdfDocument {
-  const xref = readXref(bytes, sink);
+  const maxDecodedBytes = options?.maxDecodedBytes;
+  const decodeBudget =
+    maxDecodedBytes === undefined
+      ? undefined
+      : new PdfDecodeBudget(maxDecodedBytes);
+  const xref = readXref(bytes, sink, decodeBudget);
+  // Each stream object fetch() hands out, by its object number: a decode reached through decodeStream below names the stream it refused by this, so a budget error says which object it was. Keyed by the stream's dictionary as fetch() returns it (after decryption), which every reader holds even when it passes the dictionary and data on separately (an image XObject does), and held weakly so it goes with the objects.
+  const streamObjectNumbers = new WeakMap<PdfDict, number>();
 
   const objectCache = new Map<number, PdfObject>();
   const objStmCache = new Map<number, PdfObject[]>();
@@ -147,7 +168,11 @@ export function openPdfDocument(
       objStmCache.set(streamObjNum, []);
       return [];
     }
-    const decoded = decodeStream(streamObj.raw, streamObj.dict, sink);
+    // fetchDirect has already decrypted the stream, so what is decoded (and charged) is the object stream's plaintext.
+    const decoded = decodeStream(streamObj.raw, streamObj.dict, sink, {
+      budget: decodeBudget,
+      objectNumber: streamObjNum,
+    });
     const n = asNumber(dictGet(streamObj.dict, "N")) ?? 0;
     const first = asNumber(dictGet(streamObj.dict, "First")) ?? 0;
     const headerReader = new ByteReader(decoded.bytes);
@@ -194,6 +219,9 @@ export function openPdfDocument(
         : (decodeObjectStream(entry.streamObjNum)[entry.indexInStream] ??
           pdfNull());
     objectCache.set(num, value);
+    if (value.kind === "stream") {
+      streamObjectNumbers.set(value.dict, num);
+    }
     return value;
   }
 
@@ -218,6 +246,27 @@ export function openPdfDocument(
 
   function resolveDict(obj: PdfObject | undefined): PdfDict | undefined {
     return asDict(resolve(obj));
+  }
+
+  function decodeDocumentStream(
+    stream: PdfStream,
+    decodeSink: PdfDiagnosticSink,
+    expectedLength?: () => number | undefined,
+  ): DecodedStream {
+    return decodeStream(stream.raw, stream.dict, decodeSink, {
+      resolve,
+      expectedLength,
+      budget: decodeBudget,
+      objectNumber: streamObjectNumbers.get(stream.dict),
+      objectNumberOf: (resolved) => streamObjectNumbers.get(resolved.dict),
+    });
+  }
+
+  function chargeDecodedBytes(stream: PdfStream, decodedBytes: number): void {
+    decodeBudget?.charge(decodedBytes, {
+      objectNumber: streamObjectNumbers.get(stream.dict),
+      filters: filterNames(stream.dict),
+    });
   }
 
   // Returns its own type narrowed to PdfDict (never undefined) via the function's declared return type — unlike a bare `if (x === undefined) throw; ` guard on a local, this narrowing is a real declared type, so it still holds inside the nested `pages()` closure below, which TypeScript's control-flow analysis would not otherwise carry across a function boundary.
@@ -326,8 +375,11 @@ export function openPdfDocument(
   return {
     trailer: xref.trailer,
     catalog,
+    decodeBudget,
     resolve,
     resolveDict,
+    decodeStream: decodeDocumentStream,
+    chargeDecodedBytes,
     pages,
     pageIndex,
   };

@@ -1,9 +1,11 @@
-import { inflateTolerant } from "./bytes/flate";
+import { inflateTolerant, inflateTolerantBounded } from "./bytes/flate";
+import { OutputLimitExceededError } from "./bytes/output-limit";
 import { isAsciiWhitespace } from "./bytes/reader";
+import type { PdfDecodeBudget, PdfDecodeSource } from "./decode-budget";
 import type { PdfDiagnosticSink } from "./diagnostics";
-import { decodeCcittFax } from "./image/ccitt";
+import { CCITT_DEFAULT_COLUMNS, decodeCcittFax } from "./image/ccitt";
 import { decodeJbig2Embedded } from "./image/jbig2";
-import type { PdfDict, PdfObject } from "./objects";
+import type { PdfDict, PdfObject, PdfStream } from "./objects";
 import { asArray, asBool, asDict, asName, asNumber, dictGet } from "./objects";
 import {
   applyPredictor,
@@ -18,13 +20,23 @@ const BYTE_MASK = 0xff; // an all-ones byte: used both to bit-invert a byte (XOR
 class GrowableBytes {
   #buffer: Uint8Array<ArrayBuffer>;
   #length = 0;
+  readonly #maxLength: number | undefined;
 
-  // `capacity` is a first guess at the output's length (at least one byte); a wrong guess costs only doublings.
-  constructor(capacity: number) {
-    this.#buffer = new Uint8Array(Math.max(1, capacity));
+  // `capacity` is a first guess at the output's length (at least one byte); a wrong guess costs only doublings. `maxLength`, when given, is the most bytes the output may hold: the push that would add one more throws OutputLimitExceededError, so a decoder stops at the limit rather than after finishing.
+  constructor(capacity: number, maxLength: number | undefined) {
+    this.#buffer = new Uint8Array(
+      Math.max(
+        1,
+        maxLength === undefined ? capacity : Math.min(capacity, maxLength),
+      ),
+    );
+    this.#maxLength = maxLength;
   }
 
   push(byte: number): void {
+    if (this.#length === this.#maxLength) {
+      throw new OutputLimitExceededError(this.#maxLength);
+    }
     if (this.#length === this.#buffer.length) {
       const grown = new Uint8Array(this.#buffer.length * 2);
       grown.set(this.#buffer);
@@ -55,32 +67,80 @@ export type PdfIndirectResolver = (
   obj: PdfObject | undefined,
 ) => PdfObject | undefined;
 
+/**
+ * What a decode may consult beyond the stream itself.
+ */
+export interface DecodeStreamOptions {
+  /** Follows an indirect /DecodeParms entry (JBIG2Decode's /JBIG2Globals). */
+  readonly resolve?: PdfIndirectResolver;
+  /** Charges every filter stage's output against this budget, refusing with `PdfDecodeBudgetError` the first stage that would pass it. Absent, decoding is unbounded, exactly as before budgets existed. */
+  readonly budget?: PdfDecodeBudget;
+  /** The stream's indirect object number, named in a `PdfDecodeBudgetError`. */
+  readonly objectNumber?: number;
+  /** The object number of a stream `resolve` hands out (the /JBIG2Globals stream), named in a `PdfDecodeBudgetError` refusing it. */
+  readonly objectNumberOf?: (stream: PdfStream) => number | undefined;
+  /** How long the caller expects the decoded stream to be, when it knows (an image's rows of samples). Asked only when FlateDecode is the last filter and no budget bounds the decode, since it only sizes the buffer inflate writes into; a bounded decode streams its output in chunks instead. */
+  readonly expectedLength?: () => number | undefined;
+}
+
 // Runs a stream's raw bytes through its /Filter chain (a single name or an array of names, with /DecodeParms supplying per-filter parameters in the same single-or-array shape). Recoverable per-filter issues (an unresolvable /Predictor, an unimplemented filter) degrade with a diagnostic and stop the chain rather than throwing — the caller decides whether the partially- or un-decoded result is still useful (e.g. a DCTDecode image's bytes are perfectly usable as-is).
+//
+// With a budget, each stage decodes through a bounded variant that stops as soon as its output would pass what the budget has left (Flate, LZW, RunLength and ASCII85 incrementally; ASCIIHex from its exact output size, counted before allocating it; CCITTFax and JBIG2 from their declared or worst-case output, refused before decoding when that passes the budget or cannot be known), and its output is charged once it exists. A /Predictor applied after Flate or LZW is not charged again: it rewrites the stage's output in place of it, never longer than it. DCTDecode and JPXDecode stop the chain undecoded here, so they cost nothing at this point; whoever decodes their pixels charges for them (src/images-read.ts for JPEG 2000, src/raster.ts for a JPEG handed to a rasteriser). Without a budget every stage runs exactly the unbounded code it always has, so the output is byte-for-byte what it was.
 //
 // expectedLength says how long the caller expects the decoded stream to be, when it knows (an image's rows of samples). It is asked only when FlateDecode is the last filter, since it only sizes the buffer that inflate writes into (see inflateTolerant): it changes what decoding costs in memory, never the bytes it produces, and a stream ending in any other filter never pays for working it out.
 export function decodeStream(
   raw: Uint8Array<ArrayBuffer>,
   dict: PdfDict,
   sink: PdfDiagnosticSink,
-  resolve?: PdfIndirectResolver,
-  expectedLength?: () => number | undefined,
+  options?: DecodeStreamOptions,
 ): DecodedStream {
   const filters = filterNames(dict);
   const parms = decodeParmsList(dict, filters.length);
+  const budget = options?.budget;
+  const source: PdfDecodeSource = {
+    objectNumber: options?.objectNumber,
+    filters,
+  };
+  // One filter stage under the budget: its decoder is given what the budget has left as its output limit, a decoder that would pass it is refused through the budget (spending it), and the output that stayed within it is charged.
+  const charged = (
+    decode: (maxOutputBytes: number | undefined) => Uint8Array<ArrayBuffer>,
+  ): Uint8Array<ArrayBuffer> => {
+    if (budget === undefined) {
+      return decode(undefined);
+    }
+    let output: Uint8Array<ArrayBuffer>;
+    try {
+      output = decode(budget.remainingBytes);
+    } catch (error) {
+      if (error instanceof OutputLimitExceededError) {
+        budget.refuse(source);
+      }
+      throw error;
+    }
+    budget.charge(output.length, source);
+    return output;
+  };
   let bytes = raw;
   let jbig2: DecodedStream["jbig2"] | undefined;
   for (let i = 0; i < filters.length; i++) {
     const filter = filters[i]!;
     const parm = parms[i];
+    const input = bytes;
     if (filter === "FlateDecode" || filter === "Fl") {
       const expected =
-        i === filters.length - 1 ? expectedLength?.() : undefined;
+        i === filters.length - 1 ? options?.expectedLength?.() : undefined;
       const inflatedLength =
         expected !== undefined
           ? lengthBeforePredictor(expected, readPredictorParams(parm))
           : undefined;
       bytes = applyPredictorIfPresent(
-        inflateTolerant(bytes, inflatedLength).bytes,
+        charged(
+          (max) =>
+            (max === undefined
+              ? inflateTolerant(input, inflatedLength)
+              : inflateTolerantBounded(input, max)
+            ).bytes,
+        ),
         parm,
         sink,
       );
@@ -88,20 +148,20 @@ export function decodeStream(
       const earlyChange =
         (asNumber(parm ? dictGet(parm, "EarlyChange") : undefined) ?? 1) !== 0;
       bytes = applyPredictorIfPresent(
-        lzwDecode(bytes, earlyChange, sink),
+        charged((max) => lzwDecode(input, earlyChange, sink, max)),
         parm,
         sink,
       );
     } else if (filter === "ASCII85Decode" || filter === "A85") {
-      bytes = ascii85Decode(bytes);
+      bytes = charged((max) => ascii85Decode(input, max));
     } else if (filter === "ASCIIHexDecode" || filter === "AHx") {
-      bytes = asciiHexDecode(bytes);
+      bytes = charged((max) => asciiHexDecode(input, max));
     } else if (filter === "RunLengthDecode" || filter === "RL") {
-      bytes = runLengthDecode(bytes);
+      bytes = charged((max) => runLengthDecode(input, max));
     } else if (filter === "CCITTFaxDecode" || filter === "CCF") {
-      bytes = ccittFaxDecode(bytes, parm, dict, sink);
+      bytes = charged((max) => ccittFaxDecode(input, parm, dict, sink, max));
     } else if (filter === "JBIG2Decode") {
-      const decoded = jbig2Decode(bytes, parm, dict, sink, resolve);
+      const decoded = jbig2Decode(input, parm, dict, sink, options, source);
       if (decoded === undefined) {
         return { bytes, remainingFilter: "JBIG2Decode" };
       }
@@ -137,20 +197,36 @@ function applyPredictorIfPresent(
 // /Rows falls back to the stream dictionary's own /Height because Table 11 defaults /Rows to 0 ("decode until the data runs out"), and a real producer very often leaves it there and lets the image dictionary carry the row count — resolving it here means the decoder gets a definite row count and stops on it rather than reading whatever trailing bits an encoder left behind.
 //
 // /EndOfLine, /EndOfBlock, and /DamagedRowsBeforeError are deliberately not consulted: the decoder handles an EOL wherever one actually appears rather than being told in advance whether to expect one, stops at an end-of-block marker or at the declared row count whichever comes first, and reports damage through the diagnostic sink rather than switching between "throw" and "keep going" on a per-document count.
+//
+// With `maxOutputBytes`, the output is bounded before decoding rather than incrementally, since the decoder produces whole rows of a width it knows up front: a declared row count gives the exact output (the decoder pads a short image out to it), and with none every row costs at least one bit of input (a two-dimensional V0 code, or a pass straight to the end of an unchanged row), so the input's bit count bounds the rows. Either bound passing the limit refuses the stream before any row is decoded.
 function ccittFaxDecode(
   data: Uint8Array<ArrayBuffer>,
   parm: PdfDict | undefined,
   dict: PdfDict,
   sink: PdfDiagnosticSink,
+  maxOutputBytes: number | undefined,
 ): Uint8Array<ArrayBuffer> {
   const parmGet = (key: string): PdfObject | undefined =>
     parm !== undefined ? dictGet(parm, key) : undefined;
   const rows =
     asNumber(parmGet("Rows")) ??
     asNumber(dictGet(dict, "Height") ?? dictGet(dict, "H"));
+  const columns = asNumber(parmGet("Columns"));
+  if (maxOutputBytes !== undefined) {
+    const bytesPerRow = Math.ceil(
+      Math.max(0, columns ?? CCITT_DEFAULT_COLUMNS) / BITS_PER_BYTE,
+    );
+    const rowBound =
+      rows !== undefined && rows > 0
+        ? Math.ceil(rows)
+        : data.length * BITS_PER_BYTE;
+    if (bytesPerRow * rowBound > maxOutputBytes) {
+      throw new OutputLimitExceededError(maxOutputBytes);
+    }
+  }
   return decodeCcittFax(data, {
     k: asNumber(parmGet("K")),
-    columns: asNumber(parmGet("Columns")),
+    columns,
     rows,
     blackIs1: asBool(parmGet("BlackIs1")),
     encodedByteAlign: asBool(parmGet("EncodedByteAlign")),
@@ -165,30 +241,44 @@ function ccittFaxDecode(
 // Two polarity/sizing details, both of them PDF's rather than JBIG2's, and both handled here so src/image/jbig2.ts stays free of PDF knowledge. First, JBIG2 codes a black pixel as a 1 bit (T.88 3.29) while a PDF 1-bit /DeviceGray image reads 0 as black, so the decoded bitmap is inverted on the way out — exactly the convention CCITTFaxDecode reaches through its own /BlackIs1 defaulting to false. Second, the image dictionary's own /Width and /Height are authoritative over the page information segment's, which is also the only way a JBIG2 page of "unknown" (striped) height resolves at all.
 //
 // Returns undefined when the stream uses a JBIG2 feature this decoder does not implement, or is malformed. That degrades exactly like an unimplemented filter: the caller gets the still-encoded bytes back with remainingFilter set, skips the image, and the rest of the page still reads. On success it returns the decoded samples beside the globals segments it consumed, so decodeStream can capture the verbatim-re-embedding pair (see DecodedStream.jbig2).
+//
+// Under a budget the output is charged before decoding, from the image dictionary's /Width and /Height (the size the decoder produces, packed one bit per pixel), and a stream without them is refused, since only the page information segment inside the data would say how large it is. The /JBIG2Globals stream is decoded through decodeStream with the same budget, so it pays for its own decoding. The decoder's intermediate bitmaps (symbol dictionaries, regions) are bounded by its own per-bitmap ceiling (MAX_JBIG2_BITMAP_PIXELS) rather than charged.
 function jbig2Decode(
   data: Uint8Array<ArrayBuffer>,
   parm: PdfDict | undefined,
   dict: PdfDict,
   sink: PdfDiagnosticSink,
-  resolve: PdfIndirectResolver | undefined,
+  options: DecodeStreamOptions | undefined,
+  source: PdfDecodeSource,
 ):
   | {
       bytes: Uint8Array<ArrayBuffer>;
       globals: Uint8Array<ArrayBuffer> | undefined;
     }
   | undefined {
+  const resolve = options?.resolve;
+  const budget = options?.budget;
+  const width = asNumber(dictGet(dict, "Width") ?? dictGet(dict, "W"));
+  const height = asNumber(dictGet(dict, "Height") ?? dictGet(dict, "H"));
+  if (budget !== undefined) {
+    if (width === undefined || height === undefined) {
+      return budget.refuse(source);
+    }
+    budget.charge(
+      Math.ceil(Math.max(0, width) / BITS_PER_BYTE) * Math.max(0, height),
+      source,
+    );
+  }
   const globalsObj =
     parm !== undefined ? dictGet(parm, "JBIG2Globals") : undefined;
   const resolvedGlobals =
     resolve !== undefined ? resolve(globalsObj) : globalsObj;
   let globals: Uint8Array<ArrayBuffer> | undefined;
   if (resolvedGlobals?.kind === "stream") {
-    globals = decodeStream(
-      resolvedGlobals.raw,
-      resolvedGlobals.dict,
-      sink,
-      resolve,
-    ).bytes;
+    globals = decodeStream(resolvedGlobals.raw, resolvedGlobals.dict, sink, {
+      ...options,
+      objectNumber: options?.objectNumberOf?.(resolvedGlobals),
+    }).bytes;
   } else if (globalsObj !== undefined) {
     sink({
       code: "pdf/jbig2-degraded",
@@ -201,8 +291,8 @@ function jbig2Decode(
   try {
     const image = decodeJbig2Embedded(data, {
       globals,
-      width: asNumber(dictGet(dict, "Width") ?? dictGet(dict, "W")),
-      height: asNumber(dictGet(dict, "Height") ?? dictGet(dict, "H")),
+      width,
+      height,
       onWarning: (message) => {
         sink({ code: "pdf/jbig2-degraded", severity: "warning", message });
       },
@@ -222,6 +312,11 @@ function jbig2Decode(
   }
 }
 
+/**
+ * The names of a stream's /Filter chain in order: one name, an array of names, or none.
+ * @param dict - the stream dictionary
+ * @returns the filter names, empty for an unfiltered stream
+ */
 export function filterNames(dict: PdfDict): string[] {
   const filterObj = dictGet(dict, "Filter") ?? dictGet(dict, "F");
   if (filterObj === undefined) {
@@ -293,12 +388,15 @@ function concatTwo(
 }
 
 // `earlyChange` mirrors the filter's own /EarlyChange DecodeParms entry (default true): when set, the code width grows one code sooner than the dictionary size alone would demand, matching how essentially every real-world PDF/TIFF encoder actually writes the bitstream.
+//
+// `maxOutputBytes`, when given, stops the decode with OutputLimitExceededError at the first byte past it (as for ascii85Decode, asciiHexDecode and runLengthDecode below).
 export function lzwDecode(
   data: Uint8Array<ArrayBuffer>,
   earlyChange: boolean,
   sink: PdfDiagnosticSink,
+  maxOutputBytes?: number,
 ): Uint8Array<ArrayBuffer> {
-  const out = new GrowableBytes(data.length);
+  const out = new GrowableBytes(data.length, maxOutputBytes);
   let dict = initialLzwDictionary();
   let nextCode = LZW_FIRST_NEW_CODE;
   let codeWidth = LZW_INITIAL_CODE_WIDTH;
@@ -402,8 +500,9 @@ function ascii85GroupBytes(
 
 export function ascii85Decode(
   data: Uint8Array<ArrayBuffer>,
+  maxOutputBytes?: number,
 ): Uint8Array<ArrayBuffer> {
-  const out = new GrowableBytes(data.length);
+  const out = new GrowableBytes(data.length, maxOutputBytes);
   let tuple: number[] = [];
   let i = 0;
   if (
@@ -477,8 +576,9 @@ function hexDigitValue(byte: number): number | undefined {
 
 export function asciiHexDecode(
   data: Uint8Array<ArrayBuffer>,
+  maxOutputBytes?: number,
 ): Uint8Array<ArrayBuffer> {
-  // Two passes, so the output is sized exactly and no digit is held anywhere but the input: the first counts the digits before the terminator, the second packs them two to a byte (an odd last digit as the high nibble of a byte whose low nibble is 0).
+  // Two passes, so the output is sized exactly (and refused against `maxOutputBytes` before it is allocated) and no digit is held anywhere but the input: the first counts the digits before the terminator, the second packs them two to a byte (an odd last digit as the high nibble of a byte whose low nibble is 0).
   let digitCount = 0;
   for (const byte of data) {
     if (byte === ASCII_HEX_TERMINATOR) {
@@ -488,7 +588,11 @@ export function asciiHexDecode(
       digitCount++;
     }
   }
-  const out = new Uint8Array(Math.ceil(digitCount / 2));
+  const outputLength = Math.ceil(digitCount / 2);
+  if (maxOutputBytes !== undefined && outputLength > maxOutputBytes) {
+    throw new OutputLimitExceededError(maxOutputBytes);
+  }
+  const out = new Uint8Array(outputLength);
   let digit = 0;
   for (const byte of data) {
     if (byte === ASCII_HEX_TERMINATOR) {
@@ -512,8 +616,9 @@ const RUN_LENGTH_REPEAT_COUNT_BASE = 257; // one past the maximum byte value (25
 
 export function runLengthDecode(
   data: Uint8Array<ArrayBuffer>,
+  maxOutputBytes?: number,
 ): Uint8Array<ArrayBuffer> {
-  const out = new GrowableBytes(data.length);
+  const out = new GrowableBytes(data.length, maxOutputBytes);
   let i = 0;
   while (i < data.length) {
     const length = data[i]!;

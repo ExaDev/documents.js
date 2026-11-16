@@ -1,6 +1,7 @@
 // The result types interpretContentStream produces, split from interpret.ts: the Extracted* paint/text/image item shapes, the glyph-advance port, and the InterpretContext the caller supplies.
 import type { PdfDiagnosticSink } from "./diagnostics";
-import type { PdfDict, PdfObject } from "./objects";
+import type { DecodedStream } from "./filters";
+import type { PdfDict, PdfObject, PdfStream } from "./objects";
 import type { Matrix } from "./matrix";
 import type {
   Color as LayoutColor,
@@ -148,6 +149,14 @@ export interface FontMetricsPort {
 export interface PdfObjectResolver {
   resolve: (obj: PdfObject | undefined) => PdfObject | undefined;
   resolveDict: (obj: PdfObject | undefined) => PdfDict | undefined;
+  // Decodes a stream this resolver handed out (or an inline image's dictionary and data, wrapped as a stream), charging its output against the document's decode budget when it has one. Every reader decodes through this rather than calling decodeStream itself, which is what puts every decode a document reaches under its budget (decode-budget.test.ts checks that only document.ts and xref.ts, which charge the budget themselves, import it).
+  decodeStream: (
+    stream: PdfStream,
+    sink: PdfDiagnosticSink,
+    expectedLength?: () => number | undefined,
+  ) => DecodedStream;
+  // Charges bytes a reader decodes outside decodeStream (a JPEG 2000 codestream's samples, a JPEG handed to a rasteriser) against the document's decode budget, before it decodes them; throws PdfDecodeBudgetError when they would pass it, and does nothing for a document with no budget.
+  chargeDecodedBytes: (stream: PdfStream, decodedBytes: number) => void;
 }
 
 export interface InterpretContext {

@@ -4,19 +4,20 @@ import type { PdfDiagnosticSink } from "./diagnostics";
 import { walkNameTree } from "./names";
 import type { PdfDict, PdfObject } from "./objects";
 import { pdfArray, pdfDict, pdfName, pdfNum, pdfRef } from "./objects";
+import { unbudgetedResolver } from "./test-support/resolver";
 
 // The names-tree walker (ISO 32000-1 7.9.6): flattens a name tree's /Names pairs across /Kids recursion into one ordered entry list. This is the hard prerequisite the #721 verdict calls out — one walker serves destinations, embedded files, and any later names-tree tenant (JavaScript names, etc.). Tests build synthetic PdfObject trees with an in-memory resolver so the walker's own structural rules (recursion, ordering, cycle safety, non-dict handling) are pinned independently of any full-document fixture.
 
 function resolverOf(objects: Map<number, PdfObject>) {
-  return {
-    resolve(obj: PdfObject | undefined): PdfObject | undefined {
-      return obj?.kind === "ref" ? objects.get(obj.num) : obj;
-    },
+  const resolve = (obj: PdfObject | undefined): PdfObject | undefined =>
+    obj?.kind === "ref" ? objects.get(obj.num) : obj;
+  return unbudgetedResolver({
+    resolve,
     resolveDict(obj: PdfObject | undefined): PdfDict | undefined {
-      const resolved = this.resolve(obj);
+      const resolved = resolve(obj);
       return resolved?.kind === "dict" ? resolved : undefined;
     },
-  };
+  });
 }
 
 function stringObj(text: string): PdfObject {

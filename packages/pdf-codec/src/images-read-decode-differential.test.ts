@@ -28,6 +28,7 @@ import {
 import { JBIG2_FIXTURES, jbig2FixtureBytes } from "./test-support/jbig2";
 import { referenceDecodeImageSamples } from "./test-support/reference-image-decode";
 import { randomBytes, seededRandom } from "./test-support/seeded-random";
+import { unbudgetedResolver } from "./test-support/resolver";
 
 // The current sample decode against the per-sample-array decode it replaced (test-support/reference-image-decode.ts): every colour space, bit depth and /Decode setting the package decodes, over row widths that do and do not fill their last byte, and over streams that are exactly as long as the image, shorter (mid-row and mid-pixel included) and longer. Both must produce the same raster and so the same PNG bytes, since an image's id is the crc32 of those bytes.
 
@@ -302,7 +303,7 @@ function makeResolver(objects: Map<number, PdfObject>): PdfObjectResolver {
     obj?.kind === "ref" ? objects.get(obj.num) : obj;
   const resolveDict = (obj: PdfObject | undefined): PdfDict | undefined =>
     asDict(resolve(obj));
-  return { resolve, resolveDict };
+  return unbudgetedResolver({ resolve, resolveDict });
 }
 
 function asciiHexEncode(bytes: Uint8Array<ArrayBuffer>): Uint8Array {
@@ -509,9 +510,9 @@ function referenceRead(
   inverted: boolean,
   alpha: Uint8Array<ArrayBuffer> | undefined,
 ): Uint8Array<ArrayBuffer> {
-  const decoded = decodeStream(raw, dict, NOOP_SINK, (obj) =>
-    resolver.resolve(obj),
-  );
+  const decoded = decodeStream(raw, dict, NOOP_SINK, {
+    resolve: (obj) => resolver.resolve(obj),
+  });
   const image = referenceDecodeImageSamples(
     decoded.bytes,
     width,

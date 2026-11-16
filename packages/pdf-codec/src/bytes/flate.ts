@@ -1,4 +1,5 @@
-import { Unzlib, inflateSync, unzlibSync, zlibSync } from "fflate";
+import { Inflate, Unzlib, inflateSync, unzlibSync, zlibSync } from "fflate";
+import { OutputLimitExceededError } from "./output-limit";
 import { isAsciiWhitespace } from "./reader";
 import { concatBytes } from "./writer";
 
@@ -129,4 +130,126 @@ export function inflateTolerant(
     throw new Error("unable to inflate stream: no data could be recovered");
   }
   return { bytes: concatBytes(chunks), recovered: true };
+}
+
+// DEFLATE's largest expansion per input byte: a dynamic-Huffman block can give one length symbol (a 258-byte match) and its distance one bit each, so two bits of input yield 258 bytes of output, 1032 bytes per input byte (RFC 1951 3.2.5).
+const MAX_DEFLATE_EXPANSION = 1032;
+// The smallest input slice fed to the streaming inflater, so a nearly spent limit does not cost one push per input byte: one slice can then overshoot the limit by at most this many bytes times MAX_DEFLATE_EXPANSION (258 KiB), plus whatever a few buffered header bytes expand to.
+const MIN_BOUNDED_SLICE_BYTES = 256;
+
+type StreamingInflater = Inflate | Unzlib;
+
+interface BoundedAttempt {
+  readonly chunks: Uint8Array<ArrayBuffer>[];
+  // Set when the inflater threw part-way (corrupt or truncated data), with `chunks` holding what it emitted before then.
+  readonly failed: boolean;
+}
+
+// Feeds `data` to a streaming inflater in slices no larger than the remaining limit can absorb at DEFLATE's maximum expansion, so output is checked as it is produced and the limit stops the decode before it can materialise much more than the limit: an output that would pass `maxOutputBytes` throws OutputLimitExceededError out of the ondata callback, through the push. `final` is passed with the last slice, which is what makes the inflater verify the end of the stream (see inflateTolerant's last tier for why recovery passes false).
+function boundedInflateAttempt(
+  inflater: StreamingInflater,
+  data: Uint8Array,
+  final: boolean,
+  maxOutputBytes: number,
+): BoundedAttempt {
+  const chunks: Uint8Array<ArrayBuffer>[] = [];
+  let produced = 0;
+  inflater.ondata = (chunk) => {
+    produced += chunk.length;
+    if (produced > maxOutputBytes) {
+      throw new OutputLimitExceededError(maxOutputBytes);
+    }
+    chunks.push(chunk);
+  };
+  let offset = 0;
+  try {
+    do {
+      const slice = Math.max(
+        MIN_BOUNDED_SLICE_BYTES,
+        Math.floor((maxOutputBytes - produced) / MAX_DEFLATE_EXPANSION),
+      );
+      const end = Math.min(data.length, offset + slice);
+      inflater.push(data.subarray(offset, end), final && end === data.length);
+      offset = end;
+    } while (offset < data.length);
+  } catch (error) {
+    if (error instanceof OutputLimitExceededError) {
+      throw error;
+    }
+    return { chunks, failed: true };
+  }
+  return { chunks, failed: false };
+}
+
+// One of inflateTolerant's whole-stream tiers under a limit: the streaming inflater decodes it with the limit enforced as output appears; if that fails for any other reason, the tier's own synchronous function decides, as it does in inflateTolerant, since fflate's synchronous inflaters accept some ends of stream (a stream cut off inside its header or its final block) that the streaming ones reject. The streaming attempt failed having produced no more than the limit, and both decode the same bits up to where it failed, so the synchronous decode does a bounded amount of work, and its output is checked against the limit too. Undefined when the tier fails.
+function boundedTier(
+  inflater: StreamingInflater,
+  inflateWhole: (data: Uint8Array) => Uint8Array<ArrayBuffer>,
+  data: Uint8Array<ArrayBuffer>,
+  maxOutputBytes: number,
+): Uint8Array<ArrayBuffer> | undefined {
+  const attempt = boundedInflateAttempt(inflater, data, true, maxOutputBytes);
+  if (!attempt.failed) {
+    return concatBytes(attempt.chunks);
+  }
+  let whole: Uint8Array<ArrayBuffer>;
+  try {
+    whole = inflateWhole(data);
+  } catch {
+    return undefined;
+  }
+  if (whole.length > maxOutputBytes) {
+    throw new OutputLimitExceededError(maxOutputBytes);
+  }
+  return whole;
+}
+
+/**
+ * inflateTolerant's recovery ladder with an output limit: the same four tiers in the same order (zlib, zlib after leading whitespace, raw DEFLATE, then whatever a truncated zlib stream yields), each decoding incrementally so it stops as soon as its output would pass `maxOutputBytes` rather than after materialising it. A tier that fails for any other reason falls through exactly as inflateTolerant's does, and its output is discarded. A tier whose output passes the limit refuses the stream there, even when it would have failed later and a later tier would have produced less: whether it succeeds is only known by finishing it, which is the work the limit exists to prevent, so the refusal errs on the side of the bound. The last tier feeds the stream in slices, so on a truncated stream it can recover a longer prefix of the decoded data than inflateTolerant's single push does; that output is still a prefix of the stream's own decoding, within the limit.
+ * @param data - the zlib-framed (or mislabelled raw) DEFLATE stream
+ * @param maxOutputBytes - the most bytes the decoded output may hold
+ * @returns the decoded bytes, and whether any tier past the first produced them
+ * @throws OutputLimitExceededError as soon as a tier's output would pass `maxOutputBytes`
+ * @throws Error when no tier recovers any data, as inflateTolerant does
+ */
+export function inflateTolerantBounded(
+  data: Uint8Array<ArrayBuffer>,
+  maxOutputBytes: number,
+): InflateResult {
+  const plain = boundedTier(new Unzlib(), unzlibSync, data, maxOutputBytes);
+  if (plain !== undefined) {
+    return { bytes: plain, recovered: false };
+  }
+
+  let offset = 0;
+  while (offset < data.length && isAsciiWhitespace(data[offset])) {
+    offset++;
+  }
+  if (offset > 0) {
+    const skipped = boundedTier(
+      new Unzlib(),
+      unzlibSync,
+      data.subarray(offset),
+      maxOutputBytes,
+    );
+    if (skipped !== undefined) {
+      return { bytes: skipped, recovered: true };
+    }
+  }
+
+  const raw = boundedTier(new Inflate(), inflateSync, data, maxOutputBytes);
+  if (raw !== undefined) {
+    return { bytes: raw, recovered: true };
+  }
+
+  const partial = boundedInflateAttempt(
+    new Unzlib(),
+    data,
+    false,
+    maxOutputBytes,
+  );
+  if (partial.chunks.length === 0) {
+    throw new Error("unable to inflate stream: no data could be recovered");
+  }
+  return { bytes: concatBytes(partial.chunks), recovered: true };
 }

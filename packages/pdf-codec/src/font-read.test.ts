@@ -20,6 +20,7 @@ import {
   buildPostV3Table,
   buildSfnt,
 } from "./test-support/sfnt";
+import { unbudgetedResolver } from "./test-support/resolver";
 
 function collectDiagnostics(): {
   sink: PdfDiagnosticSink;
@@ -43,7 +44,7 @@ function makeResolver(objects: Map<number, PdfObject>): PdfObjectResolver {
     obj?.kind === "ref" ? objects.get(obj.num) : obj;
   const resolveDict = (obj: PdfObject | undefined): PdfDict | undefined =>
     asDict(resolve(obj));
-  return { resolve, resolveDict };
+  return unbudgetedResolver({ resolve, resolveDict });
 }
 
 describe("createFontResolver: simple fonts", () => {

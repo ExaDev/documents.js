@@ -1,7 +1,6 @@
 import type { Point } from "document-schema.js";
 // The colour module alone rather than the package barrel, which would load every content and layout schema document-schema.js defines (about 7 MB of heap) into a reader that only needs this one constant.
 import { COLOR_BLACK } from "document-schema.js/color";
-import { decodeStream } from "./filters";
 import type { Matrix } from "./matrix";
 import {
   IDENTITY_MATRIX,
@@ -478,7 +477,7 @@ function runContentStream(
       const formResources =
         context.resolver.resolveDict(dictGet(xobj.dict, "Resources")) ??
         resources;
-      const decoded = decodeStream(xobj.raw, xobj.dict, context.sink);
+      const decoded = context.resolver.decodeStream(xobj, context.sink);
       // ISO 32000-1 8.10.2: the form executes in the graphics state in effect at this Do, as if nested inline inside an implicit q/Q — so the whole state travels inward, the text parameters (a font a preceding Tf already selected, spacing, scaling) among them, and a form whose own content omits a redundant Tf still draws in the caller's font. The recursed call binds its own `gs` local, so nothing the form changes travels back out; the text matrix is not carried because it is text object state the form's own BT resets regardless.
       const formState: GraphicsState = {
         ...gs,
