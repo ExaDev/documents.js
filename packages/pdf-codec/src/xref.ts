@@ -1,4 +1,5 @@
 import { ByteReader, isAsciiWhitespace } from "./bytes/reader";
+import type { PdfDecodeBudget } from "./decode-budget";
 import type { PdfDiagnosticSink } from "./diagnostics";
 import { decodeStream } from "./filters";
 import { nextToken } from "./lexer";
@@ -67,13 +68,20 @@ const DELIMITER_BYTES = new Set([
 // Guards a looping /Prev chain (a corrupt or adversarial file pointing back at an already-visited offset) — generous for any real-world incremental-update history, which rarely exceeds single digits of revisions.
 const MAX_XREF_SECTIONS = 64;
 
+// `budget`, when given, is charged for every cross-reference stream and recovered object stream decoded here, the same budget openPdfDocument charges every later decode against. A cross-reference stream is never encrypted (ISO 32000-1 7.5.8.2), so its bytes are its plaintext; a recovered object stream is decoded as found, before the document's decryptor exists, so in an encrypted file it is charged for whatever decoding its ciphertext produces.
 export function readXref(
   bytes: Uint8Array<ArrayBuffer>,
   sink: PdfDiagnosticSink,
+  budget?: PdfDecodeBudget,
 ): XrefTable {
   const startxrefOffset = findStartxrefOffset(bytes);
   if (startxrefOffset !== undefined) {
-    const { entries, trailer } = walkXrefChain(bytes, startxrefOffset, sink);
+    const { entries, trailer } = walkXrefChain(
+      bytes,
+      startxrefOffset,
+      sink,
+      budget,
+    );
     if (isTableUsable(bytes, entries, trailer)) {
       return { entries, trailer };
     }
@@ -84,7 +92,7 @@ export function readXref(
     message:
       'the document\'s own cross-reference data was missing, unreadable, or did not check out against the bytes it points at; rebuilt the table by scanning the file for "N G obj" headers',
   });
-  return recoverXrefByLinearScan(bytes, sink);
+  return recoverXrefByLinearScan(bytes, sink, budget);
 }
 
 function findLastOccurrence(
@@ -167,6 +175,7 @@ function walkXrefChain(
   bytes: Uint8Array<ArrayBuffer>,
   startOffset: number,
   sink: PdfDiagnosticSink,
+  budget: PdfDecodeBudget | undefined,
 ): { entries: Map<number, XrefEntry>; trailer: PdfDict } {
   const merged = new Map<number, XrefEntry>();
   const mergedTrailerEntries = new Map<string, PdfObject>();
@@ -180,7 +189,7 @@ function walkXrefChain(
   ) {
     visited.add(offset);
     sections++;
-    const section = readXrefSection(bytes, offset, sink);
+    const section = readXrefSection(bytes, offset, sink, budget);
     if (section === undefined) {
       sink({
         code: "pdf/xref-entry-invalid",
@@ -208,6 +217,7 @@ function readXrefSection(
   bytes: Uint8Array<ArrayBuffer>,
   offset: number,
   sink: PdfDiagnosticSink,
+  budget: PdfDecodeBudget | undefined,
 ): XrefSection | undefined {
   const reader = new ByteReader(bytes);
   reader.seek(offset);
@@ -219,7 +229,13 @@ function readXrefSection(
   reader.reset(mark);
   const indirect = parseIndirectObject(reader, sink);
   if (indirect?.value.kind === "stream") {
-    return readXrefStreamSection(indirect.value.dict, indirect.value.raw, sink);
+    return readXrefStreamSection(
+      indirect.value.dict,
+      indirect.value.raw,
+      sink,
+      budget,
+      indirect.num,
+    );
   }
   return undefined;
 }
@@ -291,8 +307,10 @@ function readXrefStreamSection(
   dict: PdfDict,
   raw: Uint8Array<ArrayBuffer>,
   sink: PdfDiagnosticSink,
+  budget: PdfDecodeBudget | undefined,
+  objectNumber: number,
 ): XrefSection {
-  const decoded = decodeStream(raw, dict, sink);
+  const decoded = decodeStream(raw, dict, sink, { budget, objectNumber });
   const widths = asArray(dictGet(dict, "W"));
   const w0 = widths !== undefined ? (asNumber(widths[0]) ?? 0) : 1;
   const w1 = widths !== undefined ? (asNumber(widths[1]) ?? 0) : 1;
@@ -448,6 +466,7 @@ function scanObjectHeaderBackward(
 function recoverXrefByLinearScan(
   bytes: Uint8Array<ArrayBuffer>,
   sink: PdfDiagnosticSink,
+  budget: PdfDecodeBudget | undefined,
 ): XrefTable {
   const entries = new Map<number, XrefEntry>();
   for (const objPos of findAllKeywordPositions(bytes, OBJ_BYTES)) {
@@ -494,6 +513,7 @@ function recoverXrefByLinearScan(
         indirect.value.raw,
         entries,
         sink,
+        budget,
       );
     }
   }
@@ -513,8 +533,12 @@ function registerObjStmContents(
   raw: Uint8Array<ArrayBuffer>,
   entries: Map<number, XrefEntry>,
   sink: PdfDiagnosticSink,
+  budget: PdfDecodeBudget | undefined,
 ): void {
-  const decoded = decodeStream(raw, dict, sink);
+  const decoded = decodeStream(raw, dict, sink, {
+    budget,
+    objectNumber: streamObjNum,
+  });
   const n = asNumber(dictGet(dict, "N")) ?? 0;
   const reader = new ByteReader(decoded.bytes);
   let index = 0;

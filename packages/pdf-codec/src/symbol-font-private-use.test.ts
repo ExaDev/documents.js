@@ -27,6 +27,7 @@ import {
 import { buildSfnt } from "./test-support/sfnt";
 import { buildNameTable } from "./test-support/sfnt-tables";
 import { WINGDINGS_CHARACTERS } from "./wingdings-characters";
+import { unbudgetedResolver } from "./test-support/resolver";
 
 const NO_DIAGNOSTICS: PdfDiagnosticSink = () => undefined;
 
@@ -35,7 +36,7 @@ function makeResolver(objects: Map<number, PdfObject>): PdfObjectResolver {
     obj?.kind === "ref" ? objects.get(obj.num) : obj;
   const resolveDict = (obj: PdfObject | undefined): PdfDict | undefined =>
     asDict(resolve(obj));
-  return { resolve, resolveDict };
+  return unbudgetedResolver({ resolve, resolveDict });
 }
 
 /** A /ToUnicode CMap sending each two-byte code to the code point given. */

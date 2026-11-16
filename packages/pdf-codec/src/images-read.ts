@@ -7,10 +7,10 @@ import {
 } from "byte-codec";
 import type { Jpeg2000Image } from "./image/jpeg2000";
 import { decodeJpeg2000 } from "./image/jpeg2000";
+import { PdfDecodeBudgetError } from "./decode-budget";
 import type { PdfDiagnosticSink } from "./diagnostics";
-import { decodeStream } from "./filters";
 import type { PdfObjectResolver } from "./interpret-types";
-import type { PdfDict, PdfObject } from "./objects";
+import type { PdfDict, PdfObject, PdfStream } from "./objects";
 import { asArray, asBool, asName, asNumber, dictGet } from "./objects";
 
 // Turns an Image XObject (or an inline image's dict+data) into bytes ready to store as a LayoutImageAsset. A DCTDecode (JPEG) image passes through completely undecoded — its compressed bytes ARE the deliverable, exactly mirroring the write path's own lossless JPEG passthrough. Everything else is decoded to raw samples and re-encoded as PNG via byte-codec's own encodePng, since LayoutImageAsset only ever stores 'png' or 'jpeg' — byte-codec's encodePng is this package's only PNG encoder: a caller's own imageId is a crc32 of the PNG bytes it originally supplied (see documents.js's registerImageBytes), so this module's re-encode of the same raster data must run through the identical function a caller would have used, not a second, independently-maintained copy that could silently diverge from it.
@@ -107,7 +107,7 @@ function resolveColorSpace(
     const lookupObj = resolver.resolve(arr[3]);
     let lookup: Uint8Array<ArrayBuffer>;
     if (lookupObj?.kind === "stream") {
-      lookup = decodeStream(lookupObj.raw, lookupObj.dict, sink).bytes;
+      lookup = resolver.decodeStream(lookupObj, sink).bytes;
     } else if (lookupObj?.kind === "string") {
       lookup = lookupObj.bytes;
     } else {
@@ -399,7 +399,7 @@ function readSoftMaskAlpha(
   if (smaskObj?.kind !== "stream") {
     return undefined;
   }
-  const decoded = decodeStream(smaskObj.raw, smaskObj.dict, sink);
+  const decoded = resolver.decodeStream(smaskObj, sink);
   if (decoded.remainingFilter !== undefined) {
     return undefined; // an encoded (e.g. DCT) soft mask is out of scope — degrade to no alpha rather than guess
   }
@@ -458,11 +458,12 @@ function jpeg2000ChannelKind(
 }
 
 function readJpeg2000Image(
-  dict: PdfDict,
+  stream: PdfStream,
   raw: Uint8Array<ArrayBuffer>,
   resolver: Readonly<PdfObjectResolver>,
   sink: PdfDiagnosticSink,
 ): ExtractedPdfImage | undefined {
+  const dict = stream.dict;
   let image: Jpeg2000Image;
   try {
     image = decodeJpeg2000(raw, {
@@ -473,8 +474,16 @@ function readJpeg2000Image(
       maxWidth: PNG_MAX_DIMENSION,
       maxHeight: PNG_MAX_DIMENSION,
       maxPixels: PNG_MAX_PIXELS,
+      // The decoded samples are the JPEG 2000 stage's output, which decodeStream leaves undecoded, so they are charged here, before the decoder allocates them.
+      onSampleAllocation: (bytes) => {
+        resolver.chargeDecodedBytes(stream, bytes);
+      },
     });
   } catch (error) {
+    // A budget refusal is the document's, not this image's: it stops the read rather than degrading to "skip this image".
+    if (error instanceof PdfDecodeBudgetError) {
+      throw error;
+    }
     sink({
       code: "image/jpx-undecodable",
       severity: "warning",
@@ -568,6 +577,8 @@ export function readImageXObject(
   resolver: Readonly<PdfObjectResolver>,
   sink: PdfDiagnosticSink,
 ): ExtractedPdfImage | undefined {
+  // The resolver knows a stream by its dictionary, so an image XObject's dictionary names its object in a budget error, and an inline image's, which belongs to no object, names it as inline.
+  const stream: PdfStream = { kind: "stream", dict, raw };
   if (asBool(dictGet(dict, "ImageMask") ?? dictGet(dict, "IM")) === true) {
     sink({
       code: "image/mask-unsupported",
@@ -578,8 +589,8 @@ export function readImageXObject(
     return undefined;
   }
 
-  // The resolver is threaded in here, and only here, because JBIG2Decode's own /JBIG2Globals DecodeParms entry is a stream that a producer essentially always writes as an indirect reference — no other filter this codec implements has a parameter that needs dereferencing.
-  const decoded = decodeStream(raw, dict, sink, (obj) => resolver.resolve(obj));
+  // Decoded through the resolver, which also follows JBIG2Decode's own /JBIG2Globals DecodeParms entry, a stream a producer essentially always writes as an indirect reference.
+  const decoded = resolver.decodeStream(stream, sink);
   const jbig2Original: ExtractedPdfImage["original"] =
     decoded.jbig2 === undefined
       ? undefined
@@ -611,7 +622,7 @@ export function readImageXObject(
     };
   }
   if (decoded.remainingFilter === "JPXDecode") {
-    return readJpeg2000Image(dict, decoded.bytes, resolver, sink);
+    return readJpeg2000Image(stream, decoded.bytes, resolver, sink);
   }
   if (decoded.remainingFilter !== undefined) {
     return undefined; // decodeStream already raised 'pdf/unsupported-filter'
@@ -697,4 +708,19 @@ export function readImageXObject(
     heightPx: height,
     ...(jbig2Original !== undefined ? { original: jbig2Original } : {}),
   };
+}
+
+// A JPEG passes through readImageXObject undecoded (its DCTDecode stage stops the filter chain), so a rasteriser renderPdfPage hands it to is what decodes it: its samples, one byte per component per pixel as the JPEG's own header declares them, are that stage's output, and are charged against the document's decode budget before the image is handed over. A PNG needs no charge, since readImageXObject decoded, and charged, its samples itself.
+export function chargeRasterisedJpeg(
+  image: ExtractedPdfImage,
+  stream: PdfStream,
+  resolver: Readonly<PdfObjectResolver>,
+): void {
+  if (image.format === "jpeg") {
+    const info = readJpegInfo(image.bytes);
+    resolver.chargeDecodedBytes(
+      stream,
+      info.width * info.height * info.components,
+    );
+  }
 }

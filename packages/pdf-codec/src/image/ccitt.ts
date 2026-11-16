@@ -617,13 +617,13 @@ export interface CcittFaxImage {
   readonly rows: number;
 }
 
-const DEFAULT_COLUMNS = 1728; // ISO 32000-1 Table 11, and the standard fax scan line width T.4 is written around
+export const CCITT_DEFAULT_COLUMNS = 1728; // ISO 32000-1 Table 11, and the standard fax scan line width T.4 is written around
 
 export function decodeCcittFax(
   data: Uint8Array<ArrayBuffer>,
   options: CcittFaxOptions = {},
 ): CcittFaxImage {
-  const columns = options.columns ?? DEFAULT_COLUMNS;
+  const columns = options.columns ?? CCITT_DEFAULT_COLUMNS;
   const requestedRows = options.rows ?? 0;
   const k = options.k ?? 0;
   const blackBit = options.blackIs1 === true ? 1 : 0;

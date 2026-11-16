@@ -4,6 +4,7 @@ import type { FontMetricsPort, PdfObjectResolver } from "./interpret-types";
 import { interpretContentStream } from "./interpret";
 import type { PdfDict, PdfObject } from "./objects";
 import { asDict, pdfDict } from "./objects";
+import { unbudgetedResolver } from "./test-support/resolver";
 
 function collectDiagnostics(): {
   sink: PdfDiagnosticSink;
@@ -41,7 +42,7 @@ function makeResolver(objects: Map<number, PdfObject>): PdfObjectResolver {
     obj?.kind === "ref" ? objects.get(obj.num) : obj;
   const resolveDict = (obj: PdfObject | undefined): PdfDict | undefined =>
     asDict(resolve(obj));
-  return { resolve, resolveDict };
+  return unbudgetedResolver({ resolve, resolveDict });
 }
 
 const EMPTY_RESOURCES = pdfDict({});

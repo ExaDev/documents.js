@@ -14,6 +14,7 @@ import {
 } from "./test-support/jpeg2000";
 import type { PdfObject } from "./objects";
 import { asDict, pdfDict, pdfName, pdfNum, pdfStream } from "./objects";
+import { unbudgetedResolver } from "./test-support/resolver";
 
 // The write side's verbatim passthrough of a no-encoder filter's original stream: an asset carrying `original` (which only the read side of a JBIG2/JPX source mints) must re-embed those bytes under their own filter rather than re-encoding the decoded pixels through Flate or Group 4, so a pdf-to-pdf round trip pays zero generation loss for exactly the two filters this package cannot re-encode. Each test builds the asset the way the reader really does — through readImageXObject over the fixture, so the decoded canonical and the original come from one genuine extraction rather than a hand-assembled pair — then writes, re-reads, and checks both halves: the written bytes carry the original stream (and the /JBIG2Globals object a symbol-dictionary stream needs), and the re-read image decodes back to the same pixels.
 
@@ -56,12 +57,12 @@ function jbig2Asset(
           ],
         ])
       : undefined;
-  const resolver = {
+  const resolver = unbudgetedResolver({
     resolve: (obj: PdfObject | undefined) =>
       obj?.kind === "ref" ? (globalsObjects?.get(obj.num) ?? obj) : obj,
     resolveDict: (obj: PdfObject | undefined) =>
       asDict(obj?.kind === "ref" ? (globalsObjects?.get(obj.num) ?? obj) : obj),
-  };
+  });
   const extracted = readImageXObject(
     dict,
     jbig2FixtureBytes(fixture.stream),
@@ -112,10 +113,10 @@ function jpeg2000Asset(
   const extracted = readImageXObject(
     dict,
     jpeg2000FixtureBytes(fixture.codestream),
-    {
+    unbudgetedResolver({
       resolve: (obj: PdfObject | undefined) => obj,
       resolveDict: (obj: PdfObject | undefined) => asDict(obj),
-    },
+    }),
     emptySink,
   );
   if (extracted === undefined) {
