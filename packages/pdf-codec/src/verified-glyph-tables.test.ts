@@ -20,6 +20,7 @@ import {
   verifiedGlyphTableFor,
   type VerifiedGlyphTableSource,
 } from "./verified-glyph-tables";
+import { unbudgetedResolver } from "./test-support/resolver";
 
 const NO_DIAGNOSTICS: PdfDiagnosticSink = () => undefined;
 
@@ -28,7 +29,7 @@ function makeResolver(objects: Map<number, PdfObject>): PdfObjectResolver {
     obj?.kind === "ref" ? objects.get(obj.num) : obj;
   const resolveDict = (obj: PdfObject | undefined): PdfDict | undefined =>
     asDict(resolve(obj));
-  return { resolve, resolveDict };
+  return unbudgetedResolver({ resolve, resolveDict });
 }
 
 function programBytes(label: string): Uint8Array<ArrayBuffer> {

@@ -1,6 +1,5 @@
 import { concatBytes } from "./bytes/writer";
 import type { PdfDiagnosticSink } from "./diagnostics";
-import { decodeStream } from "./filters";
 import type { PdfObjectResolver } from "./interpret-types";
 import type { LayoutItem } from "./layout";
 import type { Matrix } from "./matrix";
@@ -202,7 +201,7 @@ export function readPageContentBytes(
 ): Uint8Array<ArrayBuffer> {
   const contentsObj = resolver.resolve(dictGet(page, "Contents"));
   if (contentsObj?.kind === "stream") {
-    return decodeStream(contentsObj.raw, contentsObj.dict, sink).bytes;
+    return resolver.decodeStream(contentsObj, sink).bytes;
   }
   if (contentsObj?.kind === "array") {
     const chunks: Uint8Array<ArrayBuffer>[] = [];
@@ -210,7 +209,7 @@ export function readPageContentBytes(
       const streamObj = resolver.resolve(item);
       if (streamObj?.kind === "stream") {
         chunks.push(
-          decodeStream(streamObj.raw, streamObj.dict, sink).bytes,
+          resolver.decodeStream(streamObj, sink).bytes,
           new Uint8Array([CONTENT_STREAM_JOIN_BYTE]),
         );
       }

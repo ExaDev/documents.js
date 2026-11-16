@@ -20,6 +20,7 @@ import {
 } from "./objects";
 import { readPdf } from "./read";
 import { navigationClusterPdf } from "./test-support/pdf";
+import { unbudgetedResolver } from "./test-support/resolver";
 
 // The navigation cluster (#721's core): named destinations (old-style /Dests dictionary AND /Names /Dests name tree), the /Outlines bookmark tree, and internal link annotations (/Dest direct and named, /A /GoTo actions) — all read into the LayoutDocument's destinations/outline surfaces and the internalLink item kind. A direct destination array names no destination, so the reader mints one (dest1, dest2, ...) so every internal link and outline entry targets a destinations-table name.
 
@@ -150,7 +151,7 @@ function makeResolver(
     obj?.kind === "ref" ? objects.get(obj.num) : obj;
   const resolveDict = (obj: PdfObject | undefined): PdfDict | undefined =>
     asDict(resolve(obj));
-  return { resolve, resolveDict };
+  return unbudgetedResolver({ resolve, resolveDict });
 }
 
 // A page-index lookup that resolves any ref to its own object number — arbitrary but deterministic, and distinct enough from a small page count that a test asserting `pageIndex: N` can't be confused with a coincidental default.

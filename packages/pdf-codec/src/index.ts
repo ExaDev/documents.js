@@ -38,6 +38,9 @@ export {
   PdfParseError,
   PdfPasswordRequiredError,
 } from "./diagnostics";
+// The decode budget (ReadPdfOptions.maxDecodedBytes, RenderPdfPageOptions.maxDecodedBytes): the error a read throws at the first decode that would pass it, and the budget itself, for a caller decoding a stream through `pdf-codec/filters`' decodeStream.
+export type { PdfDecodeSource } from "./decode-budget";
+export { PdfDecodeBudget, PdfDecodeBudgetError } from "./decode-budget";
 export type { WinAnsiSubstitution } from "./winansi";
 export { PdfBytesSchema, pdfCodec } from "./codec";
 

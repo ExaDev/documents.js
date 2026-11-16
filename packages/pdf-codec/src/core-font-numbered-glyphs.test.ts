@@ -9,6 +9,7 @@ import { createFontResolver } from "./font-read";
 import type { PdfObjectResolver } from "./interpret-types";
 import type { PdfDict, PdfObject } from "./objects";
 import { asDict, pdfArray, pdfDict, pdfName, pdfNum } from "./objects";
+import { unbudgetedResolver } from "./test-support/resolver";
 
 const NO_DIAGNOSTICS: PdfDiagnosticSink = () => undefined;
 
@@ -192,7 +193,10 @@ function makeResolver(objects: Map<number, PdfObject>): PdfObjectResolver {
   const resolve = (obj: PdfObject | undefined): PdfObject | undefined => obj;
   const resolveDict = (obj: PdfObject | undefined): PdfDict | undefined =>
     asDict(resolve(obj));
-  return { resolve, resolveDict: (obj) => resolveDict(obj ?? objects.get(0)) };
+  return unbudgetedResolver({
+    resolve,
+    resolveDict: (obj) => resolveDict(obj ?? objects.get(0)),
+  });
 }
 
 describe("a CFF subset that numbers its glyphs after a core face", () => {

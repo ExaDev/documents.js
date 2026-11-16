@@ -18,6 +18,7 @@ import {
 } from "./objects";
 import {} from "./test-support/ccitt-fax";
 import {} from "./test-support/jpeg2000";
+import { unbudgetedResolver } from "./test-support/resolver";
 
 function collectDiagnostics(): {
   sink: PdfDiagnosticSink;
@@ -37,7 +38,7 @@ function makeResolver(objects: Map<number, PdfObject>): PdfObjectResolver {
     obj?.kind === "ref" ? objects.get(obj.num) : obj;
   const resolveDict = (obj: PdfObject | undefined): PdfDict | undefined =>
     asDict(resolve(obj));
-  return { resolve, resolveDict };
+  return unbudgetedResolver({ resolve, resolveDict });
 }
 
 function u16be(n: number): number[] {

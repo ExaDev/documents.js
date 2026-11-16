@@ -8,10 +8,9 @@ import type { SfntFont } from "./sfnt";
 import { drawTextRun, type TextOutlineFace } from "./raster-text";
 import type { PdfDiagnosticSink } from "./diagnostics";
 import { NOOP_DIAGNOSTIC_SINK, PdfParseError } from "./diagnostics";
-import { decodeStream } from "./filters";
 import { createFontResolver } from "./font-read";
 import type { FontResolverService } from "./font-read";
-import { readImageXObject } from "./images-read";
+import { chargeRasterisedJpeg, readImageXObject } from "./images-read";
 import type {
   ExtractedEllipse,
   ExtractedImage,
@@ -31,7 +30,7 @@ import {
   translationMatrix,
 } from "./matrix";
 import { normalizeRotation, pageRotationTransform } from "./page-frame";
-import type { PdfDict } from "./objects";
+import type { PdfDict, PdfStream } from "./objects";
 import { asArray, asNumber, dictGet } from "./objects";
 import { readOptionalContent } from "./optional-content";
 import { concatBytes } from "./bytes/writer";
@@ -148,6 +147,8 @@ export interface RenderPdfPageOptions {
   readonly clipPt?: RasterRegionPt;
   readonly sink?: PdfDiagnosticSink;
   readonly signal?: AbortSignal;
+  // The most bytes decoding may produce while opening the document and rendering the page, as ReadPdfOptions.maxDecodedBytes describes it; a JPEG the page draws is charged its decoded samples here, since the rasteriser decodes it. The first decode that would pass it throws PdfDecodeBudgetError. Absent, decoding is unbounded.
+  readonly maxDecodedBytes?: number;
 }
 
 // Absorbs float fuzz in regionPixels below (an exact 100pt at scale 2 computing 200.00000000000003 must be 200, not 201).
@@ -251,7 +252,7 @@ function readPageContentBytes(
 ): Uint8Array<ArrayBuffer> {
   const contentsObj = resolver.resolve(dictGet(page, "Contents"));
   if (contentsObj?.kind === "stream") {
-    return decodeStream(contentsObj.raw, contentsObj.dict, sink).bytes;
+    return resolver.decodeStream(contentsObj, sink).bytes;
   }
   if (contentsObj?.kind === "array") {
     const chunks: Uint8Array<ArrayBuffer>[] = [];
@@ -259,7 +260,7 @@ function readPageContentBytes(
       const streamObj = resolver.resolve(entry);
       if (streamObj?.kind === "stream") {
         chunks.push(
-          decodeStream(streamObj.raw, streamObj.dict, sink).bytes,
+          resolver.decodeStream(streamObj, sink).bytes,
           new Uint8Array([NEWLINE_BYTE]),
         );
       }
@@ -305,7 +306,9 @@ export function renderPdfPage(
       'no "%PDF-" header found within the first bytes of the file; this does not look like a PDF at all',
     );
   }
-  const doc = openPdfDocument(pdfBytes, sink);
+  const doc = openPdfDocument(pdfBytes, sink, {
+    maxDecodedBytes: options.maxDecodedBytes,
+  });
   const pages = doc.pages();
   if (pageIndex < 0 || pageIndex >= pages.length) {
     throw new PdfParseError(
@@ -735,6 +738,7 @@ function drawImageXObjectItem(
   if (image === undefined) {
     return; // readImageXObject has reported its own diagnostic for why these pixels are unavailable
   }
+  chargeRasterisedJpeg(image, stream, resolver);
   drawImage(image, item.matrix, interpretToDeviceMatrix, rasteriser);
 }
 
@@ -745,10 +749,12 @@ function drawInlineImageItem(
   rasteriser: Readonly<PageRasteriser>,
   sink: PdfDiagnosticSink,
 ): void {
-  const image = readImageXObject(item.dict, item.data, resolver, sink);
+  const stream: PdfStream = { kind: "stream", dict: item.dict, raw: item.data };
+  const image = readImageXObject(stream.dict, stream.raw, resolver, sink);
   if (image === undefined) {
     return;
   }
+  chargeRasterisedJpeg(image, stream, resolver);
   drawImage(image, item.matrix, interpretToDeviceMatrix, rasteriser);
 }
 

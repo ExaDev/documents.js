@@ -78,6 +78,8 @@ export interface Jpeg2000DecodeOptions {
   readonly maxWidth?: number;
   readonly maxHeight?: number;
   readonly maxPixels?: number;
+  // Called once the size bounds above have passed, with the bytes the decoder is about to allocate for its sample planes (one 32-bit sample per pixel per component), before allocating them; a throw from it stops the decode there. How a caller charges a JPEG 2000 image against a budget of its own before paying for it.
+  readonly onSampleAllocation?: (bytes: number) => void;
 }
 
 export interface Jpeg2000Image {
@@ -601,6 +603,9 @@ export function decodeJpeg2000(
   if (first === undefined) {
     throw new Jpeg2000ParseError("the codestream declares no components");
   }
+  options.onSampleAllocation?.(
+    width * height * componentCount * Int32Array.BYTES_PER_ELEMENT,
+  );
   const planes: Int32Array[] = Array.from(
     { length: componentCount },
     () => new Int32Array(width * height),
