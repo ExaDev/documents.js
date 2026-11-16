@@ -31,7 +31,6 @@ import {
   scaleMatrix,
   translationMatrix,
 } from "./matrix";
-import { decodeStream } from "./filters";
 import {
   EXTENT_ZERO_EPSILON,
   type EmbeddedProgram,
@@ -58,11 +57,7 @@ function openEmbeddedProgram(
     if (stream?.kind !== "stream") {
       continue;
     }
-    const bytes = decodeStream(
-      stream.raw,
-      stream.dict,
-      NOOP_DIAGNOSTIC_SINK,
-    ).bytes;
+    const bytes = resolver.decodeStream(stream, NOOP_DIAGNOSTIC_SINK).bytes;
     // No separate bytes.length >= 3 guard: with noUncheckedIndexedAccess, an out-of-bounds index already reads as undefined, which can never strictly equal any of these three literals — a short stream already fails the chain on its own without a length check duplicating that fact.
     if (
       bytes[0] === 0x01 &&
@@ -216,9 +211,8 @@ function buildTextOutlineFace(
     }
     if (cidToGidMap?.kind === "stream") {
       // An explicit mapping stream: 2-byte big-endian GID per CID (ISO 32000-1 9.7.4.2). CIDs past the stream's end have no entry, and a missing GID is skipped — never drawn as glyph 0, which would paint .notdef ink the file never stated.
-      const decodedBytes = decodeStream(
-        cidToGidMap.raw,
-        cidToGidMap.dict,
+      const decodedBytes = resolver.decodeStream(
+        cidToGidMap,
         NOOP_DIAGNOSTIC_SINK,
       ).bytes;
       const entries: number[] = [];

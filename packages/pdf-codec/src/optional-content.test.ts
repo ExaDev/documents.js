@@ -7,6 +7,7 @@ import type { PdfDict, PdfObject } from "./objects";
 import { asDict, pdfArray, pdfDict, pdfLiteralString, pdfRef } from "./objects";
 import { readPdf } from "./read";
 import { ocgPdf } from "./test-support/pdf-structures";
+import { unbudgetedResolver } from "./test-support/resolver";
 
 // A resolver over a plain ref-number -> object table, matching interpret.test.ts's/navigation.test.ts's own makeResolver.
 function makeResolver(
@@ -16,7 +17,7 @@ function makeResolver(
     obj?.kind === "ref" ? objects.get(obj.num) : obj;
   const resolveDict = (obj: PdfObject | undefined): PdfDict | undefined =>
     asDict(resolve(obj));
-  return { resolve, resolveDict };
+  return unbudgetedResolver({ resolve, resolveDict });
 }
 
 function collectDiagnostics(): {

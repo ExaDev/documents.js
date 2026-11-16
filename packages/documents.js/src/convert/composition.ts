@@ -329,6 +329,10 @@ export interface UnifiedConversionOptions {
    * The document-level surfaces of a pdf source to read, as pdf-codec's `ReadPdfOptions.surfaces` takes them: one boolean per surface (`outline`, `destinations`, `form`, `layers`, `structure`, `residue`, `images`), each read unless set to `false`, so omitting it reads everything as before. Independent of `pages`, and handed to the same hop: only the plan's first hop, and only when the conversion's source is pdf, so an intermediate pdf a route renders internally is always read whole. A skipped surface is never parsed and is absent from the read, so what the conversion builds from it is absent too: no `outline-N` entries in the tree's `destinations` table without `outline`, no destinations and no internal link constructs without `destinations` (a link to a URI is kept, and a read outline's `outline-N` entries stay, each without a `destination`), no form `contentControl` constructs without `form`, no layers table without `layers`, no structure entries in `definitions` without `structure`, no residue without `residue`, no images without `images` (no image stream is decoded, so a text-only conversion of an image-heavy page costs no image memory); skipping the outline also renumbers the reader-minted `destN` names internal link anchors carry, since the outline mints its direct destinations first. Two skips also change reconstruction: without `structure` a tagged PDF's headings, table cells and divisions are inferred from geometry as for an untagged file, and without `layers` content the default view hides cannot be told apart and is kept as if visible. See `ReadPdfOptions.surfaces` for exactly what each covers.
    */
   readonly surfaces?: ReadPdfSurfaces;
+  /**
+   * The most bytes a pdf source's stream decoding may produce, as pdf-codec's `ReadPdfOptions.maxDecodedBytes` takes it: every content stream, font program, image, metadata packet and embedded file the read decodes is charged against it, and the first decode that would pass it throws `PdfDecodeBudgetError` (a `PdfParseError` with code `pdf/decode-budget-exceeded`, carrying the budget, the stream's object number and its filters) before materialising the rest, so a caller can tell a conversion that would cost too much from a malformed file. Handed to the same hop as `pages` and `surfaces`: only the plan's first hop, and only when the conversion's source is pdf, since an intermediate pdf a route renders internally is this package's own output rather than untrusted input. Absent, decoding is unbounded.
+   */
+  readonly maxDecodedBytes?: number;
 }
 
 // What the fromPdf executor knows about a conversion's pages that a text build needs and the caller's options do not carry, passed to a text node's build alongside those options: the original one-based page number of each page the read returned, set only for a page-selected read (see UnifiedConversionOptions.pages), where a page's position in the output no longer says which page it is. Internal to the executors, never caller-supplied.
@@ -657,6 +661,7 @@ export function executeFromPdf(
     sink: options?.sink,
     pages: options?.pages,
     surfaces: options?.surfaces,
+    maxDecodedBytes: options?.maxDecodedBytes,
   });
   const content = RECONSTRUCTORS[node.variant](layout, {
     signal: options?.signal,
@@ -726,7 +731,7 @@ export function runCompositionPlan(
     }
     // onDocument fires on the last hop only: null out onDocument for every hop before the last, then pass the caller's options through unchanged on the final hop so the callback receives the package that actually produced the output bytes. This mirrors the convention the original hand-written composed functions (xlsxToPdf/pdfToXlsx/xlsxToMarkdown/markdownToXlsx) already followed — each forwarded onDocument to its own last hop, never the first — so a caller of xlsxToPdf still receives the odsToPdf hop's content+layout package rather than the intermediate xlsx->ods bridge's content-only one.
     const isLastHop = i === plan.hops.length - 1;
-    // pages and surfaces select what to read of the caller's own pdf source, so only the hop that reads that source receives them: the first hop of a plan whose source is pdf. Every other hop's pdf (an intermediate rendering, as on a docx -> ods route through toPdf then fromPdf) is not the caller's document, and selecting its pages would silently drop content or throw for an index the caller never meant against it, and skipping its surfaces would drop what the caller's own source carried through it.
+    // pages, surfaces and maxDecodedBytes govern how the caller's own pdf source is read, so only the hop that reads that source receives them: the first hop of a plan whose source is pdf. Every other hop's pdf (an intermediate rendering, as on a docx -> ods route through toPdf then fromPdf) is not the caller's document, and selecting its pages would silently drop content or throw for an index the caller never meant against it, and skipping its surfaces would drop what the caller's own source carried through it.
     const readsCallerPdf = i === 0 && hop.from === "pdf";
     const hopOptions: UnifiedConversionOptions | undefined =
       options === undefined
@@ -736,6 +741,9 @@ export function runCompositionPlan(
             onDocument: isLastHop ? options.onDocument : undefined,
             pages: readsCallerPdf ? options.pages : undefined,
             surfaces: readsCallerPdf ? options.surfaces : undefined,
+            maxDecodedBytes: readsCallerPdf
+              ? options.maxDecodedBytes
+              : undefined,
           };
     if (hop.executor === "toPdf") {
       if (!isSourceContentFormat(hop.from)) {

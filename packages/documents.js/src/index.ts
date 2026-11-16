@@ -406,6 +406,7 @@ export type {
 } from "pdf-codec";
 export {
   NOOP_DIAGNOSTIC_SINK,
+  PdfDecodeBudgetError,
   PdfEncryptedError,
   PdfPageSelectionError,
   PdfParseError,

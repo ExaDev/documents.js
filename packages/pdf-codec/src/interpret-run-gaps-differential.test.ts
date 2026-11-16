@@ -10,6 +10,7 @@ import {
   groupPdfTextRuns,
 } from "./text-group";
 import { seededRandom } from "./test-support/seeded-random";
+import { unbudgetedResolver } from "./test-support/resolver";
 
 // How a producer chooses to chunk its text-showing operators must not change the words a reader gets back. The reference here places every glyph with an operator of its own at the position the producer's form puts it, so the line grouping alone decides where words and columns break; the form under test sets a whole row as one TJ under a character spacing, with adjustments that take the spacing back inside each figure and leave or widen it between figures. Both must read as the same line.
 
@@ -34,10 +35,10 @@ const FIXED_WIDTH_METRICS: FontMetricsPort = {
   }),
   isVertical: () => false,
 };
-const RESOLVER = {
+const RESOLVER = unbudgetedResolver({
   resolve: () => undefined,
   resolveDict: () => undefined,
-};
+});
 
 function between(random: () => number, low: number, high: number): number {
   return low + random() * (high - low);
