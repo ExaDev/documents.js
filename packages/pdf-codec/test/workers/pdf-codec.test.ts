@@ -2,12 +2,13 @@ import { describe, expect, it } from 'vitest';
 import { bytesToBase64 } from 'byte-codec';
 import { readPdf } from '../../src/read';
 import { decodePdfImage, listPdfImages } from '../../src/read-images';
-import { createFontRegistry, encodePng, writePdf } from '../../src';
+import { createFontRegistry, encodePng, PdfDecodeBudgetError, writePdf } from '../../src';
 
 // Proves pdf-codec's read path executes inside a Cloudflare Workers isolate (workerd, via @cloudflare/vitest-pool-workers) with no Node-only APIs. The read test imports through src/read.ts — the module behind the package.json `./read` entry point — so one test proves both that the read pipeline executes in the isolate and that the read-only entry itself works; the module-graph-width half of that entry's guarantee is held separately by src/read-graph.test.ts. The write test below exercises the opposite end: a real font registry resolving Calibri onto the vendored, metric-compatible Carlito face, which decodes the embedded asset, subsets it, and embeds a genuine TrueType font program — exactly the modules the read entry exists to exclude, proven to run in the isolate when a caller does want them. Fixtures are built inline rather than read from disk because workerd exposes no node:fs — and building them from the package's own format rules (object table, classic cross-reference, parenthesised content-stream string) is itself a check that nothing in the construction path needs Node either. This is the runtime complement to attw's static module-resolution check.
 
 // A minimal, structurally ordinary single-page PDF built by literal ASCII concatenation with inline byte-offset tracking — the same construction idea src/test-support/pdf.ts uses for the node fixtures, reimplemented here so the workerd test stays self-contained and pulls in no test-support code (only the package src barrel). Produces: Catalog -> Pages -> one Page (MediaBox [0 0 200 100]) with a Helvetica /F1 font and a content stream drawing "(Hello)", plus a classic (ISO 32000-1 7.5.4) cross-reference table. Each xref entry is padded to the mandatory fixed 20 bytes.
-function minimalClassicXrefPdf(): Uint8Array<ArrayBuffer> {
+// `contentFilter`, when given, is the content stream's /Filter and `content` its already-encoded bytes; otherwise the stream is the plain "(Hello)" text.
+function minimalClassicXrefPdf(contentFilter?: string, content?: Uint8Array): Uint8Array<ArrayBuffer> {
   const enc = new TextEncoder();
   const chunks: Uint8Array[] = [];
   const offsets = new Map<number, number>();
@@ -39,7 +40,7 @@ function minimalClassicXrefPdf(): Uint8Array<ArrayBuffer> {
   object(2, '<< /Type /Pages /Kids [3 0 R] /Count 1 >>');
   object(3, '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 100] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>');
   object(4, '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>');
-  stream(5, '<< >>', enc.encode('BT /F1 12 Tf 10 50 Td (Hello) Tj ET'));
+  stream(5, contentFilter === undefined ? '<< >>' : `<< /Filter /${contentFilter} >>`, content ?? enc.encode('BT /F1 12 Tf 10 50 Td (Hello) Tj ET'));
 
   const xrefOffset = length;
   ascii(`xref\n0 6\n`);
@@ -82,6 +83,18 @@ describe('pdf-codec under the Cloudflare Workers runtime', () => {
     const decoded = decodePdfImage(pdfBytes, entry!.locator);
     expect(decoded).toMatchObject({ format: 'png', widthPx: 2, heightPx: 1 });
     expect(bytesToBase64(decoded!.bytes)).toBe(readPdf(pdfBytes).images[decoded!.imageId]?.base64);
+  });
+
+  it('readPdf stops a content stream that would decode past maxDecodedBytes inside a workerd isolate, before decoding the rest', () => {
+    // 64 KiB of RunLength-encoded zero bytes, written as 512 repeat runs of 128 (length byte 129, then the byte) and an end-of-data marker: a small stream that expands far past the budget.
+    const runs = new Uint8Array(512 * 2 + 1);
+    for (let i = 0; i < 512; i++) {
+      runs[i * 2] = 129;
+    }
+    runs[runs.length - 1] = 128;
+    const pdf = minimalClassicXrefPdf('RunLengthDecode', runs);
+    expect(() => readPdf(pdf)).not.toThrow();
+    expect(() => readPdf(pdf, { maxDecodedBytes: 1024 })).toThrow(PdfDecodeBudgetError);
   });
 
   it('writePdf embeds the vendored Carlito face through a font registry inside a workerd isolate', () => {
