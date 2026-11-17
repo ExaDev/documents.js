@@ -94,9 +94,11 @@ export interface PdfImages {
   list: (options?: ListPdfImagesOptions) => PdfImageEntry[];
   /**
    * Decodes one image.
+   *
+   * An `xobject` locator is not checked against a listing: it names any image XObject stream in the file by its object number, so one naming a stream no page draws (another image's `/SMask`, or a page's `/Thumb` thumbnail) decodes that stream as an image, as `readPdf` would decode it had a page drawn it. The handle keeps the inline images of the last page it found an inline image on, so decoding a page's inline images one after another interprets that page once.
    * @param locator - The image, as a listing of this same file named it.
    * @returns The image, or undefined for one `readPdf` would leave out of its registry too (an `/ImageMask` stencil, an unsupported filter, colour space or bit depth, an invalid size, or an undecodable stream), with the same diagnostic `readPdf` reports for it.
-   * @throws PdfImageLocatorError if the locator names no image of this document: an object that is not an image XObject stream, or a page index or occurrence that is negative, not an integer, or past the page's inline images.
+   * @throws PdfImageLocatorError if the locator names nothing that can be decoded as an image: an object that is not a stream whose `/Subtype` is `/Image`, or a page index or occurrence that is negative, not an integer, or past the page's inline images.
    */
   decode: (locator: PdfImageLocator) => DecodedPdfImage | undefined;
 }
@@ -324,11 +326,38 @@ function isLocatorIndex(value: number): boolean {
   return Number.isInteger(value) && value >= 0;
 }
 
+// One page's inline images, in content-stream order.
+interface PageInlineImages {
+  readonly pageIndex: number;
+  readonly images: readonly Extract<ExtractedItem, { kind: "inlineImage" }>[];
+}
+
+// The inline images a page draws, found by interpreting its content again. The page's own diagnostics were reported when it was listed, so finding them again reports nothing new.
+function inlineImagesOf(
+  doc: PdfDocument,
+  pageIndex: number,
+  page: PdfDict | undefined,
+): PageInlineImages {
+  const items =
+    page === undefined
+      ? []
+      : (interpretPage(doc, pageIndex, page, undefined, NOOP_DIAGNOSTIC_SINK)
+          ?.items ?? []);
+  return {
+    pageIndex,
+    images: items.filter((item) => item.kind === "inlineImage"),
+  };
+}
+
 function decodeImage(
   doc: PdfDocument,
   pageDicts: readonly PdfDict[],
   locator: PdfImageLocator,
   sink: PdfDiagnosticSink,
+  inlineImagesOn: (
+    pageIndex: number,
+    page: PdfDict | undefined,
+  ) => PageInlineImages,
 ): ExtractedPdfImage | undefined {
   if (locator.kind === "xobject") {
     const stream = doc.resolve({
@@ -336,7 +365,7 @@ function decodeImage(
       num: locator.objectNumber,
       gen: locator.generation,
     });
-    // The interpreter draws an XObject as an image exactly when its /Subtype says so, so that is what a locator must name.
+    // The interpreter draws an XObject as an image exactly when its /Subtype says so, so that is what a locator must name. Whether a page draws it is not checked, since that would mean interpreting every page.
     if (
       stream?.kind !== "stream" ||
       asName(dictGet(stream.dict, "Subtype")) !== "Image"
@@ -363,20 +392,10 @@ function decodeImage(
     [locator.pageIndex],
     pageDicts.length,
   );
-  const page = pageDicts[pageIndex];
-  // The page's own diagnostics were reported when it was listed; finding the image again reports nothing new, and only the image's decode below reports to the caller.
-  const inline =
-    page === undefined
-      ? undefined
-      : interpretPage(
-          doc,
-          pageIndex,
-          page,
-          undefined,
-          NOOP_DIAGNOSTIC_SINK,
-        )?.items.filter((item) => item.kind === "inlineImage")[
-          locator.occurrence
-        ];
+  // Only the image's decode below reports to the caller.
+  const inline = inlineImagesOn(pageIndex, pageDicts[pageIndex]).images[
+    locator.occurrence
+  ];
   if (inline === undefined) {
     throw new PdfImageLocatorError(
       locator,
@@ -408,13 +427,30 @@ export function openPdfImages(
   throwIfAborted(signal);
   const doc = openPdfDocument(bytes, sink);
   const pageDicts = doc.pages();
+  // The last page whose inline images were looked for, kept so decoding a page's inline images one by one interprets it once rather than once per image. One page at most: its inline images are views onto its decoded content, which this keeps alive until another page's are looked for.
+  let lastInlinePage: PageInlineImages | undefined;
+  const inlineImagesOn = (
+    pageIndex: number,
+    page: PdfDict | undefined,
+  ): PageInlineImages => {
+    if (lastInlinePage?.pageIndex !== pageIndex) {
+      lastInlinePage = inlineImagesOf(doc, pageIndex, page);
+    }
+    return lastInlinePage;
+  };
   return {
     pageCount: pageDicts.length,
     list: (listOptions) =>
       listImages(doc, pageDicts, listOptions, signal, sink),
     decode: (locator) => {
       throwIfAborted(signal);
-      const extracted = decodeImage(doc, pageDicts, locator, sink);
+      const extracted = decodeImage(
+        doc,
+        pageDicts,
+        locator,
+        sink,
+        inlineImagesOn,
+      );
       if (extracted === undefined) {
         return undefined;
       }
