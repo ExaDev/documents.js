@@ -1,5 +1,5 @@
 import { zlibSync } from "fflate";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { PdfDiagnostic, PdfDiagnosticSink } from "./diagnostics";
 import {
   ascii85Decode,
@@ -268,6 +268,32 @@ describe("decodeStream", () => {
     expect(decodedText(result.bytes)).toBe("Hello, stream!");
     expect(result.remainingFilter).toBeUndefined();
     expect(diagnostics).toEqual([]);
+  });
+
+  it("asks for the expected length only when FlateDecode is the last filter, and decodes the same bytes either way", () => {
+    const { sink } = collectDiagnostics();
+    const compressed = zlibSync(textBytes("Hello, stream!"));
+    const expectedLength = vi.fn(() => 14);
+    const flateLast = decodeStream(
+      compressed,
+      pdfDict({ Filter: pdfName("FlateDecode") }),
+      sink,
+      undefined,
+      expectedLength,
+    );
+    expect(decodedText(flateLast.bytes)).toBe("Hello, stream!");
+    expect(expectedLength).toHaveBeenCalledTimes(1);
+
+    expectedLength.mockClear();
+    const dct = decodeStream(
+      new Uint8Array([0xff, 0xd8]),
+      pdfDict({ Filter: pdfName("DCTDecode") }),
+      sink,
+      undefined,
+      expectedLength,
+    );
+    expect(dct.remainingFilter).toBe("DCTDecode");
+    expect(expectedLength).not.toHaveBeenCalled();
   });
 
   it("decodes FlateDecode combined with a PNG predictor (Predictor 12)", () => {
