@@ -168,6 +168,33 @@ export function filterScanlines(
   bpp: number,
   strategy: "none" | "adaptive" = "adaptive",
 ): Uint8Array<ArrayBuffer> {
+  return filterScanlineRows(
+    (y, row) => {
+      row.set(raw.subarray(y * bytesPerRow, (y + 1) * bytesPerRow));
+    },
+    height,
+    bytesPerRow,
+    bpp,
+    strategy,
+  );
+}
+
+/**
+ * Filters pixel rows into PNG's per-scanline IDAT payload shape, as `filterScanlines` does, reading each row from a callback rather than from one buffer holding the whole image: a caller whose pixels are not already laid out as PNG rows (separate colour and alpha planes, say) writes each row as it is filtered instead of building the whole interleaved image first.
+ * @param readRow - Writes row `y`'s unfiltered bytes into `row` (exactly `bytesPerRow` long, holding whatever an earlier row left there, so every byte must be written). Called once per row, in order.
+ * @param height - Rows.
+ * @param bytesPerRow - Unfiltered bytes per row.
+ * @param bpp - Bytes per complete pixel, at least 1: the distance the Sub, Average and Paeth filters look back.
+ * @param strategy - As for `filterScanlines`.
+ * @returns The filtered rows, each prefixed by its filter-type byte.
+ */
+export function filterScanlineRows(
+  readRow: (y: number, row: Uint8Array<ArrayBuffer>) => void,
+  height: number,
+  bytesPerRow: number,
+  bpp: number,
+  strategy: "none" | "adaptive" = "adaptive",
+): Uint8Array<ArrayBuffer> {
   const stride = bytesPerRow + 1;
   const out = new Uint8Array(height * stride);
   // Two padded row buffers, swapped after each row so the row above is always the one just filtered; `previous` starts as all zeros, which is what "above the first row" means. Two candidate buffers, swapped when a filter beats the best so far, so no filtered row is ever copied out just to be compared.
@@ -179,7 +206,7 @@ export function filterScanlines(
     strategy === "none" ? [PNG_FILTER_NONE] : ALL_FILTER_TYPES;
 
   Array.from({ length: height }).forEach((_row, y) => {
-    current.set(raw.subarray(y * bytesPerRow, (y + 1) * bytesPerRow), bpp);
+    readRow(y, current.subarray(bpp));
     let bestType: PngFilterType = PNG_FILTER_NONE;
     let bestSum = Number.POSITIVE_INFINITY;
     for (const filterType of filterTypes) {

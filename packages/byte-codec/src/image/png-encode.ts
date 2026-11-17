@@ -2,7 +2,7 @@ import { crc32 } from "../bytes/crc32";
 import { deflate } from "../bytes/flate";
 import { ByteWriter, concatBytes } from "../bytes/writer";
 import type { RawImage } from "./png-decode";
-import { filterScanlines } from "./png-filter";
+import { filterScanlineRows, filterScanlines } from "./png-filter";
 
 // The eight-byte PNG signature (PNG spec section 5.2): a high-bit-set byte to catch 7-bit transmission, the ASCII text "PNG", a CRLF pair to detect line-ending translation, a DOS end-of-file marker to detect ASCII-mode truncation, and a final LF to detect CR stripping.
 const PNG_SIG_HIGH_BIT_MARKER = 0x89;
@@ -39,11 +39,12 @@ const OPAQUE_ALPHA = 255;
 const GREEN_SHIFT = 8;
 const BLUE_SHIFT = 16;
 const ALPHA_SHIFT = 24;
+const BYTE_MASK = 0xff;
 
 // The PNG spec's IHDR width/height fields are each a 'PNG four-byte unsigned integer', a datatype the spec (section 3, Terms and definitions) itself defines as "limited to the range 0 to 2^31-1 ... in order to accommodate languages that have difficulty with unsigned four-byte values" — so 2^31 and above has no valid encoding, the same way zero, a fraction, or NaN doesn't.
 export const PNG_MAX_DIMENSION = 0x7fffffff;
 
-// A ceiling on width * height, on top of PNG_MAX_DIMENSION above — the spec bounds only each dimension independently, not their product, so a pair of dimensions that individually satisfy PNG_MAX_DIMENSION (e.g. 46341 x 46341, or 65536 x 65536) can still multiply into an unboundedly large pixel count. This has no PNG-spec basis — it is a practical, finite ceiling on the per-call work this encoder is willing to do, not a guarantee that encoding at or near it stays fast: measured directly, encoding a PNG_MAX_PIXELS-sized image takes tens of seconds end to end, dominated by filterScanlines' own adaptive per-row search across all five PNG filter types and the subsequent deflate pass, not by the smaller per-pixel loops in detectPalette or writeTruecolorPng's interleave step. The point of the bound is to keep that worst case finite rather than to keep it quick, and this figure is chosen high enough to reject only genuinely extreme inputs — some real sources (an above-100-megapixel medium-format sensor, a high-DPI full-page scan) do exceed it, so this is not a claim that every legitimate photograph or scan stays under the ceiling, only that one large enough to exceed it needs downsampling before it reaches this encoder.
+// A ceiling on width * height, on top of PNG_MAX_DIMENSION above — the spec bounds only each dimension independently, not their product, so a pair of dimensions that individually satisfy PNG_MAX_DIMENSION (e.g. 46341 x 46341, or 65536 x 65536) can still multiply into an unboundedly large pixel count. This has no PNG-spec basis — it is a practical, finite ceiling on the per-call work this encoder is willing to do, not a guarantee that encoding at or near it stays fast: measured directly, encoding a PNG_MAX_PIXELS-sized image takes tens of seconds end to end, dominated by filterScanlines' own adaptive per-row search across all five PNG filter types and the subsequent deflate pass, not by the smaller per-pixel loops in detectPalette or writeTruecolorPng's per-row interleave. The point of the bound is to keep that worst case finite rather than to keep it quick, and this figure is chosen high enough to reject only genuinely extreme inputs — some real sources (an above-100-megapixel medium-format sensor, a high-DPI full-page scan) do exceed it, so this is not a claim that every legitimate photograph or scan stays under the ceiling, only that one large enough to exceed it needs downsampling before it reaches this encoder.
 export const PNG_MAX_PIXELS = 100_000_000;
 
 // Extracted from encodePng's own guard purely so its exact boundary (a pixel count of precisely PNG_MAX_PIXELS must be accepted, one more must not) is directly, cheaply testable: exercising this comparison through encodePng itself at the real boundary means actually allocating and filtering/deflating a genuine 100-million-pixel image, which — see PNG_MAX_PIXELS' own comment on what dominates cost at this size — takes tens of seconds even in the cheapest configuration, and far longer under Stryker's per-statement coverage instrumentation (multiple minutes, repeated across every mutant in the whole package's test run). A pure, standalone predicate keeps the real guard's exact logic under test without paying that cost at all.
@@ -113,32 +114,39 @@ function detectPalette(image: RawImage): PaletteEncoding | undefined {
   const { width, height, data, alpha } = image;
   const pixelCount = width * height;
   const colorToIndex = new Map<number, number>();
-  const indices = new Uint8Array(pixelCount);
   const paletteRgb: number[] = [];
   const paletteAlpha: number[] = [];
-
-  for (let i = 0; i < pixelCount; i++) {
+  const colorKey = (i: number): number => {
     const base = i * RGB_CHANNELS;
-    // `?? 0` rather than `!`: mirrors what writeTruecolorPng's own behaviour already implies for a data or alpha plane shorter than width*height(*channels) — writing an out-of-range `undefined` sample into that function's Uint8Array coerces it to 0 via ToUint8(ToNumber(undefined)), so a short buffer there already degrades to a per-pixel 0, never a thrown error. Without the same default here, the same missing sample would instead feed `undefined` into the arithmetic below, producing NaN and colliding every such pixel onto one arbitrary shared palette entry regardless of its real RGB — so encodePng's choice between the indexed and truecolour candidates would silently change what a short-buffered image decodes back to. Explicitly matching the default keeps that choice purely a size optimisation, never a content one.
+    // `?? 0` rather than `!`: mirrors writeTruecolorPng's own behaviour for a data or alpha plane shorter than width*height(*channels), which reads each missing sample as 0, so a short buffer there degrades to a per-pixel 0, never a thrown error. Without the same default here, the same missing sample would instead feed `undefined` into the arithmetic below, producing NaN and colliding every such pixel onto one arbitrary shared palette entry regardless of its real RGB — so encodePng's choice between the indexed and truecolour candidates would silently change what a short-buffered image decodes back to. Explicitly matching the default keeps that choice purely a size optimisation, never a content one.
     const r = data[base] ?? 0;
     const g = data[base + 1] ?? 0;
     const b = data[base + 2] ?? 0;
     const a = alpha === undefined ? OPAQUE_ALPHA : (alpha[i] ?? 0);
     // A packed bitfield (each 0..255 sample in its own byte lane) rather than a sum of scaled terms: since r/g/b/a each occupy a disjoint, non-overlapping 8-bit lane of the 32-bit key, the packing is a bijection by construction, with no arithmetic identity between the lanes for a mutation to preserve.
-    const key = r | (g << GREEN_SHIFT) | (b << BLUE_SHIFT) | (a << ALPHA_SHIFT);
+    return r | (g << GREEN_SHIFT) | (b << BLUE_SHIFT) | (a << ALPHA_SHIFT);
+  };
 
-    let index = colorToIndex.get(key);
-    if (index === undefined) {
+  // The palette is found before any index is stored: most images a caller encodes are photographs that exceed it within their first rows, and an index plane allocated up front would cost them a byte per pixel for nothing, just as the truecolour path is about to allocate its own largest buffers.
+  for (let i = 0; i < pixelCount; i++) {
+    const key = colorKey(i);
+    if (!colorToIndex.has(key)) {
       if (colorToIndex.size >= MAX_PALETTE_ENTRIES) {
         return undefined;
       }
-      index = colorToIndex.size;
-      colorToIndex.set(key, index);
-      paletteRgb.push(r, g, b);
-      paletteAlpha.push(a);
+      colorToIndex.set(key, colorToIndex.size);
+      paletteRgb.push(
+        key & BYTE_MASK,
+        (key >>> GREEN_SHIFT) & BYTE_MASK,
+        (key >>> BLUE_SHIFT) & BYTE_MASK,
+      );
+      paletteAlpha.push(key >>> ALPHA_SHIFT);
     }
-    indices[i] = index;
   }
+  const indices = new Uint8Array(pixelCount);
+  indices.forEach((_index, i) => {
+    indices[i] = colorToIndex.get(colorKey(i))!;
+  });
 
   const palette = Uint8Array.from(paletteRgb);
   if (alpha === undefined) {
@@ -198,22 +206,27 @@ function writeTruecolorPng(
   const { width, height, channels, data, alpha } = image;
   const outChannels = alpha === undefined ? channels : channels + 1;
   const bytesPerRow = width * outChannels;
-  const pixelCount = width * height;
-
-  const interleaved = new Uint8Array(pixelCount * outChannels);
-  // Filled through the typed array's own forEach rather than a manually bounded for loop, and rather than an index array as long as the image: `interleaved` is allocated to exactly pixelCount * outChannels elements, so each position is visited once, there is no separate loop-bound comparison whose own boundary could ever be observed through it, and encoding a large image does not first build a pixelCount-entry array. Each position holds one channel of one pixel; the extra channel past `channels`, present only with an alpha plane, is that pixel's alpha.
-  interleaved.forEach((_byte, index) => {
-    const pixel = Math.floor(index / outChannels);
-    const channel = index % outChannels;
-    interleaved[index] =
-      alpha !== undefined && channel === channels
-        ? alpha[pixel]!
-        : data[pixel * channels + channel]!;
-  });
 
   writeIhdr(writer, width, height, colorTypeFor(image));
-  const filtered = filterScanlines(
-    interleaved,
+  // Each row is written straight into the filter's own row buffer rather than first into one interleaved copy of the whole image, which for a large picture would cost as much memory again as its pixels. A pixel the raster or alpha plane is too short to hold reads as 0, as it always has.
+  const filtered = filterScanlineRows(
+    alpha === undefined
+      ? (y, row) => {
+          const samples = data.subarray(y * bytesPerRow, (y + 1) * bytesPerRow);
+          row.set(samples);
+          row.fill(0, samples.length);
+        }
+      : (y, row) => {
+          const firstPixel = y * width;
+          row.forEach((_byte, index) => {
+            const pixel = firstPixel + Math.floor(index / outChannels);
+            const channel = index % outChannels;
+            row[index] =
+              (channel === channels
+                ? alpha[pixel]
+                : data[pixel * channels + channel]) ?? 0;
+          });
+        },
     height,
     bytesPerRow,
     outChannels,
