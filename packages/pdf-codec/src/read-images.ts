@@ -1,8 +1,13 @@
 import type { PdfDiagnosticSink } from "./diagnostics";
-import { NOOP_DIAGNOSTIC_SINK, PdfImageLocatorError } from "./diagnostics";
+import {
+  NOOP_DIAGNOSTIC_SINK,
+  PdfImageLocatorError,
+  PdfParseError,
+} from "./diagnostics";
 import { openPdfDocument } from "./document";
 import type { PdfDocument } from "./document";
 import { filterNames } from "./filters";
+import type { PdfImageLocator } from "./image-locator";
 import type { ExtractedPdfImage } from "./images-read";
 import { readImageXObject } from "./images-read";
 import { interpretContentStream } from "./interpret";
@@ -23,28 +28,9 @@ import {
 } from "./page-frame";
 import { imageIdOf, imagePlacementFrom } from "./read-convert";
 import { hasPdfHeader, resolvePageSelection } from "./read-open";
-import { PdfParseError } from "./diagnostics";
 import { throwIfAborted } from "./util/abort";
 
-// The image registry readPdf builds, taken apart into its two halves so a memory-capped caller (a Worker isolate shelving a picture-heavy PDF) can pay for one image at a time: listing finds every image a page draws, where it draws it, and the reference that names it, without decoding any image stream; decoding turns one image, named by that reference, into exactly the bytes readPdf's registry holds for it (the same readImageXObject call on the same stream), without interpreting any page again. readPdf decodes every image during its one pass and keeps each as a base64 string, so its memory grows with the number of images; here nothing outlives the call that decoded it.
-
-/**
- * Names one image of a PDF, as `listPdfImages` reports it and `decodePdfImage` takes it back. Plain data, so a caller can store it and decode the image in a later call (or a later process) against the same file bytes.
- *
- * - `xobject`: an image XObject, by its indirect object reference. One entry covers every place the document draws it.
- * - `inline`: an inline image (`BI` ... `ID` ... `EI`), which has no object of its own, by its page and its position among that page's inline images in content-stream order (counted from 0, every inline image counted, including ones the listing leaves out). Decoding one interprets that page's content again to find it; inline images are small by design (ISO 32000-1 8.9.7 recommends at most 4 KB), and producers rarely write them.
- */
-export type PdfImageLocator =
-  | {
-      readonly kind: "xobject";
-      readonly objectNumber: number;
-      readonly generation: number;
-    }
-  | {
-      readonly kind: "inline";
-      readonly pageIndex: number;
-      readonly occurrence: number;
-    };
+// The image registry readPdf builds, taken apart into its two halves so a memory-capped caller (a Worker isolate shelving a picture-heavy PDF) can pay for one image at a time: listing finds every image a page draws, where it draws it, and the reference that names it (image-locator.ts), without decoding any image stream; decoding turns one image, named by that reference, into exactly the bytes readPdf's registry holds for it (the same readImageXObject call on the same stream), without interpreting any page again. readPdf decodes every image during its one pass and keeps each as a base64 string, so its memory grows with the number of images; here nothing outlives the call that decoded it.
 
 /** One place a page draws an image: the same placement fields a `readPdf` image item carries, in the same page coordinates. */
 export interface PdfImagePlacement {
@@ -75,7 +61,7 @@ export interface PdfImageEntry {
   readonly placements: readonly PdfImagePlacement[];
 }
 
-/** One image decoded: exactly the bytes, format and size `readPdf`'s registry holds for it, and the id `readPdf` names it by. */
+/** One image decoded: exactly the bytes, format and size `readPdf`'s registry holds for it, and the id `readPdf` names it by. Its byte arrays are its own, never views onto the PDF file's bytes, so keeping one does not keep the file alive. */
 export interface DecodedPdfImage extends ExtractedPdfImage {
   /** `img` and the CRC-32 of `bytes`, the key `readPdf` registers the image under in `LayoutDocument.images`. */
   readonly imageId: string;
@@ -84,7 +70,7 @@ export interface DecodedPdfImage extends ExtractedPdfImage {
 export interface PdfImageReadOptions {
   /** Receives every recoverable diagnostic, as `readPdf`'s sink does. */
   readonly sink?: PdfDiagnosticSink;
-  /** Checked before the document is opened, before each listed page, and before each decode. */
+  /** Checked before the document is opened, before each listed page, and before each decode. The signal given when the document is opened is the one every later `list` and `decode` of it checks. */
   readonly signal?: AbortSignal;
 }
 
@@ -99,15 +85,18 @@ export interface PdfImages {
   readonly pageCount: number;
   /**
    * Lists the images the selected pages draw, without decoding any of them.
+   *
+   * The listing follows the images `readPdf`'s pages draw, not its registry: two entries whose streams decode to the same bytes (the same picture stored twice) both appear here, and decode to the same `imageId`, where the registry holds the picture once. A caller storing decoded images by `imageId` stores it once too.
    * @param options - Which pages to list.
    * @returns One entry per image XObject drawn (in the order first drawn), and one per inline image, each with every visible placement.
+   * @throws PdfPageSelectionError if `pages` names a page the document does not have.
    */
   list: (options?: ListPdfImagesOptions) => PdfImageEntry[];
   /**
    * Decodes one image.
    * @param locator - The image, as a listing of this same file named it.
    * @returns The image, or undefined for one `readPdf` would leave out of its registry too (an `/ImageMask` stencil, an unsupported filter, colour space or bit depth, an invalid size, or an undecodable stream), with the same diagnostic `readPdf` reports for it.
-   * @throws PdfImageLocatorError if the locator names no image of this document.
+   * @throws PdfImageLocatorError if the locator names no image of this document: an object that is not an image XObject stream, or a page index or occurrence that is negative, not an integer, or past the page's inline images.
    */
   decode: (locator: PdfImageLocator) => DecodedPdfImage | undefined;
 }
@@ -225,8 +214,8 @@ function listImages(
       : resolvePageSelection(options.pages, pageDicts.length);
   const { layerNameOf } = readOptionalContent(doc.catalog, doc, sink);
   const entries: PdfImageEntry[] = [];
-  // Each image XObject's entry, by object number, with the placements still being collected into it.
-  const xobjects = new Map<number, PdfImagePlacement[]>();
+  // Each image XObject's placements, still being collected, by its stream: two references that resolve to one stream (a reference to a reference) name one image, listed under the first reference seen.
+  const xobjects = new Map<PdfObject, PdfImagePlacement[]>();
   pageDicts.forEach((page, pageIndex) => {
     if (selection !== undefined && !selection.has(pageIndex)) {
       return;
@@ -280,13 +269,13 @@ function listImages(
       if (placement === undefined) {
         continue;
       }
-      const placements = xobjects.get(ref.num);
+      const placements = xobjects.get(stream);
       if (placements !== undefined) {
         placements.push(placement);
         continue;
       }
       const collected = [placement];
-      xobjects.set(ref.num, collected);
+      xobjects.set(stream, collected);
       entries.push({
         locator: {
           kind: "xobject",
@@ -301,13 +290,46 @@ function listImages(
   return entries;
 }
 
+// The bytes a decode returns as an array of their own: an image whose stream needs no decoding (a JPEG's, or a JPEG 2000 or JBIG2 original) is otherwise a view onto the file, and would keep the whole file alive for as long as the caller keeps the image.
+function detachedFrom(
+  file: ArrayBufferLike,
+  bytes: Uint8Array<ArrayBuffer>,
+): Uint8Array<ArrayBuffer> {
+  return bytes.buffer === file ? bytes.slice() : bytes;
+}
+
+function detachedImage(
+  file: ArrayBufferLike,
+  image: ExtractedPdfImage,
+): ExtractedPdfImage {
+  const { original } = image;
+  return {
+    ...image,
+    bytes: detachedFrom(file, image.bytes),
+    ...(original !== undefined
+      ? {
+          original: {
+            ...original,
+            bytes: detachedFrom(file, original.bytes),
+            ...(original.globalsBytes !== undefined
+              ? { globalsBytes: detachedFrom(file, original.globalsBytes) }
+              : {}),
+          },
+        }
+      : {}),
+  };
+}
+
+function isLocatorIndex(value: number): boolean {
+  return Number.isInteger(value) && value >= 0;
+}
+
 function decodeImage(
   doc: PdfDocument,
   pageDicts: readonly PdfDict[],
   locator: PdfImageLocator,
   sink: PdfDiagnosticSink,
-): DecodedPdfImage | undefined {
-  let extracted: ExtractedPdfImage | undefined;
+): ExtractedPdfImage | undefined {
   if (locator.kind === "xobject") {
     const stream = doc.resolve({
       kind: "ref",
@@ -324,31 +346,44 @@ function decodeImage(
         `object ${String(locator.objectNumber)} ${String(locator.generation)} R is not an image XObject stream of this document`,
       );
     }
-    extracted = readImageXObject(stream.dict, stream.raw, doc, sink);
-  } else {
-    // The page index is resolved like a one-page selection, so a locator naming no page throws PdfPageSelectionError as a selection would.
-    const [pageIndex = 0] = resolvePageSelection(
-      [locator.pageIndex],
-      pageDicts.length,
-    );
-    const page = pageDicts[pageIndex];
-    const inline =
-      page === undefined
-        ? undefined
-        : interpretPage(doc, pageIndex, page, undefined, sink)?.items.filter(
-            (item) => item.kind === "inlineImage",
-          )[locator.occurrence];
-    if (inline === undefined) {
-      throw new PdfImageLocatorError(
-        locator,
-        `page ${String(locator.pageIndex)} holds no inline image at occurrence ${String(locator.occurrence)}`,
-      );
-    }
-    extracted = readImageXObject(inline.dict, inline.data, doc, sink);
+    return readImageXObject(stream.dict, stream.raw, doc, sink);
   }
-  return extracted === undefined
-    ? undefined
-    : { ...extracted, imageId: imageIdOf(extracted.bytes) };
+  // A locator's page index is the page's own source index, as a listing reports it, never one counted from the end as a page selection's may be.
+  if (
+    !isLocatorIndex(locator.pageIndex) ||
+    !isLocatorIndex(locator.occurrence)
+  ) {
+    throw new PdfImageLocatorError(
+      locator,
+      `an inline image locator's pageIndex and occurrence are non-negative integers (got ${String(locator.pageIndex)} and ${String(locator.occurrence)})`,
+    );
+  }
+  // Resolved like a one-page selection, so a locator naming no page throws PdfPageSelectionError as a selection would.
+  const [pageIndex = 0] = resolvePageSelection(
+    [locator.pageIndex],
+    pageDicts.length,
+  );
+  const page = pageDicts[pageIndex];
+  // The page's own diagnostics were reported when it was listed; finding the image again reports nothing new, and only the image's decode below reports to the caller.
+  const inline =
+    page === undefined
+      ? undefined
+      : interpretPage(
+          doc,
+          pageIndex,
+          page,
+          undefined,
+          NOOP_DIAGNOSTIC_SINK,
+        )?.items.filter((item) => item.kind === "inlineImage")[
+          locator.occurrence
+        ];
+  if (inline === undefined) {
+    throw new PdfImageLocatorError(
+      locator,
+      `page ${String(locator.pageIndex)} holds no inline image at occurrence ${String(locator.occurrence)}`,
+    );
+  }
+  return readImageXObject(inline.dict, inline.data, doc, sink);
 }
 
 /**
@@ -356,7 +391,7 @@ function decodeImage(
  * @param bytes - The PDF file.
  * @param options - A diagnostic sink and an abort signal.
  * @returns The document's images, listed and decoded on request.
- * @throws PdfParseError (or a subclass) for a file that cannot be opened at all, as `readPdf` does.
+ * @throws PdfParseError (or a subclass) for a file that cannot be opened at all, as `readPdf` does; a DOMException named AbortError if the signal is already aborted.
  */
 export function openPdfImages(
   bytes: Uint8Array<ArrayBuffer>,
@@ -379,7 +414,13 @@ export function openPdfImages(
       listImages(doc, pageDicts, listOptions, signal, sink),
     decode: (locator) => {
       throwIfAborted(signal);
-      return decodeImage(doc, pageDicts, locator, sink);
+      const extracted = decodeImage(doc, pageDicts, locator, sink);
+      if (extracted === undefined) {
+        return undefined;
+      }
+      // The id is the CRC-32 of the same bytes either way: detaching copies them, never changes them.
+      const image = detachedImage(bytes.buffer, extracted);
+      return { ...image, imageId: imageIdOf(image.bytes) };
     },
   };
 }
@@ -389,6 +430,7 @@ export function openPdfImages(
  * @param bytes - The PDF file.
  * @param options - Which pages to list, a diagnostic sink and an abort signal.
  * @returns One entry per image (see `PdfImages.list`).
+ * @throws PdfParseError (or a subclass) for a file that cannot be opened; PdfPageSelectionError for a page the document does not have; a DOMException named AbortError once the signal is aborted.
  */
 export function listPdfImages(
   bytes: Uint8Array<ArrayBuffer>,
@@ -403,6 +445,7 @@ export function listPdfImages(
  * @param locator - The image.
  * @param options - A diagnostic sink and an abort signal.
  * @returns The image, byte-identical to `readPdf`'s registry entry for it, or undefined for one `readPdf` would leave out (see `PdfImages.decode`).
+ * @throws PdfParseError (or a subclass) for a file that cannot be opened; PdfImageLocatorError for a locator naming no image of it; PdfPageSelectionError for an inline locator's page the document does not have; a DOMException named AbortError if the signal is already aborted.
  */
 export function decodePdfImage(
   bytes: Uint8Array<ArrayBuffer>,
