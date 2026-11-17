@@ -1,3 +1,10 @@
+## [3.10.77](https://github.com/ExaDev/documents.js/compare/document-outline.js%403.10.76...document-outline.js%403.10.77) (2026-11-17)
+
+
+### Dependencies
+
+- Updated pdf-codec to 5.9.0
+
 ## [3.10.76](https://github.com/ExaDev/documents.js/compare/document-outline.js%403.10.75...document-outline.js%403.10.76) (2026-11-14)
 
 

@@ -1,3 +1,31 @@
+## [5.9.0](https://github.com/ExaDev/documents.js/compare/pdf-codec%405.8.6...pdf-codec%405.9.0) (2026-11-17)
+
+### Features
+
+* **pdf-codec:** export pdf-codec/read-images and a locator schema ([9aefa2b](https://github.com/ExaDev/documents.js/commit/9aefa2b29ae02975b466f3fc3d00afe68f282674))
+* **pdf-codec:** list a PDF's images without decoding them, and decode one at a time ([960df72](https://github.com/ExaDev/documents.js/commit/960df72b6a18750a0b9b27550c9881e2a481157c))
+
+### Bug Fixes
+
+* **pdf-codec:** never act on an inflate size hint past 32 MiB ([0a780fc](https://github.com/ExaDev/documents.js/commit/0a780fca447ba746b8aac43e680c0220b39d4af4))
+* **pdf-codec:** report an image's diagnostics as readPdf did before the size hint ([648790f](https://github.com/ExaDev/documents.js/commit/648790f83cbe71877f6741b5a4c4f8ac71c64d6e))
+* **pdf-codec:** size an inflate buffer only for an image that decodes ([70f820f](https://github.com/ExaDev/documents.js/commit/70f820fabaf885700e6772a0196fb17b6110f8bb))
+
+### Performance Improvements
+
+* **pdf-codec:** inflate an image's stream into a buffer of its expected size ([9c250cd](https://github.com/ExaDev/documents.js/commit/9c250cd5bc59c3fe0e1d7150a66be5aa63618ea9))
+* **pdf-codec:** interpret a page once for all of its inline images ([a13e1b3](https://github.com/ExaDev/documents.js/commit/a13e1b31b962a806fad0cefc7ecd264bc20a1859))
+
+### Documentation
+
+* **pdf-codec:** give per-image reading's memory with and without GC ([ebdc859](https://github.com/ExaDev/documents.js/commit/ebdc85911453a58f2749bfd7717e0ad2b51c90f4))
+* **pdf-codec:** widen per-image and readPdf memory ranges to this round's runs ([23b943f](https://github.com/ExaDev/documents.js/commit/23b943f0bb0715b6471f9b5d6b60a933df08c54b))
+
+
+### Dependencies
+
+- Updated byte-codec to 2.1.0
+
 ## [5.8.6](https://github.com/ExaDev/documents.js/compare/pdf-codec%405.8.5...pdf-codec%405.8.6) (2026-11-14)
 
 ### Bug Fixes
