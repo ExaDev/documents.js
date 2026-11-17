@@ -140,12 +140,12 @@ Failures follow the [read failure policy](#conventions): a file that cannot be o
 
 The decoded bytes are those `readPdf` produces for the same image, which are those pdf-codec 4.5.2 produced (pinned in `src/read-images.test.ts` against digests recorded from 4.5.2), so an image stored by an earlier release keeps its identity. Decoding one image holds its decoded samples, its alpha plane and the PNG encoder's filtered rows and deflate buffer at once, in proportion to its pixels: a 2360x1309 RGB image with a soft mask needs about 40 MB on top of the module and the file. `pdf-codec/read-images` serves the three functions without the text pipeline `readPdf` loads (font resolution and its glyph tables, about 12 MB of heap). `scripts/measure-image-memory.mjs` measures a generated picture-heavy fixture (2.4 MB, 108 images) against the built `dist/`, as the peak of the V8 heap in use plus every `ArrayBuffer`'s backing store:
 
-| Read                                  | Collecting before each image (`--gc`) | Left to the collector                |
-| ------------------------------------- | ------------------------------------- | ------------------------------------ |
-| One image at a time (`openPdfImages`) | about 56 MB                           | 57-63 MB in most runs, 70 MB in some |
-| `readPdf`                             | 83-87 MB                              | 86-96 MB                             |
-| `readPdf` in pdf-codec 5.8            | 140-148 MB                            | 139-148 MB                           |
-| `readPdf` in pdf-codec 4.5.2          | about 526 MB                          | about 526 MB                         |
+| Read                                  | Collecting before each image (`--gc`) | Left to the collector                      |
+| ------------------------------------- | ------------------------------------- | ------------------------------------------ |
+| One image at a time (`openPdfImages`) | 55-57 MB                              | 57-63 MB in most runs, up to 77 MB in some |
+| `readPdf`                             | 83-87 MB                              | 86-100 MB                                  |
+| `readPdf` in pdf-codec 5.8            | 140-148 MB                            | 139-148 MB                                 |
+| `readPdf` in pdf-codec 4.5.2          | about 526 MB                          | about 526 MB                               |
 
 A Worker cannot force a collection, so its figure is the right-hand one: what an image leaves behind counts until the collector reclaims it, which in most runs it has before the next large image and in some it has not.
 
