@@ -5,7 +5,7 @@
 //
 // read-pdf mode takes --read-entry=<path to another build's dist/read.js> to measure an earlier release the same way, e.g. one installed with `npm install pdf-codec@5.8.6` in a scratch directory.
 //
-// The PDF is src/test-support/image-heavy-pdf.ts's pictureDeckPdf: shaped like a typical picture-heavy slide deck (about 2.5 MB, 108 images, Flate RGB with soft masks up to 2360x1309), generated, never a real document. The read runs in a worker thread, and this thread samples the worker's V8 heap statistics continuously while it runs: worker.getHeapStatistics() is answered through a V8 interrupt, so it samples inside a synchronous decode too, not only between calls. The figure reported is the peak of used_heap_size + external_memory, the second of which holds every ArrayBuffer's backing store: a typed array's bytes sit outside the V8 heap (and outside --max-old-space-size) but count towards a Cloudflare Worker isolate's 128 MB all the same. Garbage counts until the collector runs; --gc collects before each image, which shows what the decode itself needs at once rather than what the collector has yet to reclaim.
+// The PDF is src/test-support/image-heavy-pdf.ts's pictureDeckPdf: shaped like a typical picture-heavy slide deck (about 2.5 MB, 108 images, Flate RGB with soft masks up to 2360x1309), generated, never a real document. The read runs in a worker thread, and this thread samples the worker's V8 heap statistics continuously while it runs: worker.getHeapStatistics() is answered through a V8 interrupt, so it samples inside a synchronous decode too, not only between calls. The figure reported is the peak of used_heap_size + external_memory, the second of which holds every ArrayBuffer's backing store: a typed array's bytes sit outside the V8 heap (and outside --max-old-space-size) but count towards a Cloudflare Worker isolate's 128 MB all the same. This is the heap in use, not the heap V8 has committed (which is larger, and is what process RSS shows). Garbage counts until the collector runs; --gc collects before each image, which shows what the decode itself needs at once rather than what the collector has yet to reclaim. A Worker cannot force a collection, so the run without --gc is the one a Worker sees, and it varies from run to run with when the collector happens to run. The time reported is measured while this thread samples the worker continuously, which slows it, so it is a comparison between modes rather than what a read costs on its own.
 import { Worker } from "node:worker_threads";
 import { fileURLToPath } from "node:url";
 import { createJiti } from "jiti";
@@ -18,7 +18,10 @@ const readEntryArgument = process.argv.find((argument) =>
 const readEntry =
   readEntryArgument === undefined
     ? new URL("../dist/read.js", import.meta.url).href
-    : new URL(readEntryArgument.slice("--read-entry=".length), `file://${process.cwd()}/`).href;
+    : new URL(
+        readEntryArgument.slice("--read-entry=".length),
+        `file://${process.cwd()}/`,
+      ).href;
 if (mode !== "per-image" && mode !== "read-pdf") {
   throw new Error(`unknown mode ${mode}: per-image or read-pdf`);
 }
@@ -85,5 +88,5 @@ console.log(
   `images: ${String(report.images)} decoded (${String(report.pngs)} PNG, ${String(report.jpegs)} JPEG), largest ${report.largest}`,
 );
 console.log(
-  `time: ${String(Math.round(report.wallMs))} ms wall, ${String(Math.round(report.cpuMs))} ms CPU`,
+  `time, measured under continuous sampling: ${String(Math.round(report.wallMs))} ms wall, ${String(Math.round(report.cpuMs))} ms CPU`,
 );
