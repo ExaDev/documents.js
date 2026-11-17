@@ -1,7 +1,11 @@
 import { describe, expect, it } from "vitest";
 import type { PdfDiagnostic, PdfDiagnosticSink } from "./diagnostics";
 import { pdfDict, pdfNum } from "./objects";
-import { applyPredictor, readPredictorParams } from "./predictors";
+import {
+  applyPredictor,
+  lengthBeforePredictor,
+  readPredictorParams,
+} from "./predictors";
 
 function collectDiagnostics(): {
   sink: PdfDiagnosticSink;
@@ -127,5 +131,43 @@ describe("applyPredictor", () => {
     );
     expect(Array.from(result)).toEqual([9, 9, 9]);
     expect(diagnostics[0]?.code).toBe("pdf/unsupported-predictor");
+  });
+});
+
+describe("lengthBeforePredictor", () => {
+  const params = (predictor: number, columns = 10, colors = 3) => ({
+    predictor,
+    colors,
+    bitsPerComponent: 8,
+    columns,
+  });
+
+  it("is the decoded length itself without a predictor and under the TIFF predictor", () => {
+    expect(lengthBeforePredictor(300, params(1))).toBe(300);
+    expect(lengthBeforePredictor(300, params(2))).toBe(300);
+  });
+
+  it("adds one filter-type byte per row under a PNG predictor", () => {
+    // Ten 3-byte pixels a row: 30 bytes, so 300 bytes are ten rows of 31.
+    expect(lengthBeforePredictor(300, params(10))).toBe(310);
+    expect(lengthBeforePredictor(300, params(15))).toBe(310);
+    // A partial last row still carries its filter byte.
+    expect(lengthBeforePredictor(301, params(12))).toBe(341);
+  });
+
+  it("names no length for a predictor it does not undo, or rows of no bytes", () => {
+    expect(lengthBeforePredictor(300, params(5))).toBeUndefined();
+    expect(lengthBeforePredictor(300, params(10, 0))).toBeUndefined();
+  });
+
+  it("agrees with what applyPredictor reads back", () => {
+    const rows = 4;
+    const bytesPerRow = 30;
+    const encoded = new Uint8Array(
+      lengthBeforePredictor(rows * bytesPerRow, params(10))!,
+    );
+    expect(applyPredictor(encoded, params(10), () => undefined)).toHaveLength(
+      rows * bytesPerRow,
+    );
   });
 });

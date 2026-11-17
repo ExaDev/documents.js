@@ -45,6 +45,30 @@ export function readPredictorParams(
   };
 }
 
+/**
+ * How long a stream's data is before its predictor is undone, for data that decodes to `decodedLength` bytes: the same length for no predictor and the TIFF predictor, and one filter-type byte more per row for a PNG predictor.
+ * @param decodedLength - The length the predictor's output is expected to be.
+ * @param params - The stream's predictor parameters.
+ * @returns The length, or undefined for a predictor this module does not undo.
+ */
+export function lengthBeforePredictor(
+  decodedLength: number,
+  params: PredictorParams,
+): number | undefined {
+  if (params.predictor <= 2) {
+    return decodedLength;
+  }
+  if (params.predictor < PNG_PREDICTOR_CODE_MIN) {
+    return undefined;
+  }
+  const bytesPerRow = Math.ceil(
+    (params.colors * params.bitsPerComponent * params.columns) / BITS_PER_BYTE,
+  );
+  return bytesPerRow > 0
+    ? Math.ceil(decodedLength / bytesPerRow) * (bytesPerRow + 1)
+    : undefined;
+}
+
 export function applyPredictor(
   data: Uint8Array<ArrayBuffer>,
   params: PredictorParams,

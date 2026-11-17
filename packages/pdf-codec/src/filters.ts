@@ -5,7 +5,11 @@ import { decodeCcittFax } from "./image/ccitt";
 import { decodeJbig2Embedded } from "./image/jbig2";
 import type { PdfDict, PdfObject } from "./objects";
 import { asArray, asBool, asDict, asName, asNumber, dictGet } from "./objects";
-import { applyPredictor, readPredictorParams } from "./predictors";
+import {
+  applyPredictor,
+  lengthBeforePredictor,
+  readPredictorParams,
+} from "./predictors";
 
 const BITS_PER_BYTE = 8;
 const BYTE_MASK = 0xff; // an all-ones byte: used both to bit-invert a byte (XOR) and to keep only its low 8 bits after a wider shift (AND)
@@ -52,11 +56,14 @@ export type PdfIndirectResolver = (
 ) => PdfObject | undefined;
 
 // Runs a stream's raw bytes through its /Filter chain (a single name or an array of names, with /DecodeParms supplying per-filter parameters in the same single-or-array shape). Recoverable per-filter issues (an unresolvable /Predictor, an unimplemented filter) degrade with a diagnostic and stop the chain rather than throwing — the caller decides whether the partially- or un-decoded result is still useful (e.g. a DCTDecode image's bytes are perfectly usable as-is).
+//
+// expectedLength is how long the caller expects the decoded stream to be, when it knows (an image's rows of samples). It only sizes the buffer a final FlateDecode inflates into (see inflateTolerant), so it changes what decoding costs in memory, never the bytes it produces.
 export function decodeStream(
   raw: Uint8Array<ArrayBuffer>,
   dict: PdfDict,
   sink: PdfDiagnosticSink,
   resolve?: PdfIndirectResolver,
+  expectedLength?: number,
 ): DecodedStream {
   const filters = filterNames(dict);
   const parms = decodeParmsList(dict, filters.length);
@@ -66,7 +73,15 @@ export function decodeStream(
     const filter = filters[i]!;
     const parm = parms[i];
     if (filter === "FlateDecode" || filter === "Fl") {
-      bytes = applyPredictorIfPresent(inflateTolerant(bytes).bytes, parm, sink);
+      const inflatedLength =
+        expectedLength !== undefined && i === filters.length - 1
+          ? lengthBeforePredictor(expectedLength, readPredictorParams(parm))
+          : undefined;
+      bytes = applyPredictorIfPresent(
+        inflateTolerant(bytes, inflatedLength).bytes,
+        parm,
+        sink,
+      );
     } else if (filter === "LZWDecode" || filter === "LZW") {
       const earlyChange =
         (asNumber(parm ? dictGet(parm, "EarlyChange") : undefined) ?? 1) !== 0;
@@ -205,7 +220,7 @@ function jbig2Decode(
   }
 }
 
-function filterNames(dict: PdfDict): string[] {
+export function filterNames(dict: PdfDict): string[] {
   const filterObj = dictGet(dict, "Filter") ?? dictGet(dict, "F");
   if (filterObj === undefined) {
     return [];
