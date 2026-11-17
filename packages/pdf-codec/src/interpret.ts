@@ -1,4 +1,6 @@
-import { COLOR_BLACK, type Point } from "document-schema.js";
+import type { Point } from "document-schema.js";
+// The colour module alone rather than the package barrel, which would load every content and layout schema document-schema.js defines (about 7 MB of heap) into a reader that only needs this one constant.
+import { COLOR_BLACK } from "document-schema.js/color";
 import { decodeStream } from "./filters";
 import type { Matrix } from "./matrix";
 import {
