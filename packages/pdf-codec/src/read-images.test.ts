@@ -1,15 +1,22 @@
 import { base64ToBytes } from "byte-codec";
+import type * as Fflate from "fflate";
+import { unzlibSync } from "fflate";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type * as ImagesRead from "./images-read";
+import type * as Interpret from "./interpret";
 import { sha256 } from "./crypto/sha2";
 import type { PdfDiagnostic } from "./diagnostics";
 import { PdfImageLocatorError, PdfPageSelectionError } from "./diagnostics";
+import type { PdfImageLocator } from "./image-locator";
+import { PdfImageLocatorSchema } from "./image-locator";
 import { readImageXObject } from "./images-read";
+import { interpretContentStream } from "./interpret";
 import type { LayoutDocument } from "./layout";
 import { readPdf } from "./read";
-import type { PdfImageEntry, PdfImageLocator } from "./read-images";
+import type { PdfImageEntry } from "./read-images";
 import { decodePdfImage, listPdfImages, openPdfImages } from "./read-images";
 import {
+  imageEdgeCasesPdf,
   imageVarietyPdf,
   pictureDeckPdf,
 } from "./test-support/image-heavy-pdf";
@@ -24,8 +31,23 @@ vi.mock("./images-read", async (importOriginal) => {
   return { ...actual, readImageXObject: vi.fn(actual.readImageXObject) };
 });
 
+// Observed the same way: how many pages a call interprets, and which buffers inflate was handed.
+vi.mock("./interpret", async (importOriginal) => {
+  const actual = await importOriginal<typeof Interpret>();
+  return {
+    ...actual,
+    interpretContentStream: vi.fn(actual.interpretContentStream),
+  };
+});
+vi.mock("fflate", async (importOriginal) => {
+  const actual = await importOriginal<typeof Fflate>();
+  return { ...actual, unzlibSync: vi.fn(actual.unzlibSync) };
+});
+
 beforeEach(() => {
   vi.mocked(readImageXObject).mockClear();
+  vi.mocked(interpretContentStream).mockClear();
+  vi.mocked(unzlibSync).mockClear();
 });
 
 function hex(bytes: Uint8Array): string {
@@ -56,6 +78,8 @@ function drawnImageIds(doc: LayoutDocument): Set<string> {
 }
 
 const variety = imageVarietyPdf();
+const edgeCases = imageEdgeCasesPdf();
+const pictureDeckQuarter = pictureDeckPdf({ scale: 0.25 });
 
 describe("listPdfImages", () => {
   it("lists every visible image once, by reference, without decoding any of them", () => {
@@ -156,43 +180,102 @@ describe("listPdfImages", () => {
     expect(openPdfImages(variety).pageCount).toBe(2);
     const controller = new AbortController();
     controller.abort();
-    expect(() =>
-      listPdfImages(variety, { signal: controller.signal }),
-    ).toThrow();
+    let thrown: unknown;
+    try {
+      listPdfImages(variety, { signal: controller.signal });
+    } catch (error) {
+      thrown = error;
+    }
+    expect(thrown).toBeInstanceOf(DOMException);
+    expect(thrown).toMatchObject({ name: "AbortError" });
+  });
+
+  it("lists an image named through a reference to its reference once, under the first reference drawn", () => {
+    const [chained] = listPdfImages(edgeCases);
+    expect(chained?.locator).toEqual({
+      kind: "xobject",
+      objectNumber: 3,
+      generation: 0,
+    });
+    expect(chained?.placements.map((p) => p.xPt)).toEqual([0, 30]);
+  });
+
+  it("counts an inline stencil mask among its page's inline images, without listing it", () => {
+    const inline = listPdfImages(edgeCases).filter(
+      (entry) => entry.locator.kind === "inline",
+    );
+    expect(inline.map((entry) => entry.locator)).toEqual([
+      { kind: "inline", pageIndex: 0, occurrence: 1 },
+    ]);
+    expect(decodePdfImage(edgeCases, inline[0]!.locator)).toMatchObject({
+      format: "png",
+      widthPx: 1,
+      heightPx: 1,
+    });
+    // Occurrence 0 is the stencil, which readPdf leaves out of its registry too.
+    expect(
+      decodePdfImage(edgeCases, {
+        kind: "inline",
+        pageIndex: 0,
+        occurrence: 0,
+      }),
+    ).toBeUndefined();
+  });
+
+  it("reports locators the schema accepts", () => {
+    for (const entry of listPdfImages(variety)) {
+      expect(PdfImageLocatorSchema.parse(entry.locator)).toEqual(entry.locator);
+    }
+    expect(
+      PdfImageLocatorSchema.safeParse({
+        kind: "inline",
+        pageIndex: -1,
+        occurrence: 0,
+      }).success,
+    ).toBe(false);
   });
 });
 
 describe("decodePdfImage", () => {
-  it("decodes one image per call", () => {
-    const [, gray] = listPdfImages(variety);
-    const decoded = decodePdfImage(variety, gray!.locator);
+  it("decodes one image per call, without interpreting any page", () => {
+    const images = openPdfImages(variety);
+    const [, gray] = images.list();
+    vi.mocked(interpretContentStream).mockClear();
+    const decoded = images.decode(gray!.locator);
     expect(readImageXObject).toHaveBeenCalledTimes(1);
+    expect(interpretContentStream).not.toHaveBeenCalled();
     expect(decoded).toMatchObject({ format: "png", widthPx: 40, heightPx: 30 });
   });
 
-  it("decodes each image to exactly the bytes, format, size and id readPdf registers for it", () => {
-    const doc = readPdf(variety);
-    const images = openPdfImages(variety);
-    const decodedIds = new Set<string>();
-    for (const entry of images.list()) {
-      const decoded = images.decode(entry.locator);
-      if (decoded === undefined) {
-        continue;
+  it.each([
+    ["the variety fixture", variety],
+    ["the picture-deck fixture at quarter scale", pictureDeckQuarter],
+  ] as const)(
+    "decodes each image of %s to exactly the bytes, format, size and id readPdf registers for it",
+    (_name, pdf) => {
+      const doc = readPdf(pdf);
+      const images = openPdfImages(pdf);
+      const decodedIds = new Set<string>();
+      for (const entry of images.list()) {
+        const decoded = images.decode(entry.locator);
+        if (decoded === undefined) {
+          continue;
+        }
+        decodedIds.add(decoded.imageId);
+        const asset = doc.images[decoded.imageId];
+        expect(asset, locatorKey(entry.locator)).toBeDefined();
+        expect(asset?.format).toBe(decoded.format);
+        expect(asset?.widthPx).toBe(decoded.widthPx);
+        expect(asset?.heightPx).toBe(decoded.heightPx);
+        expect(hex(base64ToBytes(asset!.base64))).toBe(hex(decoded.bytes));
+        // The standalone call opens the file afresh and still decodes the same bytes.
+        expect(hex(decodePdfImage(pdf, entry.locator)!.bytes)).toBe(
+          hex(decoded.bytes),
+        );
       }
-      decodedIds.add(decoded.imageId);
-      const asset = doc.images[decoded.imageId];
-      expect(asset, locatorKey(entry.locator)).toBeDefined();
-      expect(asset?.format).toBe(decoded.format);
-      expect(asset?.widthPx).toBe(decoded.widthPx);
-      expect(asset?.heightPx).toBe(decoded.heightPx);
-      expect(hex(base64ToBytes(asset!.base64))).toBe(hex(decoded.bytes));
-      // The standalone call opens the file afresh and still decodes the same bytes.
-      expect(hex(decodePdfImage(variety, entry.locator)!.bytes)).toBe(
-        hex(decoded.bytes),
-      );
-    }
-    expect(decodedIds).toEqual(drawnImageIds(doc));
-  });
+      expect(decodedIds).toEqual(drawnImageIds(doc));
+    },
+  );
 
   it("leaves out an image readPdf leaves out, with the same diagnostic", () => {
     const unsupported = listPdfImages(variety).find(
@@ -212,6 +295,63 @@ describe("decodePdfImage", () => {
     ]);
   });
 
+  it("returns a JPEG's bytes as an array of its own, not a view onto the file", () => {
+    const jpeg = listPdfImages(variety).find(
+      (entry) => entry.filters[0] === "DCTDecode",
+    );
+    const decoded = decodePdfImage(variety, jpeg!.locator);
+    expect(decoded?.format).toBe("jpeg");
+    expect(decoded?.bytes.buffer).not.toBe(variety.buffer);
+    expect(decoded?.bytes.byteLength).toBe(decoded?.bytes.buffer.byteLength);
+  });
+
+  it("finds an image by its object number whatever generation the locator names", () => {
+    const images = openPdfImages(variety);
+    const named = images.decode({
+      kind: "xobject",
+      objectNumber: 5,
+      generation: 0,
+    });
+    const otherGeneration = images.decode({
+      kind: "xobject",
+      objectNumber: 5,
+      generation: 3,
+    });
+    expect(otherGeneration?.imageId).toBe(named?.imageId);
+  });
+
+  it("decodes an image without its soft mask when the mask is the wrong size, never inflating the mask", () => {
+    const decoded = decodePdfImage(edgeCases, {
+      kind: "xobject",
+      objectNumber: 4,
+      generation: 0,
+    });
+    expect(decoded).toMatchObject({ format: "png", widthPx: 2, heightPx: 1 });
+    // The image's own stream, and not its 4000x4000 mask's.
+    expect(unzlibSync).toHaveBeenCalledTimes(1);
+  });
+
+  it("never sizes an inflate buffer by a dictionary that declares an image too large to decode", () => {
+    const diagnostics: PdfDiagnostic[] = [];
+    expect(
+      decodePdfImage(
+        edgeCases,
+        { kind: "xobject", objectNumber: 7, generation: 0 },
+        {
+          sink: (diagnostic) => {
+            diagnostics.push(diagnostic);
+          },
+        },
+      ),
+    ).toBeUndefined();
+    expect(diagnostics.map((diagnostic) => diagnostic.code)).toContain(
+      "image/undecodable",
+    );
+    expect(
+      vi.mocked(unzlibSync).mock.calls.every((call) => call[1] === undefined),
+    ).toBe(true);
+  });
+
   it("refuses a locator that names no image of the document", () => {
     const images = openPdfImages(variety);
     // Object 1 is the catalog; object 99 does not exist; the form XObject is a stream, but not an image.
@@ -229,6 +369,14 @@ describe("decodePdfImage", () => {
     expect(() =>
       images.decode({ kind: "inline", pageIndex: 5, occurrence: 0 }),
     ).toThrow(PdfPageSelectionError);
+    // A page index counted from the end is a page selection's, never a locator's.
+    for (const locator of [
+      { kind: "inline", pageIndex: -1, occurrence: 0 },
+      { kind: "inline", pageIndex: 1, occurrence: -1 },
+      { kind: "inline", pageIndex: 1, occurrence: 0.5 },
+    ] as const) {
+      expect(() => images.decode(locator)).toThrow(PdfImageLocatorError);
+    }
   });
 });
 
@@ -238,7 +386,7 @@ describe("per-image decoding reproduces pdf-codec 4.5.2's decoded images byte fo
     ["the variety fixture", variety, IMAGE_VARIETY_4_5_2],
     [
       "the picture-deck fixture at quarter scale",
-      pictureDeckPdf({ scale: 0.25 }),
+      pictureDeckQuarter,
       PICTURE_DECK_QUARTER_4_5_2,
     ],
   ] as const)("%s", (_name, pdf, golden) => {
@@ -273,7 +421,7 @@ describe("per-image decoding reproduces pdf-codec 4.5.2's decoded images byte fo
 
 describe("the picture-deck fixture", () => {
   it("has the shape of the picture-heavy deck it stands in for", () => {
-    const listing = listPdfImages(pictureDeckPdf({ scale: 0.25 }));
+    const listing = listPdfImages(pictureDeckQuarter);
     expect(listing).toHaveLength(108);
     expect(
       listing.filter((entry) => entry.filters[0] === "DCTDecode"),

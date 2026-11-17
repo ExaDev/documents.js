@@ -29,6 +29,14 @@
       "import": "./dist/read.js",
       "require": "./dist/read.cjs"
     },
+    "./read-images": {
+      "types": {
+        "import": "./dist/read-images.d.ts",
+        "require": "./dist/read-images.d.cts"
+      },
+      "import": "./dist/read-images.js",
+      "require": "./dist/read-images.cjs"
+    },
     "./*": {
       "types": {
         "import": "./dist/*.d.ts",
@@ -45,6 +53,9 @@
     "*": {
       "read": [
         "./dist/read.d.ts"
+      ],
+      "read-images": [
+        "./dist/read-images.d.ts"
       ]
     }
   },

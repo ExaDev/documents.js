@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
+import { bytesToBase64 } from 'byte-codec';
 import { readPdf } from '../../src/read';
-import { createFontRegistry, writePdf } from '../../src';
+import { decodePdfImage, listPdfImages } from '../../src/read-images';
+import { createFontRegistry, encodePng, writePdf } from '../../src';
 
 // Proves pdf-codec's read path executes inside a Cloudflare Workers isolate (workerd, via @cloudflare/vitest-pool-workers) with no Node-only APIs. The read test imports through src/read.ts — the module behind the package.json `./read` entry point — so one test proves both that the read pipeline executes in the isolate and that the read-only entry itself works; the module-graph-width half of that entry's guarantee is held separately by src/read-graph.test.ts. The write test below exercises the opposite end: a real font registry resolving Calibri onto the vendored, metric-compatible Carlito face, which decodes the embedded asset, subsets it, and embeds a genuine TrueType font program — exactly the modules the read entry exists to exclude, proven to run in the isolate when a caller does want them. Fixtures are built inline rather than read from disk because workerd exposes no node:fs — and building them from the package's own format rules (object table, classic cross-reference, parenthesised content-stream string) is itself a check that nothing in the construction path needs Node either. This is the runtime complement to attw's static module-resolution check.
 
@@ -65,6 +67,21 @@ describe('pdf-codec under the Cloudflare Workers runtime', () => {
     // The "(Hello)" Tj operand is the one text item recovered from the content stream.
     const textItems = doc.pages[0]!.items.filter((item) => item.kind === 'text');
     expect(textItems[0]).toMatchObject({ kind: 'text', text: 'Hello' });
+  });
+
+  it('lists and decodes a PDF\'s image one at a time (via the ./read-images entry module) inside a workerd isolate', () => {
+    const png = encodePng({ width: 2, height: 1, channels: 3, data: new Uint8Array([255, 0, 0, 0, 0, 255]) });
+    const pdfBytes = writePdf({
+      formatVersion: 1,
+      metadata: {},
+      pages: [{ widthPt: 200, heightPt: 100, items: [{ kind: 'image', imageId: 'pixels', xPt: 10, yPt: 10, widthPt: 40, heightPt: 20 }] }],
+      images: { pixels: { format: 'png', base64: bytesToBase64(png), widthPx: 2, heightPx: 1 } },
+    });
+    const [entry] = listPdfImages(pdfBytes);
+    expect(entry).toMatchObject({ widthPx: 2, heightPx: 1, placements: [{ pageIndex: 0 }] });
+    const decoded = decodePdfImage(pdfBytes, entry!.locator);
+    expect(decoded).toMatchObject({ format: 'png', widthPx: 2, heightPx: 1 });
+    expect(bytesToBase64(decoded!.bytes)).toBe(readPdf(pdfBytes).images[decoded!.imageId]?.base64);
   });
 
   it('writePdf embeds the vendored Carlito face through a font registry inside a workerd isolate', () => {

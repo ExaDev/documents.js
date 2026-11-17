@@ -3,11 +3,13 @@ import { createRequire } from 'node:module';
 import { describe, expect, it } from 'vitest';
 import * as esm from '../dist/index.js';
 import * as esmRead from '../dist/read.js';
+import * as esmReadImages from '../dist/read-images.js';
 import * as esmPdfText from '../dist/pdf-text.js';
 
 const require = createRequire(import.meta.url);
 const cjs = require('../dist/index.cjs');
 const cjsRead = require('../dist/read.cjs');
+const cjsReadImages = require('../dist/read-images.cjs');
 const cjsPdfText = require('../dist/pdf-text.cjs');
 
 // A representative slice of the public surface, not an exhaustive list — enough to catch a genuinely broken dual build without duplicating src/index.ts's own export list here. Classes (ByteReader, ByteWriter, PdfParseError, PdfEncryptedError) are real invocable functions at runtime (typeof === 'function'), so they're checked here alongside ordinary functions rather than in OBJECTS below.
@@ -171,6 +173,31 @@ describe.each([
       .map((item) => item.text)
       .join(' ');
     expect(text).toContain('read entry smoke');
+  });
+});
+
+// The per-image entry (package.json `./read-images` -> dist/read-images.js/.cjs): loads in both builds and lists and decodes a PDF's image through the built artifact, to the bytes and id readPdf registers for it. Like the read entry, its module graph's width is held at the source level by src/read-graph.test.ts.
+describe.each([
+  ['ESM', esmReadImages],
+  ['CJS', cjsReadImages],
+])('%s read-images entry', (_label, api) => {
+  it('lists a PDF\'s image without decoding it, then decodes it to exactly what readPdf registers', () => {
+    const rgb = new Uint8Array([255, 0, 0, 0, 255, 0, 0, 0, 255, 255, 255, 255]);
+    const png = esm.encodePng({ width: 2, height: 2, channels: 3, data: rgb });
+    const pdfBytes = esm.writePdf({
+      formatVersion: 1,
+      metadata: {},
+      pages: [{ widthPt: 200, heightPt: 100, items: [{ kind: 'image', imageId: 'pixel', xPt: 10, yPt: 10, widthPt: 40, heightPt: 40 }] }],
+      images: { pixel: { format: 'png', base64: Buffer.from(png).toString('base64'), widthPx: 2, heightPx: 2 } },
+    });
+    expect(typeof api.openPdfImages).toBe('function');
+    const listing = api.listPdfImages(pdfBytes);
+    expect(listing).toHaveLength(1);
+    expect(listing[0]).toMatchObject({ widthPx: 2, heightPx: 2, placements: [{ pageIndex: 0, widthPt: 40, heightPt: 40 }] });
+    const decoded = api.decodePdfImage(pdfBytes, listing[0].locator);
+    const registered = esmRead.readPdf(pdfBytes).images[decoded.imageId];
+    expect(registered).toBeDefined();
+    expect(Buffer.from(decoded.bytes).toString('base64')).toBe(registered.base64);
   });
 });
 

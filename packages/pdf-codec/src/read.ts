@@ -30,16 +30,17 @@ import type { FontResolverService } from "./font-read";
 import { createFontResolver } from "./font-read";
 import type { PdfObjectResolver } from "./interpret-types";
 import { interpretContentStream } from "./interpret";
-import type { PageBoxRect } from "./page-frame";
+import type {
+  PageBoxRect,
+  PageRotation,
+  PageRotationResult,
+} from "./page-frame";
 import {
   itemIntersectsVisibleRegion,
-  readPageContentBytes,
-  readPageFrame,
-} from "./page-frame";
-import type { PageRotation, PageRotationResult } from "./page-frame";
-import {
   normalizeRotation as normalizePageRotation,
   pageRotationTransform as pageRotationMatrix,
+  readPageContentBytes,
+  readPageFrame,
 } from "./page-frame";
 import type { DestinationRegistry } from "./navigation";
 import { createDestinationRegistry, readOutline } from "./navigation";
@@ -241,8 +242,6 @@ function noLayerName(): undefined {
 function noStructureOwner(): undefined {
   return undefined;
 }
-
-// --- Page geometry: MediaBox origin shift + /Rotate, composed into one matrix applied to every extracted item on the page. ---
 
 // --- Page rotation: implemented in page-frame.ts (which the image listing loads without this module's text pipeline), and still served from here, where the pdf-codec/read entry has always exported them. ---
 
