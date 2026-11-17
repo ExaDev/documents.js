@@ -301,6 +301,16 @@ export function imagePlacementFrom(matrix: Matrix): {
 
 const HEX_RADIX = 16;
 
+/**
+ * The id a read names a decoded image by in its registry.
+ * @param bytes - The image's decoded canonical bytes (PNG, or the JPEG passed through).
+ * @returns `img` and the bytes' CRC-32 in hexadecimal.
+ */
+export function imageIdOf(bytes: Uint8Array<ArrayBuffer>): string {
+  // The imageId is a crc32 of the DECODED canonical bytes (a JBIG2/JPX original must not fold into it: two different producers' compressed streams of the same raster content would then mint two ids for what every consumer sees as the same image, while a re-encoded canonical would mint a different id than the source's own re-read of the same file produced before this write — the canonical is the identity, the original is a re-emission spelling of it).
+  return `img${crc32(bytes).toString(HEX_RADIX)}`;
+}
+
 export function registerExtractedImage(
   format: "png" | "jpeg",
   bytes: Uint8Array<ArrayBuffer>,
@@ -309,8 +319,7 @@ export function registerExtractedImage(
   images: Record<string, LayoutImageAsset>,
   original: ExtractedPdfImage["original"],
 ): string {
-  // The imageId is a crc32 of the DECODED canonical bytes (a JBIG2/JPX original must not fold into it: two different producers' compressed streams of the same raster content would then mint two ids for what every consumer sees as the same image, while a re-encoded canonical would mint a different id than the source's own re-read of the same file produced before this write — the canonical is the identity, the original is a re-emission spelling of it).
-  const imageId = `img${crc32(bytes).toString(HEX_RADIX)}`;
+  const imageId = imageIdOf(bytes);
   if (!(imageId in images)) {
     images[imageId] = {
       format,

@@ -133,6 +133,22 @@ describe("the read path module graph excludes the write path and font assets", (
     ).toEqual([]);
   });
 
+  it("src/read-images.ts (the per-image reader) reaches neither the write path nor readPdf's text pipeline", () => {
+    const root = join(SRC_DIR, "read-images.ts");
+    const reachable = reachableModules(root);
+    // The text pipeline (read.ts and the font resolution it drives, with its glyph tables) costs a Worker isolate about 12 MB of heap to load, and the per-image reader never shows text.
+    const textPipeline = new Set(
+      ["read.ts", "font-read.ts"].map((file) => join(SRC_DIR, file)),
+    );
+    const forbidden = [...reachable.keys()].filter(
+      (module) => isForbidden(module) || textPipeline.has(module),
+    );
+    expect(
+      forbidden.map((module) => chainTo(root, module, reachable)),
+      `the per-image reader's module graph must not reach the write path, the vendored font assets or the text pipeline; offending chain(s):\n  ${forbidden.map((module) => chainTo(root, module, reachable)).join("\n  ")}`,
+    ).toEqual([]);
+  });
+
   it("the package.json ./read export maps onto the read module, pinning the read-only entry", () => {
     const parsed: unknown = JSON.parse(
       readFileSync(join(SRC_DIR, "..", "package.json"), "utf8"),

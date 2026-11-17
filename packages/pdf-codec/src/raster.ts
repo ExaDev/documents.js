@@ -30,7 +30,7 @@ import {
   multiplyMatrices,
   translationMatrix,
 } from "./matrix";
-import { normalizeRotation, pageRotationTransform } from "./read";
+import { normalizeRotation, pageRotationTransform } from "./page-frame";
 import type { PdfDict } from "./objects";
 import { asArray, asNumber, dictGet } from "./objects";
 import { readOptionalContent } from "./optional-content";
