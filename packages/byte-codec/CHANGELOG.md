@@ -1,3 +1,13 @@
+## [2.1.0](https://github.com/ExaDev/documents.js/compare/byte-codec%402.0.3...byte-codec%402.1.0) (2026-11-17)
+
+### Features
+
+* **byte-codec:** filter a PNG's rows from a callback, and encode without an interleaved copy ([8f2be29](https://github.com/ExaDev/documents.js/commit/8f2be290ac901e4c1e3208328ce4bfbccdde5dc8))
+
+### Performance Improvements
+
+* **byte-codec:** encode a PNG's truecolour form before its palette ([b16234b](https://github.com/ExaDev/documents.js/commit/b16234bb20034770fc2f0e9bf9049befcf334ca8))
+
 ## [2.0.3](https://github.com/ExaDev/documents.js/compare/byte-codec%402.0.2...byte-codec%402.0.3) (2026-11-08)
 
 ### Documentation
