@@ -13,6 +13,12 @@ const MAX_INFLATE_OUTPUT_MIB = 512;
 export const MAX_INFLATE_OUTPUT_BYTES =
   MAX_INFLATE_OUTPUT_MIB * KIB_PER_MIB * BYTES_PER_KIB;
 
+// The largest expected length acted on, in mebibytes: past it a stream is inflated into a growable buffer, as with no expectation. A dictionary can state any size up to its stream's deflate bound, and in a Worker isolate an allocation that size ends the isolate rather than throwing into the catch below, so a buffer bought on a dictionary's word alone stays small enough to survive. 32 MiB holds an 11-megapixel RGB image's samples.
+const MAX_EXPECTED_LENGTH_MIB = 32;
+
+export const MAX_EXPECTED_LENGTH_BYTES =
+  MAX_EXPECTED_LENGTH_MIB * KIB_PER_MIB * BYTES_PER_KIB;
+
 // The most a deflate stream can expand: a 258-byte match costs at least two bits, so each input byte decodes to at most 1032 bytes (zlib's own technical details give the same limit).
 const DEFLATE_MAX_EXPANSION = 1032;
 
@@ -48,11 +54,11 @@ function inflateIntoExpectedLength(
   data: Uint8Array<ArrayBuffer>,
   expectedLength: number,
 ): Uint8Array<ArrayBuffer> | undefined {
-  // An expectation the data could not possibly meet is not acted on: deflate expands at most DEFLATE_MAX_EXPANSION-fold, so a dictionary claiming a huge image over a tiny stream never buys a huge buffer. One that overstates what a stream holds still buys a buffer of the stated size, but never a larger one than a stream of the same length that really does decode that far costs without an expectation.
+  // An expectation the data could not possibly meet is not acted on: deflate expands at most DEFLATE_MAX_EXPANSION-fold, so a dictionary claiming a huge image over a tiny stream never buys a huge buffer. One that overstates what a stream holds still buys a buffer of the stated size, but never one past MAX_EXPECTED_LENGTH_BYTES, nor a larger one than a stream of the same length that really does decode that far costs without an expectation.
   if (
     !Number.isInteger(expectedLength) ||
     expectedLength < 0 ||
-    expectedLength >= MAX_INFLATE_OUTPUT_BYTES ||
+    expectedLength > MAX_EXPECTED_LENGTH_BYTES ||
     expectedLength > data.length * DEFLATE_MAX_EXPANSION
   ) {
     return undefined;
@@ -72,7 +78,7 @@ function inflateIntoExpectedLength(
 /**
  * Inflates a zlib stream, recovering what it can from a damaged one.
  * @param data - The zlib stream.
- * @param expectedLength - How long the caller expects the output to be (an image's rows of samples), if it knows. A stream that decodes to at most this many bytes is decoded into one buffer of that size, rather than one grown by doubling and then trimmed, which for a large image is most of what inflating it costs in memory; the bytes are the same either way, and a stream that does not fit is inflated as if no length were given.
+ * @param expectedLength - How long the caller expects the output to be (an image's rows of samples), if it knows. A stream that decodes to at most this many bytes is decoded into one buffer of that size (for an expectation of at most `MAX_EXPECTED_LENGTH_BYTES`), rather than one grown by doubling and then trimmed, which for a large image is most of what inflating it costs in memory; the bytes are the same either way, and a stream that does not fit is inflated as if no length were given.
  * @returns The inflated bytes, and whether recovery was needed.
  */
 export function inflateTolerant(
