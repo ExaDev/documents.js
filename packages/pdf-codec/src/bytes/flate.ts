@@ -43,12 +43,12 @@ export interface InflateResult {
 }
 
 // A tolerant inflate for the read path: real-world PDF/PNG streams occasionally carry a leading whitespace byte, are mistakenly raw-DEFLATE under a zlib-labelled filter, or are truncated. Tries, in order: a plain inflate(); skipping leading whitespace and retrying; raw inflateSync (some producers mislabel raw DEFLATE as FlateDecode); and finally the streaming Unzlib class, which emits chunks as they're produced, so a mid-stream truncation still yields whatever decoded successfully before the failure (`recovered: true`) rather than nothing at all.
-// Inflates straight into a buffer as long as the caller expects the output to be, plus one byte. A stream that decodes to no more than expectedLength bytes is then decoded once, with no buffer growth and no trimming copy, to exactly the bytes inflate returns (fflate writes the same bytes whatever buffer it writes them into). Undefined when the stream does not decode or does not fit, which the spare byte filling up is how a too-long stream shows, for the caller to inflate it as before.
+// Inflates straight into a buffer as long as the caller expects the output to be, plus one byte. A stream that decodes to no more than expectedLength bytes is then decoded once, with no buffer growth and no trimming copy, to exactly the bytes inflate returns (fflate writes the same bytes whatever buffer it writes them into). A stream that decodes to fewer bytes is copied into a buffer of its own length. Undefined when the stream does not decode or does not fit, which the spare byte filling up is how a too-long stream shows, for the caller to inflate it as before.
 function inflateIntoExpectedLength(
   data: Uint8Array<ArrayBuffer>,
   expectedLength: number,
 ): Uint8Array<ArrayBuffer> | undefined {
-  // An expectation the data could not possibly meet is not acted on: deflate expands at most DEFLATE_MAX_EXPANSION-fold, so a dictionary claiming a huge image over a tiny stream never buys a huge buffer.
+  // An expectation the data could not possibly meet is not acted on: deflate expands at most DEFLATE_MAX_EXPANSION-fold, so a dictionary claiming a huge image over a tiny stream never buys a huge buffer. One that overstates what a stream holds still buys a buffer of the stated size, but never a larger one than a stream of the same length that really does decode that far costs without an expectation.
   if (
     !Number.isInteger(expectedLength) ||
     expectedLength < 0 ||
@@ -59,7 +59,11 @@ function inflateIntoExpectedLength(
   }
   try {
     const out = unzlibSync(data, { out: new Uint8Array(expectedLength + 1) });
-    return out.length <= expectedLength ? out : undefined;
+    if (out.length > expectedLength) {
+      return undefined;
+    }
+    // A stream shorter than expected is copied out, so the buffer sized for the expectation is not kept alive behind a view onto its start.
+    return out.length === expectedLength ? out : out.slice();
   } catch {
     return undefined;
   }

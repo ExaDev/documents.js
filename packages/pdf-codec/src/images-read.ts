@@ -46,6 +46,14 @@ const RGB_CHANNEL_COUNT = 3;
 // One PDF sample byte's full range (ISO 32000-1 7.4.9's implicit 8-bit-per-sample assumption once BitsPerComponent is scaled up to it), and the width of one byte in bits.
 const MAX_BYTE_VALUE = 255;
 const BITS_PER_BYTE = 8;
+// The third of PDF's four legal /BitsPerComponent depths for a sampled image (1, 2, 4, 8 — ISO 32000-1 Table 89, or Table 6 in later editions); 1 and 2 need no name of their own, exempt from this rule as structurally self-evident, and 8 reuses BITS_PER_BYTE. This module decodes every one of the four.
+const FOUR_BIT_DEPTH = 4;
+const SUPPORTED_BITS_PER_COMPONENT: ReadonlySet<number> = new Set([
+  1,
+  2,
+  FOUR_BIT_DEPTH,
+  BITS_PER_BYTE,
+]);
 
 function componentsOf(cs: ResolvedColorSpace): number {
   if (cs.kind === "gray") {
@@ -400,26 +408,27 @@ function readSoftMaskAlpha(
   if (smaskObj?.kind !== "stream") {
     return undefined;
   }
-  const decoded = decodeStream(
-    smaskObj.raw,
-    smaskObj.dict,
-    sink,
-    undefined,
-    expectedSampleLength(smaskObj.dict, resolver),
-  );
-  if (decoded.remainingFilter !== undefined) {
-    return undefined; // an encoded (e.g. DCT) soft mask is out of scope — degrade to no alpha rather than guess
-  }
   const smaskWidth = asNumber(dictGet(smaskObj.dict, "Width")) ?? width;
   const smaskHeight = asNumber(dictGet(smaskObj.dict, "Height")) ?? height;
   const smaskBpc =
     asNumber(dictGet(smaskObj.dict, "BitsPerComponent")) ?? BITS_PER_BYTE;
+  // Checked before the mask is decoded, so a mask that is never used never costs a decode: its size is then the image's own, which readImageXObject has already bounded.
   if (
     smaskWidth !== width ||
     smaskHeight !== height ||
     smaskBpc !== BITS_PER_BYTE
   ) {
     return undefined; // a differently-sized or differently-depthed mask needs resampling this module doesn't do
+  }
+  const decoded = decodeStream(
+    smaskObj.raw,
+    smaskObj.dict,
+    sink,
+    undefined,
+    () => expectedSampleLength(smaskObj.dict, resolver),
+  );
+  if (decoded.remainingFilter !== undefined) {
+    return undefined; // an encoded (e.g. DCT) soft mask is out of scope — degrade to no alpha rather than guess
   }
   return decoded.bytes.subarray(0, width * height);
 }
@@ -569,7 +578,7 @@ function readJpeg2000Image(
   };
 }
 
-// How many bytes an image's samples take, rows padded to a whole byte (ISO 32000-1 8.9.3), from its dictionary alone: what its stream should decode to, which decodeStream sizes its inflate buffer by. Undefined when the dictionary does not say (no usable size or depth, or a colour space this module does not read), and the stream is then decoded as it would be without it. The colour space is resolved with diagnostics discarded, since readImageXObject resolves it again and reports what it finds.
+// How many bytes an image's samples take, rows padded to a whole byte (ISO 32000-1 8.9.3), from its dictionary alone: what its stream should decode to, which decodeStream sizes its inflate buffer by. Undefined when the dictionary does not say, or says something readImageXObject goes on to refuse (no usable size, a size past its PNG ceilings, a depth it does not read, or a colour space it does not read), and the stream is then decoded as it would be without it: a dictionary's size is trusted for a buffer only where it describes an image that would be decoded. The colour space is resolved with diagnostics discarded, since readImageXObject resolves it again and reports what it finds.
 function expectedSampleLength(
   dict: PdfDict,
   resolver: Readonly<PdfObjectResolver>,
@@ -584,10 +593,12 @@ function expectedSampleLength(
     height === undefined ||
     !Number.isInteger(width) ||
     !Number.isInteger(height) ||
-    !Number.isInteger(bitsPerComponent) ||
     width <= 0 ||
     height <= 0 ||
-    bitsPerComponent <= 0
+    width > PNG_MAX_DIMENSION ||
+    height > PNG_MAX_DIMENSION ||
+    width * height > PNG_MAX_PIXELS ||
+    !SUPPORTED_BITS_PER_COMPONENT.has(bitsPerComponent)
   ) {
     return undefined;
   }
@@ -628,7 +639,7 @@ export function readImageXObject(
     dict,
     sink,
     (obj) => resolver.resolve(obj),
-    expectedSampleLength(dict, resolver),
+    () => expectedSampleLength(dict, resolver),
   );
   const jbig2Original: ExtractedPdfImage["original"] =
     decoded.jbig2 === undefined
@@ -693,14 +704,7 @@ export function readImageXObject(
   const bitsPerComponent =
     asNumber(dictGet(dict, "BitsPerComponent") ?? dictGet(dict, "BPC")) ??
     BITS_PER_BYTE;
-  // The third of PDF's four legal /BitsPerComponent depths (1, 2, 4, 8 — ISO 32000-1 Table 89, or Table 6 in later editions); 1 and 2 need no name of their own, exempt from this rule as structurally self-evident, and 8 reuses BITS_PER_BYTE.
-  const FOUR_BIT_DEPTH = 4;
-  if (
-    bitsPerComponent !== 1 &&
-    bitsPerComponent !== 2 &&
-    bitsPerComponent !== FOUR_BIT_DEPTH &&
-    bitsPerComponent !== BITS_PER_BYTE
-  ) {
+  if (!SUPPORTED_BITS_PER_COMPONENT.has(bitsPerComponent)) {
     sink({
       code: "image/unsupported-bit-depth",
       severity: "warning",

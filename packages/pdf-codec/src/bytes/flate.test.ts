@@ -121,6 +121,12 @@ describe("inflateTolerant with an expected length", () => {
     );
   });
 
+  it("returns a stream shorter than expected in a buffer of its own length, not the one sized for the expectation", () => {
+    const hinted = inflateTolerant(compressed, sample.length + 500);
+    expect(hinted.bytes.length).toBe(sample.length);
+    expect(hinted.bytes.buffer.byteLength).toBe(sample.length);
+  });
+
   it("does not act on an expectation the data could not meet, whatever a dictionary claims", () => {
     vi.mocked(unzlibSync).mockClear();
     const tiny = deflate(new Uint8Array(10));
