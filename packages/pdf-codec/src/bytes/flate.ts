@@ -13,6 +13,9 @@ const MAX_INFLATE_OUTPUT_MIB = 512;
 export const MAX_INFLATE_OUTPUT_BYTES =
   MAX_INFLATE_OUTPUT_MIB * KIB_PER_MIB * BYTES_PER_KIB;
 
+// The most a deflate stream can expand: a 258-byte match costs at least two bits, so each input byte decodes to at most 1032 bytes (zlib's own technical details give the same limit).
+const DEFLATE_MAX_EXPANSION = 1032;
+
 export type DeflateLevel = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9;
 
 export function deflate(
@@ -40,7 +43,44 @@ export interface InflateResult {
 }
 
 // A tolerant inflate for the read path: real-world PDF/PNG streams occasionally carry a leading whitespace byte, are mistakenly raw-DEFLATE under a zlib-labelled filter, or are truncated. Tries, in order: a plain inflate(); skipping leading whitespace and retrying; raw inflateSync (some producers mislabel raw DEFLATE as FlateDecode); and finally the streaming Unzlib class, which emits chunks as they're produced, so a mid-stream truncation still yields whatever decoded successfully before the failure (`recovered: true`) rather than nothing at all.
-export function inflateTolerant(data: Uint8Array<ArrayBuffer>): InflateResult {
+// Inflates straight into a buffer as long as the caller expects the output to be, plus one byte. A stream that decodes to no more than expectedLength bytes is then decoded once, with no buffer growth and no trimming copy, to exactly the bytes inflate returns (fflate writes the same bytes whatever buffer it writes them into). Undefined when the stream does not decode or does not fit, which the spare byte filling up is how a too-long stream shows, for the caller to inflate it as before.
+function inflateIntoExpectedLength(
+  data: Uint8Array<ArrayBuffer>,
+  expectedLength: number,
+): Uint8Array<ArrayBuffer> | undefined {
+  // An expectation the data could not possibly meet is not acted on: deflate expands at most DEFLATE_MAX_EXPANSION-fold, so a dictionary claiming a huge image over a tiny stream never buys a huge buffer.
+  if (
+    !Number.isInteger(expectedLength) ||
+    expectedLength < 0 ||
+    expectedLength >= MAX_INFLATE_OUTPUT_BYTES ||
+    expectedLength > data.length * DEFLATE_MAX_EXPANSION
+  ) {
+    return undefined;
+  }
+  try {
+    const out = unzlibSync(data, { out: new Uint8Array(expectedLength + 1) });
+    return out.length <= expectedLength ? out : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Inflates a zlib stream, recovering what it can from a damaged one.
+ * @param data - The zlib stream.
+ * @param expectedLength - How long the caller expects the output to be (an image's rows of samples), if it knows. A stream that decodes to at most this many bytes is decoded into one buffer of that size, rather than one grown by doubling and then trimmed, which for a large image is most of what inflating it costs in memory; the bytes are the same either way, and a stream that does not fit is inflated as if no length were given.
+ * @returns The inflated bytes, and whether recovery was needed.
+ */
+export function inflateTolerant(
+  data: Uint8Array<ArrayBuffer>,
+  expectedLength?: number,
+): InflateResult {
+  if (expectedLength !== undefined) {
+    const sized = inflateIntoExpectedLength(data, expectedLength);
+    if (sized !== undefined) {
+      return { bytes: sized, recovered: false };
+    }
+  }
   try {
     return { bytes: inflate(data), recovered: false };
   } catch {

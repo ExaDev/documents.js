@@ -8,6 +8,7 @@ import {
 import type { Jpeg2000Image } from "./image/jpeg2000";
 import { decodeJpeg2000 } from "./image/jpeg2000";
 import type { PdfDiagnosticSink } from "./diagnostics";
+import { NOOP_DIAGNOSTIC_SINK } from "./diagnostics";
 import { decodeStream } from "./filters";
 import type { PdfObjectResolver } from "./interpret-types";
 import type { PdfDict, PdfObject } from "./objects";
@@ -399,7 +400,13 @@ function readSoftMaskAlpha(
   if (smaskObj?.kind !== "stream") {
     return undefined;
   }
-  const decoded = decodeStream(smaskObj.raw, smaskObj.dict, sink);
+  const decoded = decodeStream(
+    smaskObj.raw,
+    smaskObj.dict,
+    sink,
+    undefined,
+    expectedSampleLength(smaskObj.dict, resolver),
+  );
   if (decoded.remainingFilter !== undefined) {
     return undefined; // an encoded (e.g. DCT) soft mask is out of scope — degrade to no alpha rather than guess
   }
@@ -562,6 +569,43 @@ function readJpeg2000Image(
   };
 }
 
+// How many bytes an image's samples take, rows padded to a whole byte (ISO 32000-1 8.9.3), from its dictionary alone: what its stream should decode to, which decodeStream sizes its inflate buffer by. Undefined when the dictionary does not say (no usable size or depth, or a colour space this module does not read), and the stream is then decoded as it would be without it. The colour space is resolved with diagnostics discarded, since readImageXObject resolves it again and reports what it finds.
+function expectedSampleLength(
+  dict: PdfDict,
+  resolver: Readonly<PdfObjectResolver>,
+): number | undefined {
+  const width = asNumber(dictGet(dict, "Width") ?? dictGet(dict, "W"));
+  const height = asNumber(dictGet(dict, "Height") ?? dictGet(dict, "H"));
+  const bitsPerComponent =
+    asNumber(dictGet(dict, "BitsPerComponent") ?? dictGet(dict, "BPC")) ??
+    BITS_PER_BYTE;
+  if (
+    width === undefined ||
+    height === undefined ||
+    !Number.isInteger(width) ||
+    !Number.isInteger(height) ||
+    !Number.isInteger(bitsPerComponent) ||
+    width <= 0 ||
+    height <= 0 ||
+    bitsPerComponent <= 0
+  ) {
+    return undefined;
+  }
+  const colorSpace = resolveColorSpace(
+    dictGet(dict, "ColorSpace") ?? dictGet(dict, "CS"),
+    resolver,
+    NOOP_DIAGNOSTIC_SINK,
+  );
+  if (colorSpace.kind === "unsupported") {
+    return undefined;
+  }
+  const components =
+    colorSpace.kind === "indexed" ? 1 : componentsOf(colorSpace);
+  return (
+    height * Math.ceil((width * components * bitsPerComponent) / BITS_PER_BYTE)
+  );
+}
+
 export function readImageXObject(
   dict: PdfDict,
   raw: Uint8Array<ArrayBuffer>,
@@ -579,7 +623,13 @@ export function readImageXObject(
   }
 
   // The resolver is threaded in here, and only here, because JBIG2Decode's own /JBIG2Globals DecodeParms entry is a stream that a producer essentially always writes as an indirect reference — no other filter this codec implements has a parameter that needs dereferencing.
-  const decoded = decodeStream(raw, dict, sink, (obj) => resolver.resolve(obj));
+  const decoded = decodeStream(
+    raw,
+    dict,
+    sink,
+    (obj) => resolver.resolve(obj),
+    expectedSampleLength(dict, resolver),
+  );
   const jbig2Original: ExtractedPdfImage["original"] =
     decoded.jbig2 === undefined
       ? undefined

@@ -91,3 +91,51 @@ describe("inflateTolerant", () => {
     expect(() => inflateTolerant(new Uint8Array([1, 2, 3]))).toThrow();
   });
 });
+
+describe("inflateTolerant with an expected length", () => {
+  const compressed = deflate(sample);
+  const unhinted = inflateTolerant(compressed);
+
+  it.each([
+    ["exactly the output's length", sample.length],
+    ["longer than the output", sample.length + 500],
+    ["shorter than the output", sample.length - 1],
+    ["zero", 0],
+    ["not an integer", sample.length + 0.5],
+    ["negative", -1],
+  ])(
+    "inflates to the same bytes when the expectation is %s",
+    (_name, expected) => {
+      const hinted = inflateTolerant(compressed, expected);
+      expect(Array.from(hinted.bytes)).toEqual(Array.from(unhinted.bytes));
+      expect(hinted.recovered).toBe(false);
+    },
+  );
+
+  it("inflates into one buffer of the expected length, plus a byte that shows whether the stream ran past it", () => {
+    vi.mocked(unzlibSync).mockClear();
+    inflateTolerant(compressed, sample.length);
+    expect(vi.mocked(unzlibSync)).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(unzlibSync).mock.calls[0]?.[1]?.out?.length).toBe(
+      sample.length + 1,
+    );
+  });
+
+  it("does not act on an expectation the data could not meet, whatever a dictionary claims", () => {
+    vi.mocked(unzlibSync).mockClear();
+    const tiny = deflate(new Uint8Array(10));
+    const result = inflateTolerant(tiny, tiny.length * 1032 + 1);
+    expect(Array.from(result.bytes)).toEqual(Array.from(new Uint8Array(10)));
+    expect(
+      vi.mocked(unzlibSync).mock.calls.every((call) => call[1] === undefined),
+    ).toBe(true);
+  });
+
+  it("recovers a damaged stream exactly as it would with no expectation", () => {
+    const damaged = compressed.slice(0, compressed.length - 9);
+    const hinted = inflateTolerant(damaged, sample.length);
+    const plain = inflateTolerant(damaged);
+    expect(Array.from(hinted.bytes)).toEqual(Array.from(plain.bytes));
+    expect(hinted.recovered).toBe(plain.recovered);
+  });
+});
