@@ -181,7 +181,7 @@ export function filterScanlines(
 
 /**
  * Filters pixel rows into PNG's per-scanline IDAT payload shape, as `filterScanlines` does, reading each row from a callback rather than from one buffer holding the whole image: a caller whose pixels are not already laid out as PNG rows (separate colour and alpha planes, say) writes each row as it is filtered instead of building the whole interleaved image first.
- * @param readRow - Writes row `y`'s unfiltered bytes into `row` (exactly `bytesPerRow` long, holding whatever an earlier row left there, so every byte must be written). Called once per row, in order.
+ * @param readRow - Writes row `y`'s unfiltered bytes into `row` (exactly `bytesPerRow` long, holding whatever an earlier row left there: a byte the callback leaves unwritten keeps that value, which is how `filterScanlines` treats a `raw` shorter than `height` rows, so a caller wanting each row to stand alone writes every byte). Called once per row, in order.
  * @param height - Rows.
  * @param bytesPerRow - Unfiltered bytes per row.
  * @param bpp - Bytes per complete pixel, at least 1: the distance the Sub, Average and Paeth filters look back.

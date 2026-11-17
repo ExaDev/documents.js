@@ -259,15 +259,15 @@ export function encodePng(
     );
   }
 
+  // Truecolour is encoded first, so the palette's index plane is built only once the larger truecolour pass has finished with its filtered rows and deflate buffer, and the two are never held at once.
+  const truecolor = buildPng((writer) => {
+    writeTruecolorPng(writer, image, options);
+  });
   const paletteEncoding =
     image.channels === RGB_CHANNELS ? detectPalette(image) : undefined;
-
   if (paletteEncoding === undefined) {
-    return buildPng((writer) => {
-      writeTruecolorPng(writer, image, options);
-    });
+    return truecolor;
   }
-
   const indexed = buildPng((writer) => {
     writeIndexedPng(
       writer,
@@ -276,9 +276,6 @@ export function encodePng(
       paletteEncoding,
       options,
     );
-  });
-  const truecolor = buildPng((writer) => {
-    writeTruecolorPng(writer, image, options);
   });
   return indexed.length <= truecolor.length ? indexed : truecolor;
 }
