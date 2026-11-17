@@ -12,7 +12,7 @@ import { NOOP_DIAGNOSTIC_SINK } from "./diagnostics";
 import { decodeStream } from "./filters";
 import type { PdfObjectResolver } from "./interpret-types";
 import type { PdfDict, PdfObject } from "./objects";
-import { asArray, asBool, asName, asNumber, dictGet } from "./objects";
+import { asArray, asBool, asDict, asName, asNumber, dictGet } from "./objects";
 
 // Turns an Image XObject (or an inline image's dict+data) into bytes ready to store as a LayoutImageAsset. A DCTDecode (JPEG) image passes through completely undecoded — its compressed bytes ARE the deliverable, exactly mirroring the write path's own lossless JPEG passthrough. Everything else is decoded to raw samples and re-encoded as PNG via byte-codec's own encodePng, since LayoutImageAsset only ever stores 'png' or 'jpeg' — byte-codec's encodePng is this package's only PNG encoder: a caller's own imageId is a crc32 of the PNG bytes it originally supplied (see documents.js's registerImageBytes), so this module's re-encode of the same raster data must run through the identical function a caller would have used, not a second, independently-maintained copy that could silently diverge from it.
 
@@ -65,10 +65,12 @@ function componentsOf(cs: ResolvedColorSpace): number {
   return RGB_CHANNEL_COUNT; // rgb, and indexed's own per-pixel sample count (handled separately — this is only used for a resolved *base* space)
 }
 
+// An Indexed space's lookup table is decoded unless `decodeLookup` is false, for a caller that needs only the space's shape (its lookup is then empty).
 function resolveColorSpace(
   csObj: PdfObject | undefined,
   resolver: Readonly<PdfObjectResolver>,
   sink: PdfDiagnosticSink,
+  decodeLookup = true,
 ): ResolvedColorSpace {
   const resolved = resolver.resolve(csObj);
   const directName = resolved?.kind === "name" ? resolved.name : undefined;
@@ -112,8 +114,8 @@ function resolveColorSpace(
     return { kind: "rgb" }; // 3-component ICC (by far the common case) and any unlabelled profile both treated as RGB
   }
   if (family === "Indexed") {
-    const base = resolveColorSpace(arr[1], resolver, sink);
-    const lookupObj = resolver.resolve(arr[3]);
+    const base = resolveColorSpace(arr[1], resolver, sink, decodeLookup);
+    const lookupObj = decodeLookup ? resolver.resolve(arr[3]) : undefined;
     let lookup: Uint8Array<ArrayBuffer>;
     if (lookupObj?.kind === "stream") {
       lookup = decodeStream(lookupObj.raw, lookupObj.dict, sink).bytes;
@@ -134,6 +136,23 @@ function resolveColorSpace(
     kind: "unsupported",
     name: family ?? "(unrecognised array colour space)",
   };
+}
+
+// A resolver that hands back what it resolved before for the same object, so an image's colour space resolved twice (once to size its inflate buffer, once to read its samples) reports a missing or cyclic reference once, as resolving it once did.
+function resolvingOnce(
+  resolver: Readonly<PdfObjectResolver>,
+): PdfObjectResolver {
+  const resolved = new Map<PdfObject, PdfObject | undefined>();
+  const resolve = (obj: PdfObject | undefined): PdfObject | undefined => {
+    if (obj === undefined) {
+      return undefined;
+    }
+    if (!resolved.has(obj)) {
+      resolved.set(obj, resolver.resolve(obj));
+    }
+    return resolved.get(obj);
+  };
+  return { resolve, resolveDict: (obj) => asDict(resolve(obj)) };
 }
 
 /**
@@ -412,23 +431,23 @@ function readSoftMaskAlpha(
   const smaskHeight = asNumber(dictGet(smaskObj.dict, "Height")) ?? height;
   const smaskBpc =
     asNumber(dictGet(smaskObj.dict, "BitsPerComponent")) ?? BITS_PER_BYTE;
-  // Checked before the mask is decoded, so a mask that is never used never costs a decode: its size is then the image's own, which readImageXObject has already bounded.
-  if (
-    smaskWidth !== width ||
-    smaskHeight !== height ||
-    smaskBpc !== BITS_PER_BYTE
-  ) {
-    return undefined; // a differently-sized or differently-depthed mask needs resampling this module doesn't do
-  }
+  const imageSized =
+    smaskWidth === width &&
+    smaskHeight === height &&
+    smaskBpc === BITS_PER_BYTE;
+  // Only a mask of the image's own size, which readImageXObject has already bounded, is inflated into a buffer of the size it should decode to (one 8-bit sample per pixel). A mask of any other size goes unused, but is still decoded, so its filters report what they find, into a buffer that grows with what its stream really holds rather than one its dictionary sized.
   const decoded = decodeStream(
     smaskObj.raw,
     smaskObj.dict,
     sink,
     undefined,
-    () => expectedSampleLength(smaskObj.dict, resolver),
+    imageSized ? () => width * height : undefined,
   );
   if (decoded.remainingFilter !== undefined) {
     return undefined; // an encoded (e.g. DCT) soft mask is out of scope — degrade to no alpha rather than guess
+  }
+  if (!imageSized) {
+    return undefined; // a differently-sized or differently-depthed mask needs resampling this module doesn't do
   }
   return decoded.bytes.subarray(0, width * height);
 }
@@ -578,7 +597,7 @@ function readJpeg2000Image(
   };
 }
 
-// How many bytes an image's samples take, rows padded to a whole byte (ISO 32000-1 8.9.3), from its dictionary alone: what its stream should decode to, which decodeStream sizes its inflate buffer by. Undefined when the dictionary does not say, or says something readImageXObject goes on to refuse (no usable size, a size past its PNG ceilings, a depth it does not read, or a colour space it does not read), and the stream is then decoded as it would be without it: a dictionary's size is trusted for a buffer only where it describes an image that would be decoded. The colour space is resolved with diagnostics discarded, since readImageXObject resolves it again and reports what it finds.
+// How many bytes an image's samples take, rows padded to a whole byte (ISO 32000-1 8.9.3), from its dictionary alone: what its stream should decode to, which decodeStream sizes its inflate buffer by. Undefined when the dictionary does not say, or says something readImageXObject goes on to refuse (no usable size, a size past its PNG ceilings, a depth it does not read, or a colour space it does not read), and the stream is then decoded as it would be without it: a dictionary's size is trusted for a buffer only where it describes an image that would be decoded. Only the colour space's shape is resolved, never an Indexed lookup table's stream, with diagnostics discarded, since readImageXObject resolves it again, through the same resolver, and reports what it finds.
 function expectedSampleLength(
   dict: PdfDict,
   resolver: Readonly<PdfObjectResolver>,
@@ -606,6 +625,7 @@ function expectedSampleLength(
     dictGet(dict, "ColorSpace") ?? dictGet(dict, "CS"),
     resolver,
     NOOP_DIAGNOSTIC_SINK,
+    false,
   );
   if (colorSpace.kind === "unsupported") {
     return undefined;
@@ -633,13 +653,15 @@ export function readImageXObject(
     return undefined;
   }
 
+  // The colour space is resolved through this for the inflate size hint and again for the samples, so a reference it follows is fetched, and any warning about it reported, once.
+  const colorSpaceResolver = resolvingOnce(resolver);
   // The resolver is threaded in here, and only here, because JBIG2Decode's own /JBIG2Globals DecodeParms entry is a stream that a producer essentially always writes as an indirect reference — no other filter this codec implements has a parameter that needs dereferencing.
   const decoded = decodeStream(
     raw,
     dict,
     sink,
     (obj) => resolver.resolve(obj),
-    () => expectedSampleLength(dict, resolver),
+    () => expectedSampleLength(dict, colorSpaceResolver),
   );
   const jbig2Original: ExtractedPdfImage["original"] =
     decoded.jbig2 === undefined
@@ -715,7 +737,7 @@ export function readImageXObject(
 
   const colorSpace = resolveColorSpace(
     dictGet(dict, "ColorSpace") ?? dictGet(dict, "CS"),
-    resolver,
+    colorSpaceResolver,
     sink,
   );
   if (colorSpace.kind === "unsupported") {

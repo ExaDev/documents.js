@@ -6,7 +6,7 @@ import { seededRandom } from "./seeded-random";
 // Picture-heavy PDF fixtures for the per-image reader (read-images.ts), built like every fixture in pdf.ts: by literal concatenation through FixtureBuilder, never through this package's own writer. Two shapes:
 //
 // - imageVarietyPdf: one small image of each kind the read path decodes differently (Flate RGB with a soft mask, PNG-predicted ICC RGB, inverted gray, indexed, 1-bit, CMYK, a JPEG passed through, an image inside a form XObject, an inline image), plus the cases the listing has to leave out or report as undecodable. Its objects are numbered in a fixed order (images from 3, image 0's soft mask straight after it, then the ICC profile and the form), which read-images.test.ts names them by. Its decoded bytes are pinned against pdf-codec 4.5.2's (image-heavy-pdf-golden.ts).
-// - imageEdgeCasesPdf: one page of the cases a locator has to survive: an image named through a reference to its reference, an image whose soft mask is the wrong size to use, one whose dictionary declares more pixels than any image decodes to, and an inline stencil mask before an inline image.
+// - imageEdgeCasesPdf: one page of the cases a locator has to survive: an image named through a reference to its reference, an image whose soft mask is the wrong size to use, one whose dictionary declares more pixels than any image decodes to, an inline stencil mask before an inline image, and two images no page draws, with a missing and an Indexed colour space.
 // - pictureDeckPdf: shaped like a typical picture-heavy slide deck (20 pages, about a hundred distinct images, most of them Flate RGB with soft masks and the largest 2360x1309, the rest JPEG), generated from a seed. At full scale it is about 2.5 MB; `scale` shrinks every image's pixel size for a unit test that wants the same structure without the cost.
 
 const PAGE_WIDTH_PT = 960;
@@ -397,8 +397,9 @@ export function imageVarietyPdf(): Uint8Array<ArrayBuffer> {
  * One page of the edge cases per-image reading has to handle, numbered for read-images.test.ts:
  *
  * - 3: a 2x1 Flate RGB image, drawn as /A and again as /B through object 6, which holds only a reference to 3.
- * - 4: a 2x1 Flate RGB image whose soft mask (object 5) declares 4000x4000, a size readImageXObject does not resample, so it is never used.
+ * - 4: a 2x1 Flate RGB image whose soft mask (object 5) declares 4000x4000, a size readImageXObject does not resample, so it is never used, and an unsupported predictor, which decoding it reports.
  * - 7: a Flate gray image whose dictionary declares 10001x10000 (past encodePng's pixel ceiling) over a stream of about 100 KB.
+ * - 8, 9 (never drawn): a 2x1 Flate image whose /ColorSpace is a reference to an object the file does not have, and a 2x1 Indexed one whose lookup table is the Flate stream 10.
  * - two inline images: a stencil mask (`/IM true`, occurrence 0, never listed) and a 1x1 RGB image (occurrence 1).
  * @returns The PDF.
  */
@@ -408,7 +409,7 @@ export function imageEdgeCasesPdf(): Uint8Array<ArrayBuffer> {
     {
       ...rgbImage(2, 1, 2, 0, false),
       smask: {
-        dict: "<< /Type /XObject /Subtype /Image /Width 4000 /Height 4000 /ColorSpace /DeviceGray /BitsPerComponent 8 /Filter /FlateDecode >>",
+        dict: "<< /Type /XObject /Subtype /Image /Width 4000 /Height 4000 /ColorSpace /DeviceGray /BitsPerComponent 8 /Filter /FlateDecode /DecodeParms << /Predictor 5 >> >>",
         data: flate(new Uint8Array(4)),
       },
     },
@@ -442,6 +443,18 @@ export function imageEdgeCasesPdf(): Uint8Array<ArrayBuffer> {
       {
         dict: "<< /Type /XObject /Subtype /Image /Width 10001 /Height 10000 /ColorSpace /DeviceGray /BitsPerComponent 8 /Filter /FlateDecode >>",
         data: flate(photoSamples(320, 320, 1, 5, 255)),
+      },
+      {
+        dict: "<< /Type /XObject /Subtype /Image /Width 2 /Height 1 /ColorSpace 99 0 R /BitsPerComponent 8 /Filter /FlateDecode >>",
+        data: flate(new Uint8Array(6)),
+      },
+      {
+        dict: "<< /Type /XObject /Subtype /Image /Width 2 /Height 1 /ColorSpace [/Indexed /DeviceRGB 1 @extra:4] /BitsPerComponent 8 /Filter /FlateDecode >>",
+        data: flate(new Uint8Array([0, 1])),
+      },
+      {
+        dict: "<< /Filter /FlateDecode >>",
+        data: flate(new Uint8Array([255, 0, 0, 0, 0, 255])),
       },
     ],
   );
