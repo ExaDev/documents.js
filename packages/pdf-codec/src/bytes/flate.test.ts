@@ -2,6 +2,7 @@ import type * as Fflate from "fflate";
 import { deflateSync, unzlibSync } from "fflate";
 import { describe, expect, it, vi } from "vitest";
 import {
+  MAX_EXPECTED_LENGTH_BYTES,
   MAX_INFLATE_OUTPUT_BYTES,
   deflate,
   inflate,
@@ -135,6 +136,30 @@ describe("inflateTolerant with an expected length", () => {
     expect(
       vi.mocked(unzlibSync).mock.calls.every((call) => call[1] === undefined),
     ).toBe(true);
+  });
+
+  it("inflates into a growable buffer, as with no expectation, when the expectation is past the ceiling a dictionary's word may buy", () => {
+    // Incompressible bytes, so the stream is long enough that its deflate bound allows the expectation and only the ceiling refuses it.
+    let state = 1;
+    const noise = Uint8Array.from({ length: 64 * 1024 }, () => {
+      state ^= state << 13;
+      state ^= state >>> 17;
+      state ^= state << 5;
+      return state >>> 24;
+    });
+    const stream = deflate(noise);
+    expect(stream.length * 1032).toBeGreaterThan(MAX_EXPECTED_LENGTH_BYTES);
+    vi.mocked(unzlibSync).mockClear();
+    const result = inflateTolerant(stream, MAX_EXPECTED_LENGTH_BYTES + 1);
+    expect(Array.from(result.bytes)).toEqual(Array.from(noise));
+    expect(
+      vi.mocked(unzlibSync).mock.calls.every((call) => call[1] === undefined),
+    ).toBe(true);
+    vi.mocked(unzlibSync).mockClear();
+    inflateTolerant(stream, MAX_EXPECTED_LENGTH_BYTES);
+    expect(vi.mocked(unzlibSync).mock.calls[0]?.[1]?.out?.length).toBe(
+      MAX_EXPECTED_LENGTH_BYTES + 1,
+    );
   });
 
   it("recovers a damaged stream exactly as it would with no expectation", () => {
