@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { filterScanlines, unfilterScanlines } from "./png-filter";
+import {
+  filterScanlineRows,
+  filterScanlines,
+  unfilterScanlines,
+} from "./png-filter";
 
 // Builds an unfiltered scanline stream (no filter-type bytes) for `height` rows of `bytesPerRow` bytes each, from a flat list of already-raw bytes.
 function raw(bytesPerRow: number, rows: readonly (readonly number[])[]) {
@@ -502,5 +506,49 @@ describe("filterScanlines and unfilterScanlines against the PNG specification's 
     expect(Array.from(filteredBytes)).toEqual(
       referenceFilter(rawBytes, height, bytesPerRow, bpp, "adaptive"),
     );
+  });
+});
+
+describe("filterScanlineRows", () => {
+  it("filters rows read through the callback exactly as filterScanlines filters the same rows held in one buffer", () => {
+    const bytesPerRow = 12;
+    const height = 9;
+    const pixels = Uint8Array.from(
+      { length: bytesPerRow * height },
+      (_unused, index) => (index * 37 + (index % 5) * 11) & 0xff,
+    );
+    for (const strategy of ["adaptive", "none"] as const) {
+      const fromRows = filterScanlineRows(
+        (y, row) => {
+          row.set(pixels.subarray(y * bytesPerRow, (y + 1) * bytesPerRow));
+        },
+        height,
+        bytesPerRow,
+        3,
+        strategy,
+      );
+      expect(Array.from(fromRows)).toEqual(
+        Array.from(filterScanlines(pixels, height, bytesPerRow, 3, strategy)),
+      );
+    }
+  });
+
+  it("asks for each row once, in order, in a buffer exactly one row long", () => {
+    const asked: [number, number][] = [];
+    filterScanlineRows(
+      (y, row) => {
+        asked.push([y, row.length]);
+        row.fill(y);
+      },
+      4,
+      6,
+      2,
+    );
+    expect(asked).toEqual([
+      [0, 6],
+      [1, 6],
+      [2, 6],
+      [3, 6],
+    ]);
   });
 });
