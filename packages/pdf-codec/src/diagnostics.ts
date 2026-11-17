@@ -1,4 +1,5 @@
 // The parser's three-tier failure policy (throw / recover-with-diagnostic / degrade-with-diagnostic — see the implementation plan's Step 7.5): a hand-written parser measured in low thousands of lines cannot match a mature library's robustness against adversarial or mis-generated real-world input, so it must be explicit about which tier each situation falls into rather than silently picking one. This module is the shared vocabulary every other src/pdf/* read-side module reports through.
+import type { PdfImageLocator } from "./read-images";
 
 export type PdfDiagnosticSeverity = "info" | "warning";
 
@@ -48,6 +49,19 @@ export class PdfPageSelectionError extends PdfParseError {
     this.name = "PdfPageSelectionError";
     this.pageIndex = pageIndex;
     this.pageCount = pageCount;
+  }
+}
+
+/**
+ * A locator `decodePdfImage` (or `PdfImages.decode`) was given that names no image of the document: an object that is not an image XObject stream (code `pdf/image-not-found`), or an inline image occurrence its page does not hold (the same code; a page index naming no page throws `PdfPageSelectionError` instead). Thrown rather than reported, because a locator comes from a listing of this same file, so one naming nothing means the caller has the wrong file or a wrong locator.
+ */
+export class PdfImageLocatorError extends PdfParseError {
+  readonly locator: PdfImageLocator;
+
+  constructor(locator: PdfImageLocator, message: string) {
+    super("pdf/image-not-found", message);
+    this.name = "PdfImageLocatorError";
+    this.locator = locator;
   }
 }
 
