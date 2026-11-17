@@ -342,6 +342,28 @@ describe("decodePdfImage", () => {
     expect(calls[1]?.[1]).toBeUndefined();
   });
 
+  it("interprets a page once for all of its inline images, keeping one page's at a time", () => {
+    const images = openPdfImages(edgeCases);
+    vi.mocked(interpretContentStream).mockClear();
+    expect(
+      images.decode({ kind: "inline", pageIndex: 0, occurrence: 0 }),
+    ).toBeUndefined();
+    expect(
+      images.decode({ kind: "inline", pageIndex: 0, occurrence: 1 }),
+    ).toMatchObject({ format: "png", widthPx: 1, heightPx: 1 });
+    expect(interpretContentStream).toHaveBeenCalledTimes(1);
+
+    const varietyImages = openPdfImages(variety);
+    vi.mocked(interpretContentStream).mockClear();
+    const inline = { kind: "inline", pageIndex: 1, occurrence: 0 } as const;
+    const first = varietyImages.decode(inline);
+    expect(() =>
+      varietyImages.decode({ kind: "inline", pageIndex: 0, occurrence: 0 }),
+    ).toThrow(PdfImageLocatorError);
+    expect(varietyImages.decode(inline)?.imageId).toBe(first?.imageId);
+    expect(interpretContentStream).toHaveBeenCalledTimes(3);
+  });
+
   it("reports a missing colour space object once, though sizing the inflate buffer resolves it too", () => {
     const diagnostics: PdfDiagnostic[] = [];
     expect(
@@ -370,6 +392,19 @@ describe("decodePdfImage", () => {
     expect(decoded).toMatchObject({ format: "png", widthPx: 2, heightPx: 1 });
     // The image's samples and its lookup table, each inflated once.
     expect(unzlibSync).toHaveBeenCalledTimes(2);
+  });
+
+  it("decodes an image stream no page draws, since an xobject locator is not checked against a listing", () => {
+    expect(
+      listPdfImages(edgeCases).map((entry) => entry.locator),
+    ).not.toContainEqual({ kind: "xobject", objectNumber: 9, generation: 0 });
+    expect(
+      decodePdfImage(edgeCases, {
+        kind: "xobject",
+        objectNumber: 9,
+        generation: 0,
+      }),
+    ).toBeDefined();
   });
 
   it("never sizes an inflate buffer by a dictionary that declares an image too large to decode", () => {
