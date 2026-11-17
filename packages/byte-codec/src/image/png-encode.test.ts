@@ -761,3 +761,68 @@ describe("encodePng and decodePng known answers over seeded images", () => {
     },
   );
 });
+
+// The edge cases the row-at-a-time truecolour encoder and the two-pass palette search must reproduce byte for byte: a raster and alpha plane shorter than the image (each missing sample reads as 0), a short grey raster, and a palette with alpha. Each SHA-256 was recorded from the encoder as it was before either change, which built one interleaved copy of the image and stored palette indices as it searched.
+describe("encodePng reproduces its earlier bytes for short planes and a palette with alpha", () => {
+  const pixels = GOLDEN_WIDTH * GOLDEN_HEIGHT;
+  const fewColours = seededBytes(pixels, 7).map((value) => (value % 4) * 60);
+  const images: Record<string, RawImage> = {
+    short3a: {
+      width: GOLDEN_WIDTH,
+      height: GOLDEN_HEIGHT,
+      channels: 3,
+      data: seededBytes(pixels * 3 - 100, 8),
+      alpha: seededBytes(pixels - 50, 9),
+    },
+    short1: {
+      width: GOLDEN_WIDTH,
+      height: GOLDEN_HEIGHT,
+      channels: 1,
+      data: seededBytes(pixels - 77, 10),
+    },
+    palettedAlpha: {
+      width: GOLDEN_WIDTH,
+      height: GOLDEN_HEIGHT,
+      channels: 3,
+      data: Uint8Array.from(
+        { length: pixels * 3 },
+        (_unused, index) => fewColours[Math.floor(index / 3)]!,
+      ),
+      alpha: fewColours.map((value) => (value === 60 ? 128 : 255)),
+    },
+  };
+  it.each([
+    [
+      "short3a",
+      "adaptive",
+      "0ca94aa2c9200e70112786d538ea7160bd26a3822a33165adeea7bbc6d6bfffd",
+    ],
+    [
+      "short3a",
+      "none",
+      "bcb89064f49ed3f0de54cefc3ff28c35a38f748c579f9d6a206019164e5828e9",
+    ],
+    [
+      "short1",
+      "adaptive",
+      "e8683d85b61ad2a5facf843805d03eb1f8c12f8c77a9d78f58c6315954e819d9",
+    ],
+    [
+      "short1",
+      "none",
+      "af560fde86b7a1ddc4bd793bd91d9b4def6023f62d3db67463f14add0ee8d261",
+    ],
+    [
+      "palettedAlpha",
+      "adaptive",
+      "e611d66702ba9ed26b6cb2a28ef631c8b4f1327539bc1dd56f0918dfef3453b8",
+    ],
+    [
+      "palettedAlpha",
+      "none",
+      "a4218aafe1d8f832f55ec19c340664e464bdbcab3fa66dcd6fc22db4fc805603",
+    ],
+  ] as const)("%s under the %s filter", (name, filter, png) => {
+    expect(sha256Hex(encodePng(images[name]!, { filter }))).toBe(png);
+  });
+});
