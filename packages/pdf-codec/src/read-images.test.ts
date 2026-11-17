@@ -320,15 +320,56 @@ describe("decodePdfImage", () => {
     expect(otherGeneration?.imageId).toBe(named?.imageId);
   });
 
-  it("decodes an image without its soft mask when the mask is the wrong size, never inflating the mask", () => {
+  it("decodes an image without its soft mask when the mask is the wrong size, inflating the mask only as far as its stream goes and reporting its filters as readPdf does", () => {
+    const diagnostics: PdfDiagnostic[] = [];
+    const decoded = decodePdfImage(
+      edgeCases,
+      { kind: "xobject", objectNumber: 4, generation: 0 },
+      {
+        sink: (diagnostic) => {
+          diagnostics.push(diagnostic);
+        },
+      },
+    );
+    expect(decoded).toMatchObject({ format: "png", widthPx: 2, heightPx: 1 });
+    expect(diagnostics.map((diagnostic) => diagnostic.code)).toEqual([
+      "pdf/unsupported-predictor",
+    ]);
+    // The image's own stream into a buffer of its size, then the 4000x4000 mask's into one that grows with what it holds.
+    const calls = vi.mocked(unzlibSync).mock.calls;
+    expect(calls).toHaveLength(2);
+    expect(calls[0]?.[1]?.out?.length).toBe(2 * 3 + 1);
+    expect(calls[1]?.[1]).toBeUndefined();
+  });
+
+  it("reports a missing colour space object once, though sizing the inflate buffer resolves it too", () => {
+    const diagnostics: PdfDiagnostic[] = [];
+    expect(
+      decodePdfImage(
+        edgeCases,
+        { kind: "xobject", objectNumber: 8, generation: 0 },
+        {
+          sink: (diagnostic) => {
+            diagnostics.push(diagnostic);
+          },
+        },
+      ),
+    ).toBeUndefined();
+    expect(diagnostics.map((diagnostic) => diagnostic.code)).toEqual([
+      "pdf/object-missing-value",
+      "image/unsupported-colorspace",
+    ]);
+  });
+
+  it("decodes an Indexed image's lookup table once", () => {
     const decoded = decodePdfImage(edgeCases, {
       kind: "xobject",
-      objectNumber: 4,
+      objectNumber: 9,
       generation: 0,
     });
     expect(decoded).toMatchObject({ format: "png", widthPx: 2, heightPx: 1 });
-    // The image's own stream, and not its 4000x4000 mask's.
-    expect(unzlibSync).toHaveBeenCalledTimes(1);
+    // The image's samples and its lookup table, each inflated once.
+    expect(unzlibSync).toHaveBeenCalledTimes(2);
   });
 
   it("never sizes an inflate buffer by a dictionary that declares an image too large to decode", () => {
