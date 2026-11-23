@@ -254,7 +254,7 @@ describe("detectColumnAlignedTables", () => {
     ).toBe(0);
   });
 
-  // novus-power/hive#2566: the y-axis ticks of two charts set side by side share baselines, so their labels align into a two-column table of figures.
+  // the y-axis ticks of two charts set side by side share baselines, so their labels align into a two-column table of figures.
   describe("side-by-side charts", () => {
     const TICKS = ["2.00", "1.50", "1.00", "0.50", "0.00", "-0.50", "-1.00"];
 
@@ -317,7 +317,7 @@ describe("detectColumnAlignedTables", () => {
     // from x253 down to x247. Anchored at the header's own x255, a first-match bucket takes the
     // wider figures no further than x249 and splits the rest off into a bucket of their own, which
     // is then too small to survive the vote -- and `20,000` lands back in the oil column beside
-    // `2,000` as the single cell `2,000 20,000`, losing one of the two outright (novus-power/hive#918).
+    // `2,000` as the single cell `2,000 20,000`, losing one of the two outright.
     const rows: [
       label: string,
       oil: [string, number],
@@ -385,7 +385,7 @@ describe("detectColumnAlignedTables", () => {
     // The Clivet Cristallo HVAC manual's own general-specifications table, whose value columns are
     // full of the compound forms a real datasheet states: a supply range, a pair of capacities, a
     // pair of currents, three fan speeds. Scored against bare numbers alone this column reads as a
-    // third numeric and the whole 51-row table is discarded (novus-power/hive#918).
+    // third numeric and the whole 51-row table is discarded.
     const rows: [label: string, unit: string, a: string, b: string][] = [
       ["Power supply", "V- Ph-Hz", "220~240-1-50", "220~240-1-50"],
       ["Max. input consumption", "W", "2150", "2150"],
@@ -423,7 +423,7 @@ describe("detectColumnAlignedTables", () => {
     // The SEL RTAC manual's own list of figures, whose second column is a run of leader dots ending
     // in the folio. That cell holds a digit and not one letter, so a measurement test asking only
     // for those two things scores the column as measurements and emits the whole list as a table --
-    // measured against the corpus, this readmitted many such pages (novus-power/hive#918).
+    // measured against the corpus, this readmitted many such pages.
     const entries: [string, string][] = [
       ["Figure B.36 ABS Example in CFC, LD", ". . . . . . . . . . . . . . 667"],
       ["Figure B.37 ADD Example in CFC, LD", ". . . . . . . . . . . . 670"],

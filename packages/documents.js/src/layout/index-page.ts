@@ -1,5 +1,5 @@
 /**
- * Whether the rows a column-aligned page recovers are an index and not a table: a list of entries, each a term and the places it is found (novus-power/hive#4149).
+ * Whether the rows a column-aligned page recovers are an index and not a table: a list of entries, each a term and the places it is found.
  *
  * An index set in columns clears every bar `column-aligned-tables.ts` sets for a table. Its reference column is mostly figures (`41`, `17-19`, `9, 44`, `4.2.1`), so it reads as a measurement column, and two or three index columns set side by side recur at the same x on every line. Rendered as a table, each page is a block of entries under a false header row that a reader takes for a table of data, and an index runs to many pages. So the rows are read as an index when their structure says so, from the rows alone and never from what the entries say:
  *
@@ -9,7 +9,7 @@
  *
  * The caller asks only of rows with no caption: a caption names a table, so a captioned table whose last column holds page numbers, or references like an index's, stays one.
  *
- * A contents list or a list of tables is the same layout in page order, and `readsAsContentsList` names it, for one purpose only: the captions a page carries are not read as captions in it. A list of tables wraps its long entries over two lines, so the first line of an entry (`TABLE 4E4A - Multicore armoured 90 C thermosetting insulated cables`) stands alone, as a caption does, and the rows after it were cut into a table under that title and indexed as the table itself, where a search for the table found its entry in the list before the table (BS 7671's list of tables, novus-power/hive#4059). The list's rows stay a table, as they were.
+ * A contents list or a list of tables is the same layout in page order, and `readsAsContentsList` names it, for one purpose only: the captions a page carries are not read as captions in it. A list of tables wraps its long entries over two lines, so the first line of an entry (`TABLE 4E4A - Multicore armoured 90 C thermosetting insulated cables`) stands alone, as a caption does, and the rows after it were cut into a table under that title and indexed as the table itself, where a search for the table found its entry in the list before the table (BS 7671's list of tables). The list's rows stay a table, as they were.
  *
  * Misreading a table as an index costs that table: its rows stay in the page's running text and are not appended as a table. That happens only to a table with no caption and no row of column headings, most of whose rows are a term beside a single figure, with the figures in no order, so that nothing on the page says it is a table. The opposite mistake, an index read as a table, puts a false table on every page the index runs to, and a false table is the mistake this package refuses first (`column-aligned-tables.ts`).
  */

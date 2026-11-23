@@ -7,7 +7,7 @@
  * table with the prose that introduced it, and not enough as soon as it cannot: a reader that splits an over-long document into pieces can be handed a piece holding only appendix tables, with no prose at all. Measured on the SPEL Puraceptor brochure, the rows up to `P280 1C/SC` were named
  * `SPEL Puraceptor Class 1 Single Chamber...` and every row from `P300 1C/SC` on came back with no
  * name and four candidates, because the heading naming that family sits ~2,000 characters earlier in
- * the prose and landed in a different piece (novus-power/hive#918).
+ * the prose and landed in a different piece.
  *
  * Read from FONT SIZE rather than position, because position cannot tell a heading from the running
  * header that sits above it. On that brochure's page 13 the body and the table are 7pt (631 of 700
@@ -42,7 +42,7 @@ function sizeBucket(item: TextItem): number {
 /**
  * The size most of this page's TEXT is set in -- its body text, and on a table page its table too. The modal size by characters, not by runs, and not the mean either, which a handful of very large runs would drag upwards.
  *
- * Counting runs makes the answer depend on how the writer split the text, not on how much of it there is. A slide's chart labels every tick separately, so a handful of short runs outnumber the few long lines of the slide's own body text, and the modal size becomes the tick labels' 5pt: the 12pt body then clears the half-again bar and the slide's first paragraph is read as its heading (novus-power/hive#2566). Characters weigh a paragraph as the paragraph it is; on a table page the table's cells are still most of the characters, so the datasheets this rule was built on read as before.
+ * Counting runs makes the answer depend on how the writer split the text, not on how much of it there is. A slide's chart labels every tick separately, so a handful of short runs outnumber the few long lines of the slide's own body text, and the modal size becomes the tick labels' 5pt: the 12pt body then clears the half-again bar and the slide's first paragraph is read as its heading. Characters weigh a paragraph as the paragraph it is; on a table page the table's cells are still most of the characters, so the datasheets this rule was built on read as before.
  */
 function bodySizePt(items: readonly TextItem[]): number {
   const tally = new Map<number, number>();

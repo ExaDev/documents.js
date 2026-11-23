@@ -436,7 +436,7 @@ describe("reconstructWordprocessing: duplicate-paint collapsing", () => {
     expect(para!.runs.map((r) => r.text)).toEqual(["Hello ", "World"]);
   });
 
-  it("collapses several duplicated sub-word fragments sharing one position down to coherent text (regression: novus-power/hive#1543 — an untagged table region whose duplicated paints previously spliced into scrambled output once several such runs shared a baseline)", () => {
+  it("collapses several duplicated sub-word fragments sharing one position down to coherent text (regression: an untagged table region whose duplicated paints previously spliced into scrambled output once several such runs shared a baseline)", () => {
     const pg = page(612, 792, [
       // "co"+"mp" -> "comp", each half independently repainted several times at (almost) the same position — the exact shape the corrupted source produced ("cocococompmpmpmp") before this collapsing existed.
       text({ text: "co", xPt: 50, yPt: 700, widthPt: 10 }),

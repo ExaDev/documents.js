@@ -1,5 +1,5 @@
 /**
- * A list of tables is not cut at its entries (novus-power/hive#4059): the first line of a wrapped entry stands alone as a caption does, and the rows after it were cut into a table titled by it and indexed as that table, so a search for a table found its entry in the list before the table.
+ * A list of tables is not cut at its entries: the first line of a wrapped entry stands alone as a caption does, and the rows after it were cut into a table titled by it and indexed as that table, so a search for a table found its entry in the list before the table.
  */
 import { describe, expect, it } from "vitest";
 import type { LayoutDocument, LayoutItem } from "pdf-codec";
@@ -96,7 +96,7 @@ const LIST_OF_TABLES: readonly Entry[] = [
   { title: "TABLE 6B - Pulley voltage drop", folio: "38" },
 ] as const;
 
-describe("detectColumnAlignedTables, a list of tables (novus-power/hive#4059)", () => {
+describe("detectColumnAlignedTables, a list of tables", () => {
   it("keeps a list of tables whole under no title, so a wrapped entry's first line is not the caption of the rows after it", () => {
     const tables = detectColumnAlignedTables(
       pageOf(...listOf(700, LIST_OF_TABLES)),
