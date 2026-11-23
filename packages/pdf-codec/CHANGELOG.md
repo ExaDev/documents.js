@@ -1,3 +1,9 @@
+## [5.9.1](https://github.com/ExaDev/documents.js/compare/pdf-codec%405.9.0...pdf-codec%405.9.1) (2026-11-23)
+
+### Miscellaneous Chores
+
+* remove references to a private repository and a client from comments and tests ([6dfae36](https://github.com/ExaDev/documents.js/commit/6dfae36beb626e51250f50b58e69d81d77994794))
+
 ## [5.9.0](https://github.com/ExaDev/documents.js/compare/pdf-codec%405.8.6...pdf-codec%405.9.0) (2026-11-17)
 
 ### Features
