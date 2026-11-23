@@ -120,7 +120,7 @@ const RANGE_INDEX = [
   ["Evergreens", "35-37"],
 ] as const;
 
-describe("detectColumnAlignedTables, index pages (novus-power/hive#4149)", () => {
+describe("detectColumnAlignedTables, index pages", () => {
   it("leaves an index page, whose rows are entries ending in references in no order, as running text and not a table", () => {
     expect(
       detectColumnAlignedTables(

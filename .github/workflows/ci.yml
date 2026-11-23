@@ -593,36 +593,37 @@ jobs:
   #
   # Each of the three reads directly from `needs.release`/`needs.collect-backfill-matrix` (never through an intermediate job) and gates with its own `always() && (...)` — deliberately, after finding a real GitHub Actions platform quirk the hard way: an earlier design funnelled both through one intermediate `resolve-post-release-matrices` job so this `always()`-plus-mixed-`needs` gating logic (and the JSON matrix fallback) lived in one place instead of three. That job's own step correctly resolved and wrote the right matrices (confirmed directly via a `cat -A "$GITHUB_OUTPUT"` dump inside the step), but a *separate* downstream job reading `needs.resolve-post-release-matrices.outputs.*` always saw `'[]'`, regardless. The one thing unique to that intermediate job was combining `always()` with a `needs` array where one member is always skipped — and that combination is exactly what breaks a job's own advertised `outputs` for whatever depends on *it* (its own step outputs and its own reads of *its* needs' outputs are unaffected, which is why the in-job debug dump looked correct). Reading `release`/`collect-backfill-matrix` directly here sidesteps it, since those two jobs never use `always()` themselves and nothing downstream needs outputs *from* a job that does.
 
-  notify-hive:
-    name: Notify novus-power/hive
+  notify-downstream:
+    name: Notify a downstream consumer
     needs: [release, collect-backfill-matrix]
-    # Same dual-path gating as the three jobs above, and for the identical reason — see their shared comment. This job isn't restoring anything the monorepo migration lost, though: it's telling novus-power/hive, an external consumer with its own dependency on documents.js, that a release just published, the moment it does, rather than leaving it to Dependabot's weekly scan. hive's own instant-update receiver filters the dispatched matrix down to packages it actually depends on, so this fires the full matrix unfiltered rather than hardcoding which package(s) hive currently uses — hive picking up a dependency on another family package later needs no change here.
-    if: always() && (needs.release.result == 'success' || needs.collect-backfill-matrix.result == 'success') && (needs.release.outputs.attest-matrix || needs.collect-backfill-matrix.outputs.attest-matrix) != '[]'
+    # Same dual-path gating as the three jobs above, and for the identical reason — see their shared comment. This job isn't restoring anything the monorepo migration lost, though: it's telling a downstream consumer repository, an external consumer with its own dependency on documents.js, that a release just published, the moment it does, rather than leaving it to Dependabot's weekly scan. the consumer's own instant-update receiver filters the dispatched matrix down to packages it actually depends on, so this fires the full matrix unfiltered rather than hardcoding which package(s) the consumer currently uses — the consumer picking up a dependency on another family package later needs no change here.
+    if: always() && (needs.release.result == 'success' || needs.collect-backfill-matrix.result == 'success') && (needs.release.outputs.attest-matrix || needs.collect-backfill-matrix.outputs.attest-matrix) != '[]' && vars.DOWNSTREAM_DISPATCH_REPOSITORY != ''
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
       contents: read
     steps:
-      # The ExaDev Sync App is installed on both ExaDev and novus-power, so it can mint a token for hive. `owner` has to be given explicitly because, with neither `owner` nor `repositories` set, the action mints a token for this workflow's own repository (ExaDev), and `repositories` narrows the token to hive alone.
-      - name: Generate a token for cross-org dispatch to novus-power/hive
+      # The ExaDev Sync App is installed on both this organisation and the consumer's, so it can mint a token for the consumer repository. `owner` has to be given explicitly because, with neither `owner` nor `repositories` set, the action mints a token for this workflow's own repository (ExaDev), and `repositories` narrows the token to the consumer repository alone. The target comes from the `DOWNSTREAM_DISPATCH_OWNER` and `DOWNSTREAM_DISPATCH_REPOSITORY` repository variables, and the job is skipped while the repository variable is unset.
+      - name: Generate a token for cross-org dispatch to the downstream consumer
         id: app-token
         uses: actions/create-github-app-token@v3
         with:
-          # Public client ID of the ExaDev Sync App (numeric id 4816274), the App whose private key is HIVE_DISPATCH_APP_PRIVATE_KEY.
+          # Public client ID of the ExaDev Sync App (numeric id 4816274), the App whose private key is DOWNSTREAM_DISPATCH_APP_PRIVATE_KEY.
           client-id: Iv23li7JN6kJDQqQ3pbA
-          private-key: ${{ secrets.HIVE_DISPATCH_APP_PRIVATE_KEY }}
-          owner: novus-power
-          repositories: |
-            hive
+          private-key: ${{ secrets.DOWNSTREAM_DISPATCH_APP_PRIVATE_KEY }}
+          owner: ${{ vars.DOWNSTREAM_DISPATCH_OWNER }}
+          repositories: ${{ vars.DOWNSTREAM_DISPATCH_REPOSITORY }}
       - name: Dispatch a sibling-released event per released package
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          DISPATCH_OWNER: ${{ vars.DOWNSTREAM_DISPATCH_OWNER }}
+          DISPATCH_REPOSITORY: ${{ vars.DOWNSTREAM_DISPATCH_REPOSITORY }}
           ATTEST_MATRIX: ${{ needs.release.outputs.attest-matrix || needs.collect-backfill-matrix.outputs.attest-matrix }}
         run: |
           echo "$ATTEST_MATRIX" | jq -c '.[]' | while read -r pkg; do
             name=$(echo "$pkg" | jq -r .name)
             version=$(echo "$pkg" | jq -r .version)
-            gh api "repos/novus-power/hive/dispatches" \
+            gh api "repos/${DISPATCH_OWNER}/${DISPATCH_REPOSITORY}/dispatches" \
               -f event_type=sibling-released \
               -F "client_payload[package]=$name" \
               -F "client_payload[version]=$version"

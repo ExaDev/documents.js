@@ -87,7 +87,7 @@ const WORD_SPACE_PT = FIXTURE_SIZE_PT * 0.25;
 /** The gap between a figure and a marker set against it: a tenth of an em, well under the quarter-em word space that would set it apart. */
 const MARKER_GAP_PT = FIXTURE_SIZE_PT * 0.1;
 
-describe("detectColumnAlignedTables, a column's extent and the text beside a table (novus-power/hive#4222)", () => {
+describe("detectColumnAlignedTables, a column's extent and the text beside a table", () => {
   it("keeps a centred column whole when its dashes and its heading start where its figures end, rather than giving them a column of their own", () => {
     const table = detectColumnAlignedTables(
       page(positionedRows(CENTRED_COLUMN_TABLE)),
