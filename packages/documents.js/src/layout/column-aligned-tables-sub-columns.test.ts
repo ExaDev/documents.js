@@ -36,7 +36,7 @@ const R_X = 250;
 const X_X = 310;
 const Z_X = 370;
 
-/** A voltage-drop table with a multi-level header: the second heading and the smaller sizes' one figure under it are set over the middle of its sub-columns, and the larger sizes state its `r`, `x` and `z` apart. The sub-columns hold fewer rows than the vote asks for, which is what used to lose them (novus-power/hive#4078). */
+/** A voltage-drop table with a multi-level header: the second heading and the smaller sizes' one figure under it are set over the middle of its sub-columns, and the larger sizes state its `r`, `x` and `z` apart. The sub-columns hold fewer rows than the vote asks for, which is what used to lose them. */
 const SUB_COLUMN_TABLE = [
   [
     ["Size", LABEL_X],

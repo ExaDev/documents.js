@@ -92,7 +92,7 @@ describe("reconstructWordprocessing: fuzzy redraw collapsing (ExaDev/documents.j
     );
   });
 
-  it("collapses a redraw that differs from the kept occurrence by a little wording drift, not just fragment boundaries (regression: novus-power/hive#1543 — source editions merged into the corpus PDF disagree by a character where the same sentence is redrawn)", () => {
+  it("collapses a redraw that differs from the kept occurrence by a little wording drift, not just fragment boundaries (regression: source editions merged into the corpus PDF disagree by a character where the same sentence is redrawn)", () => {
     const pg = page(612, 792, [
       text({
         text: "Access control policies remain effective for compliance",

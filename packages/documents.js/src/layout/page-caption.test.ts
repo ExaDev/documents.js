@@ -175,7 +175,7 @@ describe("readPageCaption", () => {
     ).toBe("Range overview");
   });
 
-  // novus-power/hive#2566: a slide labels every tick of a chart as its own tiny run, so by run count the page is mostly 5pt text and its 12pt body text reads as a heading.
+  // a slide labels every tick of a chart as its own tiny run, so by run count the page is mostly 5pt text and its 12pt body text reads as a heading.
   describe("a slide with a chart", () => {
     const ticks = Array.from({ length: 38 }, (_, index) => ({
       text: String(index),

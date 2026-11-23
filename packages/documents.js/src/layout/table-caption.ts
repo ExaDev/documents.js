@@ -1,5 +1,5 @@
 /**
- * The captions a PDF page prints above its tables, each saying which table it is: `TABLE 4H2A Current-carrying capacity (amperes)` (novus-power/hive#4091).
+ * The captions a PDF page prints above its tables, each saying which table it is: `TABLE 4H2A Current-carrying capacity (amperes)`.
  *
  * A page's heading (`page-caption.ts`) is what the page is OF, found by font size, and a standard whose tables are numbered does not set the number larger than its body text: a table's own caption sits in the page's body size, so the heading is a nearby sub-heading or nothing, and a reader of the appendix alone cannot tell one numbered table from another, nor search it by number. The number is read from the text instead: a line that opens with the word `Table` and a number is the caption of the table beneath it.
  *

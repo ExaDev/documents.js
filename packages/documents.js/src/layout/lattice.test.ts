@@ -186,7 +186,7 @@ describe("detectGridLattice: a border interrupted by one small gap still closes 
   });
 });
 
-// A real NGED specification's page (novus-power/hive#1397) crashed pdfToMarkdown with "Maximum call stack size exceeded" — not from recursion, but from Math.min(...cells.map(...))/Math.max(...cells.map(...)) spreading a merged region's cell list into a function call, which throws once the array exceeds the JS engine's own argument-count limit (V8's is roughly 65536-125000 depending on version). A page whose line detection turns up a dense or malformed grid can merge tens of thousands of atomic cells into one region with no drawn boundary between them.
+// A real NGED specification's page crashed pdfToMarkdown with "Maximum call stack size exceeded" — not from recursion, but from Math.min(...cells.map(...))/Math.max(...cells.map(...)) spreading a merged region's cell list into a function call, which throws once the array exceeds the JS engine's own argument-count limit (V8's is roughly 65536-125000 depending on version). A page whose line detection turns up a dense or malformed grid can merge tens of thousands of atomic cells into one region with no drawn boundary between them.
 describe("findCellRegions: a merged region far larger than the JS engine's argument-count limit", () => {
   it("computes the region's bounds without spreading the cell list into Math.min/max", () => {
     const rowCount = 200_000;

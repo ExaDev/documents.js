@@ -97,7 +97,7 @@ describe("readTableCaptions", () => {
   });
 });
 
-// novus-power/hive#4091: a caption is a standalone line carrying its whole title, and a mention of a table in an index or a contents list is not one.
+// a caption is a standalone line carrying its whole title, and a mention of a table in an index or a contents list is not one.
 describe("readTableCaptions, the whole caption", () => {
   it("reads a title that wraps onto the lines below as part of the caption, lines centred under it or not", () => {
     expect(

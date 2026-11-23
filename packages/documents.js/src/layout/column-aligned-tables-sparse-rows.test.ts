@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { detectColumnAlignedTables } from "./column-aligned-tables";
 import { cellsOf, page } from "./column-aligned-tables-fixtures";
 
-describe("detectColumnAlignedTables on a sparse table (novus-power/hive#2494)", () => {
+describe("detectColumnAlignedTables on a sparse table", () => {
   /** The column starts of a nine-column test-report table: number, parameter, unit, then six test columns. */
   const reportColumns = [40, 70, 250, 290, 340, 390, 440, 490, 540];
 
@@ -107,7 +107,7 @@ describe("detectColumnAlignedTables on a sparse table (novus-power/hive#2494)", 
   it.each(["N/A", "n/a", "NA", "-", "\u2013", "\u2014"])(
     "recovers a sparse test-report table whose rows each state a measurement in one test column and %s beside it",
     (notApplicable) => {
-      // Shaped like the Sungrow SG350HX certificate's page 44 (novus-power/hive#2494): the header and two full rows are too few to be a table on their own, and every other row fills five of nine columns, under MIN_ROW_COLUMN_SHARE, although it is plainly data.
+      // Shaped like the Sungrow SG350HX certificate's page 44: the header and two full rows are too few to be a table on their own, and every other row fills five of nine columns, under MIN_ROW_COLUMN_SHARE, although it is plainly data.
       const tables = detectColumnAlignedTables(
         page([...reportHead, ...sparseReportRows(notApplicable)]),
         new Set(),

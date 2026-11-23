@@ -64,7 +64,7 @@ const GADGETS = [
   ["5", "0.65", "0.80", "0.85"],
 ] as const;
 
-describe("detectColumnAlignedTables, tables under captions (novus-power/hive#4091)", () => {
+describe("detectColumnAlignedTables, tables under captions", () => {
   it("labels a table with the caption set above its first row", () => {
     const tables = detectColumnAlignedTables(
       pageOf(
