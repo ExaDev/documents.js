@@ -1,3 +1,14 @@
+## [14.11.6](https://github.com/ExaDev/documents.js/compare/documents.js%4014.11.5...documents.js%4014.11.6) (2026-11-23)
+
+### Miscellaneous Chores
+
+* remove references to a private repository and a client from comments and tests ([6dfae36](https://github.com/ExaDev/documents.js/commit/6dfae36beb626e51250f50b58e69d81d77994794))
+
+
+### Dependencies
+
+- Updated pdf-codec to 5.9.1
+
 ## [14.11.5](https://github.com/ExaDev/documents.js/compare/documents.js%4014.11.4...documents.js%4014.11.5) (2026-11-17)
 
 
