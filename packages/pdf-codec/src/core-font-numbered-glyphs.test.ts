@@ -3,6 +3,7 @@ import type { PdfDiagnosticSink } from "./diagnostics";
 import {
   coreFaceNameOfFontName,
   coreFaceTextsOfNumberedGlyphs,
+  macStandardAsciiAt,
 } from "./core-font-glyph-orders";
 import { createFontResolver } from "./font-read";
 import type { PdfObjectResolver } from "./interpret-types";
@@ -82,6 +83,108 @@ describe("coreFaceTextsOfNumberedGlyphs", () => {
     expect(
       coreFaceTextsOfNumberedGlyphs("EBLIGF+Times.New.Roman092", wrong),
     ).toBeUndefined();
+  });
+
+  // An Arial Bold subset whose capital A the converter made 692 wide, where the face's is 722, beside the capitals and the space of a heading whose widths agree: D, T, N, C, E, the space, P, L, I, G, U, S, R, M, O, F, V, H and B.
+  const ARIAL_BOLD = [
+    { name: "G36", width: 692 },
+    { name: "G39", width: 722 },
+    { name: "G55", width: 609 },
+    { name: "G49", width: 722 },
+    { name: "G38", width: 722 },
+    { name: "G40", width: 669 },
+    { name: "G3", width: 278 },
+    { name: "G51", width: 669 },
+    { name: "G47", width: 609 },
+    { name: "G44", width: 278 },
+    { name: "G42", width: 774 },
+    { name: "G56", width: 722 },
+    { name: "G54", width: 669 },
+    { name: "G53", width: 722 },
+    { name: "G48", width: 837 },
+    { name: "G50", width: 774 },
+    { name: "G41", width: 609 },
+    { name: "G57", width: 669 },
+    { name: "G43", width: 717 },
+    { name: "G37", width: 716 },
+  ] as const;
+
+  it("reads a glyph whose width disagrees in a font the rest of whose glyphs agree, at an id the standard order gives an ASCII character", () => {
+    const texts = coreFaceTextsOfNumberedGlyphs(
+      "EBLILH+Arial.Bold0133",
+      ARIAL_BOLD,
+    );
+
+    expect(texts?.get("G36")).toBe("A");
+    expect(texts?.get("G39")).toBe("D");
+  });
+
+  it("refuses a glyph whose width disagrees at an id outside the standard order's ASCII characters, in a font it otherwise reads", () => {
+    // Glyph 178 is the em dash in Arial Bold, 1000 wide; 600 is no width of it.
+    const texts = coreFaceTextsOfNumberedGlyphs("EBLILH+Arial.Bold0133", [
+      ...ARIAL_BOLD,
+      { name: "G178", width: 600 },
+    ]);
+
+    expect(texts?.get("G39")).toBe("D");
+    expect(texts?.has("G178")).toBe(false);
+  });
+
+  it("still refuses the whole font, the disagreeing ASCII glyph included, when too many of its widths disagree", () => {
+    const halfWrong = ARIAL_BOLD.map(({ name, width }, index) => ({
+      name,
+      width: index % 2 === 0 ? width + 100 : width,
+    }));
+
+    expect(
+      coreFaceTextsOfNumberedGlyphs("EBLILH+Arial.Bold0133", halfWrong),
+    ).toBeUndefined();
+    // The same glyphs under Times New Roman's name: its capitals are other widths.
+    expect(
+      coreFaceTextsOfNumberedGlyphs("EBLIGF+Times.New.Roman092", ARIAL_BOLD),
+    ).toBeUndefined();
+  });
+
+  it("reads a numbered name with a suffix after a full stop as the glyph the number names, under the same width check", () => {
+    // Times New Roman's capital K is glyph 46, 722 wide.
+    const texts = coreFaceTextsOfNumberedGlyphs("EBLIGF+Times.New.Roman092", [
+      ...SUBSET,
+      { name: "G46._", width: 729 },
+    ]);
+
+    expect(texts?.get("G46._")).toBe("K");
+  });
+
+  it("does not read a name that only starts with a number as numbered, nor a suffixed glyph whose width disagrees outside the ASCII ids", () => {
+    // Seven more agreeing glyphs (n, d, s, t, a, l and i) keep the one disagreeing glyph under a tenth of the font.
+    const texts = coreFaceTextsOfNumberedGlyphs("EBLIGF+Times.New.Roman092", [
+      ...SUBSET,
+      { name: "G81", width: 500 },
+      { name: "G71", width: 500 },
+      { name: "G86", width: 391 },
+      { name: "G87", width: 283 },
+      { name: "G68", width: 446 },
+      { name: "G79", width: 283 },
+      { name: "G76", width: 283 },
+      { name: "G46_", width: 729 },
+      { name: "G46x", width: 729 },
+      { name: "G178.alt", width: 600 },
+    ]);
+
+    expect(texts?.has("G46_")).toBe(false);
+    expect(texts?.has("G46x")).toBe(false);
+    expect(texts?.has("G178.alt")).toBe(false);
+    expect(texts?.get("G36")).toBe("A");
+  });
+});
+
+describe("macStandardAsciiAt", () => {
+  it("gives the printable ASCII characters at ids 3 to 97 and nothing elsewhere", () => {
+    expect(macStandardAsciiAt(3)).toBe(" ");
+    expect(macStandardAsciiAt(36)).toBe("A");
+    expect(macStandardAsciiAt(97)).toBe("~");
+    expect(macStandardAsciiAt(2)).toBeUndefined();
+    expect(macStandardAsciiAt(98)).toBeUndefined();
   });
 });
 
