@@ -1,6 +1,6 @@
 // Glyph tables for embedded font subsets whose glyphs have been checked one by one against the font program's own outlines, because the font dictionary cannot be trusted to say what they are.
 //
-// Some producers (the typesetter whose Type 1C subsets are named AdvMT_SY, AdvP4C4E74 and the like) give each glyph an arbitrary name, write a /Differences array that assigns the names to codes, and then write a /ToUnicode CMap that reads each name as if it meant what it says: the glyph named /onequarter is drawn as an equals sign, /exclam as an omega or an arrow, and the glyphs named /C25 and so on, which no name list knows, as U+FFFD. The document's own tables are valid and wrong, so nothing in the text or the names can recover the symbol. What can is the glyph's own outline.
+// Some producers (the typesetter whose Type 1C subsets are named AdvMT_SY, AdvP4C4E74 and the like) give each glyph an arbitrary name, write a /Differences array that assigns the names to codes, and then write a /ToUnicode CMap that reads each name as if it meant what it says: the glyph named /onequarter is drawn as an equals sign, /exclam as an omega or an arrow, and the glyphs named /C25 and so on, which no name list knows, as U+FFFD. The document's own tables are valid and wrong, so nothing in the text or the names can recover the symbol. What can is the glyph's own outline. A subset converted from a TrueType symbol face whose glyphs are named `G` and the glyph's id in that face, with no `/ToUnicode`, is the same case from the other side: its names say nothing, the core-face glyph orders (`core-font-glyph-orders.ts`) cover only text faces, and the outline again is what settles each glyph.
 //
 // So a table here is keyed by the SHA-256 of the decoded font program, the exact subset that was checked, and applies to that subset only: any other subset of the same font family, and any glyph name the table does not list, is read as it always was. A table lists glyphs by the program's own glyph name, not by character code, because these producers share one program between many font dictionaries that assign its glyphs to different codes; the name a dictionary's /Differences gives a code is what selects the glyph. An entry is added only for a glyph whose outline was rendered and checked against the symbol it stands for; the rendered glyph sheets are in `docs/verified-glyph-tables/`, one per table, each cell showing the glyph, its name and the character it is read as.
 
@@ -506,6 +506,33 @@ export const VERIFIED_SOURCES: ReadonlyMap<string, VerifiedGlyphTableSource> =
           C5: "\u03a0",
           C8: "\u03a6",
           underscore: "\u00b7",
+        },
+      },
+    ],
+    [
+      "988c6d2ea90959baf5ed8f013f6dd21b6e4137145a2e2f75c117591aeca44927",
+      {
+        family: "Symbol092",
+        glyphs: {
+          G149: "\u00b0",
+          G156: "\u2022",
+          G181: "\u2220",
+          G187: "\u221a",
+          G203: "\u239b",
+          G204: "\u239c",
+          G205: "\u239d",
+          G215: "\u222b",
+          G219: "\u239e",
+          G220: "\u239f",
+          G221: "\u23a0",
+          G32: " ",
+          G40: "(",
+          G41: ")",
+          G43: "+",
+          G45: "\u2212",
+          G61: "=",
+          G65: "A",
+          G87: "\u03a9",
         },
       },
     ],

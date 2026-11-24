@@ -8,6 +8,8 @@ Both families of subset are the ones a textbook typeset with the Advent 3B2 syst
 
 In `AdvP4C4E46` a size variant of a delimiter is read as the character it enlarges (every `(` size as `(`), the corners of an assembled bracket as the Unicode bracket corners, and the large sum, integral, intersection and conjunction as their Unicode n-ary operators. The pieces a tall brace, radical or bracket is assembled from other than the bracket corners, and the short bar `/ffi`, are left unmapped: a piece has no character of its own that the outline alone can settle.
 
+A CFF subset converted from a TrueType Symbol face (`Symbol092`, in an SEL conference paper, Western Protective Relay Conference 2001, "Advanced Application Guidelines for Ground Fault Protection") names each glyph `G` followed by the glyph's id in the TrueType face and carries no `/ToUnicode`, so no glyph list reads the names and the core-face glyph orders (`core-font-glyph-orders.ts`) do not cover Symbol. The blank `/G32` is read as a space (the subset sets it between a bullet and the text it introduces), the paren pieces as the Unicode parenthesis pieces the Symbol font's own `parenlefttp` and the like resolve to, and `/G65`, whose outline is a capital A, as the Latin letter rather than Alpha, since the paper sets it as the ampere unit (`( 1 or 5 A )`).
+
 | Sheet                                                  | Font       | Program SHA-256                                                    | Glyphs read | Left unmapped                                                                                            |
 | ------------------------------------------------------ | ---------- | ------------------------------------------------------------------ | ----------- | -------------------------------------------------------------------------------------------------------- |
 | [advmt-mi-40b088a330.png](advmt-mi-40b088a330.png)     | AdvMT_MI   | `40b088a33057f42fdb763f1eb9e849574a925ce59e413a0e94617b3333b40056` | 25          | none                                                                                                     |
@@ -26,6 +28,7 @@ In `AdvP4C4E46` a size variant of a delimiter is read as the character it enlarg
 | [advp4c4e74-ccf77c4a71.png](advp4c4e74-ccf77c4a71.png) | AdvP4C4E74 | `ccf77c4a71142b8025af5b751a4cc473204521ea2eddcf1d91f1713182c5aecf` | 35          | none                                                                                                     |
 | [advp4c4e74-f483d278b1.png](advp4c4e74-f483d278b1.png) | AdvP4C4E74 | `f483d278b1ade68af30ba62e57752933bccea6ee61d388fbf73ed2047feb620c` | 2           | none                                                                                                     |
 | [advp4c4e74-dc3008dbca.png](advp4c4e74-dc3008dbca.png) | AdvP4C4E74 | `dc3008dbca19a91b63116bcfed491a45776faffadc2c8063b5367c71bf1657d1` | 15          | none                                                                                                     |
+| [symbol092-988c6d2ea9.png](symbol092-988c6d2ea9.png)   | Symbol092  | `988c6d2ea90959baf5ed8f013f6dd21b6e4137145a2e2f75c117591aeca44927` | 19          | none                                                                                                     |
 
 ## Adding a subset
 
