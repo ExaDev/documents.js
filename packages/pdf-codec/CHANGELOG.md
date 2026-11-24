@@ -1,3 +1,9 @@
+## [5.9.2](https://github.com/ExaDev/documents.js/compare/pdf-codec%405.9.1...pdf-codec%405.9.2) (2026-11-24)
+
+### Bug Fixes
+
+* **pdf-codec:** read the MathTime extension and roman programs' glyphs as what they draw ([77c6279](https://github.com/ExaDev/documents.js/commit/77c62797dfaaf352ac4bfbeea9925b613015d50e)), references [#1753](https://github.com/ExaDev/documents.js/issues/1753)
+
 ## [5.9.1](https://github.com/ExaDev/documents.js/compare/pdf-codec%405.9.0...pdf-codec%405.9.1) (2026-11-23)
 
 ### Miscellaneous Chores
