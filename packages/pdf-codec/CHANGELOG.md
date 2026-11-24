@@ -1,3 +1,9 @@
+## [5.9.5](https://github.com/ExaDev/documents.js/compare/pdf-codec%405.9.4...pdf-codec%405.9.5) (2026-11-24)
+
+### Bug Fixes
+
+* **pdf-codec:** read refused ASCII glyphs and suffixed names of a matched core-face subset ([6c6dde9](https://github.com/ExaDev/documents.js/commit/6c6dde9f5ee515a41d851c74ecaf683d55079880))
+
 ## [5.9.4](https://github.com/ExaDev/documents.js/compare/pdf-codec%405.9.3...pdf-codec%405.9.4) (2026-11-24)
 
 ### Bug Fixes
