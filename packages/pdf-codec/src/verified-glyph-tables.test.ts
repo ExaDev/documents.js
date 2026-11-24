@@ -313,6 +313,7 @@ describe("the verified glyph tables", () => {
       "AdvP4C4E51",
       "AdvP4C4E59",
       "AdvP4C4E74",
+      "Symbol092",
     ]);
   });
 
@@ -378,6 +379,96 @@ describe("the MathTime extension and roman programs", () => {
       C18: "`",
       C22: "\u00af",
       underscore: "\u00b7",
+    });
+  });
+});
+
+describe("the Symbol subset with glyphs named by their TrueType glyph id", () => {
+  const SYMBOL_PROGRAM =
+    "988c6d2ea90959baf5ed8f013f6dd21b6e4137145a2e2f75c117591aeca44927";
+
+  /** The dictionary such a subset comes in: a symbolic Type 1C font whose `/Differences` names each glyph `G<id>`, with no `/ToUnicode`. */
+  function numberedSymbolFont(program: Uint8Array<ArrayBuffer>): {
+    readonly resolver: PdfObjectResolver;
+    readonly fontDict: PdfDict;
+  } {
+    const objects = new Map<number, PdfObject>([
+      [
+        10,
+        pdfDict({
+          Type: pdfName("FontDescriptor"),
+          FontName: pdfName("EBLJBD+Symbol092"),
+          Flags: pdfNum(4),
+          FontFile3: pdfRef(11, 0),
+        }),
+      ],
+      [11, pdfStream(pdfDict({ Subtype: pdfName("Type1C") }), program)],
+    ]);
+    const fontDict = pdfDict({
+      Type: pdfName("Font"),
+      Subtype: pdfName("Type1"),
+      BaseFont: pdfName("EBLJBD+Symbol092"),
+      FirstChar: pdfNum(1),
+      LastChar: pdfNum(3),
+      Widths: pdfArray([pdfNum(457), pdfNum(250), pdfNum(710)]),
+      FontDescriptor: pdfRef(10, 0),
+      Encoding: pdfDict({
+        Differences: pdfArray([
+          pdfNum(1),
+          pdfName("G156"),
+          pdfName("G32"),
+          pdfName("G65"),
+        ]),
+      }),
+    });
+    return { resolver: makeResolver(objects), fontDict };
+  }
+
+  /** Decodes the three codes through `source` filed under the program's own hash, or through no table at all. */
+  function decodeSymbol(
+    source: VerifiedGlyphTableSource | undefined,
+  ): string | undefined {
+    const program = programBytes("a numbered Symbol subset");
+    const { resolver, fontDict } = numberedSymbolFont(program);
+    const { resolve } = createFontResolver({
+      resolver,
+      sink: NO_DIAGNOSTICS,
+      verifiedGlyphTables: new Map(
+        source === undefined ? [] : [[sha256Of(program), source]],
+      ),
+    });
+    return resolve(
+      "F1",
+      pdfDict({ Font: pdfDict({ F1: fontDict }) }),
+    )?.decodeToUnicode(new Uint8Array([1, 2, 3]));
+  }
+
+  it("is filed under the family the font's /BaseFont gives, so the table reaches the font", () => {
+    const source = VERIFIED_SOURCES.get(SYMBOL_PROGRAM);
+    expect(source?.family).toBe("Symbol092");
+    expect(Object.keys(source?.glyphs ?? {})).toHaveLength(19);
+    expect(decodeSymbol(source)).toBe("\u2022 A");
+  });
+
+  it("reads every one of its numbered glyphs as replacement characters without the table", () => {
+    expect(decodeSymbol(undefined)).toBe("\ufffd\ufffd\ufffd");
+  });
+
+  it("reads the operators, the angle, the degree sign and the parenthesis pieces as what they draw", () => {
+    expect(VERIFIED_SOURCES.get(SYMBOL_PROGRAM)?.glyphs).toMatchObject({
+      G40: "(",
+      G41: ")",
+      G43: "+",
+      G45: "\u2212",
+      G61: "=",
+      G87: "\u03a9",
+      G149: "\u00b0",
+      G181: "\u2220",
+      G187: "\u221a",
+      G203: "\u239b",
+      G205: "\u239d",
+      G215: "\u222b",
+      G221: "\u23a0",
     });
   });
 });
