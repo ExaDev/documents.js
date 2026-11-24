@@ -305,7 +305,9 @@ describe("many font dictionaries sharing one embedded program", () => {
 describe("the verified glyph tables", () => {
   it("name the families they were checked for", () => {
     expect([...VERIFIED_GLYPH_FAMILIES].sort()).toEqual([
+      "AdvMT_EX",
       "AdvMT_MI",
+      "AdvMT_RM",
       "AdvMT_SY",
       "AdvP4C4E46",
       "AdvP4C4E51",
@@ -327,5 +329,55 @@ describe("the verified glyph tables", () => {
         expect(character).not.toMatch(/[\p{Co}\p{Cc}\p{Cn}�]/u);
       }
     }
+  });
+});
+
+describe("the MathTime extension and roman programs", () => {
+  const EXTENSION_PROGRAM =
+    "2ca2dba1e1e9b00e0910f1ac2f9c042f54e7a786d4feab4cbe85755a68f77fb1";
+  const ROMAN_PROGRAM =
+    "f705a315e1683ec7d00aae0d42861ee3610923a1057995017d2253dbf5a3a996";
+
+  it("are each filed once, whatever the number of subsets a document embeds them in", () => {
+    expect(VERIFIED_SOURCES.get(EXTENSION_PROGRAM)?.family).toBe("AdvMT_EX");
+    expect(VERIFIED_SOURCES.get(ROMAN_PROGRAM)?.family).toBe("AdvMT_RM");
+    expect(
+      Object.keys(VERIFIED_SOURCES.get(EXTENSION_PROGRAM)?.glyphs ?? {}),
+    ).toHaveLength(48);
+    expect(
+      Object.keys(VERIFIED_SOURCES.get(ROMAN_PROGRAM)?.glyphs ?? {}),
+    ).toHaveLength(9);
+  });
+
+  it("read the extension program's delimiters and operators as the characters they draw, not as the letters and digits their glyph names spell, and a bare bar of a tall delimiter as the vertical line extension rather than as a pipe, which a Markdown table would read as a cell separator", () => {
+    const glyphs = VERIFIED_SOURCES.get(EXTENSION_PROGRAM)?.glyphs;
+    expect(glyphs).toMatchObject({
+      parenleft: "{",
+      parenright: "}",
+      space: "(",
+      exclam: ")",
+      seven: "\u23d0",
+      eth: "\u222b",
+      P: "\u2211",
+      Q: "\u220f",
+      t: "\u221a",
+      two: "\u2308",
+      five: "\u230b",
+    });
+  });
+
+  it("read the roman program's capital Greek letters and accents, which no /ToUnicode entry names", () => {
+    const glyphs = VERIFIED_SOURCES.get(ROMAN_PROGRAM)?.glyphs;
+    expect(glyphs).toMatchObject({
+      C0: "\u0393",
+      C1: "\u0394",
+      C10: "\u03a9",
+      C2: "\u0398",
+      C5: "\u03a0",
+      C8: "\u03a6",
+      C18: "`",
+      C22: "\u00af",
+      underscore: "\u00b7",
+    });
   });
 });
