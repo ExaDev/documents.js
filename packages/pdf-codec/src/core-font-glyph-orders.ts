@@ -1,6 +1,8 @@
 import { inflateSync } from "fflate";
 import { base64ToBytes } from "byte-codec";
+import { MAC_STANDARD_GLYPH_ORDER } from "./font-tables";
 import { CORE_FONT_GLYPH_ORDERS_DEFLATED_BASE64 } from "./glyph-data/core-font-glyph-orders";
+import { glyphNameToUnicode } from "./glyph-names";
 
 // The glyph order of the core faces producers most often embed (the Arial, Times New Roman and Courier New families, and Century Schoolbook), for a program that keeps a face's own glyph numbering but carries nothing that says what any glyph draws: no 'cmap', no glyph names. A composite font's CIDs then address glyphs whose characters only the face's published order states, and readers such as Acrobat carry the same knowledge for the same reason.
 //
@@ -170,8 +172,8 @@ export function coreFaceNameOfFontName(fontName: string): string | undefined {
   return CORE_FACE_BY_SPELLING.get(spelled);
 }
 
-// Adobe Acrobat's optimiser converts a TrueType face to a CFF subset and names each glyph G followed by its glyph id in the face: G36 is the glyph the face numbers 36. Acrobat Distiller does the same with a lower-case g (g36).
-const NUMBERED_GLYPH_NAME = /^[Gg](\d+)$/u;
+// Adobe Acrobat's optimiser converts a TrueType face to a CFF subset and names each glyph G followed by its glyph id in the face: G36 is the glyph the face numbers 36. Acrobat Distiller does the same with a lower-case g (g36). A name may carry a suffix after a full stop (G46._), which the Adobe Glyph List specification reads as a variant of the glyph the part before the first full stop names (https://github.com/adobe-type-tools/agl-specification, "drop all the characters from the glyph name starting with the first occurrence of a period"), so G46._ is glyph 46 as well.
+const NUMBERED_GLYPH_NAME = /^[Gg](\d+)(?:\..*)?$/u;
 
 // How far, in thousandths of an em, a font dictionary's width for a glyph may be from the face's advance for it and still agree: the dictionary's widths are the converted program's, which this producer rounds and hints, and measured against the face they differ by up to 22 (a 489 for a 500, a 507 for a 500); two core faces differ by far more on most letters (a capital G is 722 in Times New Roman and 778 in Arial).
 const WIDTH_AGREEMENT_TOLERANCE = 25;
@@ -180,8 +182,29 @@ const THOUSANDTHS_PER_EM = 1000;
 const MIN_AGREEING_SHARE = 0.9;
 const MIN_NUMBERED_GLYPHS = 5;
 
+const FIRST_PRINTABLE_ASCII = 0x20;
+const LAST_PRINTABLE_ASCII = 0x7e;
+
 /**
- * What a core face draws at the glyphs of a CFF subset that names each `G<id>` or `g<id>`, accepted for the whole font only when the font dictionary's widths agree with the face's advances over at least `MIN_NUMBERED_GLYPHS` glyphs and `MIN_AGREEING_SHARE` of them, so a subset of any other face, or of another release of this one, is read as before.
+ * The printable ASCII character the Macintosh standard glyph order (ISO/IEC 14496-22 clause 5.2.5) puts at a glyph id, or `undefined` for an id it gives anything else. Every recorded core face numbers these glyphs in that order, while beyond them the faces depart from it and releases differ (Century Schoolbook draws the euro where the order has the currency sign), so these ids are the ones where the character comes from the order the faces share rather than from a particular release.
+ * @param glyphId - A glyph id in the face.
+ * @returns The character, or `undefined`.
+ */
+export function macStandardAsciiAt(glyphId: number): string | undefined {
+  const name = MAC_STANDARD_GLYPH_ORDER[glyphId];
+  const text = name === undefined ? undefined : glyphNameToUnicode(name);
+  const code = text?.length === 1 ? text.charCodeAt(0) : undefined;
+  return code !== undefined &&
+    code >= FIRST_PRINTABLE_ASCII &&
+    code <= LAST_PRINTABLE_ASCII
+    ? text
+    : undefined;
+}
+
+/**
+ * What a core face draws at the glyphs of a CFF subset that names each `G<id>` or `g<id>` (with or without a suffix after a full stop), accepted for the whole font only when the font dictionary's widths agree with the face's advances over at least `MIN_NUMBERED_GLYPHS` glyphs and `MIN_AGREEING_SHARE` of them, so a subset of any other face, or of another release of this one, is read as before.
+ *
+ * In a font so accepted, a glyph whose width disagrees is read through the face too when its id is one the Macintosh standard order gives a printable ASCII character and the face draws that character there (`macStandardAsciiAt`): the agreeing glyphs establish that the names number the face's glyphs, and at such an id the order, not the release, fixes the character, so the width can only be the producer's (a converted bold capital A 692 wide where the face's is 722). A disagreeing glyph at any other id is refused, since there a release can put another glyph.
  * @param fontName - The font's `/BaseFont`.
  * @param glyphs - Each glyph of the font a `/Differences` array names, with the width, in thousandths of an em, the dictionary gives its code.
  * @returns The character each numbered glyph name draws, or `undefined` when the font is not taken for a core face.
@@ -199,14 +222,14 @@ export function coreFaceTextsOfNumberedGlyphs(
   let numbered = 0;
   let agreeing = 0;
   for (const { name, width } of glyphs) {
-    const id = NUMBERED_GLYPH_NAME.exec(name)?.[1];
-    const advance =
-      id === undefined ? undefined : face.advances[Number.parseInt(id, 10)];
+    const idText = NUMBERED_GLYPH_NAME.exec(name)?.[1];
+    const id = idText === undefined ? undefined : Number.parseInt(idText, 10);
+    const advance = id === undefined ? undefined : face.advances[id];
     if (id === undefined || advance === undefined) {
       continue;
     }
     numbered++;
-    const text = face.texts[Number.parseInt(id, 10)];
+    const text = face.texts[id];
     if (
       Math.abs((advance * THOUSANDTHS_PER_EM) / face.unitsPerEm - width) <=
       WIDTH_AGREEMENT_TOLERANCE
@@ -215,6 +238,8 @@ export function coreFaceTextsOfNumberedGlyphs(
       if (text !== undefined) {
         texts.set(name, text);
       }
+    } else if (text !== undefined && text === macStandardAsciiAt(id)) {
+      texts.set(name, text);
     }
   }
   return numbered >= MIN_NUMBERED_GLYPHS &&
