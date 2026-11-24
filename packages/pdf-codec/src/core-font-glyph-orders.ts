@@ -201,29 +201,30 @@ export function macStandardAsciiAt(glyphId: number): string | undefined {
     : undefined;
 }
 
+interface NamedWidth {
+  readonly name: string;
+  readonly width: number;
+}
+
 /**
- * What a core face draws at the glyphs of a CFF subset that names each `G<id>` or `g<id>` (with or without a suffix after a full stop), accepted for the whole font only when the font dictionary's widths agree with the face's advances over at least `MIN_NUMBERED_GLYPHS` glyphs and `MIN_AGREEING_SHARE` of them, so a subset of any other face, or of another release of this one, is read as before.
+ * What a face draws at the glyphs a font's names number, accepted for the whole font only when the font dictionary's widths agree with the face's advances over at least `MIN_NUMBERED_GLYPHS` glyphs and `MIN_AGREEING_SHARE` of them.
  *
  * In a font so accepted, a glyph whose width disagrees is read through the face too when its id is one the Macintosh standard order gives a printable ASCII character and the face draws that character there (`macStandardAsciiAt`): the agreeing glyphs establish that the names number the face's glyphs, and at such an id the order, not the release, fixes the character, so the width can only be the producer's (a converted bold capital A 692 wide where the face's is 722). A disagreeing glyph at any other id is refused, since there a release can put another glyph.
- * @param fontName - The font's `/BaseFont`.
- * @param glyphs - Each glyph of the font a `/Differences` array names, with the width, in thousandths of an em, the dictionary gives its code.
- * @returns The character each numbered glyph name draws, or `undefined` when the font is not taken for a core face.
+ * @param face - The face the names are taken to number.
+ * @param glyphs - Each glyph a `/Differences` array names, with its width in thousandths of an em.
+ * @param glyphIdOf - The face's glyph id a name numbers, or `undefined` for a name that numbers none.
+ * @returns The character each numbered name draws, or `undefined` when the widths do not take the font for the face.
  */
-export function coreFaceTextsOfNumberedGlyphs(
-  fontName: string,
-  glyphs: readonly { readonly name: string; readonly width: number }[],
+function textsThroughFace(
+  face: Readonly<CoreFace>,
+  glyphs: readonly NamedWidth[],
+  glyphIdOf: (name: string) => number | undefined,
 ): ReadonlyMap<string, string> | undefined {
-  const faceName = coreFaceNameOfFontName(fontName);
-  const face = faceName === undefined ? undefined : readFaces().get(faceName);
-  if (face === undefined) {
-    return undefined;
-  }
   const texts = new Map<string, string>();
   let numbered = 0;
   let agreeing = 0;
   for (const { name, width } of glyphs) {
-    const idText = NUMBERED_GLYPH_NAME.exec(name)?.[1];
-    const id = idText === undefined ? undefined : Number.parseInt(idText, 10);
+    const id = glyphIdOf(name);
     const advance = id === undefined ? undefined : face.advances[id];
     if (id === undefined || advance === undefined) {
       continue;
@@ -246,4 +247,104 @@ export function coreFaceTextsOfNumberedGlyphs(
     agreeing >= numbered * MIN_AGREEING_SHARE
     ? texts
     : undefined;
+}
+
+function numberIn(pattern: Readonly<RegExp>, name: string): number | undefined {
+  const digits = pattern.exec(name)?.[1];
+  return digits === undefined ? undefined : Number.parseInt(digits, 10);
+}
+
+/**
+ * What a core face draws at the glyphs of a CFF subset that names each `G<id>` or `g<id>` (with or without a suffix after a full stop), read through the face its `/BaseFont` spells under the width rule of `textsThroughFace`, so a subset of any other face, or of another release of this one, is read as before.
+ * @param fontName - The font's `/BaseFont`.
+ * @param glyphs - Each glyph of the font a `/Differences` array names, with the width, in thousandths of an em, the dictionary gives its code.
+ * @returns The character each numbered glyph name draws, or `undefined` when the font is not taken for a core face.
+ */
+export function coreFaceTextsOfNumberedGlyphs(
+  fontName: string,
+  glyphs: readonly NamedWidth[],
+): ReadonlyMap<string, string> | undefined {
+  const faceName = coreFaceNameOfFontName(fontName);
+  const face = faceName === undefined ? undefined : readFaces().get(faceName);
+  return face === undefined
+    ? undefined
+    : textsThroughFace(face, glyphs, (name) =>
+        numberIn(NUMBERED_GLYPH_NAME, name),
+      );
+}
+
+// A Type 3 font made by rendering a TrueType core face to bitmaps can name each glyph c followed by the glyph's id in the face (c38 is the capital C of Arial), with no /BaseFont, no font program and no /ToUnicode to say so.
+const TYPE3_NUMBERED_GLYPH_NAME = /^c(\d+)$/u;
+
+const lowestGlyphIdOfText = new WeakMap<
+  CoreFace,
+  ReadonlyMap<string, number>
+>();
+
+// The face's glyph for a printable ASCII character code, the lowest id that draws it.
+function glyphIdOfAsciiCode(face: CoreFace, code: number): number | undefined {
+  if (code < FIRST_PRINTABLE_ASCII || code > LAST_PRINTABLE_ASCII) {
+    return undefined;
+  }
+  let ids = lowestGlyphIdOfText.get(face);
+  if (ids === undefined) {
+    const built = new Map<string, number>();
+    face.texts.forEach((text, id) => {
+      if (text !== undefined && !built.has(text)) {
+        built.set(text, id);
+      }
+    });
+    ids = built;
+    lowestGlyphIdOfText.set(face, ids);
+  }
+  return ids.get(String.fromCharCode(code));
+}
+
+// A face all of whose printable ASCII glyphs share one advance: its widths cannot tell one glyph from another, so they cannot show that names number its glyphs.
+function isFixedPitch(face: CoreFace): boolean {
+  const advances = new Set(
+    [...MAC_STANDARD_GLYPH_ORDER.keys()]
+      .filter((id) => macStandardAsciiAt(id) !== undefined)
+      .map((id) => face.advances[id]),
+  );
+  return advances.size === 1;
+}
+
+/**
+ * What the glyphs of a Type 3 font named `c<id>` draw, for a font with nothing but its widths to say which face it was made from. Every proportional core face is tried under the width rule of `textsThroughFace`; the font is read only when at least one face takes it, and refused when, for any face that takes it, reading the names as printable ASCII character codes instead of glyph ids would agree with that face's widths as well, since then the widths do not show which of the two the names are. A fixed-pitch face is never tried, because its widths agree with any numbering. Where more than one face takes the font (Arial and Arial Italic share their advances), a glyph is read only when every one of them draws the same character at its id.
+ * @param glyphs - Each glyph of the font a `/Differences` array names, with its width in thousandths of an em of text space (the glyph-space width scaled by the font's `/FontMatrix`).
+ * @returns The character each numbered glyph name draws, or `undefined` when no face, or more than one reading, fits the widths.
+ */
+export function coreFaceTextsOfType3Glyphs(
+  glyphs: readonly NamedWidth[],
+): ReadonlyMap<string, string> | undefined {
+  const readings: ReadonlyMap<string, string>[] = [];
+  for (const face of readFaces().values()) {
+    if (isFixedPitch(face)) {
+      continue;
+    }
+    const texts = textsThroughFace(face, glyphs, (name) =>
+      numberIn(TYPE3_NUMBERED_GLYPH_NAME, name),
+    );
+    if (texts === undefined) {
+      continue;
+    }
+    const asCodes = textsThroughFace(face, glyphs, (name) => {
+      const code = numberIn(TYPE3_NUMBERED_GLYPH_NAME, name);
+      return code === undefined ? undefined : glyphIdOfAsciiCode(face, code);
+    });
+    if (asCodes !== undefined) {
+      return undefined;
+    }
+    readings.push(texts);
+  }
+  const [first, ...others] = readings;
+  if (first === undefined) {
+    return undefined;
+  }
+  return new Map(
+    [...first].filter(([name, text]) =>
+      others.every((other) => other.get(name) === text),
+    ),
+  );
 }
