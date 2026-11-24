@@ -1,6 +1,6 @@
 # Verified glyph tables
 
-The glyph sheets behind `src/verified-glyph-tables.ts`: one per verified font subset, each cell showing one glyph as the embedded font program draws it, its glyph name in the font program and the Unicode character the table reads it as (`unmapped` where it is left as it was). The sheet's header names the SHA-256 of the decoded font program, which is the key the table is looked up by.
+The glyph sheets behind the tables `src/verified-glyph-tables.ts` reads (the data is in `src/verified-glyph-tables-advent.ts` and `src/verified-glyph-tables-truetype.ts`): one per verified font subset, each cell showing one glyph as the embedded font program draws it, its glyph name in the font program and the Unicode character the table reads it as (`unmapped` where it is left as it was). The sheet's header names the SHA-256 of the decoded font program, which is the key the table is looked up by.
 
 A table is added only for a subset whose glyphs were rendered from the embedded program and checked against the symbol they stand for, so a reviewer can re-check a table by comparing its cells to the shapes. A glyph whose symbol could not be settled from its outline is left unmapped. A table lists glyphs by the program's own glyph name, because these producers share one program between many font dictionaries that assign its glyphs to different codes; the name a dictionary's `/Differences` gives a code selects the glyph.
 
@@ -35,4 +35,4 @@ A CFF subset converted from a TrueType Symbol face (`Symbol092`, in an SEL confe
 1. Take the decoded font program (`/FontFile3` for a Type 1C font) and the glyph names the font dictionaries' `/Differences` arrays assign, and hash the program with SHA-256.
 2. Render every glyph those names select from the program's own CharStrings onto a sheet like the ones here.
 3. Name the character each glyph draws, from the shape alone, and list only the glyphs whose symbol is not in doubt.
-4. Add the table to `VERIFIED_SOURCES` and the sheet to this directory.
+4. Add the table to `ADVENT_SOURCES` or `TRUETYPE_SOURCES`, whichever kind of subset it is, and the sheet to this directory.
