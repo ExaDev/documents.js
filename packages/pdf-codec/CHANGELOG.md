@@ -1,3 +1,9 @@
+## [5.9.3](https://github.com/ExaDev/documents.js/compare/pdf-codec%405.9.2...pdf-codec%405.9.3) (2026-11-24)
+
+### Bug Fixes
+
+* **pdf-codec:** read a Symbol subset that names its glyphs by TrueType glyph id ([e2854d2](https://github.com/ExaDev/documents.js/commit/e2854d2e292cdd74e25d51543159151168e7c8b4)), references [ExaDev/documents.js#1753](https://github.com/ExaDev/documents.js/issues/1753)
+
 ## [5.9.2](https://github.com/ExaDev/documents.js/compare/pdf-codec%405.9.1...pdf-codec%405.9.2) (2026-11-24)
 
 ### Bug Fixes
