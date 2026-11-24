@@ -1,3 +1,9 @@
+## [5.9.6](https://github.com/ExaDev/documents.js/compare/pdf-codec%405.9.5...pdf-codec%405.9.6) (2026-11-24)
+
+### Bug Fixes
+
+* **pdf-codec:** read Type 3 bitmap fonts whose glyphs are named by a core face's glyph ids ([711d41e](https://github.com/ExaDev/documents.js/commit/711d41e16f0557a91e8f7f92f1452943260f38b8))
+
 ## [5.9.5](https://github.com/ExaDev/documents.js/compare/pdf-codec%405.9.4...pdf-codec%405.9.5) (2026-11-24)
 
 ### Bug Fixes
