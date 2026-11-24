@@ -1,3 +1,13 @@
+## [5.9.4](https://github.com/ExaDev/documents.js/compare/pdf-codec%405.9.3...pdf-codec%405.9.4) (2026-11-24)
+
+### Bug Fixes
+
+* **pdf-codec:** read the symbol subsets converted from TrueType in a second ground-fault paper ([461b26f](https://github.com/ExaDev/documents.js/commit/461b26f40d131995a0ef9d6f0f88cfca3f109097))
+
+### Code Refactoring
+
+* **pdf-codec:** keep the verified glyph table data apart from its lookup, by producer ([4158251](https://github.com/ExaDev/documents.js/commit/41582515f30cbedaf5f1794bada2d1c86f75a8b5))
+
 ## [5.9.3](https://github.com/ExaDev/documents.js/compare/pdf-codec%405.9.2...pdf-codec%405.9.3) (2026-11-24)
 
 ### Bug Fixes
