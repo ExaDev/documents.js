@@ -16,7 +16,7 @@ import {
 
 import { resolveStandardFont } from "./fonts";
 import { styleFromBaseFontName } from "./font-style";
-import { coreFaceTextsOfNumberedGlyphs } from "./core-font-glyph-orders";
+import { coreFaceTextsOfDifferences } from "./core-face-differences";
 import { glyphNameToUnicode } from "./glyph-names";
 import { symbolFontOf, symbolFontTextReader } from "./symbol-font-private-use";
 import {
@@ -384,16 +384,16 @@ function buildSimpleFont(fontDict: PdfDict, context: FontReadContext): PdfFont {
   const programEncoding = lazyFontProgram(descriptor, baseFont, context);
 
   // A code /Differences names is drawn with the glyph of that name, so only the name can say what it is: through the Adobe Glyph List, or, for a name the list does not know (a subsetter's "g27"), through the embedded program's own glyph of that name and whatever the program states about that glyph. The base encoding and the program's built-in encoding describe the glyph the code reached before /Differences replaced it, so neither is consulted for such a code; reading the code through them anyway would report the character the producer overrode.
-  // What the core face a CFF subset numbers its glyphs after draws at each of them, read once and only for a font that names glyphs `G<id>` or `g<id>`.
+  // What the core face a CFF subset numbers its glyphs after draws at each of them, read once and only for a font that names glyphs `G<id>` or `g<id>`; for a Type 3 font whose bitmap glyphs are named `c<id>` after a core face's glyph ids, the face is found from the widths alone, since such a font has no /BaseFont or program to name it.
   let numberedTexts: ReadonlyMap<string, string> | undefined;
   const numberedCoreFaceTexts = (): ReadonlyMap<string, string> => {
     numberedTexts ??=
-      coreFaceTextsOfNumberedGlyphs(
+      coreFaceTextsOfDifferences(
+        fontDict,
         baseFont,
-        [...differencesMap].map(([code, name]) => ({
-          name,
-          width: widthOf(code),
-        })),
+        differencesMap,
+        widthOf,
+        context.resolver,
       ) ?? new Map<string, string>();
     return numberedTexts;
   };
