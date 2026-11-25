@@ -5,6 +5,7 @@ import { createFontResolver } from "./font-read";
 import type { PdfObjectResolver } from "./interpret-types";
 import type { PdfDict, PdfObject } from "./objects";
 import { asDict, pdfArray, pdfDict, pdfName, pdfNum } from "./objects";
+import { unbudgetedResolver } from "./test-support/resolver";
 
 const NO_DIAGNOSTICS: PdfDiagnosticSink = () => undefined;
 
@@ -119,11 +120,11 @@ describe("coreFaceTextsOfType3Glyphs", () => {
 });
 
 function makeResolver(): PdfObjectResolver {
-  return {
+  return unbudgetedResolver({
     resolve: (obj) => obj,
     resolveDict: (obj: PdfObject | undefined): PdfDict | undefined =>
       asDict(obj),
-  };
+  });
 }
 
 function type3Font(matrixScale: number, skew: number): PdfDict {
