@@ -1037,9 +1037,9 @@ jobs:
       actions: write
     environment:
       name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
+      url: ${{ steps.deployment.outputs.page_url || steps.deployment_retry.outputs.page_url }}
     outputs:
-      page_url: ${{ steps.deployment.outputs.page_url }}
+      page_url: ${{ steps.deployment.outputs.page_url || steps.deployment_retry.outputs.page_url }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -1067,7 +1067,16 @@ jobs:
       - uses: actions/upload-pages-artifact@v5
         with:
           path: packages/web/dist
+      # Mitigation for a GitHub-side timing fault, removable once a deploy no longer needs it: deploy-pages reads the artifact through the Actions results service, which can lag the upload-pages-artifact finalisation by more than the action's first lookup ("No artifacts named github-pages were found for this workflow run", runs 45566697672 and 45568970524, and the run on dcd7f252b). The action's timeout, error_count and reporting_interval inputs only govern status polling after the deployment is created, so none of them covers this lookup. The retry below reuses the artifact this run already uploaded; the cleanup step above runs before the upload, so it never deletes the artifact the retry needs.
       - id: deployment
+        uses: actions/deploy-pages@v5
+        continue-on-error: true
+      - name: Wait for the artifact listing to propagate
+        if: steps.deployment.outcome == 'failure'
+        run: sleep 30
+      - id: deployment_retry
+        name: Retry the Pages deployment
+        if: steps.deployment.outcome == 'failure'
         uses: actions/deploy-pages@v5
 
   verify-deployed-site:
