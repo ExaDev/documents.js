@@ -7,6 +7,7 @@ import { pdfDict, pdfName, pdfStream } from "./objects";
 import type { PageRasteriser } from "./raster";
 import { renderPdfPage } from "./raster";
 import { readPdf } from "./read";
+import { listPdfImages } from "./read-images";
 import {
   BIG,
   BIG_OBJ,
@@ -444,6 +445,20 @@ function carlitoType0Pdf(
     maxObj: 10,
   });
 }
+
+describe("listPdfImages with maxDecodedBytes", () => {
+  it("charges the page content stream it interprets to find images", () => {
+    const document = contentSitePdf();
+    expect(() => listPdfImages(document)).not.toThrow();
+    expectBudgetError(
+      () => listPdfImages(document, { maxDecodedBytes: BUDGET }),
+      6,
+    );
+    expect(() =>
+      listPdfImages(document, { maxDecodedBytes: 4 * LARGE }),
+    ).not.toThrow();
+  });
+});
 
 describe("renderPdfPage with maxDecodedBytes", () => {
   it("charges a page content stream", () => {
