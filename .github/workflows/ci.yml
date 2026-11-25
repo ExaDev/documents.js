@@ -1067,6 +1067,21 @@ jobs:
       - uses: actions/upload-pages-artifact@v5
         with:
           path: packages/web/dist
+      # deploy-pages lists the run's artifacts through the Actions results service immediately after the upload finalises, and that listing can lag the finalise: two main runs failed with "No artifacts named github-pages were found" although the artifact was finalised a few hundred milliseconds earlier and is listed by the REST API afterwards. Wait until the run lists it before deploy-pages looks it up. The bound only stops a genuinely missing artifact from hanging the job, in which case deploy-pages reports the real failure.
+      - name: Wait until the uploaded github-pages artifact is listed
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          for attempt in $(seq 1 30); do
+            count=$(gh api "repos/${{ github.repository }}/actions/runs/${{ github.run_id }}/artifacts" \
+              --jq '[.artifacts[] | select(.name=="github-pages" and .expired==false)] | length')
+            if [ "$count" = "1" ]; then
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "github-pages artifact still not listed after 30 attempts" >&2
+          exit 1
       - id: deployment
         uses: actions/deploy-pages@v5
 
