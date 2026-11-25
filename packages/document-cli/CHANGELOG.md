@@ -1,3 +1,9 @@
+## [5.12.184](https://github.com/ExaDev/documents.js/compare/document-cli%405.12.183...document-cli%405.12.184) (2026-11-25)
+
+### Build System
+
+* **deps:** bump ink from 7.1.1 to 8.0.0 ([8c0d0d6](https://github.com/ExaDev/documents.js/commit/8c0d0d6fe6b1f7fc3360c18a2e2430912483283b))
+
 ## [5.12.183](https://github.com/ExaDev/documents.js/compare/document-cli%405.12.182...document-cli%405.12.183) (2026-11-25)
 
 

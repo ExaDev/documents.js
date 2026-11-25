@@ -1,3 +1,9 @@
+## [2.18.116](https://github.com/ExaDev/documents.js/compare/web%402.18.115...web%402.18.116) (2026-11-25)
+
+### Build System
+
+* **deps-dev:** bump vite-plugin-pwa from 1.3.0 to 2.0.0 ([dcd7f25](https://github.com/ExaDev/documents.js/commit/dcd7f252bab2955ffdad01e20c5afca969353e30))
+
 ## [2.18.115](https://github.com/ExaDev/documents.js/compare/web%402.18.114...web%402.18.115) (2026-11-25)
 
 
