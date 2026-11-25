@@ -278,8 +278,7 @@ describe("decodeStream", () => {
       compressed,
       pdfDict({ Filter: pdfName("FlateDecode") }),
       sink,
-      undefined,
-      expectedLength,
+      { expectedLength },
     );
     expect(decodedText(flateLast.bytes)).toBe("Hello, stream!");
     expect(expectedLength).toHaveBeenCalledTimes(1);
@@ -289,8 +288,7 @@ describe("decodeStream", () => {
       new Uint8Array([0xff, 0xd8]),
       pdfDict({ Filter: pdfName("DCTDecode") }),
       sink,
-      undefined,
-      expectedLength,
+      { expectedLength },
     );
     expect(dct.remainingFilter).toBe("DCTDecode");
     expect(expectedLength).not.toHaveBeenCalled();

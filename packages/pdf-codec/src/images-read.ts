@@ -152,7 +152,12 @@ function resolvingOnce(
     }
     return resolved.get(obj);
   };
-  return { resolve, resolveDict: (obj) => asDict(resolve(obj)) };
+  return {
+    resolve,
+    resolveDict: (obj) => asDict(resolve(obj)),
+    decodeStream: resolver.decodeStream,
+    chargeDecodedBytes: resolver.chargeDecodedBytes,
+  };
 }
 
 /**
