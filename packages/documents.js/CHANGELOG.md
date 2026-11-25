@@ -1,3 +1,10 @@
+## [14.11.13](https://github.com/ExaDev/documents.js/compare/documents.js%4014.11.12...documents.js%4014.11.13) (2026-11-25)
+
+
+### Dependencies
+
+- Updated pdf-codec to 5.9.8
+
 ## [14.11.12](https://github.com/ExaDev/documents.js/compare/documents.js%4014.11.11...documents.js%4014.11.12) (2026-11-25)
 
 ### Reverts

@@ -1,3 +1,10 @@
+## [2.18.115](https://github.com/ExaDev/documents.js/compare/web%402.18.114...web%402.18.115) (2026-11-25)
+
+
+### Dependencies
+
+- Updated documents.js to 14.11.13
+
 ## [2.18.114](https://github.com/ExaDev/documents.js/compare/web%402.18.113...web%402.18.114) (2026-11-25)
 
 ### Reverts

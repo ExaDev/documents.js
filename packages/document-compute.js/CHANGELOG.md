@@ -1,3 +1,10 @@
+## [1.6.181](https://github.com/ExaDev/documents.js/compare/document-compute.js%401.6.180...document-compute.js%401.6.181) (2026-11-25)
+
+
+### Dependencies
+
+- Updated documents.js to 14.11.13
+
 ## [1.6.180](https://github.com/ExaDev/documents.js/compare/document-compute.js%401.6.179...document-compute.js%401.6.180) (2026-11-25)
 
 ### Reverts

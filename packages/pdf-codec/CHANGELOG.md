@@ -1,3 +1,9 @@
+## [5.9.8](https://github.com/ExaDev/documents.js/compare/pdf-codec%405.9.7...pdf-codec%405.9.8) (2026-11-25)
+
+### Documentation
+
+* **pdf-codec:** attach glyph sheets to the pull request instead of committing them ([40918c9](https://github.com/ExaDev/documents.js/commit/40918c92f1a6323374df70d13483f4c18862bd4d))
+
 ## [5.9.7](https://github.com/ExaDev/documents.js/compare/pdf-codec%405.9.6...pdf-codec%405.9.7) (2026-11-25)
 
 ### Reverts
