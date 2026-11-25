@@ -72,6 +72,8 @@ export interface PdfImageReadOptions {
   readonly sink?: PdfDiagnosticSink;
   /** Checked before the document is opened, before each listed page, and before each decode. The signal given when the document is opened is the one every later `list` and `decode` of it checks. */
   readonly signal?: AbortSignal;
+  /** The most bytes stream decoding may produce over the opened document's whole life, as `ReadPdfOptions.maxDecodedBytes` describes it: opening the document, every `list` and every `decode` of it are charged against the one budget. The first decode that would pass it throws `PdfDecodeBudgetError`. Absent, decoding is unbounded. */
+  readonly maxDecodedBytes?: number;
 }
 
 export interface ListPdfImagesOptions {
@@ -425,7 +427,9 @@ export function openPdfImages(
     );
   }
   throwIfAborted(signal);
-  const doc = openPdfDocument(bytes, sink);
+  const doc = openPdfDocument(bytes, sink, {
+    maxDecodedBytes: options?.maxDecodedBytes,
+  });
   const pageDicts = doc.pages();
   // The last page whose inline images were looked for, kept so decoding a page's inline images one by one interprets it once rather than once per image. One page at most: its inline images are views onto its decoded content, which this keeps alive until another page's are looked for.
   let lastInlinePage: PageInlineImages | undefined;
