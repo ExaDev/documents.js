@@ -1,3 +1,18 @@
+## [1.11.29](https://github.com/ExaDev/documents.js/compare/archive-codec%401.11.28...archive-codec%401.11.29) (2026-11-25)
+
+### Reverts
+
+* **deps:** restore the dependency set before the 55-update bump that broke main ([2f450ce](https://github.com/ExaDev/documents.js/commit/2f450ce714cd9d27c46638f3e5361001641d3a9b))
+
+### Build System
+
+* **deps:** bump the minor-and-patch group across 1 directory with 55 updates ([13242be](https://github.com/ExaDev/documents.js/commit/13242bebca2e6da058b55fa29ade1b801df6a186))
+
+
+### Dependencies
+
+- Updated document-schema.js to 7.16.4
+
 ## [1.11.28](https://github.com/ExaDev/documents.js/compare/archive-codec%401.11.27...archive-codec%401.11.28) (2026-11-08)
 
 ### Documentation

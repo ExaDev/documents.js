@@ -1,3 +1,21 @@
+## [5.12.182](https://github.com/ExaDev/documents.js/compare/document-cli%405.12.181...document-cli%405.12.182) (2026-11-25)
+
+### Reverts
+
+* **deps:** restore the dependency set before the 55-update bump that broke main ([2f450ce](https://github.com/ExaDev/documents.js/commit/2f450ce714cd9d27c46638f3e5361001641d3a9b))
+
+### Build System
+
+* **deps:** bump the minor-and-patch group across 1 directory with 55 updates ([13242be](https://github.com/ExaDev/documents.js/commit/13242bebca2e6da058b55fa29ade1b801df6a186))
+
+
+### Dependencies
+
+- Updated document-schema.js to 7.16.4
+- Updated odf.js to 11.2.7
+- Updated document-outline.js to 3.10.84
+- Updated documents.js to 14.11.12
+
 ## [5.12.181](https://github.com/ExaDev/documents.js/compare/document-cli%405.12.180...document-cli%405.12.181) (2026-11-24)
 
 

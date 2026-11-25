@@ -1,3 +1,30 @@
+## [14.11.12](https://github.com/ExaDev/documents.js/compare/documents.js%4014.11.11...documents.js%4014.11.12) (2026-11-25)
+
+### Reverts
+
+* **deps:** restore the dependency set before the 55-update bump that broke main ([2f450ce](https://github.com/ExaDev/documents.js/commit/2f450ce714cd9d27c46638f3e5361001641d3a9b))
+
+### Build System
+
+* **deps:** bump the minor-and-patch group across 1 directory with 55 updates ([13242be](https://github.com/ExaDev/documents.js/commit/13242bebca2e6da058b55fa29ade1b801df6a186))
+
+
+### Dependencies
+
+- Updated byte-codec to 2.1.1
+- Updated document-schema.js to 7.16.4
+- Updated archive-codec to 1.11.29
+- Updated epub-codec to 5.1.21
+- Updated markdown-codec to 11.2.4
+- Updated odf.js to 11.2.7
+- Updated pdf-codec to 5.9.7
+- Updated doc-codec to 6.1.27
+- Updated ooxml.js to 12.2.39
+- Updated ppt-codec to 2.2.27
+- Updated rtf-codec to 8.1.28
+- Updated wpd-codec to 5.1.26
+- Updated xls-codec to 4.16.9
+
 ## [14.11.11](https://github.com/ExaDev/documents.js/compare/documents.js%4014.11.10...documents.js%4014.11.11) (2026-11-24)
 
 

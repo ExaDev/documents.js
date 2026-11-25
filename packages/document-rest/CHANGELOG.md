@@ -1,3 +1,20 @@
+## [1.4.236](https://github.com/ExaDev/documents.js/compare/document-rest%401.4.235...document-rest%401.4.236) (2026-11-25)
+
+### Reverts
+
+* **deps:** restore the dependency set before the 55-update bump that broke main ([2f450ce](https://github.com/ExaDev/documents.js/commit/2f450ce714cd9d27c46638f3e5361001641d3a9b))
+
+### Build System
+
+* **deps:** bump the minor-and-patch group across 1 directory with 55 updates ([13242be](https://github.com/ExaDev/documents.js/commit/13242bebca2e6da058b55fa29ade1b801df6a186))
+
+
+### Dependencies
+
+- Updated odf.js to 11.2.7
+- Updated documents.js to 14.11.12
+- Updated document-operations to 1.1.233
+
 ## [1.4.235](https://github.com/ExaDev/documents.js/compare/document-rest%401.4.234...document-rest%401.4.235) (2026-11-24)
 
 

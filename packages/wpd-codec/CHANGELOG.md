@@ -1,3 +1,20 @@
+## [5.1.26](https://github.com/ExaDev/documents.js/compare/wpd-codec%405.1.25...wpd-codec%405.1.26) (2026-11-25)
+
+### Reverts
+
+* **deps:** restore the dependency set before the 55-update bump that broke main ([2f450ce](https://github.com/ExaDev/documents.js/commit/2f450ce714cd9d27c46638f3e5361001641d3a9b))
+
+### Build System
+
+* **deps:** bump the minor-and-patch group across 1 directory with 55 updates ([13242be](https://github.com/ExaDev/documents.js/commit/13242bebca2e6da058b55fa29ade1b801df6a186))
+
+
+### Dependencies
+
+- Updated byte-codec to 2.1.1
+- Updated document-schema.js to 7.16.4
+- Updated archive-codec to 1.11.29
+
 ## [5.1.25](https://github.com/ExaDev/documents.js/compare/wpd-codec%405.1.24...wpd-codec%405.1.25) (2026-11-17)
 
 
