@@ -1,3 +1,16 @@
+## [1.4.238](https://github.com/ExaDev/documents.js/compare/document-rest%401.4.237...document-rest%401.4.238) (2026-11-25)
+
+### Build System
+
+* **deps:** bump zod to 4.6.6 ([f8fbd7f](https://github.com/ExaDev/documents.js/commit/f8fbd7f6bb00375e7cc9cb1b67de464d530a2db1))
+
+
+### Dependencies
+
+- Updated odf.js to 11.2.8
+- Updated documents.js to 14.12.0
+- Updated document-operations to 1.1.235
+
 ## [1.4.237](https://github.com/ExaDev/documents.js/compare/document-rest%401.4.236...document-rest%401.4.237) (2026-11-25)
 
 

@@ -1,3 +1,18 @@
+## [4.14.240](https://github.com/ExaDev/documents.js/compare/document-mcp%404.14.239...document-mcp%404.14.240) (2026-11-25)
+
+### Build System
+
+* **deps:** bump zod to 4.6.6 ([f8fbd7f](https://github.com/ExaDev/documents.js/commit/f8fbd7f6bb00375e7cc9cb1b67de464d530a2db1))
+
+
+### Dependencies
+
+- Updated document-schema.js to 7.16.5
+- Updated odf.js to 11.2.8
+- Updated wpd-codec to 5.1.27
+- Updated documents.js to 14.12.0
+- Updated document-operations to 1.1.235
+
 ## [4.14.239](https://github.com/ExaDev/documents.js/compare/document-mcp%404.14.238...document-mcp%404.14.239) (2026-11-25)
 
 

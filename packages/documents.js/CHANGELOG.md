@@ -1,3 +1,29 @@
+## [14.12.0](https://github.com/ExaDev/documents.js/compare/documents.js%4014.11.13...documents.js%4014.12.0) (2026-11-25)
+
+### Features
+
+* **documents.js:** forward maxDecodedBytes to the pdf read of every conversion ([d811d7d](https://github.com/ExaDev/documents.js/commit/d811d7d85e1492d13d27e338bdb73b8c142914b1))
+
+### Build System
+
+* **deps:** bump zod to 4.6.6 ([f8fbd7f](https://github.com/ExaDev/documents.js/commit/f8fbd7f6bb00375e7cc9cb1b67de464d530a2db1))
+
+
+### Dependencies
+
+- Updated document-schema.js to 7.16.5
+- Updated archive-codec to 1.11.30
+- Updated epub-codec to 5.1.22
+- Updated markdown-codec to 11.2.5
+- Updated odf.js to 11.2.8
+- Updated pdf-codec to 5.10.0
+- Updated doc-codec to 6.1.28
+- Updated ooxml.js to 12.2.40
+- Updated ppt-codec to 2.2.28
+- Updated rtf-codec to 8.1.29
+- Updated wpd-codec to 5.1.27
+- Updated xls-codec to 4.16.10
+
 ## [14.11.13](https://github.com/ExaDev/documents.js/compare/documents.js%4014.11.12...documents.js%4014.11.13) (2026-11-25)
 
 

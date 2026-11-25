@@ -1,3 +1,15 @@
+## [3.10.86](https://github.com/ExaDev/documents.js/compare/document-outline.js%403.10.85...document-outline.js%403.10.86) (2026-11-25)
+
+### Build System
+
+* **deps:** bump zod to 4.6.6 ([f8fbd7f](https://github.com/ExaDev/documents.js/commit/f8fbd7f6bb00375e7cc9cb1b67de464d530a2db1))
+
+
+### Dependencies
+
+- Updated document-schema.js to 7.16.5
+- Updated pdf-codec to 5.10.0
+
 ## [3.10.85](https://github.com/ExaDev/documents.js/compare/document-outline.js%403.10.84...document-outline.js%403.10.85) (2026-11-25)
 
 

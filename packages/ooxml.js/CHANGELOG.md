@@ -1,3 +1,15 @@
+## [12.2.40](https://github.com/ExaDev/documents.js/compare/ooxml.js%4012.2.39...ooxml.js%4012.2.40) (2026-11-25)
+
+### Build System
+
+* **deps:** bump zod to 4.6.6 ([f8fbd7f](https://github.com/ExaDev/documents.js/commit/f8fbd7f6bb00375e7cc9cb1b67de464d530a2db1))
+
+
+### Dependencies
+
+- Updated document-schema.js to 7.16.5
+- Updated archive-codec to 1.11.30
+
 ## [12.2.39](https://github.com/ExaDev/documents.js/compare/ooxml.js%4012.2.38...ooxml.js%4012.2.39) (2026-11-25)
 
 ### Reverts

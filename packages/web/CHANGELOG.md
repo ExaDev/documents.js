@@ -1,3 +1,17 @@
+## [2.18.117](https://github.com/ExaDev/documents.js/compare/web%402.18.116...web%402.18.117) (2026-11-25)
+
+### Build System
+
+* **deps:** bump zod to 4.6.6 ([f8fbd7f](https://github.com/ExaDev/documents.js/commit/f8fbd7f6bb00375e7cc9cb1b67de464d530a2db1))
+
+
+### Dependencies
+
+- Updated document-schema.js to 7.16.5
+- Updated markdown-codec to 11.2.5
+- Updated ooxml.js to 12.2.40
+- Updated documents.js to 14.12.0
+
 ## [2.18.116](https://github.com/ExaDev/documents.js/compare/web%402.18.115...web%402.18.116) (2026-11-25)
 
 ### Build System

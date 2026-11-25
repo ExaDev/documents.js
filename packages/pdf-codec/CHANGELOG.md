@@ -1,3 +1,25 @@
+## [5.10.0](https://github.com/ExaDev/documents.js/compare/pdf-codec%405.9.8...pdf-codec%405.10.0) (2026-11-25)
+
+### Features
+
+* **pdf-codec:** bound a document's stream decoding with maxDecodedBytes ([d66ce2d](https://github.com/ExaDev/documents.js/commit/d66ce2d62d30e6b8558882d47e2b1ddca4be149b))
+* **pdf-codec:** take maxDecodedBytes in openPdfImages and keep the inflate size hint under a budget ([605e8f5](https://github.com/ExaDev/documents.js/commit/605e8f5c7ce9b4e17e3d934410fc0598fac73802))
+
+### Tests
+
+* **pdf-codec:** build the Type 3 glyph test resolver through unbudgetedResolver ([5f7f245](https://github.com/ExaDev/documents.js/commit/5f7f245eafe4636ae75aa30c9232d78d0a5d0b3f))
+* **pdf-codec:** pin that listPdfImages charges its content decodes against maxDecodedBytes ([fb46228](https://github.com/ExaDev/documents.js/commit/fb46228ed4b08176b6cdbfe9af119e0f59c0f5a5))
+* **pdf-codec:** refuse a decode past maxDecodedBytes inside workerd ([4cab36e](https://github.com/ExaDev/documents.js/commit/4cab36ec1644592e3958768c488586beae74e4bf))
+
+### Build System
+
+* **deps:** bump zod to 4.6.6 ([f8fbd7f](https://github.com/ExaDev/documents.js/commit/f8fbd7f6bb00375e7cc9cb1b67de464d530a2db1))
+
+
+### Dependencies
+
+- Updated document-schema.js to 7.16.5
+
 ## [5.9.8](https://github.com/ExaDev/documents.js/compare/pdf-codec%405.9.7...pdf-codec%405.9.8) (2026-11-25)
 
 ### Documentation

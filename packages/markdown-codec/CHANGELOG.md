@@ -1,3 +1,14 @@
+## [11.2.5](https://github.com/ExaDev/documents.js/compare/markdown-codec%4011.2.4...markdown-codec%4011.2.5) (2026-11-25)
+
+### Build System
+
+* **deps:** bump zod to 4.6.6 ([f8fbd7f](https://github.com/ExaDev/documents.js/commit/f8fbd7f6bb00375e7cc9cb1b67de464d530a2db1))
+
+
+### Dependencies
+
+- Updated document-schema.js to 7.16.5
+
 ## [11.2.4](https://github.com/ExaDev/documents.js/compare/markdown-codec%4011.2.3...markdown-codec%4011.2.4) (2026-11-25)
 
 ### Reverts
