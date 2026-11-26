@@ -1,6 +1,15 @@
 import { packageStrykerConfig } from "../../stryker.shared.ts";
 
 export default packageStrykerConfig({
+  mutate: [
+    "src/**/*.ts",
+    // Modules that are nothing but module-level data tables. Every mutant in them is static (evaluated once, when the module is first imported) and also covered by the tests that read the table, which makes it what Stryker calls hybrid: under ignoreStatic it is activated in a beforeAll() hook, after the test file's imports have already evaluated the table, so the mutated entry is never the one any test reads and the mutant survives whatever the tests assert (document-schema.js's stryker.config.ts traces the mechanism through @stryker-mutator/vitest-runner). Running them instead with ignoreStatic off would re-run the whole suite once per mutant, which this package's suite cannot afford. Excluding the files is the mutate-glob form of the exclusion ignoreStatic exists to make, not a per-mutant suppression. The Wingdings, Wingdings 2, Wingdings 3 and Webdings tables are each checked entry by entry against the vendored Unicode source-reference list by wingdings-characters.test.ts, which fails on a hand edit to any one entry that Stryker reports as surviving.
+    "!src/dingbat-characters.ts",
+    "!src/wingdings-characters.ts",
+    // The verified glyph tables are keyed by the digest of a font program checked glyph by glyph against its outlines (verified-glyph-tables.ts), a program the suite does not carry, so no test reads their entries one by one; verified-glyph-tables.test.ts exercises how a table is selected and read.
+    "!src/verified-glyph-tables-advent.ts",
+    "!src/verified-glyph-tables-truetype.ts",
+  ],
   vitestConfigFile: "vitest.mutation.config.ts",
   // Well above Stryker's own default, because the dry run has to execute the whole instrumented unit suite, and that suite's cost is set by the machine's momentary contention rather than by any one test (vitest.config.ts's UNIT_TEST_TIMEOUT_MS explains why that is so for this package). The budget is therefore sized for a run several multiples slower than an unloaded one, not for the unloaded case.
   dryRunTimeoutMinutes: 45,
