@@ -1,12 +1,16 @@
+import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   COLD_FIXED_SECONDS,
   COLD_SECONDS_PER_LINE,
+  COLD_SECONDS_PER_LINE_BY_PACKAGE,
   ACCOUNT_RUNNER_LIMIT,
   EXPECTED_CONCURRENT_PULL_REQUEST_RUNS,
   GITHUB_JOB_LIMIT_MINUTES,
   MUTATION_SHARE_OF_RUNNER_LIMIT,
   affectedMutationPackages,
+  coldSecondsPerLineFor,
   estimateColdSeconds,
   matchesMutateGlobs,
   maxParallelFor,
@@ -103,6 +107,71 @@ const SLICE_SAMPLES: readonly (readonly [
   ["xls-codec 3", 4985, 629],
 ];
 
+// Slice runs from scheduled run 45604657786 (2026-11-25), in which a configuration change had emptied every slice's incremental cache, so each listed slice ran cold, as [package and slice, source lines in the slice, wall-clock seconds of the slice's Stryker run]. "document-cli 2" did not finish: its job timeout cancelled it, so its figure is the time it had run by then, a lower bound on its real cost. Add samples from later runs rather than editing these.
+const COLD_SLICE_SAMPLES: readonly (readonly [
+  name: string,
+  lines: number,
+  seconds: number,
+])[] = [
+  ["doc-codec 1", 4277, 553],
+  ["doc-codec 2", 4301, 419],
+  ["document-cli 1", 4739, 8924],
+  ["document-cli 2", 4742, 10610],
+  ["document-cli 3", 4744, 6646],
+  ["document-cli 4", 4742, 7055],
+  ["document-schema.js 1", 4430, 2528],
+  ["document-schema.js 2", 4420, 1267],
+  ["documents.js 1", 4827, 1495],
+  ["documents.js 2", 4829, 1487],
+  ["documents.js 3", 4829, 2164],
+  ["documents.js 4", 4820, 1919],
+  ["documents.js 5", 4826, 3142],
+  ["documents.js 6", 4826, 2219],
+  ["documents.js 7", 4823, 1518],
+  ["documents.js 8", 4827, 4168],
+  ["documents.js 9", 4826, 1745],
+  ["documents.js 10", 4826, 1404],
+  ["documents.js 11", 4824, 2436],
+  ["documents.js 12", 4825, 1270],
+  ["markdown-codec 1", 3890, 310],
+  ["markdown-codec 2", 3898, 567],
+  ["markdown-codec 3", 3897, 681],
+  ["odf.js 1", 4301, 1437],
+  ["odf.js 2", 4291, 1319],
+  ["odf.js 3", 4289, 897],
+  ["odf.js 4", 4289, 1078],
+  ["odf.js 5", 4299, 743],
+  ["ooxml.js 1", 4278, 1042],
+  ["ooxml.js 2", 4279, 799],
+  ["ooxml.js 3", 4280, 767],
+  ["ooxml.js 4", 4268, 1023],
+  ["pdf-codec 1", 4907, 1263],
+  ["pdf-codec 2", 4909, 1347],
+  ["pdf-codec 3", 4908, 1313],
+  ["pdf-codec 4", 4909, 4785],
+  ["pdf-codec 5", 4909, 2081],
+  ["pdf-codec 6", 4909, 3283],
+  ["pdf-codec 8", 4907, 2125],
+  ["ppt-codec 1", 3139, 282],
+  ["ppt-codec 2", 3161, 399],
+  ["rtf-codec 1", 4029, 901],
+  ["rtf-codec 2", 4032, 521],
+  ["web 1", 3189, 1562],
+  ["web 2", 3185, 1742],
+  ["wpd-codec 1", 4799, 377],
+  ["wpd-codec 2", 4802, 267],
+  ["xls-codec 1", 4972, 552],
+  ["xls-codec 2", 4962, 461],
+  ["xls-codec 3", 4964, 615],
+];
+
+const PACKAGES_DIRECTORY = join(import.meta.dirname, "../../packages");
+
+/** The package a slice sample's name is for: the name without its trailing slice number. */
+function packageOf(sliceName: string): string {
+  return sliceName.slice(0, sliceName.lastIndexOf(" "));
+}
+
 const BYTE_CODEC = { name: "byte-codec", directory: "packages/byte-codec" };
 const BIG_PACKAGE = { name: "big-package", directory: "packages/big-package" };
 
@@ -152,44 +221,88 @@ describe("affectedMutationPackages", () => {
 describe("estimateColdSeconds", () => {
   it.each(COLD_SAMPLES)(
     "stays at or above the measured cold run of %s",
-    (_name, lines, seconds) => {
-      expect(estimateColdSeconds(lines)).toBeGreaterThanOrEqual(seconds);
+    (name, lines, seconds) => {
+      expect(
+        estimateColdSeconds(lines, coldSecondsPerLineFor(name)),
+      ).toBeGreaterThanOrEqual(seconds);
     },
   );
 
-  it.each(SLICE_SAMPLES)(
+  it.each([...SLICE_SAMPLES, ...COLD_SLICE_SAMPLES])(
     "stays at or above the measured slice run of %s",
-    (_name, lines, seconds) => {
-      expect(estimateColdSeconds(lines)).toBeGreaterThanOrEqual(seconds);
+    (name, lines, seconds) => {
+      expect(
+        estimateColdSeconds(lines, coldSecondsPerLineFor(packageOf(name))),
+      ).toBeGreaterThanOrEqual(seconds);
     },
   );
 
   it("starts at the fixed cost for an empty package and grows with size", () => {
-    expect(estimateColdSeconds(0)).toBe(COLD_FIXED_SECONDS);
-    expect(estimateColdSeconds(1000)).toBeGreaterThan(estimateColdSeconds(10));
+    expect(estimateColdSeconds(0, COLD_SECONDS_PER_LINE)).toBe(
+      COLD_FIXED_SECONDS,
+    );
+    expect(estimateColdSeconds(1000, COLD_SECONDS_PER_LINE)).toBeGreaterThan(
+      estimateColdSeconds(10, COLD_SECONDS_PER_LINE),
+    );
   });
+});
+
+describe("coldSecondsPerLineFor", () => {
+  it("gives a package without its own rate the shared one", () => {
+    expect(coldSecondsPerLineFor("byte-codec")).toBe(COLD_SECONDS_PER_LINE);
+  });
+
+  it.each([...COLD_SECONDS_PER_LINE_BY_PACKAGE])(
+    "gives %s its own rate, above the shared one",
+    (name, secondsPerLine) => {
+      expect(coldSecondsPerLineFor(name)).toBe(secondsPerLine);
+      expect(secondsPerLine).toBeGreaterThan(COLD_SECONDS_PER_LINE);
+    },
+  );
+
+  it.each([...COLD_SECONDS_PER_LINE_BY_PACKAGE.keys()])(
+    "names %s, a workspace package",
+    (name) => {
+      const packageNames = readdirSync(PACKAGES_DIRECTORY).flatMap((entry) => {
+        const manifest = join(PACKAGES_DIRECTORY, entry, "package.json");
+        if (!existsSync(manifest)) return [];
+        const parsed: unknown = JSON.parse(readFileSync(manifest, "utf8"));
+        return typeof parsed === "object" &&
+          parsed !== null &&
+          "name" in parsed &&
+          typeof parsed.name === "string"
+          ? [parsed.name]
+          : [];
+      });
+      expect(packageNames).toContain(name);
+    },
+  );
 });
 
 describe("timeoutMinutesFor", () => {
   it("grows with the slice's size", () => {
-    expect(timeoutMinutesFor(5000)).toBeGreaterThan(timeoutMinutesFor(500));
+    expect(timeoutMinutesFor(5000, COLD_SECONDS_PER_LINE)).toBeGreaterThan(
+      timeoutMinutesFor(500, COLD_SECONDS_PER_LINE),
+    );
   });
 
   it("covers the whole cold estimate with room to spare", () => {
     const lines = 4000;
-    expect(timeoutMinutesFor(lines) * 60).toBeGreaterThan(
-      estimateColdSeconds(lines) * 2,
-    );
+    expect(
+      timeoutMinutesFor(lines, COLD_SECONDS_PER_LINE) * 60,
+    ).toBeGreaterThan(estimateColdSeconds(lines, COLD_SECONDS_PER_LINE) * 2);
   });
 
   it("never exceeds what GitHub allows a job to run", () => {
-    expect(timeoutMinutesFor(10_000_000)).toBe(GITHUB_JOB_LIMIT_MINUTES);
+    expect(timeoutMinutesFor(10_000_000, COLD_SECONDS_PER_LINE)).toBe(
+      GITHUB_JOB_LIMIT_MINUTES,
+    );
   });
 });
 
 describe("planSlices", () => {
   it("keeps a package that fits the budget as one slice", () => {
-    expect(planSlices(files(300, 200))).toHaveLength(1);
+    expect(planSlices(files(300, 200), COLD_SECONDS_PER_LINE)).toHaveLength(1);
   });
 
   it("splits a package whose estimate is over the budget", () => {
@@ -197,13 +310,16 @@ describe("planSlices", () => {
       (sliceBudgetSeconds() - COLD_FIXED_SECONDS) / COLD_SECONDS_PER_LINE / 2,
     );
     expect(
-      planSlices(files(perFile, perFile, perFile, perFile)).length,
+      planSlices(
+        files(perFile, perFile, perFile, perFile),
+        COLD_SECONDS_PER_LINE,
+      ).length,
     ).toBeGreaterThan(1);
   });
 
   it("assigns every file to exactly one slice", () => {
     const input = files(900, 800, 700, 600, 500, 400, 300, 200, 100);
-    const plan = planSlices(input);
+    const plan = planSlices(input, COLD_SECONDS_PER_LINE);
     expect(
       plan
         .flat()
@@ -214,17 +330,17 @@ describe("planSlices", () => {
 
   it("keeps every slice within the budget", () => {
     const input = files(...Array.from({ length: 40 }, () => 1200));
-    for (const slice of planSlices(input)) {
-      expect(estimateColdSeconds(linesOf(slice))).toBeLessThanOrEqual(
-        sliceBudgetSeconds(),
-      );
+    for (const slice of planSlices(input, COLD_SECONDS_PER_LINE)) {
+      expect(
+        estimateColdSeconds(linesOf(slice), COLD_SECONDS_PER_LINE),
+      ).toBeLessThanOrEqual(sliceBudgetSeconds());
     }
   });
 
   it("uses the fewest slices that fit, not one file per slice", () => {
     const perFile = 1000;
     const input = files(...Array.from({ length: 30 }, () => perFile));
-    const plan = planSlices(input);
+    const plan = planSlices(input, COLD_SECONDS_PER_LINE);
     const minimum = Math.ceil(
       (input.length * perFile) /
         ((sliceBudgetSeconds() - COLD_FIXED_SECONDS) / COLD_SECONDS_PER_LINE),
@@ -233,17 +349,22 @@ describe("planSlices", () => {
   });
 
   it("balances equal files evenly across the slices", () => {
-    const plan = planSlices(files(...Array.from({ length: 40 }, () => 1200)));
+    const plan = planSlices(
+      files(...Array.from({ length: 40 }, () => 1200)),
+      COLD_SECONDS_PER_LINE,
+    );
     const sizes = plan.map(linesOf);
     expect(Math.max(...sizes) - Math.min(...sizes)).toBeLessThanOrEqual(1200);
   });
 
   it("throws when a single file is over the budget by itself", () => {
-    expect(() => planSlices(files(10_000_000))).toThrow(/src\/file-0\.ts/);
+    expect(() => planSlices(files(10_000_000), COLD_SECONDS_PER_LINE)).toThrow(
+      /src\/file-0\.ts/,
+    );
   });
 
   it("plans a package with no source files as one empty slice", () => {
-    expect(planSlices([])).toEqual([[]]);
+    expect(planSlices([], COLD_SECONDS_PER_LINE)).toEqual([[]]);
   });
 });
 
@@ -370,11 +491,32 @@ describe("packageMatrixEntries", () => {
         slice: 1,
         sliceCount: 1,
         mutate: "",
-        timeoutMinutes: timeoutMinutesFor(300),
+        timeoutMinutes: timeoutMinutesFor(300, COLD_SECONDS_PER_LINE),
         cacheKey: "byte-codec-1of1",
         configHash: CONFIG_HASH,
       },
     ]);
+  });
+
+  it("slices and times a package with its own rate by that rate, not the shared one", () => {
+    const name = "document-cli";
+    const secondsPerLine = coldSecondsPerLineFor(name);
+    const input = files(...Array.from({ length: 40 }, () => 500));
+    const entries = packageMatrixEntries(
+      { name, directory: `packages/${name}` },
+      input,
+      CONFIG_HASH,
+    );
+    expect(entries).toHaveLength(planSlices(input, secondsPerLine).length);
+    expect(entries.length).toBeGreaterThan(
+      planSlices(input, COLD_SECONDS_PER_LINE).length,
+    );
+    for (const entry of entries) {
+      const lines = entry.mutate.split(",").length * 500;
+      expect(entry.timeoutMinutes).toBe(
+        timeoutMinutesFor(lines, secondsPerLine),
+      );
+    }
   });
 
   it("numbers slices from one and lists each slice's own files", () => {
