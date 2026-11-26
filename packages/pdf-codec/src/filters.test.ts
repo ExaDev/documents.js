@@ -677,3 +677,48 @@ describe("decodeStream: remaining filter-name spellings", () => {
     expect(Array.from(result.bytes)).toEqual([0xff]);
   });
 });
+
+describe("the growable output buffer of a decoder whose output length is unknown", () => {
+  // Capacity is requested by number, so every Uint8Array constructed with a length is a buffer the decoder asked for.
+  function largestRequestedBuffer(run: () => void): number {
+    const original = globalThis.Uint8Array;
+    let largest = 0;
+    vi.stubGlobal(
+      "Uint8Array",
+      new Proxy(original, {
+        construct(target, args: readonly unknown[], newTarget) {
+          const [requested] = args;
+          if (typeof requested === "number") {
+            largest = Math.max(largest, requested);
+          }
+          const instance: unknown = Reflect.construct(target, args, newTarget);
+          if (typeof instance !== "object" || instance === null) {
+            throw new TypeError("a constructor returned a non-object");
+          }
+          return instance;
+        },
+      }),
+    );
+    try {
+      run();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+    return largest;
+  }
+
+  it("never holds more than twice the bytes written, so a wrong growth condition cannot compound into an exponential allocation", () => {
+    const RUN_LENGTH = 128;
+    const RUNS = 64;
+    const data = new Uint8Array(RUNS * 2);
+    for (let run = 0; run < RUNS; run++) {
+      data[run * 2] = 257 - RUN_LENGTH;
+      data[run * 2 + 1] = 7;
+    }
+    const written = RUN_LENGTH * RUNS;
+    const largest = largestRequestedBuffer(() => {
+      expect(runLengthDecode(data).length).toBe(written);
+    });
+    expect(largest).toBeLessThanOrEqual(2 * written);
+  });
+});

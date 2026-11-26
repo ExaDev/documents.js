@@ -38,7 +38,8 @@ class GrowableBytes {
       throw new OutputLimitExceededError(this.#maxLength);
     }
     if (this.#length === this.#buffer.length) {
-      const grown = new Uint8Array(this.#buffer.length * 2);
+      // Sized from the bytes held, not from the capacity: the two are equal whenever this branch is meant to run, and a size derived from the capacity would compound if the branch ran when it should not, doubling an off-heap buffer on every push until the process is out of memory.
+      const grown = new Uint8Array(this.#length * 2);
       grown.set(this.#buffer);
       this.#buffer = grown;
     }
