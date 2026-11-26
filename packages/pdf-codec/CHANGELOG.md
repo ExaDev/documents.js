@@ -1,3 +1,9 @@
+## [5.10.1](https://github.com/ExaDev/documents.js/compare/pdf-codec%405.10.0...pdf-codec%405.10.1) (2026-11-26)
+
+### Bug Fixes
+
+* **pdf-codec:** leave the module-level glyph tables out of mutation scope ([307729a](https://github.com/ExaDev/documents.js/commit/307729a029437ff90e9964413424dc2cd2ce3a92)), references [#1791](https://github.com/ExaDev/documents.js/issues/1791)
+
 ## [5.10.0](https://github.com/ExaDev/documents.js/compare/pdf-codec%405.9.8...pdf-codec%405.10.0) (2026-11-25)
 
 ### Features
