@@ -31,8 +31,15 @@ export const SLICE_SHARE_OF_JOB_LIMIT = 1 / 4;
 /** Cold-run cost that does not depend on package size, in seconds: the build, Stryker's dry run and the checker's start-up. Taken from the smallest measured packages, rounded up. */
 export const COLD_FIXED_SECONDS = 240;
 
-/** Cold-run cost per mutable source line, in seconds. A round value at or just above the smallest one for which the envelope through COLD_FIXED_SECONDS clears every measured sample; the slowest sample per line, a package whose tests are heavy, sets it. */
+/** Cold-run cost per mutable source line, in seconds, for every package without its own entry in COLD_SECONDS_PER_LINE_BY_PACKAGE. A round value at or just above the smallest one for which the envelope through COLD_FIXED_SECONDS clears every measured sample of those packages; the slowest sample per line among them sets it. */
 export const COLD_SECONDS_PER_LINE = 1;
+
+/** Cold-run cost per mutable source line, in seconds, keyed by package name, for a package whose tests are so much heavier per line than the rest that COLD_SECONDS_PER_LINE would underestimate its slices and let them run into their job timeout. Kept per package rather than raising the shared rate, since one heavy package would otherwise split every light one into slices its cold runs never needed. Each value is chosen the same way as the shared rate, over that package's own samples (plan-mutation-slices.test.ts). */
+export const COLD_SECONDS_PER_LINE_BY_PACKAGE: ReadonlyMap<string, number> =
+  new Map([
+    // Its cold slices ran at up to 1.83 seconds per line, and one was cancelled by its job timeout before finishing, at a lower bound of 2.19.
+    ["document-cli", 3],
+  ]);
 
 /** How many standard GitHub-hosted Linux jobs one account may run at once, from GitHub's "Actions limits" reference (job concurrency limits, by plan). The account this repository belongs to is on the plan this figure is for, and every workflow of every repository in it draws on the same pool, including the required checks a merge waits on. */
 export const ACCOUNT_RUNNER_LIMIT = 20;
@@ -182,9 +189,19 @@ export function packageSourceFiles(
     });
 }
 
-/** The cold-run estimate in seconds for mutating `lines` source lines in one job: the linear upper envelope described at the top of this file. */
-export function estimateColdSeconds(lines: number): number {
-  return COLD_FIXED_SECONDS + COLD_SECONDS_PER_LINE * lines;
+/** The cold-run cost per source line, in seconds, of the package named `packageName`: its own entry in COLD_SECONDS_PER_LINE_BY_PACKAGE, else COLD_SECONDS_PER_LINE. */
+export function coldSecondsPerLineFor(packageName: string): number {
+  return (
+    COLD_SECONDS_PER_LINE_BY_PACKAGE.get(packageName) ?? COLD_SECONDS_PER_LINE
+  );
+}
+
+/** The cold-run estimate in seconds for mutating `lines` source lines in one job, at `secondsPerLine` per line: the linear upper envelope described at the top of this file. */
+export function estimateColdSeconds(
+  lines: number,
+  secondsPerLine: number,
+): number {
+  return COLD_FIXED_SECONDS + secondsPerLine * lines;
 }
 
 /** The cold estimate in seconds a single slice may not exceed. */
@@ -194,24 +211,29 @@ export function sliceBudgetSeconds(): number {
   );
 }
 
-/** The job timeout for a slice of `lines` source lines: its scaled cold estimate plus runner set-up, never more than GitHub allows. */
-export function timeoutMinutesFor(lines: number): number {
+/** The job timeout for a slice of `lines` source lines at `secondsPerLine` per line: its scaled cold estimate plus runner set-up, never more than GitHub allows. */
+export function timeoutMinutesFor(
+  lines: number,
+  secondsPerLine: number,
+): number {
   const scaled = Math.ceil(
-    (estimateColdSeconds(lines) * TIMEOUT_MARGIN) / SECONDS_PER_MINUTE,
+    (estimateColdSeconds(lines, secondsPerLine) * TIMEOUT_MARGIN) /
+      SECONDS_PER_MINUTE,
   );
   return Math.min(GITHUB_JOB_LIMIT_MINUTES, scaled + JOB_SETUP_MINUTES);
 }
 
-/** Splits a package's files into the fewest slices whose cold estimates all fit the budget: longest-processing-time-first assignment, so each file goes to whichever slice is currently smallest, which keeps the slices close to equal. A package that fits whole is a single slice. Throws when one file alone is over the budget, since a file is the smallest unit `--mutate` can select and no slice count would help; with every file under the budget the loop always ends, at the latest with one file per slice. */
+/** Splits a package's files, costing `secondsPerLine` per line, into the fewest slices whose cold estimates all fit the budget: longest-processing-time-first assignment, so each file goes to whichever slice is currently smallest, which keeps the slices close to equal. A package that fits whole is a single slice. Throws when one file alone is over the budget, since a file is the smallest unit `--mutate` can select and no slice count would help; with every file under the budget the loop always ends, at the latest with one file per slice. */
 export function planSlices(
   files: readonly SourceFile[],
+  secondsPerLine: number,
 ): readonly (readonly SourceFile[])[] {
   const budgetSeconds = sliceBudgetSeconds();
   const largest = files.reduce(
     (max, file) => (file.lines > max.lines ? file : max),
     { path: "", lines: 0 },
   );
-  if (estimateColdSeconds(largest.lines) > budgetSeconds) {
+  if (estimateColdSeconds(largest.lines, secondsPerLine) > budgetSeconds) {
     throw new Error(
       `${largest.path} alone is estimated over the slice budget, and a file cannot be split across slices`,
     );
@@ -230,7 +252,8 @@ export function planSlices(
       smallest.lines += file.lines;
     }
     const fits = slices.every(
-      (slice) => estimateColdSeconds(slice.lines) <= budgetSeconds,
+      (slice) =>
+        estimateColdSeconds(slice.lines, secondsPerLine) <= budgetSeconds,
     );
     if (fits) return slices.map((slice) => slice.files);
   }
@@ -250,7 +273,8 @@ export function packageMatrixEntries(
       );
     }
   }
-  const slices = planSlices(files);
+  const secondsPerLine = coldSecondsPerLineFor(name);
+  const slices = planSlices(files, secondsPerLine);
   return slices.map((sliceFiles, index) => ({
     package: name,
     directory: pkg.directory,
@@ -260,6 +284,7 @@ export function packageMatrixEntries(
       slices.length === 1 ? "" : sliceFiles.map((file) => file.path).join(","),
     timeoutMinutes: timeoutMinutesFor(
       sliceFiles.reduce((total, file) => total + file.lines, 0),
+      secondsPerLine,
     ),
     cacheKey: `${name}-${String(index + 1)}of${String(slices.length)}`,
     configHash,
