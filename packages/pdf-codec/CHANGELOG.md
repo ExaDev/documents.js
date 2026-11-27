@@ -1,3 +1,9 @@
+## [5.10.2](https://github.com/ExaDev/documents.js/compare/pdf-codec%405.10.1...pdf-codec%405.10.2) (2026-11-27)
+
+### Bug Fixes
+
+* **pdf-codec:** size a grown decoder buffer from the bytes held ([85f5c8d](https://github.com/ExaDev/documents.js/commit/85f5c8d711afae0ee5b458727deb20608bba6c97)), references [#1791](https://github.com/ExaDev/documents.js/issues/1791)
+
 ## [5.10.1](https://github.com/ExaDev/documents.js/compare/pdf-codec%405.10.0...pdf-codec%405.10.1) (2026-11-26)
 
 ### Bug Fixes
