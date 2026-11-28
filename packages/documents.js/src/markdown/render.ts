@@ -3,18 +3,15 @@ import type {
   ContentDocument,
   ContentDrawPage,
   ContentParagraph,
-  ContentRun,
   ContentSheet,
-  ContentSheetCell,
   ContentSlide,
   ContentTable,
-  ContentTableCell,
-  ContentTableRow,
   LayoutMetadata,
 } from "document-schema.js";
 import { PAGE_SIZE_A4 } from "document-schema.js";
 import { headingStyleId } from "markdown-codec";
 import { formulaPlaceholderText } from "../model/formula";
+import { sheetToTable } from "../model/sheet-table";
 import type { BuildMarkdownTextOptions } from "./write";
 import { buildMarkdownText } from "./write";
 
@@ -64,9 +61,6 @@ export interface RenderMarkdownOptions extends BuildMarkdownTextOptions {
 
 // A synthesised A4/1in section, exactly like markdown-codec's own INVENTED_PAGE_GEOMETRY default (ReadMarkdownOptions.pageSize/margins falling back to PAGE_SIZE_A4/its own DEFAULT_MARGINS) — writeMarkdownContent never reads a section's pageSize/margins at all (markdown has no page-geometry construct), so these values are here purely to satisfy ContentSection's own schema shape, not because they affect the rendered text.
 const SYNTHETIC_MARGINS = { topPt: 72, rightPt: 72, bottomPt: 72, leftPt: 72 };
-
-// A column with no width of its own (a spreadsheet cell reader that never individuated it) falls back to this, again cosmetic: no markdown table renderer reads ContentTable.columns' widthPt values.
-const DEFAULT_COLUMN_WIDTH_PT = 72;
 
 function headingParagraph(level: number, text: string): ContentParagraph {
   return {
@@ -153,87 +147,29 @@ function drawingBlocks(
   return blocks;
 }
 
-// --- spreadsheet: each sheet becomes its own H2-headed section plus (when it has any cells left after hidden rows/columns are excluded) one GFM table. A sheet's own printSettings/formulas have no markdown equivalent and are silently out of scope — not degraded, since there was never a markdown construct they could have mapped to (the same "structural mismatch, not a bug" framing markdown-codec's own README gives colour/font/alignment). ---
-function spreadsheetCellToTableCell(
-  cell: ContentSheetCell | undefined,
-): ContentTableCell {
-  if (cell === undefined) {
-    return { blocks: [textParagraph("")] };
-  }
-  const runs: ContentRun[] = cell.runs ?? [{ text: cell.displayText }];
-  return { blocks: [{ kind: "paragraph", runs, alignment: cell.alignment }] };
-}
-
-function sheetToTable(
+// --- spreadsheet: each sheet becomes its own H2-headed section plus (when it has any cells left after hidden rows/columns are excluded) one GFM table over the rows and columns that hold a visible cell (`sheetToTable`, src/model/sheet-table.ts). A sheet's own printSettings/formulas have no markdown equivalent and are silently out of scope — not degraded, since there was never a markdown construct they could have mapped to (the same "structural mismatch, not a bug" framing markdown-codec's own README gives colour/font/alignment). ---
+function sheetTable(
   sheet: ContentSheet,
   sink: MarkdownRenderDiagnosticSink,
 ): ContentTable | undefined {
-  const hiddenRows = new Set(
-    sheet.rows.filter((row) => row.hidden === true).map((row) => row.index),
-  );
-  const hiddenColumns = new Set(
-    sheet.columns
-      .filter((column) => column.hidden === true)
-      .map((column) => column.index),
-  );
-
-  const cellByPosition = new Map<string, ContentSheetCell>();
-  let maxRow = -1;
-  let maxColumn = -1;
-  for (const cell of sheet.cells) {
-    if (hiddenRows.has(cell.row) || hiddenColumns.has(cell.column)) {
-      continue;
-    }
-    cellByPosition.set(`${String(cell.row)}:${String(cell.column)}`, cell);
-    maxRow = Math.max(maxRow, cell.row);
-    maxColumn = Math.max(maxColumn, cell.column);
-  }
-  if (cellByPosition.size === 0) {
+  const flattened = sheetToTable(sheet);
+  if (flattened === undefined) {
     return undefined;
   }
-
-  if (hiddenRows.size > 0 || hiddenColumns.size > 0) {
+  const { table, hiddenRowCount, hiddenColumnCount } = flattened;
+  if (hiddenRowCount > 0 || hiddenColumnCount > 0) {
     sink({
       severity: "info",
       code: MarkdownRenderDiagnosticCodes.SPREADSHEET_HIDDEN_CELLS_DROPPED,
-      message: `sheet "${sheet.name}" hides ${String(hiddenRows.size)} row(s) and ${String(hiddenColumns.size)} column(s); hidden rows/columns are excluded from the rendered table`,
+      message: `sheet "${sheet.name}" hides ${String(hiddenRowCount)} row(s) and ${String(hiddenColumnCount)} column(s); hidden rows/columns are excluded from the rendered table`,
     });
   }
-
-  const visibleRows: number[] = [];
-  for (let row = 0; row <= maxRow; row += 1) {
-    if (!hiddenRows.has(row)) {
-      visibleRows.push(row);
-    }
-  }
-  const visibleColumns: number[] = [];
-  for (let column = 0; column <= maxColumn; column += 1) {
-    if (!hiddenColumns.has(column)) {
-      visibleColumns.push(column);
-    }
-  }
-
-  const columnWidthByIndex = new Map(
-    sheet.columns.map((column) => [column.index, column.widthPt] as const),
-  );
-  const columns = visibleColumns.map((column) => ({
-    widthPt: columnWidthByIndex.get(column) ?? DEFAULT_COLUMN_WIDTH_PT,
-  }));
-  const rows: ContentTableRow[] = visibleRows.map((row) => ({
-    cells: visibleColumns.map((column) =>
-      spreadsheetCellToTableCell(
-        cellByPosition.get(`${String(row)}:${String(column)}`),
-      ),
-    ),
-  }));
-
   sink({
     severity: "info",
     code: MarkdownRenderDiagnosticCodes.SPREADSHEET_SHEET_AS_TABLE,
-    message: `sheet "${sheet.name}" flattened to a ${String(rows.length)}x${String(columns.length)} GFM table; its first row is rendered as the table header (a GFM table always has one, and a spreadsheet has no header/body distinction of its own)`,
+    message: `sheet "${sheet.name}" flattened to a ${String(table.rows.length)}x${String(table.columns.length)} GFM table; its first row is rendered as the table header (a GFM table always has one, and a spreadsheet has no header/body distinction of its own)`,
   });
-
-  return { kind: "table", rows, columns };
+  return table;
 }
 
 function spreadsheetBlocks(
@@ -243,7 +179,7 @@ function spreadsheetBlocks(
   const blocks: ContentBlock[] = [];
   for (const sheet of document.sheets) {
     blocks.push(headingParagraph(2, sheet.name));
-    const table = sheetToTable(sheet, sink);
+    const table = sheetTable(sheet, sink);
     blocks.push(table ?? textParagraph("_(empty sheet)_"));
 
     const embeddedObjectCount = sheet.embeddedObjects?.length ?? 0;
