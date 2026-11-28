@@ -1,3 +1,10 @@
+## [14.12.3](https://github.com/ExaDev/documents.js/compare/documents.js%4014.12.2...documents.js%4014.12.3) (2026-11-28)
+
+### Bug Fixes
+
+* **documents.js:** bound a sheet's table by its cells, not its furthest cell ([13b3cb8](https://github.com/ExaDev/documents.js/commit/13b3cb8693838299e47c93a58531339d65f69871))
+* **documents.js:** keep drawing labels the line dedup read as redraws ([748a747](https://github.com/ExaDev/documents.js/commit/748a747652660f51ed859971d7b7fce3f9eca267)), closes [#1846](https://github.com/ExaDev/documents.js/issues/1846)
+
 ## [14.12.2](https://github.com/ExaDev/documents.js/compare/documents.js%4014.12.1...documents.js%4014.12.2) (2026-11-27)
 
 
