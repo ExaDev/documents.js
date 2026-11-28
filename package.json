@@ -42,7 +42,7 @@
     "@commitlint/config-conventional": "21.2.0",
     "@eslint/js": "10.0.1",
     "@eslint/json": "2.0.1",
-    "@eslint/markdown": "8.0.3",
+    "@eslint/markdown": "9.0.0",
     "@exadev/eslint-config": "2.12.1",
     "@exadev/semantic-release-workspace": "3.3.1",
     "@semantic-release/changelog": "7.0.0",
