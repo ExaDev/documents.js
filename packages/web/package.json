@@ -84,7 +84,7 @@
     "globals": "17.9.0",
     "husky": "9.1.7",
     "jiti": "2.7.0",
-    "jsdom": "30.0.1",
+    "jsdom": "31.0.1",
     "ooxml.js": "12.2.40",
     "semantic-release": "25.0.9",
     "typescript": "6.0.3",
