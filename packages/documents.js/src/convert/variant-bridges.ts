@@ -4,17 +4,11 @@ import type {
   ContentDrawPage,
   ContentSection,
   ContentShape,
-  ContentSheet,
-  ContentSheetCell,
   ContentSlide,
-  ContentTableCell,
-  ContentTableRow,
 } from "document-schema.js";
 
 import { SLIDE_SIZE_WIDESCREEN, PAGE_SIZE_A4 } from "document-schema.js";
-
-// The width assumed for a column the sheet itself declares none for: one inch, the default every spreadsheet starts from.
-const DEFAULT_COLUMN_WIDTH_PT = 72;
+import { sheetToTable } from "../model/sheet-table";
 
 // Cross-variant content bridges: transforms between ContentDocument variants that do NOT share a common shape (wordprocessing ↔ presentation, wordprocessing ↔ spreadsheet, drawing ↔ presentation), so pairs like docx↔pptx, odt↔xlsx, or odg↔odp can bypass PDF entirely through the content pivot. Unlike the same-variant bridges (odt↔docx, odp↔pptx, ods↔xlsx), which are a direct read→build copy because both sides share one ContentDocument variant, these are genuine semantic TRANSFORMS — a flow document has no slide boundaries, a deck has no flow — so each direction is an approximation, documented per direction below. The wordprocessing ↔ spreadsheet pair named above went unimplemented from this module's very first commit until spreadsheetToWordprocessing landed (ExaDev/documents.js#1043) — the reverse direction stays unimplemented: a markdown/docx table has no cell types, formulas, or geometry of its own to recover, so wordprocessing → spreadsheet is a separate question with no honest answer here.
 
@@ -140,80 +134,6 @@ export function presentationToDrawing(
   return { kind: "drawing", metadata: doc.metadata, pages };
 }
 
-// A single spreadsheet cell, wrapped as a one-run table-cell paragraph. Absent (a position no ContentSheetCell occupies) becomes an empty paragraph, exactly as an unfilled spreadsheet cell renders as blank in any spreadsheet application — not a placeholder marker, since there is nothing noteworthy about an empty cell.
-function spreadsheetCellToTableCell(
-  cell: ContentSheetCell | undefined,
-): ContentTableCell {
-  if (cell === undefined) {
-    return { blocks: [{ kind: "paragraph", runs: [{ text: "" }] }] };
-  }
-  return {
-    blocks: [
-      {
-        kind: "paragraph",
-        runs: cell.runs ?? [{ text: cell.displayText }],
-        alignment: cell.alignment,
-      },
-    ],
-  };
-}
-
-// One sheet's cells, addressed by row/column, flattened into a dense grid table — hidden rows and hidden columns are excluded entirely (the same convention markdown/render.ts's own sheetToTable uses for its GFM output), since a wordprocessing table has no per-row/per-column visibility flag of its own to carry them forward on. A sheet with no visible cells at all (every cell hidden, or a genuinely empty sheet) produces no table — an empty ContentTable with zero rows has nothing meaningful to render, so the caller falls back to a plain placeholder paragraph instead.
-function sheetToTableBlock(sheet: ContentSheet): ContentBlock | undefined {
-  const hiddenRows = new Set(
-    sheet.rows.filter((row) => row.hidden === true).map((row) => row.index),
-  );
-  const hiddenColumns = new Set(
-    sheet.columns
-      .filter((column) => column.hidden === true)
-      .map((column) => column.index),
-  );
-
-  const cellByPosition = new Map<string, ContentSheetCell>();
-  let maxRow = -1;
-  let maxColumn = -1;
-  for (const cell of sheet.cells) {
-    if (hiddenRows.has(cell.row) || hiddenColumns.has(cell.column)) {
-      continue;
-    }
-    cellByPosition.set(`${String(cell.row)}:${String(cell.column)}`, cell);
-    maxRow = Math.max(maxRow, cell.row);
-    maxColumn = Math.max(maxColumn, cell.column);
-  }
-  if (cellByPosition.size === 0) {
-    return undefined;
-  }
-
-  const visibleRows: number[] = [];
-  for (let row = 0; row <= maxRow; row += 1) {
-    if (!hiddenRows.has(row)) {
-      visibleRows.push(row);
-    }
-  }
-  const visibleColumns: number[] = [];
-  for (let column = 0; column <= maxColumn; column += 1) {
-    if (!hiddenColumns.has(column)) {
-      visibleColumns.push(column);
-    }
-  }
-
-  const columnWidthByIndex = new Map(
-    sheet.columns.map((column) => [column.index, column.widthPt] as const),
-  );
-  const columns = visibleColumns.map((column) => ({
-    widthPt: columnWidthByIndex.get(column) ?? DEFAULT_COLUMN_WIDTH_PT,
-  }));
-  const rows: ContentTableRow[] = visibleRows.map((row) => ({
-    cells: visibleColumns.map((column) =>
-      spreadsheetCellToTableCell(
-        cellByPosition.get(`${String(row)}:${String(column)}`),
-      ),
-    ),
-  }));
-
-  return { kind: "table", rows, columns };
-}
-
 // spreadsheet → wordprocessing: each sheet becomes its own H2-headed section flow, plus (when it has any visible cells) one table — a sheet's own formulas, print settings, comments, and anchored images/embedded objects have no wordprocessing counterpart and are silently out of scope, the same "structural mismatch, not a bug" framing this file's other three directions already use for their own dropped fields. headingLevel (not a producer-specific styleId) marks each sheet-name heading, so every wordprocessing-family builder recognises it as a heading on its own terms. All sheets land in a single A4 section, matching presentationToWordprocessing's own one-section convention for a source variant with no wordprocessing section boundary of its own.
 export function spreadsheetToWordprocessing(
   doc: SpreadsheetContentDocument,
@@ -225,9 +145,12 @@ export function spreadsheetToWordprocessing(
       headingLevel: 2,
       runs: [{ text: sheet.name }],
     });
-    const table = sheetToTableBlock(sheet);
+    // The table spans only the rows and columns holding a visible cell, hidden ones excluded (`sheetToTable`, src/model/sheet-table.ts); a sheet with no visible cell falls back to a plain placeholder paragraph, since an empty ContentTable with zero rows has nothing to render.
     blocks.push(
-      table ?? { kind: "paragraph", runs: [{ text: "(empty sheet)" }] },
+      sheetToTable(sheet)?.table ?? {
+        kind: "paragraph",
+        runs: [{ text: "(empty sheet)" }],
+      },
     );
   }
   const section: ContentSection = {

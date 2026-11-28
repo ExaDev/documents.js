@@ -1,13 +1,24 @@
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
-import { decodePackage as decodeOoxmlPackage, readXlsxContent } from "ooxml.js";
+import {
+  buildXlsxPackageFromContent,
+  decodePackage as decodeOoxmlPackage,
+  encodePackage as encodeOoxmlPackage,
+  readXlsxContent,
+} from "ooxml.js";
+import { encodeCsvText } from "../csv/text";
 import { decodeMarkdownText } from "../markdown/text";
 import { gridOdsBytes } from "../test-support/ods";
 import { createLocalDocumentConverter } from "./local";
 import { xlsxMarkdownCodec } from "./codec";
-import { markdownToXlsx, odsToXlsx, xlsxToMarkdown } from "./convert";
+import {
+  csvToXlsx,
+  markdownToXlsx,
+  odsToXlsx,
+  xlsxToMarkdown,
+} from "./convert";
 
-// xlsx <-> markdown is the one pair whose two formats share no ContentDocument variant (spreadsheet vs wordprocessing), so it routes through PDF internally — the same composed-edge shape xlsxToPdf/pdfToXlsx use. These tests prove the single-call functions exist and round-trip (the issue's core ask: a caller no longer has to chain xlsxToPdf -> pdfToMarkdown by hand), that the codec wraps them, and that the DocumentConverter port now routes the pair instead of rejecting it with UnsupportedConversionError.
+// xlsx <-> markdown is a pair whose two formats share no ContentDocument variant (spreadsheet vs wordprocessing): xlsx -> markdown crosses through the spreadsheetToWordprocessing content bridge (src/convert/variant-bridges.ts), while markdown -> xlsx still routes through PDF, having no reverse transform. These tests prove the single-call functions exist and round-trip, that the codec wraps them, that the DocumentConverter port routes the pair instead of rejecting it with UnsupportedConversionError, and that a sheet's table is bounded by its cells rather than by their furthest position.
 
 const xlsxBytes = (): Uint8Array<ArrayBuffer> => odsToXlsx(gridOdsBytes());
 
@@ -50,5 +61,30 @@ describe("xlsx <-> markdown composed bridge", () => {
     );
     expect(result.document.format).toBe("markdown");
     expect(() => decodeMarkdownText(result.document.bytes)).not.toThrow();
+  });
+
+  it("xlsxToMarkdown renders a workbook holding A1 and the sheet's last cell, XFD1048576, as a two-by-two table rather than one spanning every row and column between", () => {
+    const content = readXlsxContent(
+      decodeOoxmlPackage(csvToXlsx(encodeCsvText("Near\n"))),
+    );
+    if (content.kind !== "spreadsheet" || content.sheets[0] === undefined) {
+      throw new Error("expected a spreadsheet ContentDocument with a sheet");
+    }
+    const [first] = content.sheets;
+    const lastCell = {
+      row: 1048575,
+      column: 16383,
+      value: { kind: "string" as const, value: "Far" },
+      displayText: "Far",
+    };
+    const bytes = encodeOoxmlPackage(
+      buildXlsxPackageFromContent({
+        ...content,
+        sheets: [{ ...first, cells: [...first.cells, lastCell] }],
+      }),
+    );
+    expect(decodeMarkdownText(xlsxToMarkdown(bytes))).toContain(
+      "| Near |  |\n| --- | --- |\n|  | Far |",
+    );
   });
 });
