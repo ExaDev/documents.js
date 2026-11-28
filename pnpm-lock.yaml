@@ -1007,8 +1007,8 @@ importers:
         specifier: 7.16.5
         version: link:../document-schema.js
       entities:
-        specifier: 8.0.0
-        version: 8.0.0
+        specifier: 9.0.0
+        version: 9.0.0
       fast-xml-parser:
         specifier: 5.12.0
         version: 5.12.0
@@ -5640,6 +5640,10 @@ packages:
 
   entities@8.0.0:
     resolution: {integrity: sha512-zwfzJecQ/Uej6tusMqwAqU/6KL2XaB2VZ2Jg54Je6ahNBGNH6Ek6g3jjNCF0fG9EWQKGZNddNjU5F1ZQn/sBnA==}
+    engines: {node: '>=20.19.0'}
+
+  entities@9.0.0:
+    resolution: {integrity: sha512-oJFNDJg3kTPwAD1cNn2+WmUq4wFoo09npc3Ydf1D7ED4smRiWrsKnaLxykrTWgyGEcusc87P5dxlAleol9kpkg==}
     engines: {node: '>=20.19.0'}
 
   env-ci@11.2.0:
@@ -12582,6 +12586,8 @@ snapshots:
   empathic@2.0.1: {}
 
   entities@8.0.0: {}
+
+  entities@9.0.0: {}
 
   env-ci@11.2.0:
     dependencies:

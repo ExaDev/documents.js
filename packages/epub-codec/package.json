@@ -80,7 +80,7 @@
   "dependencies": {
     "byte-codec": "2.1.1",
     "document-schema.js": "7.16.5",
-    "entities": "8.0.0",
+    "entities": "9.0.0",
     "fast-xml-parser": "5.12.0",
     "fflate": "0.8.3",
     "zod": "4.6.6"
