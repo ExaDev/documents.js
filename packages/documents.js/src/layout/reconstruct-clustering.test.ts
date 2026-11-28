@@ -18,6 +18,7 @@ function text(overrides: {
   sizePt?: number;
   family?: string;
   bold?: boolean;
+  rotationDeg?: number;
 }): LayoutText {
   return {
     kind: "text",
@@ -32,7 +33,36 @@ function text(overrides: {
     sizePt: overrides.sizePt ?? 12,
     color: { r: 0, g: 0, b: 0 },
     widthPt: overrides.widthPt,
+    ...(overrides.rotationDeg === undefined
+      ? {}
+      : { rotationDeg: overrides.rotationDeg }),
   };
+}
+
+// A drawing sheet's title block: upright prose outweighing the quarter-turned labels a test sets beside it, so the page is read in its own frame, as a drawing whose dimension labels are turned is.
+const TITLE_BLOCK: readonly LayoutText[] = [
+  text({
+    text: "Single line diagram of the auxiliary supplies panel",
+    xPt: 100,
+    yPt: 800,
+    widthPt: 300,
+    sizePt: 7.5,
+  }),
+  text({
+    text: "All dimensions are in millimetres unless stated otherwise",
+    xPt: 100,
+    yPt: 790,
+    widthPt: 320,
+    sizePt: 7.5,
+  }),
+];
+
+function renderedText(
+  doc: ReturnType<typeof reconstructWordprocessing>,
+): string {
+  return paragraphs(doc)
+    .flatMap((p) => p.runs.map((r) => r.text))
+    .join("");
 }
 
 function image(overrides: {
@@ -324,6 +354,109 @@ describe("reconstructWordprocessing: fuzzy redraw collapsing (ExaDev/documents.j
     const doc = reconstructWordprocessing(docFrom([pg]));
     const [para] = paragraphs(doc);
     expect(para!.runs.map((r) => r.text).join("")).toBe("AAAAAAAAAAAAAAA");
+  });
+});
+
+describe("reconstructWordprocessing: drawing labels are not redraws (ExaDev/documents.js#1846)", () => {
+  it("keeps two similar labels turned a quarter turn on one baseline far apart along it, which share an x and so each rewound along page x", () => {
+    const pg = page(1190, 842, [
+      ...TITLE_BLOCK,
+      text({
+        text: "(Load : 6000W)",
+        xPt: 263.5,
+        yPt: 100,
+        widthPt: 55.5,
+        sizePt: 7.5,
+        rotationDeg: 90,
+      }),
+      text({
+        text: "(Load : 5000W)",
+        xPt: 263.5,
+        yPt: 700,
+        widthPt: 55.5,
+        sizePt: 7.5,
+        rotationDeg: 90,
+      }),
+    ]);
+    const rendered = renderedText(reconstructWordprocessing(docFrom([pg])));
+    expect(rendered).toContain("(Load : 6000W)");
+    expect(rendered).toContain("(Load : 5000W)");
+  });
+
+  it("keeps a second group of upright labels drawn in the gaps of a first group, whose hull spans them but whose ink none of them overlaps", () => {
+    const pg = page(1190, 842, [
+      ...TITLE_BLOCK,
+      text({ text: "Feeder panel 1A", xPt: 100, yPt: 400, widthPt: 60 }),
+      text({ text: "Feeder panel 3A", xPt: 500, yPt: 400, widthPt: 60 }),
+      // Drawn after the first group, restarting behind its reach, so it is a pass of its own on the same baseline.
+      text({ text: "Feeder panel 2A", xPt: 300, yPt: 400, widthPt: 60 }),
+      text({ text: "Feeder panel 4A", xPt: 700, yPt: 400, widthPt: 60 }),
+    ]);
+    const rendered = renderedText(reconstructWordprocessing(docFrom([pg])));
+    for (const label of ["1A", "2A", "3A", "4A"]) {
+      expect(rendered).toContain(`Feeder panel ${label}`);
+    }
+  });
+
+  it("drops a redraw whose every run paints over the first pass's ink, even when one of them reaches past the first pass's end", () => {
+    const pg = page(612, 792, [
+      text({ text: "Access control", xPt: 50, yPt: 700, widthPt: 80 }),
+      text({ text: "policies", xPt: 130, yPt: 700, widthPt: 48 }),
+      text({ text: "Access contr", xPt: 50.4, yPt: 700, widthPt: 70 }),
+      text({ text: "ol policies", xPt: 120.4, yPt: 700, widthPt: 60 }),
+    ]);
+    expect(renderedText(reconstructWordprocessing(docFrom([pg])))).toBe(
+      "Access controlpolicies",
+    );
+  });
+
+  it("keeps a redraw-like pass one of whose runs is set where the first pass has no ink", () => {
+    const pg = page(612, 792, [
+      text({ text: "Access control", xPt: 50, yPt: 700, widthPt: 80 }),
+      text({ text: "policies", xPt: 300, yPt: 700, widthPt: 48 }),
+      text({ text: "Access contr", xPt: 50.4, yPt: 700, widthPt: 70 }),
+      text({ text: "ol policies", xPt: 200, yPt: 700, widthPt: 60 }),
+    ]);
+    expect(renderedText(reconstructWordprocessing(docFrom([pg])))).toContain(
+      "ol policies",
+    );
+  });
+
+  it("keeps a figure's repeated digit whose stated advance runs a tenth of the glyph past where the next digit starts, as tight character spacing sets it", () => {
+    const pg = page(612, 792, [
+      text({ text: "Scale 1:", xPt: 100, yPt: 400, widthPt: 30 }),
+      text({ text: "25", xPt: 130, yPt: 400, widthPt: 12.2 }),
+      text({ text: "0", xPt: 142.2, yPt: 400, widthPt: 6.8 }),
+      text({ text: "0", xPt: 148.3, yPt: 400, widthPt: 6.8 }),
+    ]);
+    expect(renderedText(reconstructWordprocessing(docFrom([pg])))).toContain(
+      "1:2500",
+    );
+  });
+
+  it("drops a short quarter-turned label painted twice a fraction of a point apart along its baseline, as an upright one is, measuring the repeat along and across the label's own baseline", () => {
+    const pg = page(1190, 842, [
+      ...TITLE_BLOCK,
+      text({
+        text: "5000",
+        xPt: 263.5,
+        yPt: 100,
+        widthPt: 15,
+        sizePt: 7.5,
+        rotationDeg: 90,
+      }),
+      // The same paint again, 0.3pt further up the label's baseline: past the duplicate-paint bucket, and well inside the first paint's own ink.
+      text({
+        text: "5000",
+        xPt: 263.5,
+        yPt: 100.3,
+        widthPt: 15,
+        sizePt: 7.5,
+        rotationDeg: 90,
+      }),
+    ]);
+    const rendered = renderedText(reconstructWordprocessing(docFrom([pg])));
+    expect(rendered.split("5000").length - 1).toBe(1);
   });
 });
 

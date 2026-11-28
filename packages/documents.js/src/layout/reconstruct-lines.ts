@@ -74,7 +74,27 @@ function dropDuplicatePaints(
 
 // A second, coarser duplicate-paint case dropDuplicatePaints' own tight position bucket deliberately does not catch: the SAME complete text-showing run redrawn several times across a wider span, one paint per underlying table column, rather than once as a genuinely spanning cell — confirmed directly against the source PDF's own content stream, which wraps every text run in its own self-contained `q <rect> re W n BT ... Tj ET Q` block, each already correctly and tightly clipped to its own content. Clipping is not the mechanism producing the repeats (every clip already fully contains its own text, so none of this is a truncated sliver of a longer string); the content stream genuinely repeats the whole block, verbatim, several times at different x positions.
 //
-// Two occurrences of the identical text sharing one already-clustered line are treated as one such repeat, not two independently laid-out cells that merely happen to hold the same short value, exactly when the earlier occurrence's own rendered width already extends past where the next one starts — a real table never lays out two cells so close together that their own text would visually collide, so an overlap this direct is only possible when both paint the identical content on top of, or straddling into, one another. A short status code genuinely repeated once per column (a grade table's "NP"/"Op" across several narrow columns) never trips this: its own rendered width sits well inside the gap to the next column, with no overlap at all — so this rule can tell a redundant redraw of a long fragment apart from a legitimately repeated short cell value without needing a length threshold of its own.
+// Two occurrences of the identical text sharing one already-clustered line are treated as one such repeat, not two independently laid-out cells that merely happen to hold the same short value, exactly when the later one paints over most of the earlier one's ink, overlapping more than REPAINT_MIN_OVERLAP_SHARE of the earlier occurrence's own rendered width — a real table never lays out two cells so close together that their own text would visually collide, so an overlap this direct is only possible when both paint the identical content on top of, or straddling into, one another. A short status code genuinely repeated once per column (a grade table's "NP"/"Op" across several narrow columns) never trips this: its own rendered width sits well inside the gap to the next column, with no overlap at all — so this rule can tell a redundant redraw of a long fragment apart from a legitimately repeated short cell value without needing a length threshold of its own.
+//
+// Nor does a figure drawn glyph by glyph whose digit repeats ("25", "0", "0" for 2500, ExaDev/documents.js#1846): each glyph starts about one advance after the one before it, and a producer's stated advance often runs past that start, by a hundredth of a point from rounding or by a tenth of the glyph under tight character spacing. Read as "starts before the earlier one ends", every such overlap dropped the repeated digit; a glyph set so close that it covers half the one before it would print as one smeared glyph, which no producer sets, while every repaint starts at or near where its earlier copy starts.
+//
+// Both distances are measured on the line's own axes (runGapPt along its baseline, runsShareBaseline across it), not the page's, so a label turned a quarter turn is judged as an upright one is: on such a line every run shares one x, which read as page x made every pair overlap along the line and none share its baseline.
+const REPAINT_MIN_OVERLAP_SHARE = 0.5;
+
+// Whether `later`, set on `prior`'s line no earlier than it along the baseline, paints over `prior`'s own ink: their baselines within DUPLICATE_PAINT_BUCKET_PT of each other, and `later` overlapping more than REPAINT_MIN_OVERLAP_SHARE of `prior`'s width. A `prior` stating no advance width has no end to measure from, so nothing is read as painting over it. runsShareBaseline's tolerance is a fraction of the smaller run's em, so the bucket is stated as that fraction to compare the two baselines to it exactly.
+function paintsOver(prior: LayoutText, later: LayoutText): boolean {
+  const gapPt = runGapPt(prior, later);
+  return (
+    gapPt !== undefined &&
+    prior.widthPt !== undefined &&
+    -gapPt > REPAINT_MIN_OVERLAP_SHARE * prior.widthPt &&
+    runsShareBaseline(prior, later, {
+      baselineToleranceEm:
+        DUPLICATE_PAINT_BUCKET_PT / Math.min(prior.sizePt, later.sizePt),
+    })
+  );
+}
+
 function dropOverlappingRepeatsWithinLine(
   items: readonly LayoutText[],
 ): LayoutText[] {
@@ -85,11 +105,7 @@ function dropOverlappingRepeatsWithinLine(
     const textKey = item.text.trim();
     const earlier = keptByText.get(textKey);
     // A repeat is the same run redrawn on its own baseline, within the float noise DUPLICATE_PAINT_BUCKET_PT allows for; the same text set one above the other on a line (a subscript "2" and a superscript "2" stacked after one symbol) is two runs, each of which a reader sees.
-    const repeats = earlier?.some(
-      (prior) =>
-        item.xPt < prior.xPt + (prior.widthPt ?? 0) &&
-        Math.abs(item.yPt - prior.yPt) <= DUPLICATE_PAINT_BUCKET_PT,
-    );
+    const repeats = earlier?.some((prior) => paintsOver(prior, item));
     if (repeats === true) {
       continue;
     }
@@ -107,11 +123,11 @@ function dropOverlappingRepeatsWithinLine(
 //
 // dropDuplicatePaints and dropOverlappingRepeatsWithinLine above both assume a repeated paint tokenizes identically each time it is redrawn: the same text-showing operator boundaries, producing items whose text (once trimmed) matches exactly. Some PDF producers redraw the same underlying sentence several times with DIFFERENT operator boundaries per redraw — confirmed against a real production PDF where kerning/positioning differs enough between redraws that no two occurrences ever land at the same position or split the sentence into the same fragments, so neither dedup pass above ever fires; sorted by x, the redraws' fragments interleave with each other exactly the way #1062's same-position repeats used to, except here the corruption survives that fix too.
 //
-// This pass runs on items in their ORIGINAL document-encounter order — the order interpret.ts's own content-stream walk produced them in, preserved end to end through page.items into reconstructPageBlocks' own textItems filter above — before anything sorts by position. Within one baseline, a legitimate paint pass advances left to right; a later item whose x has fallen well behind the rightmost extent the current pass had already reached is the signature of a fresh redraw beginning again near the same left margin, not of the same sentence continuing. Two such passes on one baseline, occupying overlapping x-ranges, whose concatenated text is a close (not necessarily exact) match, are the redraw this section exists to collapse — every later matching pass is dropped, keeping only the first, the same convention dropOverlappingRepeatsWithinLine above already uses.
+// This pass runs on items in their ORIGINAL document-encounter order — the order interpret.ts's own content-stream walk produced them in, preserved end to end through page.items into reconstructPageBlocks' own textItems filter above — before anything sorts by position. Within one baseline, a legitimate paint pass advances along it (left to right for upright text); a later item whose start along the baseline has fallen well behind the furthest extent the current pass had already reached is the signature of a fresh redraw beginning again near the same start, not of the same sentence continuing. Two such passes on one baseline, the later painting over the earlier's ink, whose concatenated text is a close (not necessarily exact) match, are the redraw this section exists to collapse — every later matching pass is dropped, keeping only the first, the same convention dropOverlappingRepeatsWithinLine above already uses.
 //
 // The corpus PDF this was confirmed against is a confidential licensed standard and could not be attached to this package's own test fixtures — the tests below instead model the reported failure shape directly (a sentence redrawn with different fragment splits and a little wording drift, with legitimate distinct prose left untouched nearby).
 
-// Comfortably above the sub-thousandth-point float noise a paint's own repeated interpretation introduces (see DUPLICATE_PAINT_BUCKET_PT above), and comfortably below any genuine redraw restart, which begins again from (approximately) the same left margin the current pass itself started from — tens of points behind wherever the pass has already reached. A within-pass kerning wobble never falls back this far; only a fresh redraw does.
+// Comfortably above the sub-thousandth-point float noise a paint's own repeated interpretation introduces (see DUPLICATE_PAINT_BUCKET_PT above), and comfortably below any genuine redraw restart, which begins again from (approximately) the same start along the baseline the current pass itself started from — tens of points behind wherever the pass has already reached. A within-pass kerning wobble never falls back this far; only a fresh redraw does.
 const REDRAW_PASS_REWIND_TOLERANCE_PT = 2;
 
 // Below this length, two short strings can land close in edit distance by coincidence (e.g. "Op"/"No"), and dropOverlappingRepeatsWithinLine above already owns genuinely repeated short values — restricting this pass to sentence-length text keeps it from ever competing with that decision.
@@ -120,10 +136,16 @@ const MIN_REDRAW_PASS_TEXT_LENGTH = 12;
 // A redraw re-deriving the same underlying content can differ from the occurrence kept — not just in fragment boundaries, but in the odd character here and there (confirmed directly against the corpus PDF: its own repeats sometimes disagree by a character where source editions were merged). Requiring more than half of each pass's own text to participate in transforming one into the other is comfortably above what two unrelated sentences of comparable length would share by chance, and comfortably below where two independent re-derivations of the same content, drift and all, actually land.
 const REDRAW_PASS_SIMILARITY_THRESHOLD = 0.6;
 
+// Where a pass's runs lie and how far the pass has reached are measured along the baseline its runs share (runAlongBaselinePt), not along page x: one group's runs share one angle, and on a baseline turned a quarter turn every run has the same x, so measured along x each run rewound against the one before it and became a pass of its own, and two labels far apart up one vertical baseline read as overlapping passes (ExaDev/documents.js#1846).
 interface RedrawPass {
   readonly items: LayoutText[];
-  readonly startXPt: number;
-  endXPt: number;
+  endAlongPt: number;
+}
+
+// Where a run starts and ends along its own baseline. A run stating no advance width is taken to end where it starts, as a point of ink.
+function alongExtent(item: LayoutText): { startPt: number; endPt: number } {
+  const startPt = runAlongBaselinePt(item);
+  return { startPt, endPt: startPt + (item.widthPt ?? 0) };
 }
 
 // Mirrors clusterIntoLines' own baseline-tolerance bucketing below, but walks items in the order given rather than sorting first — each group's own items therefore stay in document order, which splitIntoPasses needs to detect a restart.
@@ -142,24 +164,20 @@ function groupByBaselineInDocumentOrder(
   return groups.map((g) => g.items);
 }
 
-// Splits one baseline's items (in document order) into candidate redraw passes: a new pass starts whenever an item's x has fallen well behind the rightmost extent the current pass has already reached (see REDRAW_PASS_REWIND_TOLERANCE_PT above).
+// Splits one baseline's items (in document order) into candidate redraw passes: a new pass starts whenever an item's start along the baseline has fallen well behind the furthest extent the current pass has already reached (see REDRAW_PASS_REWIND_TOLERANCE_PT above).
 function splitIntoPasses(group: readonly LayoutText[]): RedrawPass[] {
   const passes: RedrawPass[] = [];
   for (const item of group) {
     const current = passes.at(-1);
-    const itemRightPt = item.xPt + (item.widthPt ?? 0);
+    const { startPt, endPt } = alongExtent(item);
     if (
       current !== undefined &&
-      item.xPt >= current.endXPt - REDRAW_PASS_REWIND_TOLERANCE_PT
+      startPt >= current.endAlongPt - REDRAW_PASS_REWIND_TOLERANCE_PT
     ) {
       current.items.push(item);
-      current.endXPt = Math.max(current.endXPt, itemRightPt);
+      current.endAlongPt = Math.max(current.endAlongPt, endPt);
     } else {
-      passes.push({
-        items: [item],
-        startXPt: item.xPt,
-        endXPt: itemRightPt,
-      });
+      passes.push({ items: [item], endAlongPt: endPt });
     }
   }
   return passes;
@@ -173,9 +191,13 @@ function passText(pass: RedrawPass): string {
     .trim();
 }
 
-// Whether two passes on the same baseline occupy overlapping page-space — the same "would visually collide" reasoning dropOverlappingRepeatsWithinLine above uses, applied to a pass' full span rather than one item's own width.
-function passesOverlap(a: RedrawPass, b: RedrawPass): boolean {
-  return a.startXPt < b.endXPt && b.startXPt < a.endXPt;
+// Whether `candidate` paints over `first`'s ink: every one of its runs overlaps, along the baseline, a run of `first` — the same "would visually collide" reasoning dropOverlappingRepeatsWithinLine above uses, applied run by run. Not the span from a pass's first run to its last: a row of labels the content stream draws in two groups (the panels at 264 and 856, then those at 494 and 796) has the second group inside the first's span with no ink overlapping, and every label of it is content the first group does not show (ExaDev/documents.js#1846). A redraw re-derives the same content at the same place, so each of its fragments, however it is split, lands on the kept copy's ink. Touching at an edge is not overlapping.
+function paintsOverPass(first: RedrawPass, candidate: RedrawPass): boolean {
+  const firstInk = first.items.map(alongExtent);
+  return candidate.items.every((item) => {
+    const { startPt, endPt } = alongExtent(item);
+    return firstInk.some((ink) => startPt < ink.endPt && ink.startPt < endPt);
+  });
 }
 
 // Classic memoized edit distance. Recurses on plain string indices rather than indexing into a rolling DP array or a character array, using String.prototype.charAt (always a string, empty past the end — never undefined) for the per-character comparison and a Map keyed by "i:j" for memoization, so this needs neither a non-null assertion nor a type assertion to satisfy noUncheckedIndexedAccess.
@@ -211,7 +233,7 @@ function textSimilarity(a: string, b: string): number {
   return 1 - levenshteinDistance(a, b) / maxLength;
 }
 
-// Drops every later pass on a baseline that is a fuzzy redraw of the first: a restart in x within one baseline's own document-order sequence (splitIntoPasses), long enough text on both sides to rule out coincidental short-string similarity, overlapping x-ranges, and a similarity ratio clearing REDRAW_PASS_SIMILARITY_THRESHOLD against the first (kept) pass. Falling short of any one of these leaves every item on that baseline untouched — this pass would rather miss a real redraw than risk dropping content that only looked like one, exactly the "editorial amendment text, not corrupted noise" distinction ExaDev/documents.js#1066 itself calls for.
+// Drops every later pass on a baseline that is a fuzzy redraw of the first: a restart along the baseline within its own document-order sequence (splitIntoPasses), long enough text on both sides to rule out coincidental short-string similarity, every run of the later pass painting over the first's ink (paintsOverPass), and a similarity ratio clearing REDRAW_PASS_SIMILARITY_THRESHOLD against the first (kept) pass. Falling short of any one of these leaves every item on that baseline untouched — this pass would rather miss a real redraw than risk dropping content that only looked like one, exactly the "editorial amendment text, not corrupted noise" distinction ExaDev/documents.js#1066 itself calls for.
 function dropFuzzyRedrawnPasses(
   items: readonly LayoutText[],
 ): readonly LayoutText[] {
@@ -234,7 +256,7 @@ function dropFuzzyRedrawnPasses(
       if (candidateText.length < MIN_REDRAW_PASS_TEXT_LENGTH) {
         continue;
       }
-      if (!passesOverlap(first, candidate)) {
+      if (!paintsOverPass(first, candidate)) {
         continue;
       }
       if (
